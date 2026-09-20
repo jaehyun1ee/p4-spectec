@@ -11,92 +11,20 @@ use crate::lang::{
 
 use super::{Context, ProseError, ProseErrorKind};
 
-// == Hint lookup
+// == Hint construction
 
-fn hints_of_call_exp(ctx: &Context, id_func: &sl::Id) -> annot::Hints {
-    let Some(hints_func) = ctx.hints_func(id_func) else {
-        return annot::Hints::default();
-    };
-    annot::Hints {
-        prose_in: hints_func.prose_in.clone(),
-        prose_true: hints_func.prose_true.clone(),
-        prose_false: hints_func.prose_false.clone(),
-        ..annot::Hints::default()
-    }
+fn build_func_hints(ctx: &Context, id_func: &sl::Id) -> annot::Hints {
+    ctx.hints_func(id_func)
+        .map(|hints_func| annot::Hints {
+            prose_in: hints_func.prose_in.clone(),
+            prose_true: hints_func.prose_true.clone(),
+            prose_false: hints_func.prose_false.clone(),
+            ..annot::Hints::default()
+        })
+        .unwrap_or_default()
 }
 
-fn hints_of_case_exp(ctx: &Context, exp_sl: &sl::Exp, not_exp_sl: &sl::NotExp) -> annot::Hints {
-    let il::TypKind::Var(id_typ, _) = exp_sl.note.as_ref() else {
-        return annot::Hints::default();
-    };
-    let Some(hints_case) = ctx.hints_case(id_typ, &not_exp_sl.to_mixop()) else {
-        return annot::Hints::default();
-    };
-    annot::Hints {
-        prose: hints_case.prose.clone(),
-        prose_fields: hints_case.prose_fields.clone(),
-        ..annot::Hints::default()
-    }
-}
-
-fn hints_of_hold_instr(ctx: &Context, id_rel: &sl::Id) -> annot::Hints {
-    let Some(hints_rel) = ctx.hints_rel(id_rel) else {
-        return annot::Hints::default();
-    };
-    annot::Hints {
-        prose_true: hints_rel.prose_true.clone(),
-        prose_false: hints_rel.prose_false.clone(),
-        ..annot::Hints::default()
-    }
-}
-
-fn hints_of_rule_instr(
-    ctx: &Context,
-    id_rel: &sl::Id,
-    input_hint: &input::InputHint,
-) -> annot::Hints {
-    let Some(hints_rel) = ctx.hints_rel(id_rel) else {
-        return annot::Hints::default();
-    };
-    annot::Hints {
-        prose_in: hints_rel.prose_in.clone(),
-        prose_out: hints_rel
-            .prose_out
-            .as_ref()
-            .map(|hint| alter::realign(hint, input_hint)),
-        ..annot::Hints::default()
-    }
-}
-
-fn hints_of_result_instr(ctx: &Context, input_hint: &input::InputHint) -> annot::Hints {
-    let Some(hints_rel) = ctx.hints_rel(ctx.namespace()) else {
-        return annot::Hints::default();
-    };
-    annot::Hints {
-        prose_out: hints_rel
-            .prose_out
-            .as_ref()
-            .map(|hint| alter::realign(hint, input_hint)),
-        ..annot::Hints::default()
-    }
-}
-
-fn hints_of_group_instr(ctx: &Context) -> annot::Hints {
-    let Some(hints_rel) = ctx.hints_rel(ctx.namespace()) else {
-        return annot::Hints::default();
-    };
-    annot::Hints {
-        prose_in: hints_rel.prose_in.clone(),
-        prose_true: hints_rel.prose_true.clone(),
-        ..annot::Hints::default()
-    }
-}
-
-fn hints_of_func_def(ctx: &Context, id_func: &sl::Id) -> annot::Hints {
-    hints_of_call_exp(ctx, id_func)
-}
-
-fn hints_of_rel_def(
+fn build_rel_hints(
     ctx: &Context,
     id_rel: &sl::Id,
     rel_signature: &sl::RelSignature,
@@ -146,41 +74,6 @@ fn hints_of_rel_def(
         prose_output_exps,
         prose_fields: None,
     })
-}
-
-fn hints_of_let_instr(exp_l_pl: &pl::Exp) -> annot::Hints {
-    if matches!(exp_l_pl.node.node, pl::ExpKind::Case(_)) {
-        annot::Hints {
-            prose_fields: exp_l_pl.hints.prose_fields.clone(),
-            ..annot::Hints::default()
-        }
-    } else {
-        annot::Hints::default()
-    }
-}
-
-fn hints_of_def(ctx: &Context, def_kind_sl: &sl::DefKind) -> Result<annot::Hints, ProseError> {
-    match def_kind_sl {
-        sl::DefKind::Rel(sl::RelDef::Extern(def_rel_sl)) => {
-            hints_of_rel_def(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)
-        }
-        sl::DefKind::Rel(sl::RelDef::Defined(def_rel_sl)) => {
-            hints_of_rel_def(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)
-        }
-        sl::DefKind::MetaFunc(sl::MetaFuncDef::Extern(def_func_sl)) => {
-            Ok(hints_of_func_def(ctx, &def_func_sl.id))
-        }
-        sl::DefKind::MetaFunc(sl::MetaFuncDef::Builtin(def_func_sl)) => {
-            Ok(hints_of_func_def(ctx, &def_func_sl.id))
-        }
-        sl::DefKind::MetaFunc(sl::MetaFuncDef::Table(def_func_sl)) => {
-            Ok(hints_of_func_def(ctx, &def_func_sl.id))
-        }
-        sl::DefKind::MetaFunc(sl::MetaFuncDef::Defined(def_func_sl)) => {
-            Ok(hints_of_func_def(ctx, &def_func_sl.id))
-        }
-        sl::DefKind::Typ(_) | sl::DefKind::Var(_) => Ok(annot::Hints::default()),
-    }
 }
 
 // == Hint validation
@@ -235,22 +128,7 @@ fn validate_hint_split(
 // - Expression
 
 fn prosify_exp(ctx: &Context, exp_sl: &sl::Exp) -> Result<pl::Exp, ProseError> {
-    let exp_kind_pl = prosify_exp_kind(ctx, &exp_sl.node)?;
-    let hints = match &exp_sl.node {
-        il::ExpKind::Case(not_exp_sl) => {
-            let hints = hints_of_case_exp(ctx, exp_sl, not_exp_sl);
-            let num_args = not_exp_sl.args().len();
-            validate_hint_alter(&exp_sl.span, &hints, num_args)?;
-            validate_hint_fields(&exp_sl.span, &hints, num_args)?;
-            hints
-        }
-        il::ExpKind::Call(id, _, args_sl) => {
-            let hints = hints_of_call_exp(ctx, id);
-            validate_hint_alter(&exp_sl.span, &hints, args_sl.len())?;
-            hints
-        }
-        _ => annot::Hints::default(),
-    };
+    let (exp_kind_pl, hints) = prosify_exp_kind(ctx, exp_sl)?;
     let exp_node_pl = crate::note_phrase! {
         node: exp_kind_pl,
         note: exp_sl.note.as_ref().clone(),
@@ -260,122 +138,327 @@ fn prosify_exp(ctx: &Context, exp_sl: &sl::Exp) -> Result<pl::Exp, ProseError> {
     Ok(exp_pl)
 }
 
-fn prosify_exp_kind(ctx: &Context, exp_kind_sl: &sl::ExpKind) -> Result<pl::ExpKind, ProseError> {
-    let exp_kind_pl = match exp_kind_sl {
+fn prosify_exp_kind(
+    ctx: &Context,
+    exp_sl: &sl::Exp,
+) -> Result<(pl::ExpKind, annot::Hints), ProseError> {
+    let exp_kind_pl = match &exp_sl.node {
         il::ExpKind::Bool(value) => pl::ExpKind::Bool(*value),
         il::ExpKind::Num(num) => pl::ExpKind::Num(num.clone()),
         il::ExpKind::Text(text) => pl::ExpKind::Text(text.clone()),
         il::ExpKind::Var(id) => pl::ExpKind::Var(id.clone()),
         il::ExpKind::Un(op, op_typ, exp_inner_sl) => {
-            let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
-            pl::ExpKind::Un(*op, *op_typ, Box::new(exp_inner_pl))
+            prosify_un_exp(ctx, *op, *op_typ, exp_inner_sl)?
         }
         il::ExpKind::Bin(op, op_typ, exp_l_sl, exp_r_sl) => {
-            let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
-            let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
-            pl::ExpKind::Bin(*op, *op_typ, Box::new(exp_l_pl), Box::new(exp_r_pl))
+            prosify_bin_exp(ctx, *op, *op_typ, exp_l_sl, exp_r_sl)?
         }
         il::ExpKind::Cmp(op, op_typ, exp_l_sl, exp_r_sl) => {
-            let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
-            let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
-            pl::ExpKind::Cmp(*op, *op_typ, Box::new(exp_l_pl), Box::new(exp_r_pl))
+            prosify_cmp_exp(ctx, *op, *op_typ, exp_l_sl, exp_r_sl)?
         }
-        il::ExpKind::UpCast(typ, exp_inner_sl) => {
-            let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
-            pl::ExpKind::UpCast(typ.as_ref().clone(), Box::new(exp_inner_pl))
-        }
-        il::ExpKind::DownCast(typ, exp_inner_sl) => {
-            let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
-            pl::ExpKind::DownCast(typ.as_ref().clone(), Box::new(exp_inner_pl))
-        }
+        il::ExpKind::UpCast(typ, exp_inner_sl) => prosify_upcast_exp(ctx, typ, exp_inner_sl)?,
+        il::ExpKind::DownCast(typ, exp_inner_sl) => prosify_downcast_exp(ctx, typ, exp_inner_sl)?,
         il::ExpKind::Sub(exp_inner_sl, typ, subcheck) => {
-            let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
-            pl::ExpKind::Sub(Box::new(exp_inner_pl), typ.as_ref().clone(), subcheck.clone())
+            prosify_sub_exp(ctx, exp_inner_sl, typ, subcheck)?
         }
-        il::ExpKind::Match(exp_inner_sl, pattern) => {
-            let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
-            pl::ExpKind::Match(Box::new(exp_inner_pl), pattern.clone())
-        }
-        il::ExpKind::Tuple(exps_sl) => {
-            let exps_pl = prosify_exps(ctx, exps_sl)?;
-            pl::ExpKind::Tuple(exps_pl)
-        }
-        il::ExpKind::Case(not_exp_sl) => {
-            let not_exp_pl = prosify_not_exp(ctx, not_exp_sl)?;
-            pl::ExpKind::Case(Box::new(not_exp_pl))
-        }
-        il::ExpKind::Str(fields_sl) => {
-            let mut fields_pl = Vec::with_capacity(fields_sl.len());
-            for (atom, exp_sl) in fields_sl {
-                let exp_pl = prosify_exp(ctx, exp_sl)?;
-                fields_pl.push((atom.clone(), exp_pl));
-            }
-            pl::ExpKind::Str(fields_pl)
-        }
-        il::ExpKind::Opt(exp_opt_sl) => {
-            let exp_opt_pl = match exp_opt_sl.as_deref() {
-                Some(exp_sl) => {
-                    let exp_pl = prosify_exp(ctx, exp_sl)?;
-                    Some(Box::new(exp_pl))
-                }
-                None => None,
-            };
-            pl::ExpKind::Opt(exp_opt_pl)
-        }
-        il::ExpKind::List(exps_sl) => {
-            let exps_pl = prosify_exps(ctx, exps_sl)?;
-            pl::ExpKind::List(exps_pl)
-        }
-        il::ExpKind::Cons(exp_l_sl, exp_r_sl) => {
-            let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
-            let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
-            pl::ExpKind::Cons(Box::new(exp_l_pl), Box::new(exp_r_pl))
-        }
-        il::ExpKind::Cat(exp_l_sl, exp_r_sl) => {
-            let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
-            let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
-            pl::ExpKind::Cat(Box::new(exp_l_pl), Box::new(exp_r_pl))
-        }
-        il::ExpKind::Mem(exp_l_sl, exp_r_sl) => {
-            let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
-            let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
-            pl::ExpKind::Mem(Box::new(exp_l_pl), Box::new(exp_r_pl))
-        }
-        il::ExpKind::Len(exp_inner_sl) => {
-            let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
-            pl::ExpKind::Len(Box::new(exp_inner_pl))
-        }
-        il::ExpKind::Dot(exp_inner_sl, atom) => {
-            let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
-            pl::ExpKind::Dot(Box::new(exp_inner_pl), atom.clone())
-        }
-        il::ExpKind::Idx(exp_l_sl, exp_r_sl) => {
-            let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
-            let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
-            pl::ExpKind::Idx(Box::new(exp_l_pl), Box::new(exp_r_pl))
-        }
+        il::ExpKind::Match(exp_inner_sl, pattern) => prosify_match_exp(ctx, exp_inner_sl, pattern)?,
+        il::ExpKind::Tuple(exps_sl) => prosify_tuple_exp(ctx, exps_sl)?,
+        il::ExpKind::Case(not_exp_sl) => return prosify_case_exp(ctx, exp_sl, not_exp_sl),
+        il::ExpKind::Str(fields_sl) => prosify_struct_exp(ctx, fields_sl)?,
+        il::ExpKind::Opt(exp_opt_sl) => prosify_option_exp(ctx, exp_opt_sl)?,
+        il::ExpKind::List(exps_sl) => prosify_list_exp(ctx, exps_sl)?,
+        il::ExpKind::Cons(exp_l_sl, exp_r_sl) => prosify_cons_exp(ctx, exp_l_sl, exp_r_sl)?,
+        il::ExpKind::Cat(exp_l_sl, exp_r_sl) => prosify_cat_exp(ctx, exp_l_sl, exp_r_sl)?,
+        il::ExpKind::Mem(exp_l_sl, exp_r_sl) => prosify_mem_exp(ctx, exp_l_sl, exp_r_sl)?,
+        il::ExpKind::Len(exp_inner_sl) => prosify_len_exp(ctx, exp_inner_sl)?,
+        il::ExpKind::Dot(exp_inner_sl, atom) => prosify_dot_exp(ctx, exp_inner_sl, atom)?,
+        il::ExpKind::Idx(exp_l_sl, exp_r_sl) => prosify_idx_exp(ctx, exp_l_sl, exp_r_sl)?,
         il::ExpKind::Slice(exp_base_sl, exp_idx_sl, exp_len_sl) => {
-            let exp_base_pl = prosify_exp(ctx, exp_base_sl)?;
-            let exp_idx_pl = prosify_exp(ctx, exp_idx_sl)?;
-            let exp_len_pl = prosify_exp(ctx, exp_len_sl)?;
-            pl::ExpKind::Slice(Box::new(exp_base_pl), Box::new(exp_idx_pl), Box::new(exp_len_pl))
+            prosify_slice_exp(ctx, exp_base_sl, exp_idx_sl, exp_len_sl)?
         }
         il::ExpKind::Upd(exp_base_sl, path_sl, exp_field_sl) => {
-            let exp_base_pl = prosify_exp(ctx, exp_base_sl)?;
-            let path_pl = prosify_path(ctx, path_sl)?;
-            let exp_field_pl = prosify_exp(ctx, exp_field_sl)?;
-            pl::ExpKind::Upd(Box::new(exp_base_pl), Box::new(path_pl), Box::new(exp_field_pl))
+            prosify_update_exp(ctx, exp_base_sl, path_sl, exp_field_sl)?
         }
         il::ExpKind::Call(id, targs, args_sl) => {
-            let args_pl = prosify_args(ctx, args_sl)?;
-            pl::ExpKind::Call(id.clone(), targs.clone(), args_pl)
+            return prosify_call_exp(ctx, exp_sl, id, targs, args_sl);
         }
-        il::ExpKind::Iter(exp_inner_sl, iter_exp) => {
-            let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
-            pl::ExpKind::Iter(Box::new(exp_inner_pl), iter_exp.clone())
-        }
+        il::ExpKind::Iter(exp_inner_sl, iter_exp) => prosify_iter_exp(ctx, exp_inner_sl, iter_exp)?,
     };
-    Ok(exp_kind_pl)
+    Ok((exp_kind_pl, annot::Hints::default()))
+}
+
+// - Unary expression
+
+fn prosify_un_exp(
+    ctx: &Context,
+    op: il::UnOp,
+    op_typ: il::OpTyp,
+    exp_inner_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
+    Ok(pl::ExpKind::Un(op, op_typ, Box::new(exp_inner_pl)))
+}
+
+// - Binary expression
+
+fn prosify_bin_exp(
+    ctx: &Context,
+    op: il::BinOp,
+    op_typ: il::OpTyp,
+    exp_l_sl: &sl::Exp,
+    exp_r_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
+    let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
+    Ok(pl::ExpKind::Bin(op, op_typ, Box::new(exp_l_pl), Box::new(exp_r_pl)))
+}
+
+// - Comparison expression
+
+fn prosify_cmp_exp(
+    ctx: &Context,
+    op: il::CmpOp,
+    op_typ: il::OpTyp,
+    exp_l_sl: &sl::Exp,
+    exp_r_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
+    let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
+    Ok(pl::ExpKind::Cmp(op, op_typ, Box::new(exp_l_pl), Box::new(exp_r_pl)))
+}
+
+// - Upcast expression
+
+fn prosify_upcast_exp(
+    ctx: &Context,
+    typ: &sl::Typ,
+    exp_inner_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
+    Ok(pl::ExpKind::UpCast(typ.clone(), Box::new(exp_inner_pl)))
+}
+
+// - Downcast expression
+
+fn prosify_downcast_exp(
+    ctx: &Context,
+    typ: &sl::Typ,
+    exp_inner_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
+    Ok(pl::ExpKind::DownCast(typ.clone(), Box::new(exp_inner_pl)))
+}
+
+// - Subtype expression
+
+fn prosify_sub_exp(
+    ctx: &Context,
+    exp_inner_sl: &sl::Exp,
+    typ: &sl::Typ,
+    subcheck: &sl::Subcheck,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
+    Ok(pl::ExpKind::Sub(Box::new(exp_inner_pl), typ.clone(), Box::new(subcheck.clone())))
+}
+
+// - Match expression
+
+fn prosify_match_exp(
+    ctx: &Context,
+    exp_inner_sl: &sl::Exp,
+    pattern: &sl::Pattern,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
+    Ok(pl::ExpKind::Match(Box::new(exp_inner_pl), pattern.clone()))
+}
+
+// - Tuple expression
+
+fn prosify_tuple_exp(ctx: &Context, exps_sl: &[sl::Exp]) -> Result<pl::ExpKind, ProseError> {
+    let exps_pl = prosify_exps(ctx, exps_sl)?;
+    Ok(pl::ExpKind::Tuple(exps_pl))
+}
+
+// - Case expression
+
+fn prosify_case_exp(
+    ctx: &Context,
+    exp_sl: &sl::Exp,
+    not_exp_sl: &sl::NotExp,
+) -> Result<(pl::ExpKind, annot::Hints), ProseError> {
+    let not_exp_pl = prosify_not_exp(ctx, not_exp_sl)?;
+    let hints = match exp_sl.note.as_ref() {
+        il::TypKind::Var(id_typ, _) => ctx
+            .hints_case(id_typ, &not_exp_sl.to_mixop())
+            .map(|hints_case| annot::Hints {
+                prose: hints_case.prose.clone(),
+                prose_fields: hints_case.prose_fields.clone(),
+                ..annot::Hints::default()
+            })
+            .unwrap_or_default(),
+        _ => annot::Hints::default(),
+    };
+    let num_args = not_exp_sl.args().len();
+    validate_hint_alter(&exp_sl.span, &hints, num_args)?;
+    validate_hint_fields(&exp_sl.span, &hints, num_args)?;
+    Ok((pl::ExpKind::Case(Box::new(not_exp_pl)), hints))
+}
+
+// - Struct expression
+
+fn prosify_struct_exp(
+    ctx: &Context,
+    fields_sl: &[il::ExpField],
+) -> Result<pl::ExpKind, ProseError> {
+    let mut fields_pl = Vec::with_capacity(fields_sl.len());
+    for (atom, exp_sl) in fields_sl {
+        let exp_pl = prosify_exp(ctx, exp_sl)?;
+        fields_pl.push((atom.clone(), exp_pl));
+    }
+    Ok(pl::ExpKind::Str(fields_pl))
+}
+
+// - Optional expression
+
+fn prosify_option_exp(
+    ctx: &Context,
+    exp_opt_sl: &Option<Box<sl::Exp>>,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_opt_pl = match exp_opt_sl.as_deref() {
+        Some(exp_sl) => {
+            let exp_pl = prosify_exp(ctx, exp_sl)?;
+            Some(Box::new(exp_pl))
+        }
+        None => None,
+    };
+    Ok(pl::ExpKind::Opt(exp_opt_pl))
+}
+
+// - List expression
+
+fn prosify_list_exp(ctx: &Context, exps_sl: &[sl::Exp]) -> Result<pl::ExpKind, ProseError> {
+    let exps_pl = prosify_exps(ctx, exps_sl)?;
+    Ok(pl::ExpKind::List(exps_pl))
+}
+
+// - Cons expression
+
+fn prosify_cons_exp(
+    ctx: &Context,
+    exp_l_sl: &sl::Exp,
+    exp_r_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
+    let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
+    Ok(pl::ExpKind::Cons(Box::new(exp_l_pl), Box::new(exp_r_pl)))
+}
+
+// - Concatenation expression
+
+fn prosify_cat_exp(
+    ctx: &Context,
+    exp_l_sl: &sl::Exp,
+    exp_r_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
+    let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
+    Ok(pl::ExpKind::Cat(Box::new(exp_l_pl), Box::new(exp_r_pl)))
+}
+
+// - Membership expression
+
+fn prosify_mem_exp(
+    ctx: &Context,
+    exp_l_sl: &sl::Exp,
+    exp_r_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
+    let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
+    Ok(pl::ExpKind::Mem(Box::new(exp_l_pl), Box::new(exp_r_pl)))
+}
+
+// - Length expression
+
+fn prosify_len_exp(ctx: &Context, exp_inner_sl: &sl::Exp) -> Result<pl::ExpKind, ProseError> {
+    let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
+    Ok(pl::ExpKind::Len(Box::new(exp_inner_pl)))
+}
+
+// - Dot expression
+
+fn prosify_dot_exp(
+    ctx: &Context,
+    exp_inner_sl: &sl::Exp,
+    atom: &il::Atom,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
+    Ok(pl::ExpKind::Dot(Box::new(exp_inner_pl), atom.clone()))
+}
+
+// - Index expression
+
+fn prosify_idx_exp(
+    ctx: &Context,
+    exp_l_sl: &sl::Exp,
+    exp_r_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_l_pl = prosify_exp(ctx, exp_l_sl)?;
+    let exp_r_pl = prosify_exp(ctx, exp_r_sl)?;
+    Ok(pl::ExpKind::Idx(Box::new(exp_l_pl), Box::new(exp_r_pl)))
+}
+
+// - Slice expression
+
+fn prosify_slice_exp(
+    ctx: &Context,
+    exp_base_sl: &sl::Exp,
+    exp_idx_sl: &sl::Exp,
+    exp_len_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_base_pl = prosify_exp(ctx, exp_base_sl)?;
+    let exp_idx_pl = prosify_exp(ctx, exp_idx_sl)?;
+    let exp_len_pl = prosify_exp(ctx, exp_len_sl)?;
+    Ok(pl::ExpKind::Slice(Box::new(exp_base_pl), Box::new(exp_idx_pl), Box::new(exp_len_pl)))
+}
+
+// - Update expression
+
+fn prosify_update_exp(
+    ctx: &Context,
+    exp_base_sl: &sl::Exp,
+    path_sl: &sl::Path,
+    exp_field_sl: &sl::Exp,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_base_pl = prosify_exp(ctx, exp_base_sl)?;
+    let path_pl = prosify_path(ctx, path_sl)?;
+    let exp_field_pl = prosify_exp(ctx, exp_field_sl)?;
+    Ok(pl::ExpKind::Upd(Box::new(exp_base_pl), Box::new(path_pl), Box::new(exp_field_pl)))
+}
+
+// - Call expression
+
+fn prosify_call_exp(
+    ctx: &Context,
+    exp_sl: &sl::Exp,
+    id_func: &sl::Id,
+    targs: &[sl::Targ],
+    args_sl: &[sl::Arg],
+) -> Result<(pl::ExpKind, annot::Hints), ProseError> {
+    let args_pl = prosify_args(ctx, args_sl)?;
+    let hints = build_func_hints(ctx, id_func);
+    validate_hint_alter(&exp_sl.span, &hints, args_sl.len())?;
+    Ok((pl::ExpKind::Call(id_func.clone(), targs.to_vec(), args_pl), hints))
+}
+
+// - Iterated expression
+
+fn prosify_iter_exp(
+    ctx: &Context,
+    exp_inner_sl: &sl::Exp,
+    iter_exp: &sl::ExpIter,
+) -> Result<pl::ExpKind, ProseError> {
+    let exp_inner_pl = prosify_exp(ctx, exp_inner_sl)?;
+    Ok(pl::ExpKind::Iter(Box::new(exp_inner_pl), iter_exp.clone()))
 }
 
 // - Expression list
@@ -578,7 +661,7 @@ fn prosify_dispatch_instr_kind(
         sl::InstrKind::Case(instr_sl) => prosify_dispatch_case_instr(ctx, instr_sl, span),
         sl::InstrKind::Let(instr_sl) => prosify_dispatch_let_instr(ctx, instr_sl, span),
         sl::InstrKind::Debug(instr_sl) => prosify_dispatch_debug_instr(ctx, instr_sl, span),
-        sl::InstrKind::Group(instr_sl) => prosify_rulegroup_instr(ctx, instr_sl, span),
+        sl::InstrKind::Group(instr_sl) => prosify_dispatch_rulegroup_instr(ctx, instr_sl, span),
         sl::InstrKind::Rule(_) | sl::InstrKind::Result(_) | sl::InstrKind::Return(_) => {
             Err(ProseError::new(ProseErrorKind::InvalidDispatchTier, span))
         }
@@ -612,7 +695,14 @@ fn prosify_dispatch_hold_instr(
     instr_sl: sl::HoldInstr,
     span: Span,
 ) -> Result<pl::DispatchBlock, ProseError> {
-    let hints = hints_of_hold_instr(ctx, &instr_sl.id);
+    let hints = ctx
+        .hints_rel(&instr_sl.id)
+        .map(|hints_rel| annot::Hints {
+            prose_true: hints_rel.prose_true.clone(),
+            prose_false: hints_rel.prose_false.clone(),
+            ..annot::Hints::default()
+        })
+        .unwrap_or_default();
     validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
     let not_exp_pl = prosify_not_exp(ctx, &instr_sl.not_exp)?;
     let hold_case_pl = prosify_dispatch_hold_case(ctx, instr_sl.hold_case)?;
@@ -685,7 +775,14 @@ fn prosify_dispatch_let_instr(
     span: Span,
 ) -> Result<pl::DispatchBlock, ProseError> {
     let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
-    let hints = hints_of_let_instr(&exp_l_pl);
+    let hints = if matches!(exp_l_pl.node.node, pl::ExpKind::Case(_)) {
+        annot::Hints {
+            prose_fields: exp_l_pl.hints.prose_fields.clone(),
+            ..annot::Hints::default()
+        }
+    } else {
+        annot::Hints::default()
+    };
     let exp_r_pl = prosify_exp(ctx, &instr_sl.exp_r)?;
     let instr_pl =
         pl::LetInstr { exp_l: exp_l_pl, exp_r: exp_r_pl, iter_instrs: instr_sl.iter_instrs };
@@ -716,12 +813,19 @@ fn prosify_dispatch_debug_instr(
 
 // - Group instruction
 
-fn prosify_rulegroup_instr(
+fn prosify_dispatch_rulegroup_instr(
     ctx: &Context,
     instr_sl: sl::GroupInstr,
     span: Span,
 ) -> Result<pl::DispatchBlock, ProseError> {
-    let hints = hints_of_group_instr(ctx);
+    let hints = ctx
+        .hints_rel(ctx.namespace())
+        .map(|hints_rel| annot::Hints {
+            prose_in: hints_rel.prose_in.clone(),
+            prose_true: hints_rel.prose_true.clone(),
+            ..annot::Hints::default()
+        })
+        .unwrap_or_default();
     input::validate(&instr_sl.rel_signature.input_hint, instr_sl.exps.len())
         .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
     validate_hint_alter(&span, &hints, instr_sl.rel_signature.input_hint.indices().len())?;
@@ -827,7 +931,14 @@ fn prosify_group_hold_instr(
     instr_sl: sl::HoldInstr,
     span: Span,
 ) -> Result<pl::GroupBlock, ProseError> {
-    let hints = hints_of_hold_instr(ctx, &instr_sl.id);
+    let hints = ctx
+        .hints_rel(&instr_sl.id)
+        .map(|hints_rel| annot::Hints {
+            prose_true: hints_rel.prose_true.clone(),
+            prose_false: hints_rel.prose_false.clone(),
+            ..annot::Hints::default()
+        })
+        .unwrap_or_default();
     validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
     let not_exp_pl = prosify_not_exp(ctx, &instr_sl.not_exp)?;
     let hold_case_pl = prosify_group_hold_case(ctx, instr_sl.hold_case)?;
@@ -900,7 +1011,14 @@ fn prosify_group_let_instr(
     span: Span,
 ) -> Result<pl::GroupBlock, ProseError> {
     let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
-    let hints = hints_of_let_instr(&exp_l_pl);
+    let hints = if matches!(exp_l_pl.node.node, pl::ExpKind::Case(_)) {
+        annot::Hints {
+            prose_fields: exp_l_pl.hints.prose_fields.clone(),
+            ..annot::Hints::default()
+        }
+    } else {
+        annot::Hints::default()
+    };
     let exp_r_pl = prosify_exp(ctx, &instr_sl.exp_r)?;
     let instr_pl =
         pl::LetInstr { exp_l: exp_l_pl, exp_r: exp_r_pl, iter_instrs: instr_sl.iter_instrs };
@@ -936,7 +1054,17 @@ fn prosify_group_rule_instr(
     instr_sl: sl::RuleInstr,
     span: Span,
 ) -> Result<pl::GroupBlock, ProseError> {
-    let hints = hints_of_rule_instr(ctx, &instr_sl.id, &instr_sl.input_hint);
+    let hints = ctx
+        .hints_rel(&instr_sl.id)
+        .map(|hints_rel| annot::Hints {
+            prose_in: hints_rel.prose_in.clone(),
+            prose_out: hints_rel
+                .prose_out
+                .as_ref()
+                .map(|hint| alter::realign(hint, &instr_sl.input_hint)),
+            ..annot::Hints::default()
+        })
+        .unwrap_or_default();
     let num_args = instr_sl.not_exp.args().len();
     input::validate(&instr_sl.input_hint, num_args)
         .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
@@ -966,7 +1094,14 @@ fn prosify_group_result_instr(
     instr_sl: sl::ResultInstr,
     span: Span,
 ) -> Result<pl::GroupBlock, ProseError> {
-    let hints = hints_of_result_instr(ctx, &instr_sl.rel_signature.input_hint);
+    let hints = ctx
+        .hints_rel(ctx.namespace())
+        .and_then(|hints_rel| hints_rel.prose_out.as_ref())
+        .map(|hint| annot::Hints {
+            prose_out: Some(alter::realign(hint, &instr_sl.rel_signature.input_hint)),
+            ..annot::Hints::default()
+        })
+        .unwrap_or_default();
     validate_hint_alter(&span, &hints, instr_sl.exps.len())?;
     let exps_output_pl = prosify_exps(ctx, &instr_sl.exps)?;
     let instr_pl =
@@ -1072,18 +1207,22 @@ fn prosify_var_def(def_var_sl: sl::VarDef) -> pl::VarDef {
 
 // - Relation definition
 
-fn prosify_rel_def(ctx: &mut Context, def_rel_sl: sl::RelDef) -> Result<pl::RelDef, ProseError> {
-    let def_rel_pl = match def_rel_sl {
+fn prosify_rel_def(
+    ctx: &mut Context,
+    def_rel_sl: sl::RelDef,
+) -> Result<(pl::RelDef, annot::Hints), ProseError> {
+    match def_rel_sl {
         sl::RelDef::Extern(def_rel_sl) => {
+            let hints = build_rel_hints(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)?;
             let def_rel_pl = prosify_extern_rel_def(ctx, def_rel_sl)?;
-            pl::RelDef::Extern(def_rel_pl)
+            Ok((pl::RelDef::Extern(def_rel_pl), hints))
         }
         sl::RelDef::Defined(def_rel_sl) => {
+            let hints = build_rel_hints(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)?;
             let def_rel_pl = prosify_defined_rel_def(ctx, def_rel_sl)?;
-            pl::RelDef::Defined(def_rel_pl)
+            Ok((pl::RelDef::Defined(def_rel_pl), hints))
         }
-    };
-    Ok(def_rel_pl)
+    }
 }
 
 // - External relation definition
@@ -1132,26 +1271,29 @@ fn prosify_defined_rel_def(
 fn prosify_func_def(
     ctx: &mut Context,
     def_func_sl: sl::MetaFuncDef,
-) -> Result<pl::MetaFuncDef, ProseError> {
-    let def_func_pl = match def_func_sl {
+) -> Result<(pl::MetaFuncDef, annot::Hints), ProseError> {
+    match def_func_sl {
         sl::MetaFuncDef::Extern(def_func_sl) => {
+            let hints = build_func_hints(ctx, &def_func_sl.id);
             let def_func_pl = prosify_extern_func_def(ctx, def_func_sl)?;
-            pl::MetaFuncDef::Extern(def_func_pl)
+            Ok((pl::MetaFuncDef::Extern(def_func_pl), hints))
         }
         sl::MetaFuncDef::Builtin(def_func_sl) => {
+            let hints = build_func_hints(ctx, &def_func_sl.id);
             let def_func_pl = prosify_builtin_func_def(ctx, def_func_sl)?;
-            pl::MetaFuncDef::Builtin(def_func_pl)
+            Ok((pl::MetaFuncDef::Builtin(def_func_pl), hints))
         }
         sl::MetaFuncDef::Table(def_func_sl) => {
+            let hints = build_func_hints(ctx, &def_func_sl.id);
             let def_func_pl = prosify_table_func_def(ctx, def_func_sl)?;
-            pl::MetaFuncDef::Table(def_func_pl)
+            Ok((pl::MetaFuncDef::Table(def_func_pl), hints))
         }
         sl::MetaFuncDef::Defined(def_func_sl) => {
+            let hints = build_func_hints(ctx, &def_func_sl.id);
             let def_func_pl = prosify_defined_func_def(ctx, def_func_sl)?;
-            pl::MetaFuncDef::Defined(def_func_pl)
+            Ok((pl::MetaFuncDef::Defined(def_func_pl), hints))
         }
-    };
-    Ok(def_func_pl)
+    }
 }
 
 // - External function definition
@@ -1231,8 +1373,7 @@ fn prosify_defined_func_def(
 // - Definition
 
 fn prosify_def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError> {
-    let hints = hints_of_def(ctx, &def_sl.node)?;
-    let def_kind_pl = prosify_def_kind(ctx, def_sl.node)?;
+    let (def_kind_pl, hints) = prosify_def_kind(ctx, def_sl.node)?;
     let def_node_pl = crate::phrase! { node: def_kind_pl, span: def_sl.span };
     let def_pl = crate::annotated! { node: def_node_pl, hints: hints };
     Ok(def_pl)
@@ -1241,26 +1382,25 @@ fn prosify_def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError
 fn prosify_def_kind(
     ctx: &mut Context,
     def_kind_sl: sl::DefKind,
-) -> Result<pl::DefKind, ProseError> {
-    let def_kind_pl = match def_kind_sl {
-        sl::DefKind::Typ(typdef_sl) => {
-            let typdef_pl = prosify_typ_def(typdef_sl);
-            pl::DefKind::Typ(typdef_pl)
+) -> Result<(pl::DefKind, annot::Hints), ProseError> {
+    match def_kind_sl {
+        sl::DefKind::Typ(def_typ_sl) => {
+            let def_typ_pl = prosify_typ_def(def_typ_sl);
+            Ok((pl::DefKind::Typ(def_typ_pl), annot::Hints::default()))
         }
         sl::DefKind::Var(def_var_sl) => {
             let def_var_pl = prosify_var_def(def_var_sl);
-            pl::DefKind::Var(def_var_pl)
+            Ok((pl::DefKind::Var(def_var_pl), annot::Hints::default()))
         }
         sl::DefKind::Rel(def_rel_sl) => {
-            let def_rel_pl = prosify_rel_def(ctx, def_rel_sl)?;
-            pl::DefKind::Rel(def_rel_pl)
+            let (def_rel_pl, hints) = prosify_rel_def(ctx, def_rel_sl)?;
+            Ok((pl::DefKind::Rel(def_rel_pl), hints))
         }
         sl::DefKind::MetaFunc(def_func_sl) => {
-            let def_func_pl = prosify_func_def(ctx, def_func_sl)?;
-            pl::DefKind::MetaFunc(def_func_pl)
+            let (def_func_pl, hints) = prosify_func_def(ctx, def_func_sl)?;
+            Ok((pl::DefKind::MetaFunc(def_func_pl), hints))
         }
-    };
-    Ok(def_kind_pl)
+    }
 }
 
 // == Entry point
