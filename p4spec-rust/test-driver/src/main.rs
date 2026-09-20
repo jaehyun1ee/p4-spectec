@@ -37,7 +37,7 @@ enum Command {
     Algo,
     /// Compare the structured P4 specification in both rule-group modes
     Structure,
-    /// Convert the full P4 specification to prose
+    /// Compare the rendered prose specification with expected output
     Prose,
     /// Compare the full P4 corpus with stored file results (cache on, det off)
     RunAl,

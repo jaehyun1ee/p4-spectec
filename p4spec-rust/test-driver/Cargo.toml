@@ -10,6 +10,7 @@ clap = { version = "4.6.6", features = ["derive"] }
 thiserror = "1.0.63"
 expect-test = "1.5.1"
 indicatif = "0.18.6"
+sha2 = "0.10.9"
 
 [lints.rust]
 unsafe_code = "forbid"
