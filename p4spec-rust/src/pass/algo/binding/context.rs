@@ -1,4 +1,10 @@
 //! State accumulated while analyzing bindings
+//!
+//! `Context` carries the free identifiers of the construct under analysis,
+//! the variables already bound (`venv`) with their dimensions,
+//! and the type and meta-variable environments loaded from the specification.
+//! Premises bind variables in order,
+//! so `venv` grows as a premise list is analyzed.
 
 use crate::{
     lang::{
@@ -15,17 +21,23 @@ use crate::{
 
 use super::super::{AlgoError, AlgoErrorKind};
 
+/// Bindings and environments threaded through one binding analysis.
 #[derive(Clone, Debug)]
 pub struct Context {
+    /// Free identifiers of the construct under analysis.
     pub(crate) frees: IdSet,
+    /// Variables bound so far, with their dimensions.
     pub(crate) venv: VEnv,
+    /// Type definitions.
     pub(crate) tdenv: TDEnv,
+    /// Meta-variable types.
     pub(crate) menv: MEnv,
 }
 
 impl Context {
     // - Constructor
 
+    /// Creates a context with the primitive meta-variables bound.
     pub fn new() -> Self {
         let mut menv = MEnv::new();
         for (name, typ) in [
@@ -52,6 +64,7 @@ impl Context {
         }
     }
 
+    /// Records newly bound variables, keeping the first dimension seen.
     pub fn add_bounds(&mut self, venv: &VEnv) {
         for (id, dim) in venv.iter() {
             if !self.venv.contains_key(id) {
@@ -73,6 +86,7 @@ impl Context {
 
     // - Definition loading
 
+    /// Loads a type or meta-variable definition into the environments.
     pub fn load_def(&mut self, def_al: &ast::Def) {
         match &def_al.node {
             ast::DefKind::Typ(typ_def_al) => self.load_typ_def(typ_def_al),
@@ -83,6 +97,7 @@ impl Context {
         }
     }
 
+    /// Stores an extern or defined type under its id.
     fn load_typ_def(&mut self, typ_def_al: &ast::TypDef) {
         match typ_def_al {
             ast::TypDef::Extern(extern_typ_al) => {
@@ -98,6 +113,7 @@ impl Context {
         }
     }
 
+    /// Loads every type and meta-variable definition of the specification.
     pub fn load(&mut self, spec_al: &ast::Spec) {
         for def_al in spec_al {
             self.load_def(def_al);

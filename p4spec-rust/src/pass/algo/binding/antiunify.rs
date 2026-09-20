@@ -1,11 +1,13 @@
 //! Anti-unification of rule input expressions
 //!
-//! Overlap corresponding inputs to obtain a shared template, then add equality
-//! premises for each rule. For example, `(true, x)` and `(false, x)` become
-//! `(b, x)`, with `if b == true` and `if b == false` on the respective paths
+//! Overlap corresponding inputs to obtain a shared template,
+//! then add equality premises for each rule.
+//! For example, `(true, x)` and `(false, x)` become `(b, x)`,
+//! with `if b == true` and `if b == false` on the respective paths.
 //!
-//! A failed structural overlap falls back to one fresh variable if the types
-//! are equivalent. Fresh names from the failed attempt are discarded
+//! A failed structural overlap falls back to one fresh variable
+//! if the types are equivalent.
+//! Fresh names from the failed attempt are discarded.
 
 use crate::{
     lang::{
@@ -30,6 +32,7 @@ use super::{
 
 // - Expressions
 
+/// Overlaps one input against the template, structurally or by a fresh name.
 fn overlap_exp(
     tdenv: &TDEnv,
     menv: &MEnv,
@@ -72,6 +75,7 @@ fn overlap_exp(
         Err(error) => return Err(error),
     }
 
+    // Fall back to a fresh unifier variable when the types agree
     let typ_template =
         phrase!(node: exp_template.note.as_ref().clone(), span: exp_template.span.clone());
     let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
@@ -87,6 +91,7 @@ fn overlap_exp(
     Ok(exp_template)
 }
 
+/// Overlaps two expressions of the same shape node by node.
 fn overlap_exp_kind(
     tdenv: &TDEnv,
     menv: &MEnv,
@@ -96,6 +101,7 @@ fn overlap_exp_kind(
     exp: &ast::Exp,
 ) -> Result<ast::ExpKind, AlgoError> {
     match (&exp_template.node, &exp.node) {
+        // An existing unifier variable absorbs any input
         (ast::ExpKind::Id(id_template), _) if ids_unifier.contains(id_template) => {
             Ok(exp_template.node.clone())
         }
@@ -141,6 +147,7 @@ fn overlap_exp_kind(
     }
 }
 
+/// Overlaps expression lists pairwise, requiring equal length.
 fn overlap_exps<'a>(
     tdenv: &TDEnv,
     menv: &MEnv,
@@ -167,6 +174,7 @@ fn overlap_exps<'a>(
 
 // - Case expression
 
+/// Overlaps the arguments of two case expressions with the same mixfix.
 fn overlap_case_exp(
     tdenv: &TDEnv,
     menv: &MEnv,
@@ -193,6 +201,7 @@ fn overlap_case_exp(
 
 // - Record expression
 
+/// Overlaps the fields of two struct expressions with the same atoms.
 fn overlap_str_exp(
     tdenv: &TDEnv,
     menv: &MEnv,
@@ -217,6 +226,7 @@ fn overlap_str_exp(
 
 // - Expressions across rules
 
+/// Folds one input position across all rules into a template.
 fn overlap_exp_across_rules<'a>(
     tdenv: &TDEnv,
     menv: &MEnv,
@@ -232,6 +242,7 @@ fn overlap_exp_across_rules<'a>(
     Ok((ids_unifier, exp_template))
 }
 
+/// Builds the template for every input position across rules.
 fn overlap_exps_across_rules(
     tdenv: &TDEnv,
     menv: &MEnv,
@@ -241,6 +252,7 @@ fn overlap_exps_across_rules(
     let Some((exps_head, exps_tail)) = exps_by_rule.split_first() else {
         return Ok((IdSet::new(), vec![]));
     };
+    // All rules must supply the same number of inputs
     for exps in exps_tail {
         if exps.len() != exps_head.len() {
             let kind = AlgoErrorKind::ExpressionArityMismatch {
@@ -251,6 +263,7 @@ fn overlap_exps_across_rules(
             return Err(error);
         }
     }
+    // A single rule is its own template
     if exps_tail.is_empty() {
         return Ok((IdSet::new(), exps_head.clone()));
     }
@@ -271,11 +284,13 @@ fn overlap_exps_across_rules(
 
 // - Expressions
 
+/// Emits the equality premises a rule needs to match the template.
 fn populate_exp(ids_unifier: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) -> Vec<ast::Prem> {
     if exp_template.syntax_eq(exp) {
         return vec![];
     }
     match (&exp_template.node, &exp.node) {
+        // A unifier variable is fixed by equating it with the rule's input
         (ast::ExpKind::Id(id_template), _) if ids_unifier.contains(id_template) => {
             let prem = populate_equality_prem(exp_template, exp);
             vec![prem]
@@ -303,6 +318,7 @@ fn populate_exp(ids_unifier: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) ->
             let exps = exp_fields.iter().map(|ast::ExpField { exp, .. }| exp);
             populate_exps(ids_unifier, exps_template, exps)
         }
+        // Any other mismatch becomes an equality on the whole sub-expression
         _ => {
             let prem = populate_equality_prem(exp_template, exp);
             vec![prem]
@@ -323,6 +339,7 @@ fn populate_exps<'a>(
 
 // - Equality premise
 
+/// Builds `if template = exp` spanning both operands.
 fn populate_equality_prem(exp_template: &ast::Exp, exp: &ast::Exp) -> ast::Prem {
     let span = Span::over(&[exp_template.span.clone(), exp.span.clone()]);
     let op = ast::CmpOp::Bool(prim::bool::CmpOp::Eq);
@@ -341,6 +358,7 @@ fn populate_equality_prem(exp_template: &ast::Exp, exp: &ast::Exp) -> ast::Prem 
 
 // - Expressions by rule
 
+/// Emits the equality premises of every rule.
 fn populate_exps_by_rule(
     ids_unifier: &IdSet,
     exps_template: &[ast::Exp],
@@ -354,7 +372,7 @@ fn populate_exps_by_rule(
 
 // == Entry point
 
-/// Anti-unifies input paths and returns shared templates plus per-path premises
+/// Anti-unifies input paths into shared templates plus per-path premises.
 #[allow(clippy::type_complexity)]
 pub fn antiunify(
     ctx: &mut Context,
@@ -364,6 +382,7 @@ pub fn antiunify(
     let (ids_unifier, exps_template) =
         overlap_exps_across_rules(&ctx.tdenv, &ctx.menv, &mut ids_free, &exps_by_rule)?;
     let prems_by_rule = populate_exps_by_rule(&ids_unifier, &exps_template, &exps_by_rule);
+    // Only unifier names from the successful overlap become free
     ctx.add_frees(&ids_unifier);
     Ok((exps_template, prems_by_rule))
 }
