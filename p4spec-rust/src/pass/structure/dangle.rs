@@ -178,11 +178,13 @@ pub(crate) fn instrument(
     block_else_ol: Option<ol::Block>,
 ) -> Result<(sl::Block, Option<sl::Block>), StructureError> {
     match block_else_ol {
+        // With an otherwise block nothing dangles
         Some(block_else_ol) => {
             let block = insert_nothing(block_ol)?;
             let block_else = insert_nothing(block_else_ol)?;
             Ok((block, Some(block_else)))
         }
+        // Without one, failing guards fall through
         None => {
             let block = insert_dangle(block_ol)?;
             Ok((block, None))

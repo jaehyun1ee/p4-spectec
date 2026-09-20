@@ -171,6 +171,7 @@ fn antiunify_exp(
     exp_template: &Exp,
     exp: &Exp,
 ) -> Result<Exp, StructureError> {
+    // Identical inputs need no generalization
     if exp_template.syntax_eq(exp) {
         return Ok(exp_template.clone());
     }
@@ -201,6 +202,7 @@ fn antiunify_exp(
             exp_body,
             exp_iter,
         )?,
+        // Different shapes cannot be anti-unified
         _ => {
             let error_kind = StructureErrorKind::Antiunification;
             let error = StructureError::new(error_kind, exp.span.clone());
@@ -285,6 +287,7 @@ fn antiunify_str_exp(
     span: &Span,
 ) -> Result<ExpKind, StructureError> {
     check_arity(exp_fields_template.len(), exp_fields.len(), span)?;
+    // Field atoms must agree pairwise
     if !exp_fields_template.iter().zip(exp_fields).all(
         |(ExpField { atom: atom_template, .. }, ExpField { atom, .. })| {
             atom_template.syntax_eq(atom)
@@ -318,6 +321,7 @@ fn antiunify_iter_exp(
     let ExpIter { iter, vars: vars_template } = exp_iter_template;
     let ExpIter { vars, .. } = exp_iter;
     let exp_template = antiunify_exp(frees, uenv, exp_template, exp)?;
+    // Map both sides' variables to their unified names, dropping duplicates
     let mut vars_unified = vec![];
     for var in vars_template.iter().chain(vars) {
         let Var { id, typ, iters } = var;
@@ -425,6 +429,7 @@ fn antiunify_arg(
                 crate::phrase! {node: arg_kind_template, span: arg_template.span.clone()};
             Ok(arg_template)
         }
+        // Function arguments must name the same function
         (ArgKind::Def(id_template), ArgKind::Def(id)) if id_template.syntax_eq(id) => {
             Ok(arg_template.clone())
         }
@@ -478,12 +483,14 @@ pub(super) fn antiunify_rule_matches(
     exps_by_rule_group: &[Vec<Exp>],
     exps_else: Option<&[Exp]>,
 ) -> Result<(Vec<Exp>, Vec<Vec<Prem>>, Option<Vec<Prem>>), StructureError> {
+    // The otherwise group joins the matches for the template
     let exps_by_match = exps_by_rule_group
         .iter()
         .map(Vec::as_slice)
         .chain(exps_else)
         .collect::<Vec<_>>();
     let (uenv, exps_template) = antiunify_exps_across_matches(frees, &exps_by_match)?;
+    // Each group binds its inputs to the template
     let prems_by_rule_group = exps_by_rule_group
         .iter()
         .map(|exps| {

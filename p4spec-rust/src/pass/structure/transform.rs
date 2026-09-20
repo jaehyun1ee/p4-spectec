@@ -242,6 +242,7 @@ fn demote_iter_prems(
         .into_iter()
         .map(|prem_iter| {
             let al::PremIter { iter, vars_bound, vars_bind } = prem_iter;
+            // Binding under a condition-like premise is an error
             if !vars_bind.is_empty() {
                 let error = StructureError::new(error_kind.clone(), span.clone());
                 return Err(error);
@@ -439,6 +440,7 @@ fn struct_else_group(
     mut prems_unified: Vec<al::Prem>,
     else_group: al::ElseGroup,
 ) -> Result<ol::Block, StructureError> {
+    // Anti-unification premises precede the group's own match premises
     let al::ElseGroupKind { id, rule_match, rule_path } = else_group.node;
     let al::RuleMatch { exps_signature, prems, .. } = rule_match;
     prems_unified.extend(prems);
@@ -560,6 +562,7 @@ fn struct_rel_exps_input(
         let error_kind = StructureErrorKind::Input(error);
         StructureError::new(error_kind, span.clone())
     })?;
+    // One fresh variable per input position
     let mut frees = IdSet::new();
     let mut exps_input = vec![];
     for idx in input_hint.indices() {

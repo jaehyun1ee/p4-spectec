@@ -76,6 +76,7 @@ impl Renamer {
     /// Fresh names avoid the binders, the block's free names,
     /// both sides of this renamer, and names already chosen in this call.
     pub(crate) fn freshen_binders(&self, frees: &IdSet, block: &ol::Block) -> Self {
+        // Binders that a rename target would capture
         let ids_collide: IdSet = self
             .values()
             .into_iter()
@@ -84,6 +85,7 @@ impl Renamer {
         if ids_collide.is_empty() {
             return Self::empty();
         }
+        // Avoid every name in play, then pick fresh ones
         let mut ids_avoid = frees
             .clone()
             .union(block.free())
@@ -124,11 +126,13 @@ impl Renamer {
 
     /// Renames identifiers throughout an expression.
     pub(crate) fn rename_exp(&self, changed: &mut bool, exp: Exp) -> Exp {
+        // Nothing to rename
         if self.ids.is_empty() {
             return exp;
         }
         let exp_kind = match exp.node {
             ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp.node,
+            // Renaming applies at identifiers; other nodes recurse
             ExpKind::Id(id) => ExpKind::Id(self.rename_id(changed, id)),
             ExpKind::Un(op, op_typ, exp) => {
                 ExpKind::Un(op, op_typ, Box::new(self.rename_exp(changed, *exp)))
@@ -454,6 +458,7 @@ impl Renamer {
         instr_ol: ol::RuleInstr,
     ) -> Result<ol::InstrKind, StructureError> {
         let ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
+        // Split the arguments by the input hint
         let exps = not_exp.args().into_iter().cloned().collect();
         let (exps_input, exps_output) = input::split(&input_hint, exps)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
@@ -461,6 +466,7 @@ impl Renamer {
         let exps_input = self.rename_exps(changed, exps_input);
         let frees_output = exps_output.as_slice().free();
         let mut renamer = self.filter(|id, _| !frees_output.contains(id));
+        // Freshen output binders that would capture a rename target
         let renamer_fresh = renamer.freshen_binders(&frees_output, &block);
         let exps_output = renamer_fresh.rename_exps(changed, exps_output);
         renamer.ids.extend(
@@ -469,6 +475,7 @@ impl Renamer {
                 .iter()
                 .map(|(id, id_fresh)| (id.clone(), id_fresh.clone())),
         );
+        // Rebuild the notation, then rename iterators and body
         let exps = input::combine(&input_hint, exps_input, exps_output)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
         let mixop = not_exp.to_mixop();
