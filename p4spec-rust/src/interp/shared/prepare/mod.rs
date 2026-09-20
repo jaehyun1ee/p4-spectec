@@ -1,4 +1,9 @@
 //! Prepare source syntax for slot-based execution
+//!
+//! `Prepare` walks IL syntax once
+//! and replaces identifiers and variables by frame slots (`IdSlot`, `VarSlot`),
+//! so evaluation indexes a frame instead of looking names up;
+//! containers, phrases, and notation recurse structurally.
 
 pub mod ast;
 
@@ -6,9 +11,12 @@ use crate::lang::common::{Id, notation::mixfix::Mixfix, source::NotePhrase};
 use crate::lang::data::var::{IdSlot, Var, VarSlot};
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
 
+/// Slot resolution of one syntax node.
 pub trait Prepare: Sized {
+    /// The same node with identifiers resolved to slots.
     type Output;
 
+    /// Resolves the node's identifiers in `layout`.
     fn prepare(self, layout: &mut FrameLayout) -> Self::Output;
 }
 
@@ -62,6 +70,7 @@ impl<T: Prepare, N, S> Prepare for NotePhrase<T, N, S> {
     type Output = NotePhrase<T::Output, N, S>;
 
     fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+        // Grow the stack for deep syntax trees
         stacker::maybe_grow(64 * 1024, 1024 * 1024, || NotePhrase {
             node: self.node.prepare(layout),
             note: self.note,

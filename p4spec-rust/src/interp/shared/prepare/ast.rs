@@ -1,4 +1,9 @@
 //! Slot instantiation of shared IL syntax
+//!
+//! The type aliases name the slot-resolved IL forms;
+//! the `Prepare` impls rewrite each node.
+//! Iterations also register the outer variable `x*` for every iterated `x`,
+//! so `eval::iter` can find its slot.
 
 use super::Prepare;
 use crate::lang::data::var::{IdSlot, VarSlot};
@@ -15,10 +20,12 @@ use crate::runtime::envs::interp::shared::frame::FrameLayout;
 
 // - Variables
 
+/// A variable with its frame slot.
 pub type Var = VarSlot;
 
 // - Expressions
 
+/// An expression over slot-resolved identifiers.
 pub type Exp = source::Exp<IdSlot, VarSlot>;
 pub type ExpField = source::ExpField<IdSlot, VarSlot>;
 pub type ExpKind = source::ExpKind<IdSlot, VarSlot>;
@@ -27,16 +34,19 @@ pub type ExpIter = source::ExpIter<VarSlot>;
 
 // - Paths
 
+/// A path over slot-resolved identifiers.
 pub type Path = source::Path<IdSlot, VarSlot>;
 pub type PathKind = source::PathKind<IdSlot, VarSlot>;
 
 // - Arguments
 
+/// An argument over slot-resolved identifiers.
 pub type Arg = source::Arg<IdSlot, VarSlot>;
 pub type ArgKind = source::ArgKind<IdSlot, VarSlot>;
 
 // - Premises
 
+/// A premise iterator over slot-resolved variables.
 pub type PremIter = source::PremIter<VarSlot>;
 
 // == Preparation
@@ -131,6 +141,7 @@ impl Prepare for source::ExpIter {
 
     fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
         let source::ExpIter { iter, vars } = self;
+        // Register `x*` for every iterated `x` so its slot exists
         let vars = vars.prepare(layout);
         for var in &vars {
             let mut var_outer = var.var.clone();
@@ -191,6 +202,7 @@ impl Prepare for source::PremIter {
             }
         }
 
+        // Register the outer variables of the bound and binding variables
         let vars_bound = self.vars_bound.prepare(layout);
         let vars_bind = self.vars_bind.prepare(layout);
         prepare_outer_vars(&vars_bound, self.iter, layout);
