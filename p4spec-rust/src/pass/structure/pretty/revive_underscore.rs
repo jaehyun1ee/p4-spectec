@@ -1,7 +1,7 @@
 //! Give used underscore-prefixed inputs and OL binders ordinary names
 //!
 //! `candid_renamer` strips leading underscores and chooses fresh names;
-//! `downstream_block` records which candidates are actually used
+//! `downstream_block` records which candidates are actually used.
 //! When `x` is available:
 //!
 //! ```text
@@ -12,9 +12,9 @@
 //! let x = source { return x }
 //! ```
 //!
-//! An unused `_x` keeps its name; a conflicting `x` forces a fresh name
+//! An unused `_x` keeps its name; a conflicting `x` forces a fresh name.
 //! `apply_rel` and `apply_func` also check uses of inputs in the fallback,
-//! while nested bindings of the same underscore name stop substitution
+//! while nested bindings of the same underscore name stop substitution.
 
 use crate::lang::{
     common::{ds::set::IdSet, source::Span},
@@ -31,6 +31,7 @@ use crate::pass::structure::{
 
 // == Candidate names
 
+/// Keeps the underscore-prefixed identifiers.
 fn underscores(frees: IdSet) -> IdSet {
     frees
         .iter()
@@ -39,6 +40,7 @@ fn underscores(frees: IdSet) -> IdSet {
         .collect()
 }
 
+/// Proposes an underscore-free fresh name for each binder in `ids`.
 fn candid_renamer(mut frees: IdSet, ids: &IdSet) -> (IdSet, Renamer) {
     let mut renamer = Renamer::empty();
     for id in ids.iter() {
@@ -53,11 +55,9 @@ fn candid_renamer(mut frees: IdSet, ids: &IdSet) -> (IdSet, Renamer) {
 
 // == Downstream uses
 
-// With {_x -> x}, `return _x` becomes `return x` and adds _x to ids_revive
-// A nested `let _x = value { return _x }` keeps its own _x inside the body
-
 // - Expressions
 
+/// Renames candidate uses in an expression, recording which were used.
 fn downstream_exp(renamer: &Renamer, changed: &mut bool, ids_revive: &mut IdSet, exp: Exp) -> Exp {
     let ids_used = underscores(exp.free());
     ids_revive.append(renamer.dom().intersection(&ids_used));
@@ -77,6 +77,11 @@ fn downstream_exps(
 
 // - Instructions
 
+/// Renames candidate uses in an instruction, recording which were used.
+///
+/// With `_x -> x`, `return _x` becomes `return x`
+/// and adds `_x` to `ids_revive`;
+/// a nested `let _x = value { return _x }` keeps its own `_x` inside the body.
 fn downstream_instr(
     renamer: &Renamer,
     changed: &mut bool,
@@ -207,6 +212,7 @@ fn downstream_group_instr(
 
 // - Let instruction
 
+/// Renames source and body; a rebound underscore name shadows its candidate.
 fn downstream_let_instr(
     renamer: &Renamer,
     changed: &mut bool,
@@ -226,6 +232,7 @@ fn downstream_let_instr(
 
 // - Rule instruction
 
+/// Renames inputs and body; rebound underscore outputs shadow the candidate.
 fn downstream_rule_instr(
     renamer: &Renamer,
     changed: &mut bool,
@@ -296,10 +303,10 @@ fn downstream_debug_instr(
 
 // == Upstream bindings
 
-// Choose candidate names, let downstream rewrite their uses, then rename binders
-// `let (_x, _y) = source { return _x }`
-// becomes `let (x, _y) = source { return x }` when x is available
-
+/// Revives the underscore binders of an instruction that its body uses.
+///
+/// `let (_x, _y) = source { return _x }`
+/// becomes `let (x, _y) = source { return x }` when `x` is available.
 fn upstream_instr(
     changed: &mut bool,
     frees: &IdSet,
@@ -401,6 +408,7 @@ fn upstream_group_instr(
 
 // - Let instruction
 
+/// Proposes names for the let's binders, keeps the used ones, and renames.
 fn upstream_let_instr(
     changed: &mut bool,
     frees: &IdSet,
@@ -421,6 +429,7 @@ fn upstream_let_instr(
 
 // - Rule instruction
 
+/// Proposes names for the rule call's outputs, keeps used ones, and renames.
 fn upstream_rule_instr(
     changed: &mut bool,
     frees: &IdSet,
@@ -448,8 +457,9 @@ fn upstream_rule_instr(
 
 // == Entry points
 
-// An input _x used only in `else { return _x }` is also renamed to x
-
+/// Revives the used underscore inputs of a relation, then its binders.
+///
+/// An input `_x` used only in `else { return _x }` is also renamed to `x`.
 pub(crate) fn apply_rel(
     changed: &mut bool,
     (mut exps_match, mut block, mut block_else): (Vec<Exp>, Block, Option<Block>),
@@ -473,6 +483,7 @@ pub(crate) fn apply_rel(
     Ok((exps_match, block, block_else))
 }
 
+/// Revives the used underscore arguments of a function, then its binders.
 pub(crate) fn apply_func(
     changed: &mut bool,
     (mut args_input, mut block, mut block_else): (Vec<Arg>, Block, Option<Block>),

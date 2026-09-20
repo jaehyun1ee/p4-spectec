@@ -1,7 +1,7 @@
 //! Shorten tick suffixes on definition inputs and OL binding names
 //!
-//! `find_rename_ticks` picks the smallest unused tick count for each base
-//! name; `upstream_block` carries enclosing names into nested bindings
+//! `find_rename_ticks` picks the smallest unused tick count for each base name;
+//! `upstream_block` carries enclosing names into nested bindings.
 //! When `x` is already in use but `x'` is available:
 //!
 //! ```text
@@ -12,8 +12,8 @@
 //! let x' = source { return (x', x) }
 //! ```
 //!
-//! `apply_rel` and `apply_func` rename definition inputs consistently in
-//! both the main body and fallback, avoiding names already used there
+//! `apply_rel` and `apply_func` rename definition inputs consistently
+//! in both the main body and the fallback, avoiding names already used there.
 
 use crate::lang::{
     common::{ds::set::IdSet, source::Span},
@@ -27,7 +27,10 @@ use crate::pass::structure::{
 
 // == Candidate names
 
-// With {x, x'', x'''}, x''' becomes x'; its own spelling does not reserve a slot
+/// Picks the shortest tick spelling of `id` not in `frees`.
+///
+/// With `{x, x'', x'''}`, `x'''` becomes `x'`;
+/// its own spelling reserves no slot.
 fn find_rename_ticks(frees: &IdSet, id: &Id) -> Option<Id> {
     let mut id_rename = id.clone();
     id_rename
@@ -39,7 +42,9 @@ fn find_rename_ticks(frees: &IdSet, id: &Id) -> Option<Id> {
     (id.node != id_rename.node).then_some(id_rename)
 }
 
-// Reserve each choice before the next binding: (x'', x''') can become (x, x')
+/// Builds the renaming for the ticked names among `ids`, reserving each choice.
+///
+/// `(x'', x''')` can become `(x, x')`.
 fn binding_renamer(frees: impl FnOnce() -> IdSet, ids: &IdSet) -> Renamer {
     let mut renamer = Renamer::empty();
     if !ids.iter().any(|id| id.node.ends_with('\'')) {
@@ -58,9 +63,9 @@ fn binding_renamer(frees: impl FnOnce() -> IdSet, ids: &IdSet) -> Renamer {
 
 // == Upstream bindings
 
-// Carry enclosing names into each body so new names cannot capture them
-// Under `if x { ... }`, a binding x' can stay x' but cannot become x
-
+/// Rewrites an instruction; `frees` are enclosing names new names must avoid.
+///
+/// Under `if x { ... }`, a binding `x'` can stay `x'` but cannot become `x`.
 fn upstream_instr(
     changed: &mut bool,
     frees: &IdSet,
@@ -167,6 +172,7 @@ fn upstream_group_instr(
 
 // - Let instruction
 
+/// Shortens ticks on the let's binders, then rewrites its body.
 fn upstream_let_instr(
     changed: &mut bool,
     frees_upstream: &IdSet,
@@ -196,6 +202,7 @@ fn upstream_let_instr(
 
 // - Rule instruction
 
+/// Shortens ticks on the rule call's outputs, then rewrites its body.
 fn upstream_rule_instr(
     changed: &mut bool,
     frees_upstream: &IdSet,
@@ -235,6 +242,7 @@ fn upstream_rule_instr(
 
 // == Definition inputs
 
+/// Shortens ticks on relation inputs consistently across both blocks.
 fn upstream_exps(
     changed: &mut bool,
     (mut exps_match, mut block, mut block_else): (Vec<Exp>, Block, Option<Block>),
@@ -260,6 +268,7 @@ fn upstream_exps(
     Ok((exps_match, block, block_else))
 }
 
+/// Shortens ticks on function arguments consistently across both blocks.
 fn upstream_args(
     changed: &mut bool,
     (mut args_input, mut block, mut block_else): (Vec<Arg>, Block, Option<Block>),
@@ -287,6 +296,7 @@ fn upstream_args(
 
 // == Entry points
 
+/// Shortens ticks in a relation's inputs, then in its blocks.
 pub(crate) fn apply_rel(
     changed: &mut bool,
     body: (Vec<Exp>, Block, Option<Block>),
@@ -300,6 +310,7 @@ pub(crate) fn apply_rel(
     Ok((exps_match, block, block_else))
 }
 
+/// Shortens ticks in a function's arguments, then in its blocks.
 pub(crate) fn apply_func(
     changed: &mut bool,
     body: (Vec<Arg>, Block, Option<Block>),
