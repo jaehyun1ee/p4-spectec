@@ -1,4 +1,4 @@
-//! Structure AL definitions into SL through pass-local ordered instructions
+//! Structure AL definitions into SL through the pass-local optimization language
 //!
 //! `convert` turns each AL relation or function into SL blocks.
 //!
