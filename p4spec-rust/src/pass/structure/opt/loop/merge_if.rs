@@ -73,6 +73,7 @@ fn find_identical_if(
     instrs_tail: &VecDeque<Instr>,
 ) -> Result<Option<usize>, StructureError> {
     let IfInstr { exp: exp_target, iter_exps: iter_exps_target, .. } = instr_target;
+    // The search stops at the first non-If
     for (idx, instr) in instrs_tail.iter().enumerate() {
         let InstrKind::If(instr_if) = &instr.node else {
             break;
@@ -94,6 +95,7 @@ fn merge_if_instr(
     instrs_tail: &mut VecDeque<Instr>,
     mut instr_if: IfInstr,
 ) -> Result<InstrKind, StructureError> {
+    // Keep absorbing identical Ifs
     while let Some(idx) = find_identical_if(tdenv, &instr_if, instrs_tail)? {
         *changed = true;
         let instr_match = instrs_tail

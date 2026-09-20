@@ -51,6 +51,7 @@ fn removable_let(exp_r: &Exp) -> bool {
         ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             removable_let(exp_base) && removable_let(exp_idx) && removable_let(exp_len)
         }
+        // Calls are the only non-removable leaf
         ExpKind::Call(_, _, _) => false,
     }
 }

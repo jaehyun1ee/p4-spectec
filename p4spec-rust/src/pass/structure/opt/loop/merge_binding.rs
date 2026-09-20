@@ -44,6 +44,7 @@ struct ExpUnit<'a> {
 
 impl<'a> ExpUnit<'a> {
     fn new(exp: &'a Exp, iter_exps: &[ExpIter]) -> Self {
+        // Keep only the iterator variables the expression mentions
         let ids = exp.free();
         let iter_exps = iter_exps
             .iter()
@@ -88,6 +89,7 @@ impl<'a> Bind<'a> {
                 (exp_iter_bound, exp_iter_bind)
             })
             .unzip();
+        // The pattern takes the binding iterators, the source the bound ones
         let expunit_l = ExpUnit::new(exp_l, &iter_exps_bind);
         let expunit_r = ExpUnit::new(exp_r, &iter_exps_bound);
         Self::Let(expunit_l, expunit_r)
@@ -109,6 +111,7 @@ impl<'a> Bind<'a> {
                 (exp_iter_bound, exp_iter_bind)
             })
             .unzip();
+        // Inputs use the ranged-over iterators, outputs the binding ones
         let expunits_input = exps_input
             .into_iter()
             .map(|exp| ExpUnit::new(exp, &iter_exps_bound))
@@ -140,6 +143,7 @@ impl<'a> Bind<'a> {
 /// downstream renames the body and upstream merges it.
 fn collapse_bind(bind: &Bind<'_>, bind_target: &Bind<'_>) -> Option<Renamer> {
     match (bind, bind_target) {
+        // Lets need the same source; rules the same id and inputs
         (Bind::Let(expunit_l, expunit_r), Bind::Let(expunit_target_l, expunit_target_r))
             if expunit_r.syntax_eq(expunit_target_r) =>
         {
@@ -204,6 +208,7 @@ fn collapse_exp(mut renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Ren
             }
             Some(renamer)
         }
+        // Structured patterns collapse componentwise
         (ExpKind::Tuple(exps), ExpKind::Tuple(exps_target))
         | (ExpKind::List(exps), ExpKind::List(exps_target)) => {
             let exps = exps.iter().collect();
@@ -228,6 +233,7 @@ fn collapse_exp(mut renamer: Renamer, exp: &Exp, exp_target: &Exp) -> Option<Ren
         (ExpKind::Iter(exp, exp_iter), ExpKind::Iter(exp_target, exp_iter_target)) => {
             collapse_iter_exp(renamer, exp, exp_iter, exp_target, exp_iter_target)
         }
+        // Literals and other forms never collapse
         _ => None,
     }
 }
@@ -266,6 +272,7 @@ fn collapse_str_exp(
     exp_fields: &[ExpField],
     exp_fields_target: &[ExpField],
 ) -> Option<Renamer> {
+    // Field atoms must agree pairwise
     if exp_fields.len() != exp_fields_target.len()
         || !exp_fields.iter().zip(exp_fields_target).all(
             |(ExpField { atom, .. }, ExpField { atom: atom_target, .. })| {

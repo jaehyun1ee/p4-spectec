@@ -46,10 +46,12 @@ fn find_rename_ticks(frees: &IdSet, id: &Id) -> Option<Id> {
 ///
 /// `(x'', x''')` can become `(x, x')`.
 fn binding_renamer(frees: impl FnOnce() -> IdSet, ids: &IdSet) -> Renamer {
+    // Nothing to do without ticked names
     let mut renamer = Renamer::empty();
     if !ids.iter().any(|id| id.node.ends_with('\'')) {
         return renamer;
     }
+    // Reserve each choice so the next binding cannot take it
     let mut frees = frees();
     for id in ids.iter().filter(|id| id.node.ends_with('\'')) {
         if let Some(id_rename) = find_rename_ticks(&frees, id) {
@@ -179,6 +181,7 @@ fn upstream_let_instr(
     instr_ol: LetInstr,
 ) -> Result<InstrKind, StructureError> {
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
+    // Avoid the pattern, the source, the body, and enclosing names
     let frees_l = exp_l.free();
     let frees_r = exp_r.free();
     let renamer = binding_renamer(
@@ -193,6 +196,7 @@ fn upstream_let_instr(
     );
     let exp_l = renamer.rename_exp(changed, exp_l);
     let iter_instrs = renamer.rename_iterinstrs_bind(changed, iter_instrs);
+    // The body sees the renamed binders
     let frees = exp_l.free().union(frees_r).union(frees_upstream.clone());
     let block = renamer.rename_block(changed, block)?;
     let block = upstream_block(changed, &frees, block)?;
@@ -213,6 +217,7 @@ fn upstream_rule_instr(
     let exps = not_exp.args().into_iter().cloned().collect();
     let (exps_input, exps_output) = input::split(&input_hint, exps)
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
+    // Only the outputs are binders here
     let frees_output = exps_output.as_slice().free();
     let frees_input = exps_input.as_slice().free();
     let renamer = binding_renamer(
@@ -227,9 +232,11 @@ fn upstream_rule_instr(
     );
     let exps_output = renamer.rename_exps(changed, exps_output);
     let iter_instrs = renamer.rename_iterinstrs_bind(changed, iter_instrs);
+    // The body sees inputs, renamed outputs, and enclosing names
     let frees = frees_input
         .union(exps_output.as_slice().free())
         .union(frees_upstream.clone());
+    // Rebuild the notation with the renamed outputs
     let exps = input::combine(&input_hint, exps_input, exps_output)
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
     let mixop = not_exp.to_mixop();
@@ -248,15 +255,18 @@ fn upstream_exps(
     (mut exps_match, mut block, mut block_else): (Vec<Exp>, Block, Option<Block>),
 ) -> Result<(Vec<Exp>, Block, Option<Block>), StructureError> {
     let ids = exps_match.as_slice().free();
+    // Nothing to do without ticked inputs
     if !ids.iter().any(|id| id.node.ends_with('\'')) {
         return Ok((exps_match, block, block_else));
     }
+    // Names in use across the inputs and both blocks
     let frees_else = block_else.as_ref().map(Free::free).unwrap_or_default();
     let mut frees = ids.clone().union(block.free()).union(frees_else);
     for id in ids.iter().filter(|id| id.node.ends_with('\'')) {
         if let Some(id_rename) = find_rename_ticks(&frees, id) {
             frees.take(id);
             frees.insert(id_rename.clone());
+            // Rename consistently in the inputs and both blocks
             let renamer = Renamer::singleton(id.clone(), id_rename);
             exps_match = renamer.rename_exps(changed, exps_match);
             block = renamer.rename_block(changed, block)?;
@@ -274,15 +284,18 @@ fn upstream_args(
     (mut args_input, mut block, mut block_else): (Vec<Arg>, Block, Option<Block>),
 ) -> Result<(Vec<Arg>, Block, Option<Block>), StructureError> {
     let ids = args_input.as_slice().free();
+    // Nothing to do without ticked inputs
     if !ids.iter().any(|id| id.node.ends_with('\'')) {
         return Ok((args_input, block, block_else));
     }
+    // Names in use across the inputs and both blocks
     let frees_else = block_else.as_ref().map(Free::free).unwrap_or_default();
     let mut frees = ids.clone().union(block.free()).union(frees_else);
     for id in ids.iter().filter(|id| id.node.ends_with('\'')) {
         if let Some(id_rename) = find_rename_ticks(&frees, id) {
             frees.take(id);
             frees.insert(id_rename.clone());
+            // Rename consistently in the inputs and both blocks
             let renamer = Renamer::singleton(id.clone(), id_rename);
             args_input = renamer.rename_args(changed, args_input);
             block = renamer.rename_block(changed, block)?;

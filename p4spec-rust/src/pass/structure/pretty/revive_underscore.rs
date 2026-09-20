@@ -183,6 +183,7 @@ fn downstream_case_instr(
         .into_iter()
         .map(|case| {
             let Case { guard, block } = case;
+            // Guards may use candidates too
             let ids_used = underscores(guard.free());
             ids_revive.append(renamer.dom().intersection(&ids_used));
             let guard = renamer.rename_guard(changed, guard);
@@ -244,6 +245,7 @@ fn downstream_rule_instr(
     let exps = not_exp.args().into_iter().cloned().collect();
     let (exps_input, exps_output) = input::split(&input_hint, exps)
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
+    // Inputs are uses; the outputs bind their own underscore names
     let exps_input = downstream_exps(renamer, changed, ids_revive, exps_input);
     let ids_bound = underscores(exps_output.as_slice().free());
     let exps = input::combine(&input_hint, exps_input, exps_output)
@@ -415,6 +417,7 @@ fn upstream_let_instr(
     instr_ol: LetInstr,
 ) -> Result<InstrKind, StructureError> {
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
+    // Propose names for the binders, keep those the body used
     let ids_bound = underscores(exp_l.free());
     let (_, renamer) = candid_renamer(frees.clone(), &ids_bound);
     let mut ids_revive = IdSet::new();
@@ -440,6 +443,7 @@ fn upstream_rule_instr(
     let exps = not_exp.args().into_iter().cloned().collect();
     let (exps_input, exps_output) = input::split(&input_hint, exps)
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
+    // Propose names for the output binders, keep those the body used
     let ids_bound = underscores(exps_output.as_slice().free());
     let (_, renamer) = candid_renamer(frees.clone(), &ids_bound);
     let mut ids_revive = IdSet::new();
@@ -467,6 +471,7 @@ pub(crate) fn apply_rel(
     let frees_input = exps_match.as_slice().free();
     let ids_bound = underscores(frees_input.clone());
     let frees_else = block_else.as_ref().map(Free::free).unwrap_or_default();
+    // Propose names for the underscore inputs, avoiding names in either block
     let frees = frees_input.union(block.free()).union(frees_else);
     let (frees, renamer) = candid_renamer(frees, &ids_bound);
     let mut ids_revive = IdSet::new();
@@ -474,6 +479,7 @@ pub(crate) fn apply_rel(
     block_else = block_else
         .map(|block| downstream_block(&renamer, changed, &mut ids_revive, block))
         .transpose()?;
+    // Uses in both blocks decide which inputs revive; then revive the binders
     let renamer = renamer.filter(|id, _| ids_revive.contains(id));
     exps_match = renamer.rename_exps(changed, exps_match);
     block = upstream_block(changed, &frees, block)?;
@@ -491,6 +497,7 @@ pub(crate) fn apply_func(
     let frees_input = args_input.as_slice().free();
     let ids_bound = underscores(frees_input.clone());
     let frees_else = block_else.as_ref().map(Free::free).unwrap_or_default();
+    // Propose names for the underscore inputs, avoiding names in either block
     let frees = frees_input.union(block.free()).union(frees_else);
     let (frees, renamer) = candid_renamer(frees, &ids_bound);
     let mut ids_revive = IdSet::new();
@@ -498,6 +505,7 @@ pub(crate) fn apply_func(
     block_else = block_else
         .map(|block| downstream_block(&renamer, changed, &mut ids_revive, block))
         .transpose()?;
+    // Uses in both blocks decide which inputs revive; then revive the binders
     let renamer = renamer.filter(|id, _| ids_revive.contains(id));
     args_input = renamer.rename_args(changed, args_input);
     block = upstream_block(changed, &frees, block)?;

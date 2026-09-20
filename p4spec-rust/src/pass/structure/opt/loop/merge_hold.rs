@@ -91,6 +91,7 @@ fn take_identical_hold(
     let InstrKind::Hold(instr_hold) = &instr_head.node else {
         return None;
     };
+    // Relation, arguments, and iterators must all match
     if !instr_target.id.syntax_eq(&instr_hold.id)
         || !instr_target.not_exp.syntax_eq(&instr_hold.not_exp)
         || !instr_target.iter_exps.syntax_eq(&instr_hold.iter_exps)
@@ -110,6 +111,7 @@ fn merge_hold_instr(
 ) -> (InstrKind, bool) {
     let instr_merge = take_identical_hold(&instr, instrs_tail);
     let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr;
+    // Merge branch by branch and leave nested rewriting to the retry
     if let Some(instr_merge) = instr_merge {
         *changed = true;
         let HoldInstr {
@@ -123,6 +125,7 @@ fn merge_hold_instr(
         let block_not_hold = merge::merge_block(block_not_hold, block_not_hold_target);
         let instr = HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold };
         (InstrKind::Hold(instr), true)
+    // No sibling to merge: rewrite the branches
     } else {
         let block_hold = merge_block(changed, block_hold);
         let block_not_hold = merge_block(changed, block_not_hold);

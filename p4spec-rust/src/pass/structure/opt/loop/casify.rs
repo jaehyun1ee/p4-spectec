@@ -112,6 +112,7 @@ fn casify_case_instr(
     instrs_tail: &mut VecDeque<Instr>,
     mut instr_case: CaseInstr,
 ) -> Result<InstrKind, StructureError> {
+    // Keep absorbing while a later sibling combines
     while let Some((idx, instr_case_merged)) =
         casify_from_case(tdenv, &mut instr_case, span, instrs_tail)?
     {
@@ -182,6 +183,7 @@ fn casify_from_if(
     instr_target: &mut IfInstr,
     instrs_tail: &mut VecDeque<Instr>,
 ) -> Result<Option<(usize, CaseInstr)>, StructureError> {
+    // Only un-iterated Ifs combine
     if !instr_target.iter_exps.is_empty() {
         return Ok(None);
     }
@@ -193,6 +195,7 @@ fn casify_from_if(
             InstrKind::Case(instr_case) => {
                 casify_if_then_case(tdenv, instr_target, instr_case, &instr.span)?
             }
+            // Anything but an If or Case stops the search
             _ => break,
         };
         if let Some(instr_case) = instr_case {
@@ -217,6 +220,7 @@ fn casify_from_case(
             InstrKind::Case(instr_case) => {
                 casify_case_then_case(tdenv, instr_target, instr_case, span_target)?
             }
+            // Anything but an If or Case stops the search
             _ => break,
         };
         if let Some(instr_case) = instr_case {
@@ -335,6 +339,7 @@ fn casify_case_then_case(
         return Ok(None);
     }
     // A later fuzzy guard must leave both input bodies untouched
+    // Place every later branch before moving anything
     let mut guards: Vec<_> = cases_target.iter().map(|case| &case.guard).collect();
     let mut idxs = Vec::with_capacity(cases.len());
     for case in cases.iter() {
@@ -349,11 +354,13 @@ fn casify_case_then_case(
         else {
             return Ok(None);
         };
+        // A new guard extends the targets for the following branches
         if idx == guards.len() {
             guards.push(&case.guard);
         }
         idxs.push(idx);
     }
+    // Merge or append each branch at its place
     let mut cases_target = std::mem::take(cases_target);
     let cases = std::mem::take(cases);
     for (case, idx) in cases.into_iter().zip(idxs) {
@@ -412,6 +419,7 @@ fn find_case_merge<'a>(
             Overlap::Fuzzy => return Ok(None),
         }
     }
+    // A total Case cannot take a new branch
     if total_target {
         return Err(StructureError::new(StructureErrorKind::EmptyTotalCase, span_target.clone()));
     }

@@ -42,11 +42,13 @@ pub(crate) enum Overlap {
 /// Reads a condition as a guard on `exp_target`: `x == 1` becomes `Cmp(==, 1)`.
 pub(crate) fn exp_as_guard(exp_target: &Exp, exp_cond: &Exp) -> Option<Guard> {
     match &exp_cond.node {
+        // Negation of the target itself
         ExpKind::Un(UnOp::Bool(boolop::UnOp::Not), _, exp)
             if exp_target.syntax_eq(exp.as_ref()) =>
         {
             Some(Guard::Bool(false))
         }
+        // Equality or inequality with the target on either side
         ExpKind::Cmp(
             op @ CmpOp::Bool(boolop::CmpOp::Eq | boolop::CmpOp::Ne),
             optyp,
@@ -59,6 +61,7 @@ pub(crate) fn exp_as_guard(exp_target: &Exp, exp_cond: &Exp) -> Option<Guard> {
             exp_l,
             exp_r,
         ) if exp_target.syntax_eq(exp_r) => Some(Guard::Cmp(*op, *optyp, exp_l.as_ref().clone())),
+        // Subtype, pattern, and membership tests on the target
         ExpKind::Sub(exp, typ, subcheck) if exp_target.syntax_eq(exp.as_ref()) => {
             Some(Guard::Sub(typ.as_ref().clone(), subcheck.clone()))
         }
@@ -277,6 +280,7 @@ pub(crate) fn typ_as_variant(
     tdenv: &TDEnv,
     typ: &Typ,
 ) -> Result<Option<Vec<Mixop>>, StructureError> {
+    // Only a defined variant type has constructors
     let typ_unrolled = expand_typ(tdenv, typ)?;
     let TypKind::Var(id, _) = &typ_unrolled.node else {
         return Ok(None);
