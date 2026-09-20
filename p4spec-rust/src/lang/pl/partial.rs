@@ -83,13 +83,6 @@ pub fn is_partial_instr_group(instr: &InstrGroup) -> bool {
     }
 }
 
-/// Reports whether a dispatch-tier instruction can fail before entering nested blocks
-pub fn is_partial_instr_dispatch(instr: &InstrDispatch) -> bool {
-    match instr {
-        InstrDispatch::Group(_) | InstrDispatch::Route(_) => false,
-    }
-}
-
 /// Reports whether an instruction can fail before entering nested blocks
 pub fn is_partial_instr<Tier>(
     is_partial_tier: impl Fn(&Tier) -> bool,

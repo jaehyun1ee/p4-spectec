@@ -127,7 +127,4 @@ fn test_tier_classification_uses_rule_arguments_not_rule_kind() {
     assert!(!pl::partial::is_partial_instr_group(&pl::ast::InstrGroup::Backtrack(
         pl::ast::BacktrackGroupInstr { blocks: vec![Vec::new()] }
     )));
-    assert!(!pl::partial::is_partial_instr_dispatch(&pl::ast::InstrDispatch::Route(
-        pl::ast::RouteDispatchInstr { blocks: Vec::new() }
-    )));
 }

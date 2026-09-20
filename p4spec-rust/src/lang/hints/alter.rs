@@ -56,11 +56,6 @@ pub fn init(exp: &Exp) -> Option<AlterationHint> {
 
 // == Validation
 
-/// Validates every hole against `items`
-pub fn validate<Item>(hint: &AlterationHint, items: &[Item]) -> Result<(), AlterationError> {
-    validate_count(hint, items.len())
-}
-
 /// Validates every hole against an item count
 pub fn validate_count(hint: &AlterationHint, item_count: usize) -> Result<(), AlterationError> {
     validate_at(hint, item_count, 0).map(|_| ())
