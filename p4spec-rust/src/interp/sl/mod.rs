@@ -1,4 +1,11 @@
 //! Structured-language execution over the composed runner context
+//!
+//! `SlInterp` runs SL definitions:
+//! a call binds its inputs into a frame and evaluates the body block;
+//! instructions run in order and a continuing one falls through to the next,
+//! and an otherwise block catches a body that fell through entirely.
+//! Tail calls loop inside `call` instead of recursing.
+//! `Config` toggles memoization, determinism checks, and call-boundary guards.
 
 pub mod context;
 pub mod flow;
@@ -12,10 +19,13 @@ use crate::{
 };
 use context::{Context, Global};
 
-/// Configuration for the SL interpreter
+/// Configuration for the SL interpreter.
 pub struct Config {
+    /// Memoize pure calls.
     cache: bool,
+    /// Run every instruction of a block and reject two terminating ones.
     det: bool,
+    /// Check argument and result types at call boundaries.
     guard: bool,
 }
 
@@ -25,6 +35,7 @@ impl Config {
     }
 }
 
+/// The SL interpreter: configuration plus the call cache.
 pub struct SlInterp {
     config: Config,
     cache: Cache,
@@ -61,9 +72,11 @@ impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for SlInterp {
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, Error> {
+        // Public entries start from a fresh cache
         runner_ctx.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner_ctx.spec());
+        // Guard the inputs unless the call would be served from the cache
         if runner_ctx.interp().config.guard && !eval::call::cache_rel(runner_ctx, &ctx, &id) {
             eval::call::check_rel_inputs(runner_ctx.arena(), &ctx, &id, values).finish()?;
         }
@@ -76,9 +89,11 @@ impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for SlInterp {
         targs: &[ast::Typ],
         values: &[Value],
     ) -> Result<Value, Error> {
+        // Public entries start from a fresh cache
         runner_ctx.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner_ctx.spec());
+        // Guard the inputs unless the call would be served from the cache
         if runner_ctx.interp().config.guard
             && !eval::call::cache_func(runner_ctx, &ctx, &id, values)
         {
