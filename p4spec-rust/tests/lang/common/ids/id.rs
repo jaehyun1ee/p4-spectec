@@ -1,7 +1,10 @@
-use super::*;
+use p4spec_rust::lang::common::{
+    ids::id::strip_suffix,
+    source::{Position, Span},
+};
 
 #[test]
-fn test_strip_var_suffix_preserves_source_and_all_underscore_suffixes() {
+fn test_strip_suffix_preserves_source_and_all_underscore_suffixes() {
     let source =
         Span::new(Position::new("suffix-source", 0, 0), Position::new("suffix-source", 0, 0));
     let suffixed = p4spec_rust::phrase! {
@@ -17,9 +20,12 @@ fn test_strip_var_suffix_preserves_source_and_all_underscore_suffixes() {
         span: Span::default(),
     };
 
-    let stripped = var_impl::strip_var_suffix(&suffixed);
+    let stripped = suffixed.strip_suffix();
     assert_eq!(stripped.node, "value");
+    assert_eq!(strip_suffix(&suffixed.node), stripped.node);
     assert_eq!(stripped.span, source);
-    assert_eq!(var_impl::strip_var_suffix(&apostrophe).node, "value");
-    assert_eq!(var_impl::strip_var_suffix(&all_underscores).node, "value___");
+    assert_eq!(apostrophe.strip_suffix().node, "value");
+    assert_eq!(strip_suffix(&apostrophe.node), "value");
+    assert_eq!(all_underscores.strip_suffix().node, "value___");
+    assert_eq!(strip_suffix(&all_underscores.node), "value___");
 }

@@ -15,7 +15,7 @@
 use crate::lang::{
     common::{ds::set::IdSet, source::Span},
     hints::input,
-    il::ast::ExpKind,
+    il::ast::{ExpField, ExpKind},
     traits::free::Free,
 };
 use crate::pass::structure::{StructureError, StructureErrorKind, ol::ast::*};
@@ -25,7 +25,7 @@ use crate::pass::structure::{StructureError, StructureErrorKind, ol::ast::*};
 /// `x + 1` is removable; `f() + 1` is not because it contains a call
 fn removable_let(exp_r: &Exp) -> bool {
     match &exp_r.node {
-        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Var(_) => true,
+        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Id(_) => true,
         ExpKind::Un(_, _, exp)
         | ExpKind::UpCast(_, exp)
         | ExpKind::DownCast(_, exp)
@@ -43,7 +43,9 @@ fn removable_let(exp_r: &Exp) -> bool {
         | ExpKind::Upd(exp_l, _, exp_r) => removable_let(exp_l) && removable_let(exp_r),
         ExpKind::Tuple(exps) | ExpKind::List(exps) => exps.iter().all(removable_let),
         ExpKind::Case(not_exp) => not_exp.args().into_iter().all(removable_let),
-        ExpKind::Str(exp_fields) => exp_fields.iter().all(|(_, exp)| removable_let(exp)),
+        ExpKind::Str(exp_fields) => exp_fields
+            .iter()
+            .all(|ExpField { exp, .. }| removable_let(exp)),
         ExpKind::Opt(exp) => exp.as_deref().is_none_or(removable_let),
         ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             removable_let(exp_base) && removable_let(exp_idx) && removable_let(exp_len)

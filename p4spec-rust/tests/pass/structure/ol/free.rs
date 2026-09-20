@@ -3,8 +3,8 @@ use crate::lang::{common::ds::set::IdSet, traits::free::Free};
 #[test]
 fn test_let_patterns_and_both_hold_blocks_are_collected() {
     let instr_let = instr(ast_ol::InstrKind::Let(ast_ol::LetInstr {
-        exp_l: variable("pattern"),
-        exp_r: variable("source"),
+        exp_l: id_exp("pattern"),
+        exp_r: id_exp("source"),
         iter_instrs: vec![InstrIter {
             iter: Iter::List,
             vars_bound: vec![Var {
@@ -18,7 +18,7 @@ fn test_let_patterns_and_both_hold_blocks_are_collected() {
     }));
     let instr_hold = instr(ast_ol::InstrKind::Hold(ast_ol::HoldInstr {
         id: id("relation"),
-        not_exp: Mixfix::Arg(variable("argument")),
+        not_exp: Mixfix::Arg(id_exp("argument")),
         iter_exps: vec![],
         block_hold: vec![instr_let],
         block_not_hold: vec![ret("fallback")],
@@ -34,19 +34,17 @@ fn test_let_patterns_and_both_hold_blocks_are_collected() {
 fn test_nested_collection_preserves_first_identifier_spans_and_existing_names() {
     let mut id_head = id("shared");
     id_head.span = span(3);
-    let exp_head = crate::note_phrase! {
-        node: ExpKind::Var(id_head.clone()), note: TypKind::Bool, span: span(3)
-    };
+    let exp_head = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id_head.clone()), note: TypKind::Bool, span: span(3));
     let instr_result = ast_ol::ResultInstr {
         rel_signature: signature(),
-        exps: vec![variable("shared"), variable("result")],
+        exps: vec![id_exp("shared"), id_exp("result")],
     };
     let instr_result = instr(ast_ol::InstrKind::Result(instr_result));
-    let instr_debug = ast_ol::DebugInstr { exp: variable("debug"), instr: Box::new(instr_result) };
+    let instr_debug = ast_ol::DebugInstr { exp: id_exp("debug"), instr: Box::new(instr_result) };
     let instr_debug = instr(ast_ol::InstrKind::Debug(instr_debug));
     let instr_rule = ast_ol::RuleInstr {
         id: id("relation"),
-        not_exp: Mixfix::Arg(variable("rule_arg")),
+        not_exp: Mixfix::Arg(id_exp("rule_arg")),
         input_hint: InputHint::new(vec![0]),
         iter_instrs: vec![],
         block: vec![instr_debug],
@@ -55,12 +53,12 @@ fn test_nested_collection_preserves_first_identifier_spans_and_existing_names() 
     let instr_group = ast_ol::GroupInstr {
         id: id("group"),
         rel_signature: signature(),
-        exps: vec![variable("group_arg")],
+        exps: vec![id_exp("group_arg")],
         block: vec![instr_rule],
     };
     let instr_group = instr(ast_ol::InstrKind::Group(instr_group));
-    let case = ast_ol::Case { guard: Guard::Mem(variable("guard")), block: vec![instr_group] };
-    let instr_case = ast_ol::CaseInstr { exp: variable("case"), cases: vec![case], total: false };
+    let case = ast_ol::Case { guard: Guard::Mem(id_exp("guard")), block: vec![instr_group] };
+    let instr_case = ast_ol::CaseInstr { exp: id_exp("case"), cases: vec![case], total: false };
     let instr_case = instr(ast_ol::InstrKind::Case(instr_case));
     let instr_if = ast_ol::IfInstr { exp: exp_head, iter_exps: vec![], block: vec![instr_case] };
     let block = vec![instr(ast_ol::InstrKind::If(instr_if))];

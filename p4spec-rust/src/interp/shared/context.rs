@@ -1,12 +1,10 @@
 //! Read and write context interfaces for shared evaluation
 
+use crate::interp::shared::prepare::ast;
+use crate::lang::data::var::{SlotIdx, VarSlot};
 use crate::{
     interp::shared::{backtrack::Backtrack, error::Error},
-    lang::{
-        common::Variable,
-        data::value::{Value, ValueArena},
-        il::ast,
-    },
+    lang::data::value::{Value, ValueArena},
     runtime::typdef::TypeDef,
 };
 use std::rc::Rc;
@@ -17,7 +15,8 @@ use std::rc::Rc;
 pub trait ReadContext {
     // == Values
 
-    fn find_value(&self, var: &Variable) -> Result<&Value, Error>;
+    fn find_value(&self, slot: SlotIdx) -> Option<&Value>;
+    fn find_iter_var(&self, var: &VarSlot, iter: ast::Iter) -> VarSlot;
 
     // == Types
 
@@ -37,7 +36,7 @@ pub trait ReadContext {
 pub trait WriteContext: ReadContext + Clone {
     // == Values
 
-    fn add_value(&mut self, var: Variable, value: Value);
+    fn add_value(&mut self, slot: SlotIdx, value: Value);
     fn clear_value_bindings(&mut self);
 
     // == Functions

@@ -1,4 +1,5 @@
 use super::*;
+use crate::lang::il::ast::ExpField;
 use crate::pass::structure::opt::r#loop::merge_binding::apply;
 #[test]
 fn test_adjacent_bindings_rename_and_preserve_tail_and_span() {
@@ -22,19 +23,19 @@ fn test_adjacent_bindings_rename_and_preserve_tail_and_span() {
 fn test_capture_avoidance_in_target_body() {
     let mut instr_inner = binding("a", vec![ret("b"), ret("a")]);
     if let InstrKind::Let(instr_let) = &mut instr_inner.node {
-        instr_let.exp_r = variable("other");
+        instr_let.exp_r = id_exp("other");
     }
     let block =
         apply(&mut false, vec![binding("a", vec![]), binding("b", vec![instr_inner])]).unwrap();
     let InstrKind::Let(instr_outer) = &block[0].node else { panic!("expected let") };
     let InstrKind::Let(instr_inner) = &instr_outer.block[0].node else { panic!("expected let") };
-    let ExpKind::Var(id_fresh) = &instr_inner.exp_l.node else { panic!("expected variable") };
+    let ExpKind::Id(id_fresh) = &instr_inner.exp_l.node else { panic!("expected variable") };
     assert_ne!(id_fresh.node, "a");
     assert_eq!(instr_inner.block[0], ret("a"));
     let InstrKind::Return(instr_return) = &instr_inner.block[1].node else {
         panic!("expected return")
     };
-    let ExpKind::Var(id_return) = &instr_return.exp.node else { panic!("expected variable") };
+    let ExpKind::Id(id_return) = &instr_return.exp.node else { panic!("expected variable") };
     assert_eq!(id_return, id_fresh);
 }
 
@@ -74,7 +75,7 @@ fn test_hint_split_compatibility_and_intervening_instruction() {
     for instr_ol in [&mut instr_a, &mut instr_b] {
         let InstrKind::Rule(instr_rule) = &mut instr_ol.node else { unreachable!() };
         instr_rule.not_exp =
-            Mixfix::Seq(vec![Mixfix::Arg(variable("same")), Mixfix::Arg(variable("same"))]);
+            Mixfix::Seq(vec![Mixfix::Arg(id_exp("same")), Mixfix::Arg(id_exp("same"))]);
     }
     if let InstrKind::Rule(instr_rule) = &mut instr_b.node {
         instr_rule.input_hint = InputHint::new(vec![1]);
@@ -89,7 +90,7 @@ fn test_hint_split_compatibility_and_intervening_instruction() {
     );
     if let InstrKind::Rule(instr_rule) = &mut instr_b.node {
         instr_rule.not_exp =
-            Mixfix::Seq(vec![Mixfix::Arg(variable("same")), Mixfix::Arg(variable("different"))]);
+            Mixfix::Seq(vec![Mixfix::Arg(id_exp("same")), Mixfix::Arg(id_exp("different"))]);
     }
     let block = vec![instr_a, instr_b];
     assert_eq!(apply(&mut false, block.clone()).unwrap(), block);
@@ -119,14 +120,17 @@ fn atom(text: &str) -> crate::lang::il::ast::Atom {
 
 fn patterns(text: &str) -> Vec<Exp> {
     vec![
-        pattern(ExpKind::Tuple(vec![variable(text)])),
-        pattern(ExpKind::Case(Box::new(Mixfix::Arg(variable(text))))),
-        pattern(ExpKind::Str(vec![(atom("field"), variable(text))])),
-        pattern(ExpKind::Opt(Some(Box::new(variable(text))))),
+        pattern(ExpKind::Tuple(vec![id_exp(text)])),
+        pattern(ExpKind::Case(Box::new(Mixfix::Arg(id_exp(text))))),
+        pattern(ExpKind::Str(vec![ExpField { atom: atom("field"), exp: id_exp(text) }])),
+        pattern(ExpKind::Opt(Some(Box::new(id_exp(text))))),
         pattern(ExpKind::Opt(None)),
-        pattern(ExpKind::List(vec![variable(text)])),
-        pattern(ExpKind::Cons(Box::new(variable(text)), Box::new(variable(text)))),
-        pattern(ExpKind::Iter(Box::new(variable(text)), (Iter::List, vec![var(text)]))),
+        pattern(ExpKind::List(vec![id_exp(text)])),
+        pattern(ExpKind::Cons(Box::new(id_exp(text)), Box::new(id_exp(text)))),
+        pattern(ExpKind::Iter(
+            Box::new(id_exp(text)),
+            ExpIter { iter: Iter::List, vars: vec![var(text)] },
+        )),
     ]
 }
 
@@ -150,19 +154,25 @@ fn test_structured_binding_patterns_and_shape_negatives() {
     }
     for (exp_a, exp_b) in [
         (
-            pattern(ExpKind::Str(vec![(atom("field_a"), variable("a"))])),
-            pattern(ExpKind::Str(vec![(atom("field_b"), variable("b"))])),
+            pattern(ExpKind::Str(vec![ExpField { atom: atom("field_a"), exp: id_exp("a") }])),
+            pattern(ExpKind::Str(vec![ExpField { atom: atom("field_b"), exp: id_exp("b") }])),
         ),
         (pattern(ExpKind::Bool(true)), pattern(ExpKind::Bool(true))),
-        (pattern(ExpKind::Tuple(vec![])), pattern(ExpKind::Tuple(vec![variable("b")]))),
-        (pattern(ExpKind::Opt(None)), pattern(ExpKind::Opt(Some(Box::new(variable("b")))))),
+        (pattern(ExpKind::Tuple(vec![])), pattern(ExpKind::Tuple(vec![id_exp("b")]))),
+        (pattern(ExpKind::Opt(None)), pattern(ExpKind::Opt(Some(Box::new(id_exp("b")))))),
         (
-            pattern(ExpKind::Iter(Box::new(variable("a")), (Iter::List, vec![]))),
-            pattern(ExpKind::Iter(Box::new(variable("b")), (Iter::Opt, vec![]))),
+            pattern(ExpKind::Iter(
+                Box::new(id_exp("a")),
+                ExpIter { iter: Iter::List, vars: vec![] },
+            )),
+            pattern(ExpKind::Iter(
+                Box::new(id_exp("b")),
+                ExpIter { iter: Iter::Opt, vars: vec![] },
+            )),
         ),
         (
-            pattern(ExpKind::Case(Box::new(Mixfix::Arg(variable("a"))))),
-            pattern(ExpKind::Case(Box::new(Mixfix::Seq(vec![Mixfix::Arg(variable("b"))])))),
+            pattern(ExpKind::Case(Box::new(Mixfix::Arg(id_exp("a"))))),
+            pattern(ExpKind::Case(Box::new(Mixfix::Seq(vec![Mixfix::Arg(id_exp("b"))])))),
         ),
     ] {
         let mut instr_a = binding("a", vec![]);
@@ -183,10 +193,10 @@ fn test_repeated_pattern_variables_follow_source_mapping_order() {
     let mut instr_a = binding("a", vec![]);
     let mut instr_b = binding("b", vec![ret("target")]);
     if let InstrKind::Let(instr_let) = &mut instr_a.node {
-        instr_let.exp_l = pattern(ExpKind::Tuple(vec![variable("a"), variable("b")]));
+        instr_let.exp_l = pattern(ExpKind::Tuple(vec![id_exp("a"), id_exp("b")]));
     }
     if let InstrKind::Let(instr_let) = &mut instr_b.node {
-        instr_let.exp_l = pattern(ExpKind::Tuple(vec![variable("target"), variable("target")]));
+        instr_let.exp_l = pattern(ExpKind::Tuple(vec![id_exp("target"), id_exp("target")]));
     }
     let mut instr_expect = instr_a.clone();
     if let InstrKind::Let(instr_let) = &mut instr_expect.node {
@@ -201,18 +211,18 @@ fn nested(block: Block) -> Block {
     let block = vec![instr(InstrKind::Group(GroupInstr {
         id: id("group"),
         rel_signature: super::super::super::signature(),
-        exps: vec![variable("group_input")],
+        exps: vec![id_exp("group_input")],
         block,
     }))];
     let block = vec![instr(InstrKind::Case(CaseInstr {
-        exp: variable("case"),
+        exp: id_exp("case"),
         cases: vec![Case { guard: Guard::Bool(true), block }],
         total: false,
     }))];
     let block = vec![hold(block.clone(), block)];
     vec![instr(InstrKind::If(IfInstr {
-        exp: variable("condition"),
-        iter_exps: vec![(Iter::List, vec![])],
+        exp: id_exp("condition"),
+        iter_exps: vec![ExpIter { iter: Iter::List, vars: vec![] }],
         block,
     }))]
 }
@@ -223,7 +233,7 @@ fn test_nested_blocks_and_debug_barrier() {
     let block_expect = vec![binding("a", vec![ret("a"), ret("a")])];
     assert_eq!(apply(&mut false, nested(block.clone())).unwrap(), nested(block_expect));
     let instr_debug = instr(InstrKind::Debug(DebugInstr {
-        exp: variable("debug"),
+        exp: id_exp("debug"),
         instr: Box::new(binding("outer", block)),
     }));
     assert_eq!(apply(&mut false, vec![instr_debug.clone()]).unwrap(), vec![instr_debug]);

@@ -14,7 +14,7 @@ fn span(name: &str) -> Span {
 fn test_prose_nodes_collect_free_identifiers_through_annotations() {
     let exp_l = pl::annot::Annotated {
         node: p4spec_rust::note_phrase! {
-            node: pl::ast::ExpKind::Var(id("left")),
+            node: pl::ast::ExpKind::Id(id("left")),
             note: il::ast::TypKind::Bool,
             span: span("left"),
         },
@@ -22,7 +22,7 @@ fn test_prose_nodes_collect_free_identifiers_through_annotations() {
     };
     let exp_r = pl::annot::Annotated {
         node: p4spec_rust::note_phrase! {
-            node: pl::ast::ExpKind::Var(id("right")),
+            node: pl::ast::ExpKind::Id(id("right")),
             note: il::ast::TypKind::Bool,
             span: span("right"),
         },
@@ -30,7 +30,7 @@ fn test_prose_nodes_collect_free_identifiers_through_annotations() {
     };
     let exp_bin: pl::ast::Exp = pl::annot::Annotated {
         node: p4spec_rust::note_phrase! { node: pl::ast::ExpKind::Bin(
-        il::ast::BinOp::Bool(p4spec_rust::lang::xl::bool::BinOp::And),
+        il::ast::BinOp::Bool(p4spec_rust::lang::common::prim::bool::BinOp::And),
         il::ast::OpTyp::Bool,
         Box::new(exp_l),
         Box::new(exp_r),
@@ -52,7 +52,7 @@ fn id(name: &str) -> il::ast::Id {
 fn test_annotation_wrappers_forward_source_and_keep_nested_hints() {
     let mut nested = pl::annot::Annotated {
         node: p4spec_rust::note_phrase! {
-            node: pl::ast::ExpKind::Var(id("nested")),
+            node: pl::ast::ExpKind::Id(id("nested")),
             note: il::ast::TypKind::Bool,
             span: span("nested-source"),
         },
@@ -61,7 +61,7 @@ fn test_annotation_wrappers_forward_source_and_keep_nested_hints() {
     nested.hints.prose = Some(alter::AlterationHint::Text("nested prose".to_owned()));
     let outer: pl::ast::Exp = pl::annot::Annotated {
         node: p4spec_rust::note_phrase! { node: pl::ast::ExpKind::Un(
-        il::ast::UnOp::Bool(p4spec_rust::lang::xl::bool::UnOp::Not),
+        il::ast::UnOp::Bool(p4spec_rust::lang::common::prim::bool::UnOp::Not),
         il::ast::OpTyp::Bool,
         Box::new(nested),
             ), note: il::ast::TypKind::Bool, span: span("outer-source") },

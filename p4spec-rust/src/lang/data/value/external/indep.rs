@@ -4,13 +4,13 @@ use ::serde::{Deserialize, Serialize};
 
 use super::super::{Value as ArenaValue, ValueArena, ValueError, ValueKind as ArenaValueKind};
 use crate::lang::{
+    common::prim::num::Number,
     common::{
         Id,
         notation::{atom::Atom, mixfix::Mixfix},
         source::{NotePhrase, Phrase},
     },
     data::typ::TypKind,
-    xl::num::Number,
 };
 use crate::util::json::json;
 use std::rc::Rc;

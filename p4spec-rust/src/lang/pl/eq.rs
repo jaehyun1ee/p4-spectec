@@ -16,7 +16,7 @@ impl SyntaxEq for ExpKind {
             (ExpKind::Bool(value_l), ExpKind::Bool(value_r)) => value_l == value_r,
             (ExpKind::Num(value_l), ExpKind::Num(value_r)) => value_l == value_r,
             (ExpKind::Text(value_l), ExpKind::Text(value_r)) => value_l == value_r,
-            (ExpKind::Var(id_l), ExpKind::Var(id_r)) => id_l.syntax_eq(id_r),
+            (ExpKind::Id(id_l), ExpKind::Id(id_r)) => id_l.syntax_eq(id_r),
             (ExpKind::Un(op_l, typ_l, exp_l), ExpKind::Un(op_r, typ_r, exp_r)) => {
                 op_l.syntax_eq(op_r) && typ_l.syntax_eq(typ_r) && exp_l.syntax_eq(exp_r)
             }

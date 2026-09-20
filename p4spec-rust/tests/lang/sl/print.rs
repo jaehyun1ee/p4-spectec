@@ -34,12 +34,8 @@ fn typ(kind: il::ast::TypKind) -> il::ast::Typ {
     }
 }
 
-fn variable(name: &str) -> il::ast::Exp {
-    p4spec_rust::note_phrase! {
-        node: il::ast::ExpKind::Var(id(name)),
-        note: il::ast::TypKind::Bool,
-        span: span(name),
-    }
+fn id_exp(name: &str) -> il::ast::Exp {
+    p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id(name)), note: il::ast::TypKind::Bool, span: span(name))
 }
 
 fn text(value: &str) -> il::ast::Exp {
@@ -67,20 +63,20 @@ fn instr(kind: sl::ast::InstrKind) -> sl::ast::Instr {
 }
 
 fn hint(source: &str) -> el::ast::Hint {
-    (
-        id("metadata"),
-        p4spec_rust::phrase! {
+    el::ast::Hint {
+        id: id("metadata"),
+        exp: p4spec_rust::phrase! {
             node: el::ast::ExpKind::Text(source.to_owned()),
             span: span(source),
         },
-    )
+    }
 }
 
 fn composite_spec(metadata: &str) -> sl::ast::Spec {
     let signature =
         sl::ast::RelSignature { not_typ: notation(), input_hint: InputHint::new(vec![0]) };
     let param = p4spec_rust::phrase! {
-        node: sl::ast::ParamKind::Exp(typ(il::ast::TypKind::Bool), Box::new(variable("default"))),
+        node: sl::ast::ParamKind::Exp(typ(il::ast::TypKind::Bool), Box::new(id_exp("default"))),
         span: span("parameter"),
     };
     let hints = vec![hint(metadata)];
@@ -98,7 +94,7 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
         p4spec_rust::phrase! { node: sl::ast::DefKind::Rel(sl::ast::RelDef::Defined(sl::ast::DefinedRel {
             id: id("Evaluate"),
             rel_signature: signature.clone(),
-            exps_input: vec![variable("input")],
+            exps_input: vec![id_exp("input")],
             block: vec![instr(
                 sl::ast::InstrKind::Result(sl::ast::ResultInstr {
                     rel_signature: signature.clone(),
@@ -107,7 +103,7 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
             )],
             block_else: Some(vec![instr(
                 sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                    exp: variable("fallback"),
+                    exp: id_exp("fallback"),
                 }),
             )]),
             hints: hints.clone(),
@@ -124,11 +120,11 @@ fn composite_spec(metadata: &str) -> sl::ast::Spec {
             params: vec![param.clone()],
             typ: typ(il::ast::TypKind::Bool),
             table_rows: vec![sl::ast::TableRow {
-                exps_input: vec![variable("key")],
+                exps_input: vec![id_exp("key")],
                 exp: text("row\tvalue"),
                 block: vec![instr(
                     sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-                        exp: variable("row-result"),
+                        exp: id_exp("row-result"),
                     }),
                 )],
             }],
@@ -180,10 +176,10 @@ fn test_specification_printer_omits_source_and_hint_metadata() {
 #[test]
 fn test_dangling_branches_render_the_marker() {
     let branch = instr(sl::ast::InstrKind::If(sl::ast::IfInstr {
-        exp: variable("condition"),
+        exp: id_exp("condition"),
         iter_exps: Vec::new(),
         block: vec![instr(sl::ast::InstrKind::Return(sl::ast::ReturnInstr {
-            exp: variable("value"),
+            exp: id_exp("value"),
         }))],
         dangle: true,
     }));

@@ -2,8 +2,8 @@ use num_bigint::BigInt;
 
 use crate::{
     lang::{
+        common::prim::num,
         data::value::{Value, ValueArena, ValueError, get},
-        xl::num,
     },
     runner::ExternError,
 };

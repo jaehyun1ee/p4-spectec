@@ -6,13 +6,13 @@ use std::fmt;
 
 use crate::{
     lang::{
+        common::prim::num::NumericError,
         common::{
             ds::map::ArityMismatch, notation::mixop::ArityMismatch as MixopArityMismatch,
             source::Span,
         },
         data::value::ValueError,
         hints::input::InputError,
-        xl::num::NumericError,
     },
     runtime::ops::{
         typ::{TypeError, TypeErrorKind},

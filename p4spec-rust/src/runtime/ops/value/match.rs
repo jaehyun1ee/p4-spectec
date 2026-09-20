@@ -5,10 +5,10 @@ use thiserror::Error;
 
 use crate::{
     lang::{
+        common::prim::num::{Number, Typ as NumTyp},
         common::source::Span,
         data::value::{Value, ValueArena, ValueKind},
-        il::ast::{DefTypKind, FuncTyp, Id, Iter, Subcheck, Typ, TypKind},
-        xl::num::{Number, Typ as NumTyp},
+        il::ast::{DefTypKind, FuncTyp, Id, Iter, Subcheck, Typ, TypCase, TypField, TypKind},
     },
     runtime::{
         ops::typ::{Theta, TypeError, equiv_func_typ, subst_not_typ, subst_typ},
@@ -83,10 +83,10 @@ where
                             if typ_fields.len() != value_fields.len() {
                                 return Ok(false);
                             }
-                            for ((typ_atom, typ), (value_atom, value)) in
+                            for (TypField { atom: atom_typ, typ }, (atom_value, value)) in
                                 typ_fields.iter().zip(value_fields)
                             {
-                                if typ_atom.node != value_atom.node {
+                                if atom_typ.node != atom_value.node {
                                     return Ok(false);
                                 }
                                 let typ = subst_typ(&|id| theta.get(id), typ)?;
@@ -97,7 +97,7 @@ where
                             Ok(true)
                         }
                         (DefTypKind::Variant(typ_cases), ValueKind::Case(value_case)) => {
-                            for (not_typ, _, _) in typ_cases {
+                            for TypCase { not_typ, .. } in typ_cases {
                                 if !not_typ.node.eq_shape(value_case) {
                                     continue;
                                 }

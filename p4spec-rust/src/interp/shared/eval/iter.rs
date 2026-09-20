@@ -1,86 +1,86 @@
 //! Iterated expression evaluation and binding collection
 
+use std::rc::Rc;
+
 use super::super::{
     backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
     context::IterContext,
     error::Error,
 };
+use crate::interp::shared::prepare::ast;
+use crate::interp::shared::util::iterate_vars;
 use crate::{
     lang::{
-        common::{Variable, source::Span},
-        data::value::Value,
-        il::ast,
+        common::source::Span,
+        data::value::{Value, make},
     },
     runner::{Extern, Interface, Interpreter, RunnerContext},
 };
 
 // = Expression mapping
 
-pub fn map_list<Ctx, Interp, Iface, Ext>(
+pub fn map<Ctx, Interp, Iface, Ext>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Ctx,
     span: &Span,
-    vars: &[ast::Var],
+    typ: &Rc<ast::TypKind>,
+    exp_iter: &ast::ExpIter,
     mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Ext>, &Ctx) -> Backtrack<Value>,
-) -> Backtrack<Vec<Value>>
+) -> Backtrack<Value>
 where
     Ctx: IterContext,
     Interp: Interpreter<Iface, Ext, Error = Error>,
     Iface: Interface,
     Ext: Extern,
 {
-    let values_by_var =
-        unwrap_from_result!(ctx.find_list_values_by_var(runner_ctx.arena(), vars), span);
-    // Copy handles before the callback can allocate in the arena
-    let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
-    let len = values_by_var.first().map_or(0, Vec::len);
-    let vars: Vec<_> = vars
-        .iter()
-        .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
-        .collect();
-    let mut ctx_sub = ctx.clone();
-    let mut values = Vec::with_capacity(len);
-    for idx in 0..len {
-        for (var, values) in vars.iter().zip(&values_by_var) {
-            ctx_sub.add_value(var.clone(), values[idx]);
+    let vars = &exp_iter.vars;
+    let vars_outer = iterate_vars(ctx, vars, exp_iter.iter);
+    let value = match exp_iter.iter {
+        ast::Iter::Opt => {
+            let values = unwrap_from_result!(
+                ctx.find_opt_values_by_var(runner_ctx.arena(), &vars_outer),
+                span
+            );
+            let value = if let Some(values) = values {
+                let mut ctx_sub = ctx.clone();
+                for (var, value) in vars.iter().zip(values) {
+                    ctx_sub.add_value(var.slot, value);
+                }
+                Some(unwrap!(eval(runner_ctx, &ctx_sub)))
+            } else {
+                None
+            };
+            make::opt(runner_ctx.arena_mut(), typ.clone(), value, Span::default())
         }
-        values.push(unwrap!(eval(runner_ctx, &ctx_sub)));
-    }
-    ok!(values)
-}
-
-pub fn map_opt<Ctx, Interp, Iface, Ext>(
-    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    ctx: &Ctx,
-    span: &Span,
-    vars: &[ast::Var],
-    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Ext>, &Ctx) -> Backtrack<Value>,
-) -> Backtrack<Option<Value>>
-where
-    Ctx: IterContext,
-    Interp: Interpreter<Iface, Ext, Error = Error>,
-    Iface: Interface,
-    Ext: Extern,
-{
-    let values = unwrap_from_result!(ctx.find_opt_values_by_var(runner_ctx.arena(), vars), span);
-    let Some(values) = values else {
-        return ok!(None);
+        ast::Iter::List => {
+            let values_by_var = unwrap_from_result!(
+                ctx.find_list_values_by_var(runner_ctx.arena(), &vars_outer),
+                span
+            );
+            // Copy handles before the callback can allocate in the arena
+            let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
+            let len = values_by_var.first().map_or(0, Vec::len);
+            let mut ctx_sub = ctx.clone();
+            let mut values = Vec::with_capacity(len);
+            for idx in 0..len {
+                for (var, values) in vars.iter().zip(&values_by_var) {
+                    ctx_sub.add_value(var.slot, values[idx]);
+                }
+                values.push(unwrap!(eval(runner_ctx, &ctx_sub)));
+            }
+            make::list(runner_ctx.arena_mut(), typ.clone(), values, Span::default())
+        }
     };
-    let mut ctx_sub = ctx.clone();
-    for (var, value) in vars.iter().zip(values) {
-        ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
-    }
-    ok!(Some(unwrap!(eval(runner_ctx, &ctx_sub))))
+    ok!(unwrap_from_result!(value, span))
 }
 
 // = Binding iteration
 
-pub fn yield_list<Ctx, Interp, Iface, Ext>(
+pub fn r#yield<Ctx, Interp, Iface, Ext>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     mut ctx: Ctx,
     span: &Span,
-    vars_bound: &[ast::Var],
-    vars_bind: &[ast::Var],
+    prem_iter: &ast::PremIter,
     mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Ext>, Ctx) -> Backtrack<Ctx>,
 ) -> Backtrack<Ctx>
 where
@@ -89,53 +89,54 @@ where
     Iface: Interface,
     Ext: Extern,
 {
-    let values_by_var =
-        unwrap_from_result!(ctx.find_list_values_by_var(runner_ctx.arena(), vars_bound), span);
-    let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
-    let len = values_by_var.first().map_or(0, Vec::len);
-    let vars: Vec<_> = vars_bound
-        .iter()
-        .map(|var| Variable::new(var.id.clone(), var.iters.clone()))
-        .collect();
-    let mut ctx_sub = ctx.clone();
+    let vars_bound = &prem_iter.vars_bound;
+    let vars_bind = &prem_iter.vars_bind;
+    let vars_bound_outer = iterate_vars(&ctx, vars_bound, prem_iter.iter);
+    let vars_bind_outer = iterate_vars(&ctx, vars_bind, prem_iter.iter);
     let mut values_bind_by_var = vec![Vec::new(); vars_bind.len()];
-    for idx in 0..len {
-        for (var, values) in vars.iter().zip(&values_by_var) {
-            ctx_sub.add_value(var.clone(), values[idx]);
+    match prem_iter.iter {
+        ast::Iter::Opt => {
+            let values = unwrap_from_result!(
+                ctx.find_opt_values_by_var(runner_ctx.arena(), &vars_bound_outer),
+                span
+            );
+            if let Some(values) = values {
+                let mut ctx_sub = ctx.clone();
+                for (var, value) in vars_bound.iter().zip(values) {
+                    ctx_sub.add_value(var.slot, value);
+                }
+                let ctx_post = unwrap!(eval(runner_ctx, ctx_sub));
+                unwrap!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
+            }
+            unwrap!(ctx.bind_opt_values_by_var(
+                runner_ctx.arena_mut(),
+                &vars_bind_outer,
+                values_bind_by_var
+            ));
         }
-        // Keep callback writes out of the reusable input context
-        let ctx_post = unwrap!(eval(runner_ctx, ctx_sub.clone()));
-        unwrap!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
-    }
-    unwrap!(ctx.bind_list_values_by_var(runner_ctx.arena_mut(), vars_bind, values_bind_by_var));
-    ok!(ctx)
-}
-
-pub fn yield_opt<Ctx, Interp, Iface, Ext>(
-    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    mut ctx: Ctx,
-    span: &Span,
-    vars_bound: &[ast::Var],
-    vars_bind: &[ast::Var],
-    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Ext>, Ctx) -> Backtrack<Ctx>,
-) -> Backtrack<Ctx>
-where
-    Ctx: IterContext,
-    Interp: Interpreter<Iface, Ext, Error = Error>,
-    Iface: Interface,
-    Ext: Extern,
-{
-    let values =
-        unwrap_from_result!(ctx.find_opt_values_by_var(runner_ctx.arena(), vars_bound), span);
-    let mut values_bind_by_var = vec![Vec::new(); vars_bind.len()];
-    if let Some(values) = values {
-        let mut ctx_sub = ctx.clone();
-        for (var, value) in vars_bound.iter().zip(values) {
-            ctx_sub.add_value(Variable::new(var.id.clone(), var.iters.clone()), value);
+        ast::Iter::List => {
+            let values_by_var = unwrap_from_result!(
+                ctx.find_list_values_by_var(runner_ctx.arena(), &vars_bound_outer),
+                span
+            );
+            // Copy handles before the callback can allocate in the arena
+            let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
+            let len = values_by_var.first().map_or(0, Vec::len);
+            let mut ctx_sub = ctx.clone();
+            for idx in 0..len {
+                for (var, values) in vars_bound.iter().zip(&values_by_var) {
+                    ctx_sub.add_value(var.slot, values[idx]);
+                }
+                // Keep callback writes out of the reusable input context
+                let ctx_post = unwrap!(eval(runner_ctx, ctx_sub.clone()));
+                unwrap!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
+            }
+            unwrap!(ctx.bind_list_values_by_var(
+                runner_ctx.arena_mut(),
+                &vars_bind_outer,
+                values_bind_by_var
+            ));
         }
-        let ctx_post = unwrap!(eval(runner_ctx, ctx_sub));
-        unwrap!(ctx_post.collect_values_by_var(vars_bind, &mut values_bind_by_var));
     }
-    unwrap!(ctx.bind_opt_values_by_var(runner_ctx.arena_mut(), vars_bind, values_bind_by_var));
     ok!(ctx)
 }

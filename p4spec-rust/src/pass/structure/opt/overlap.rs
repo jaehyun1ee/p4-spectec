@@ -13,7 +13,8 @@
 use crate::pass::structure::error::{StructureError, StructureErrorKind};
 use crate::{
     lang::{
-        common::source::Span, il::ast::*, sl::ast::Guard, traits::eq::SyntaxEq, xl::bool as boolop,
+        common::prim::bool as boolop, common::source::Span, il::ast::*, sl::ast::Guard,
+        traits::eq::SyntaxEq,
     },
     runtime::{envs::algo::TDEnv, ops::typ::expand_typ, typdef::TypeDef},
 };
@@ -271,10 +272,10 @@ pub(crate) fn typ_as_variant(
     };
     match tdenv.get(id) {
         Some(TypeDef::Defined(_, deftyp)) => Ok(match &deftyp.node {
-            DefTypKind::Variant(typcases) => Some(
-                typcases
+            DefTypKind::Variant(typ_cases) => Some(
+                typ_cases
                     .iter()
-                    .map(|(nottyp, _, _)| nottyp.node.to_mixop())
+                    .map(|TypCase { not_typ: nottyp, .. }| nottyp.node.to_mixop())
                     .collect(),
             ),
             _ => None,

@@ -3,8 +3,8 @@
 use std::fmt::{self, Write};
 
 use crate::lang::{
+    common::prim::num,
     traits::print::{Print, Printer},
-    xl::num,
 };
 
 use super::ast::*;
@@ -115,9 +115,9 @@ impl Print for DefTyp {
 
 impl Print for TypField {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.0.print(printer)?;
+        self.atom.print(printer)?;
         printer.write_char(' ')?;
-        self.1.print(printer)
+        self.typ.print(printer)
     }
 }
 
@@ -129,7 +129,7 @@ impl Print for [TypField] {
 
 impl Print for TypCase {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.0.print(printer)
+        self.typ.print(printer)
     }
 }
 
@@ -180,7 +180,7 @@ impl Print for Exp {
             }
             ExpKind::Num(_, num) => num.print(printer),
             ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
-            ExpKind::Var(id) => printer.write_str(&id.node),
+            ExpKind::Id(id) => printer.write_str(&id.node),
             ExpKind::Un(op, exp) => {
                 op.print(printer)?;
                 exp.print(printer)
@@ -498,14 +498,14 @@ impl Print for [Prem] {
 impl Print for Rule {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_str("rule ")?;
-        self.node.0.print(printer)?;
-        if !self.node.1.node.is_empty() {
+        self.node.id_rel.print(printer)?;
+        if !self.node.id_rule.node.is_empty() {
             printer.write_char('/')?;
-            self.node.1.print(printer)?;
+            self.node.id_rule.print(printer)?;
         }
         printer.write_str(":\n  ")?;
-        self.node.2.print(printer)?;
-        self.node.3.print(printer)
+        self.node.exp.print(printer)?;
+        self.node.prems.print(printer)
     }
 }
 
@@ -525,9 +525,9 @@ impl Print for [Rule] {
 
 impl Print for TableRow {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.node.0.print(printer)?;
+        self.node.exp_pattern.print(printer)?;
         printer.write_str(" => ")?;
-        self.node.1.print(printer)
+        self.node.exp_body.print(printer)
     }
 }
 
@@ -663,9 +663,9 @@ impl Print for Def {
                     if index != 0 {
                         printer.write_str("\n  | ")?;
                     }
-                    row.node.0.print(printer)?;
+                    row.node.exp_pattern.print(printer)?;
                     printer.write_str(" => ")?;
-                    row.node.1.print(printer)?;
+                    row.node.exp_body.print(printer)?;
                 }
                 Ok(())
             }

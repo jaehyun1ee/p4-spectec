@@ -7,12 +7,12 @@ use super::{TestError, packet_runner};
 use num_bigint::BigInt;
 use p4spec_rust::{
     lang::{
+        common::prim::num,
         common::source::Span,
         data::{
             typ::{self, TypKind},
             value::{Value, ValueArena, ValueError, get, make},
         },
-        xl::num,
     },
     runner::ExternError,
     sim_plugin::{

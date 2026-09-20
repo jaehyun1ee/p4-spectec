@@ -74,7 +74,7 @@ fn test_from_result_preserves_typed_nested_errors_and_existing_locations() {
 
 #[test]
 fn test_from_result_locates_unlocated_runtime_errors() {
-    let error = p4spec_rust::lang::xl::num::NumericError::NegativeNatural((-1).into());
+    let error = p4spec_rust::lang::common::prim::num::NumericError::NegativeNatural((-1).into());
     let result = Backtrack::<()>::from_result(Err(error.clone()), &span(3));
     assert_eq!(
         result,

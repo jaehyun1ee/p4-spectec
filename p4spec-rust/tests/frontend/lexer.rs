@@ -5,7 +5,7 @@ use p4spec_rust::{
         error::LexErrorKind,
         lexer::{Lexer, Token},
     },
-    lang::{common::source::Position, xl::num::Natural},
+    lang::{common::prim::num::Natural, common::source::Position},
 };
 
 fn token_nodes(source: &str) -> Vec<Token> {

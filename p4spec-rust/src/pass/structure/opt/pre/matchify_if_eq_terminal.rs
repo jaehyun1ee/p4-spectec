@@ -17,8 +17,8 @@
 
 use crate::lang::common::source::Span;
 use crate::lang::{
+    common::prim::bool::{CmpOp as BoolCmpOp, UnOp as BoolUnOp},
     il::ast::{CmpOp, ExpKind, ListPattern, OpTyp, OptPattern, Pattern, UnOp},
-    xl::bool::{CmpOp as BoolCmpOp, UnOp as BoolUnOp},
 };
 use crate::pass::structure::ol::ast::*;
 

@@ -1,4 +1,2 @@
-#[path = "envs/caches.rs"]
-mod caches;
-#[path = "envs/interp.rs"]
+#[path = "envs/interp/mod.rs"]
 mod interp;

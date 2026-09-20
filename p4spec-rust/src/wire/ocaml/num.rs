@@ -5,7 +5,7 @@ use serde_json::json;
 
 use crate::util::json::json;
 
-use crate::lang::xl::num;
+use crate::lang::common::prim::num;
 
 use super::{DecodeError, variant};
 

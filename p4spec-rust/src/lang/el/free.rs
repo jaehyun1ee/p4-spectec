@@ -88,7 +88,7 @@ impl Free for ExpKind {
             | Self::Atom(_)
             | Self::Hole(_)
             | Self::Latex(_) => {}
-            Self::Var(id) => {
+            Self::Id(id) => {
                 free.insert(id.clone());
             }
             Self::Un(_, exp)
@@ -183,7 +183,7 @@ impl Free for ArgKind {
 
 impl Free for Hint {
     fn free(&self) -> IdSet {
-        self.1.free()
+        self.exp.free()
     }
 }
 
@@ -243,8 +243,8 @@ impl Free for DebugPrem {
 
 impl Free for RuleKind {
     fn free_into(&self, free: &mut IdSet) {
-        self.2.free_into(free);
-        self.3.as_slice().free_into(free);
+        self.exp.free_into(free);
+        self.prems.as_slice().free_into(free);
     }
 }
 
@@ -252,8 +252,8 @@ impl Free for RuleKind {
 
 impl Free for TableRowKind {
     fn free_into(&self, free: &mut IdSet) {
-        self.0.free_into(free);
-        self.1.free_into(free);
+        self.exp_pattern.free_into(free);
+        self.exp_body.free_into(free);
     }
 }
 

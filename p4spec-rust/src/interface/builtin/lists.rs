@@ -10,6 +10,7 @@ use std::rc::Rc;
 use num_bigint::BigInt;
 
 use crate::lang::{
+    common::prim::num,
     common::source::Span,
     data::{
         typ,
@@ -17,7 +18,6 @@ use crate::lang::{
     },
     il::ast::Typ,
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
-    xl::num,
 };
 
 use super::{BuiltinError, extract};

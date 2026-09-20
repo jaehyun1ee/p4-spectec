@@ -121,11 +121,11 @@ impl Context {
         defined_rel_il
             .rule_groups
             .iter()
-            .any(|group| group.node.0.node == groupid.node)
+            .any(|group| group.node.id.node == groupid.node)
             || defined_rel_il
                 .else_group
                 .as_ref()
-                .is_some_and(|group| group.node.0.node == groupid.node)
+                .is_some_and(|group| group.node.id.node == groupid.node)
     }
 
     // - Functions
@@ -285,7 +285,7 @@ impl Context {
                 relid.span.clone(),
             ));
         }
-        let groupid = &rule_group.node.0;
+        let groupid = &rule_group.node.id;
         if self.bound_rule_group(relid, groupid) {
             return Err(ElabError::duplicate(
                 EntityKind::RuleGroup,
@@ -314,7 +314,7 @@ impl Context {
                 relid.span.clone(),
             ));
         }
-        let groupid = &else_group.node.0;
+        let groupid = &else_group.node.id;
         if self.bound_rule_group(relid, groupid) {
             return Err(ElabError::duplicate(
                 EntityKind::RuleGroup,

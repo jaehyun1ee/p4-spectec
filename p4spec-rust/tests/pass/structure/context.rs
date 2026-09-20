@@ -2,7 +2,7 @@ use crate::{
     lang::{
         al::ast,
         common::notation::mixfix::Mixfix,
-        il::ast::{DefTypKind, TypKind},
+        il::ast::{DefTypKind, TypCase, TypKind, TypOriginKind},
     },
     pass::structure::{StructureErrorKind, context::Context},
     runtime::{ops::typ::expand_typ, typdef::TypeDef},
@@ -146,11 +146,13 @@ fn test_loaded_alias_expands_to_its_variant_definition() {
         span: span(50),
     };
     let typ_origin = crate::phrase! {
-        node: (id_at("Origin", 50), vec![]),
+        node: TypOriginKind { id: id_at("Origin", 50), targs: vec![] },
         span: span(50),
     };
-    let def_typ_variant =
-        def_typ_at(DefTypKind::Variant(vec![(not_typ_case, typ_origin, vec![])]), 50);
+    let def_typ_variant = def_typ_at(
+        DefTypKind::Variant(vec![TypCase { not_typ: not_typ_case, typ_origin, hints: vec![] }]),
+        50,
+    );
     let def_typ_alias = def_typ_at(DefTypKind::Plain(typ_var_at("Choice", 51)), 51);
     let spec_al = vec![
         defined_typ("Choice", 50, vec![], def_typ_variant.clone()),

@@ -11,6 +11,7 @@ pub use crate::lang::sl::ast::{Exp, ExpIter, Guard, Id, InstrIter, NotExp, RelSi
 pub type Instr = Phrase<InstrKind>;
 
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum InstrKind {
     If(IfInstr),
     Hold(HoldInstr),

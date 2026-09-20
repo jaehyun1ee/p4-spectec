@@ -43,11 +43,11 @@
 use crate::{
     lang::{
         al,
+        common::prim,
         common::{notation::mixop::Mixop, source::Span},
         hints::input::{self, InputHint},
         il::ast,
         traits::free::Free,
-        xl,
     },
     phrase,
     runtime::{dim::Dim, envs::algo::VEnv, typdef::TypeDef},
@@ -336,7 +336,7 @@ fn analyze_if_prem(
     span: &Span,
     if_prem_il: &ast::IfPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
-    if let ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l_il, exp_r_il) =
+    if let ast::ExpKind::Cmp(ast::CmpOp::Bool(prim::bool::CmpOp::Eq), _, exp_l_il, exp_r_il) =
         &if_prem_il.exp.node
     {
         analyze_if_eq_prem(ctx, iter_ctx, span, if_prem_il, exp_l_il, exp_r_il)
@@ -542,7 +542,7 @@ fn analyze_rule_group(
 ) -> Result<al::ast::RuleGroup, AlgoError> {
     let mut ctx = ctx.clone();
     let span = rule_group_il.span;
-    let (id_group, rules_il) = rule_group_il.node;
+    let ast::RuleGroupKind { id: id_group, rules: rules_il } = rule_group_il.node;
     let mut ids = Vec::with_capacity(rules_il.len());
     let mut prems_by_rule_il = Vec::with_capacity(rules_il.len());
     let mut exps_input_by_rule_il = Vec::with_capacity(rules_il.len());
@@ -595,9 +595,9 @@ fn analyze_else_group(
     else_group_il: ast::ElseGroup,
 ) -> Result<al::ast::ElseGroup, AlgoError> {
     let span = else_group_il.span;
-    let (id_group, rule_il) = else_group_il.node;
+    let ast::ElseGroupKind { id: id_group, rule: rule_il } = else_group_il.node;
     let rule_group_il = phrase! {
-        node: (id_group, vec![rule_il]),
+        node: ast::RuleGroupKind { id: id_group, rules: vec![rule_il] },
         span: span.clone(),
     };
     let rule_group_al = analyze_rule_group(ctx, inputs, rule_group_il, true)?;
@@ -661,18 +661,18 @@ fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSe
     };
     let pattern_set = cases
         .iter()
-        .map(|(not_typ, _, _)| not_typ.clone())
+        .map(|ast::TypCase { not_typ, .. }| not_typ.clone())
         .collect();
     Ok(pattern_set)
 }
 
 fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<PatternSet, AlgoError> {
     match &exp_al.node {
-        ast::ExpKind::Var(_) => {
+        ast::ExpKind::Id(_) => {
             let typ = phrase!(node: exp_al.note.as_ref().clone(), span: exp_al.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
         }
-        ast::ExpKind::UpCast(_, exp_inner) if matches!(exp_inner.node, ast::ExpKind::Var(_)) => {
+        ast::ExpKind::UpCast(_, exp_inner) if matches!(exp_inner.node, ast::ExpKind::Id(_)) => {
             let typ = phrase!(node: exp_inner.note.as_ref().clone(), span: exp_inner.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
         }
@@ -702,7 +702,7 @@ fn check_valid_table_rows(
     let has_closer =
         if let Some(row_al) = rows_al.last() {
             row_al.node.exps_signature.iter().all(
-                |exp_al| matches!(&exp_al.node, ast::ExpKind::Var(id) if id.node.starts_with('_')),
+                |exp_al| matches!(&exp_al.node, ast::ExpKind::Id(id) if id.node.starts_with('_')),
             )
         } else {
             false
@@ -743,7 +743,7 @@ fn analyze_table_row(
     let mut ctx = ctx.clone();
     ctx.add_frees(&row_il.free());
     let span = row_il.span;
-    let (args_il, exp_il) = row_il.node;
+    let ast::TableRowKind { args: args_il, exp: exp_il } = row_il.node;
     let (venv, args_input_al, prems_al) = analyze_args_as_bind_shallow(&mut ctx, &args_il, &span)?;
     ctx.add_bounds(&venv);
     analyze_args_as_bound_shallow(&ctx, &args_il)?;

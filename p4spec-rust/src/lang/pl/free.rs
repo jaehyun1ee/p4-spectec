@@ -12,7 +12,7 @@ impl Free for ExpKind {
     fn free(&self) -> IdSet {
         match self {
             Self::Bool(_) | Self::Num(_) | Self::Text(_) => IdSet::new(),
-            Self::Var(id) => IdSet::from([id.clone()]),
+            Self::Id(id) => IdSet::from([id.clone()]),
             Self::Un(_, _, exp)
             | Self::UpCast(_, exp)
             | Self::DownCast(_, exp)

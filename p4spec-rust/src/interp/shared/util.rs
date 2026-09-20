@@ -1,21 +1,36 @@
-//! Iterated-variable recognition shared by assignment and evaluation
+//! Resolve simple iterated-variable expressions through their callable layout
 
-use crate::lang::{common::Variable, il::ast};
+use super::{context::ReadContext, prepare::ast};
+use crate::lang::data::var::VarSlot;
 
-pub fn is_iter_var_exp(exp: &ast::Exp) -> Option<Variable> {
+/// Finds the slot-backed variable represented by a simple iterated expression
+pub fn find_var(ctx: &impl ReadContext, exp: &ast::Exp) -> Option<VarSlot> {
     match &exp.node {
-        ast::ExpKind::Var(id) => Some(Variable::new(id.clone(), vec![])),
-        ast::ExpKind::Iter(exp, (iter, vars)) => {
-            let mut var = is_iter_var_exp(exp)?;
-            let [binding] = vars.as_slice() else {
+        ast::ExpKind::Id(id) => Some(VarSlot {
+            slot: id.slot,
+            var: crate::lang::data::var::Var {
+                id: id.id.clone(),
+                typ: crate::phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone()),
+                iters: vec![],
+            },
+        }),
+        ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
+            let [var] = vars.as_slice() else {
                 return None;
             };
-            if var.id.node != binding.id.node || var.iters != binding.iters {
+            let var_inner = find_var(ctx, exp_inner)?;
+            if var_inner.var.id.node != var.var.id.node || var_inner.var.iters != var.var.iters {
                 return None;
             }
-            var.iters.push(*iter);
-            Some(var)
+            Some(ctx.find_iter_var(&var_inner, *iter))
         }
         _ => None,
     }
+}
+
+/// Advances prepared variables through one iterator dimension
+pub fn iterate_vars(ctx: &impl ReadContext, vars: &[ast::Var], iter: ast::Iter) -> Vec<ast::Var> {
+    vars.iter()
+        .map(|var| ctx.find_iter_var(var, iter))
+        .collect()
 }

@@ -17,6 +17,7 @@ use super::{
 use thiserror::Error;
 
 use crate::lang::{
+    common::prim::num::{self, Number},
     common::{
         Id,
         notation::{atom::Atom, mixfix::Mixfix},
@@ -24,7 +25,6 @@ use crate::lang::{
     },
     data::typ::TypKind,
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
-    xl::num::{self, Number},
 };
 
 // = Value types

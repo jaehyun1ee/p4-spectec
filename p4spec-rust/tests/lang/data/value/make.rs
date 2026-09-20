@@ -2,11 +2,11 @@
 
 use super::span;
 use p4spec_rust::lang::{
+    common::prim::num::{Natural, Number},
     data::{
         typ,
         value::{ValueArena, get, make},
     },
-    xl::num::{Natural, Number},
 };
 
 #[test]

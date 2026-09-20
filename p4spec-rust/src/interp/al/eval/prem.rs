@@ -8,8 +8,9 @@ use crate::interp::shared::{
     error::ErrorKind,
     eval::{Invoker, iter},
 };
+use crate::runtime::envs::interp::al::ast_prepared as ast;
 use crate::{
-    lang::{al::ast, data::value::get, hints::input, traits::print::Print},
+    lang::{data::value::get, hints::input, traits::print::Print},
     runner::{Extern, Interface, RunnerContext},
 };
 
@@ -135,25 +136,9 @@ fn eval_iter_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IterPrem,
 ) -> Backtrack<Context<'global>> {
-    let prem_iter = &prem.prem_iter;
-    match prem_iter.iter {
-        ast::Iter::Opt => iter::yield_opt(
-            runner_ctx,
-            ctx,
-            &prem.prem.span,
-            &prem_iter.vars_bound,
-            &prem_iter.vars_bind,
-            |runner_ctx, ctx_sub| eval_prem(runner_ctx, ctx_sub, &prem.prem),
-        ),
-        ast::Iter::List => iter::yield_list(
-            runner_ctx,
-            ctx,
-            &prem.prem.span,
-            &prem_iter.vars_bound,
-            &prem_iter.vars_bind,
-            |runner_ctx, ctx_sub| eval_prem(runner_ctx, ctx_sub, &prem.prem),
-        ),
-    }
+    iter::r#yield(runner_ctx, ctx, &prem.prem.span, &prem.prem_iter, |runner_ctx, ctx_sub| {
+        eval_prem(runner_ctx, ctx_sub, &prem.prem)
+    })
 }
 
 // - Debug premise

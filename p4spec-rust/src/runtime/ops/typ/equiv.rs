@@ -2,9 +2,9 @@
 
 use crate::{
     lang::{
+        common::prim::num,
         common::{ds::map::ArityMismatch, source::Span},
         il::ast::{self, TypKind},
-        xl::num,
     },
     runtime::{envs::elab::TDEnv, typdef::TypeDef},
 };

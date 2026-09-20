@@ -6,9 +6,10 @@ pub mod expr;
 pub mod prem;
 
 use super::{AlInterp, context::Context};
+use crate::runtime::envs::interp::al::ast_prepared as ast;
 use crate::{
     interp::shared::{backtrack::Backtrack, eval::Invoker},
-    lang::{al::ast, data::value::Value},
+    lang::data::value::Value,
     runner::{Extern, Interface, RunnerContext},
 };
 

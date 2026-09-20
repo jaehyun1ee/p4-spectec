@@ -233,7 +233,7 @@ fn demote_iter_prems(
                 let error = StructureError::new(error_kind.clone(), span.clone());
                 return Err(error);
             }
-            Ok((iter, vars_bound))
+            Ok(sl::ExpIter { iter, vars: vars_bound })
         })
         .collect()
 }

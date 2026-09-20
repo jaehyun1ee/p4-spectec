@@ -35,6 +35,7 @@ use num_bigint::BigInt;
 
 use crate::{
     lang::{
+        common::prim::num::Natural,
         common::{
             notation::{atom::Atom, mixfix::Mixfix},
             source::{Phrase, Position, Span},
@@ -43,7 +44,6 @@ use crate::{
             typ,
             value::{Value, make},
         },
-        xl::num::Natural,
     },
     phrase,
 };

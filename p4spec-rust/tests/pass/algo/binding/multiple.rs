@@ -3,7 +3,7 @@ use super::super::*;
 #[test]
 fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_order() {
     let tuple = exp(
-        ast::ExpKind::Tuple(vec![var_exp("x", 1), var_exp("x", 2), var_exp("x", 3)]),
+        ast::ExpKind::Tuple(vec![id_exp("x", 1), id_exp("x", 2), id_exp("x", 3)]),
         ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool(), typ::make::bool()]),
         1,
     );
@@ -20,7 +20,7 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
     let ids = exps
         .iter()
         .map(|exp| match &exp.node {
-            ast::ExpKind::Var(id) => id,
+            ast::ExpKind::Id(id) => id,
             _ => panic!("expected variable binding"),
         })
         .collect::<Vec<_>>();
@@ -46,7 +46,7 @@ fn test_multiple_binding_renames_repetitions_and_compares_them_in_occurrence_ord
         let ast::ExpKind::Cmp(_, ast::OpTyp::Bool, _, exp_r) = &exp.node else {
             panic!("expected equality comparison");
         };
-        let ast::ExpKind::Var(id) = &exp_r.node else {
+        let ast::ExpKind::Id(id) = &exp_r.node else {
             panic!("expected renamed right operand");
         };
         id.span.clone()
@@ -61,7 +61,7 @@ fn test_multiple_side_conditions_use_the_rename_environment_dimension() {
     let benv_r = BEnv::singleton(id("x", 2), typ::make::bool()).add_iter(ast::Iter::List);
     let benv = benv_l.union(benv_r).expect("equivalent dimensions");
     let tuple = exp(
-        ast::ExpKind::Tuple(vec![var_exp("x", 1), var_exp("x", 2)]),
+        ast::ExpKind::Tuple(vec![id_exp("x", 1), id_exp("x", 2)]),
         ast::TypKind::Tuple(vec![typ::make::bool(), typ::make::bool()]),
         1,
     );

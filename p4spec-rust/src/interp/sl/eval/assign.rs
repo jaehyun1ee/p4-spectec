@@ -2,12 +2,10 @@
 
 use super::super::context::Context;
 use crate::interp::shared::error::{AssignErrorKind, ErrorKind};
+use crate::runtime::envs::interp::sl::ast_prepared as ast;
 use crate::{
     interp::shared::backtrack::{Backtrack, ok, unwrap},
-    lang::{
-        data::value::{Value, ValueArena},
-        sl::ast,
-    },
+    lang::data::value::{Value, ValueArena},
 };
 
 pub use crate::interp::shared::eval::assign::*;

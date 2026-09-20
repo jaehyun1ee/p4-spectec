@@ -4,12 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     lang::{
+        common::prim::num,
         common::source::Span,
         data::{
             typ,
             value::{Value, get, make},
         },
-        xl::num,
     },
     runner::{Extern, ExternError, Interface, Interpreter, RunnerContext},
 };

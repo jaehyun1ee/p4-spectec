@@ -730,7 +730,7 @@ fn test_native_payload_restores_wide_register_values_and_callable_metadata() {
 
 #[test]
 fn test_serde_rejects_negative_natural() {
-    use p4spec_rust::lang::xl::num::{Natural, Number};
+    use p4spec_rust::lang::common::prim::num::{Natural, Number};
     let json_negative = serde_json::to_value(num_bigint::BigInt::from(-1)).unwrap();
     assert!(serde_json::from_value::<Natural>(json_negative.clone()).is_err());
     let mut arena = ValueArena::new();

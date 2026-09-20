@@ -1,5 +1,6 @@
+use crate::lang::il::ast::TypOriginKind;
 use crate::{
-    lang::{il::ast::*, xl::bool as boolop},
+    lang::{common::prim::bool as boolop, il::ast::*},
     note_phrase,
     pass::structure::opt::overlap::{Overlap, overlap_exp},
     runtime::envs::algo::TDEnv,
@@ -16,8 +17,7 @@ fn cmp(exp_l: Exp, exp_r: Exp) -> Exp {
 fn test_boolean_partition_and_literal_disjointness() {
     use crate::lang::sl::ast::Guard;
 
-    let exp_target =
-        exp(ExpKind::Var(crate::phrase!(node: "flag".into(), span: Default::default())));
+    let exp_target = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(crate::phrase!(node: "flag".into(), span: Default::default())), note: crate::lang::il::ast::TypKind::Bool, span: Default::default());
     let exp_a = cmp(exp_target.clone(), exp(ExpKind::Bool(true)));
     let exp_b = cmp(exp_target.clone(), exp(ExpKind::Bool(false)));
     assert!(matches!(
@@ -53,8 +53,7 @@ fn test_boolean_partition_and_literal_disjointness() {
 
 #[test]
 fn test_comparison_order_negation_and_fuzzy() {
-    let exp_target =
-        exp(ExpKind::Var(crate::phrase!(node: "flag".into(), span: Default::default())));
+    let exp_target = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(crate::phrase!(node: "flag".into(), span: Default::default())), note: crate::lang::il::ast::TypKind::Bool, span: Default::default());
     let exp_a = cmp(exp_target.clone(), exp(ExpKind::Bool(true)));
     let exp_b = cmp(exp(ExpKind::Bool(false)), exp_target.clone());
     assert!(matches!(
@@ -189,12 +188,12 @@ fn test_variant_alias_overlap_and_type_errors() {
     for (id, mixop) in [(id_a.clone(), mixop_a.clone()), (id_b.clone(), mixop_b.clone())] {
         let nottyp: Mixfix<Typ> =
             mixop.map(|_| crate::phrase!(node: TypKind::Bool, span: Default::default()));
-        let typcase = (
-            crate::phrase!(node: nottyp, span: Default::default()),
-            crate::phrase!(node: (id.clone(), vec![]), span: Default::default()),
-            vec![],
-        );
-        tdenv.insert(id, TypeDef::Defined(vec![], Box::new(crate::phrase!(node: DefTypKind::Variant(vec![typcase]), span: Default::default()))));
+        let typ_case = TypCase {
+            not_typ: crate::phrase!(node: nottyp, span: Default::default()),
+            typ_origin: crate::phrase!(node: TypOriginKind { id: id.clone(), targs: vec![] }, span: Default::default()),
+            hints: vec![],
+        };
+        tdenv.insert(id, TypeDef::Defined(vec![], Box::new(crate::phrase!(node: DefTypKind::Variant(vec![typ_case]), span: Default::default()))));
     }
     tdenv.insert(
         id_alias,

@@ -1,12 +1,12 @@
 //! Shared path access and update evaluation
 
 use super::Invoker;
+use crate::interp::shared::prepare::ast;
 
 use crate::{
     lang::{
         common::source::Span,
         data::value::{Value, get, make},
-        il::ast,
     },
     runner::{Extern, Interface, RunnerContext},
 };

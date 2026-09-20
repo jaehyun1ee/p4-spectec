@@ -2,6 +2,8 @@
 
 use super::super::context::ReadContext;
 use super::Invoker;
+use crate::interp::shared::prepare::ast;
+use crate::lang::data::var::IdSlot;
 
 use std::{borrow::Borrow, rc::Rc};
 
@@ -9,9 +11,8 @@ use crate::interp::shared::error::ExprErrorKind;
 
 use crate::{
     lang::{
-        common::{Variable, source::Span},
+        common::source::Span,
         data::value::{Value, ValueKind, get, make},
-        il::ast,
         traits::print::Print,
     },
     runner::{Extern, Interface, RunnerContext},
@@ -24,8 +25,8 @@ use crate::{
 use super::{arg::eval_args, iter, ops, path::eval_update_path};
 use crate::interp::shared::{
     backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
-    error::ErrorKind,
-    util::is_iter_var_exp,
+    error::{EntityKind, Error, ErrorKind},
+    util::find_var,
 };
 
 // = Expression evaluation
@@ -50,7 +51,7 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
             make::text(runner_ctx.arena_mut(), value.clone(), Span::default()),
             span
         )),
-        ast::ExpKind::Var(id) => eval_var_exp(ctx, span, id),
+        ast::ExpKind::Id(id) => eval_id_exp(ctx, span, id),
         ast::ExpKind::Un(op, _, exp_inner) => eval_un_exp(runner_ctx, ctx, span, op, exp_inner),
         ast::ExpKind::Bin(op, _, exp_l, exp_r) => {
             eval_bin_exp(runner_ctx, ctx, span, op, exp_l, exp_r)
@@ -90,8 +91,8 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
             eval_upd_exp(runner_ctx, ctx, exp_base, path, exp_upd)
         }
         ast::ExpKind::Call(id, targs, args) => eval_call_exp(runner_ctx, ctx, id, targs, args),
-        ast::ExpKind::Iter(exp_inner, (iter, vars)) => {
-            eval_iter_exp(runner_ctx, ctx, exp, exp_inner, iter, vars)
+        ast::ExpKind::Iter(exp_inner, exp_iter) => {
+            eval_iter_exp(runner_ctx, ctx, exp, exp_inner, exp_iter)
         }
     })();
     result.nest(exp.span.clone(), || {
@@ -119,11 +120,15 @@ pub(crate) fn eval_exps<
     ok!(values)
 }
 
-// - Variable expression
+// - Identifier expression
 
-fn eval_var_exp(ctx: &impl ReadContext, span: &Span, id: &ast::Id) -> Backtrack<Value> {
-    let var = Variable::new(id.clone(), Vec::new());
-    let value = *unwrap_from_result!(ctx.find_value(&var), span);
+fn eval_id_exp(ctx: &impl ReadContext, span: &Span, id: &IdSlot) -> Backtrack<Value> {
+    let value = *unwrap_from_result!(
+        ctx.find_value(id.slot).ok_or_else(|| {
+            Error::undefined(EntityKind::Value, id.id.node.clone(), id.id.span.clone())
+        }),
+        span
+    );
     ok!(value)
 }
 
@@ -279,7 +284,7 @@ fn eval_str_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
     exp_fields: &[ast::ExpField],
 ) -> Backtrack<Value> {
     let mut value_fields = Vec::with_capacity(exp_fields.len());
-    for (atom, exp) in exp_fields {
+    for ast::ExpField { atom, exp } in exp_fields {
         value_fields.push((atom.clone(), unwrap!(eval_exp(runner_ctx, ctx, exp))));
     }
     let value = unwrap_from_result!(
@@ -537,35 +542,23 @@ fn eval_iter_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
     ctx: &Interp::Context<'global>,
     exp: &ast::Exp,
     exp_inner: &ast::Exp,
-    iter: &ast::Iter,
-    vars: &[ast::Var],
+    exp_iter: &ast::ExpIter,
 ) -> Backtrack<Value> {
     let span = &exp.span;
     let typ = &exp.note;
-    if let Some(var) = is_iter_var_exp(exp) {
-        return ok!(*unwrap_from_result!(ctx.find_value(&var), span));
+    if let Some(var) = find_var(ctx, exp) {
+        return ok!(*unwrap_from_result!(
+            ctx.find_value(var.slot).ok_or_else(|| {
+                Error::undefined(
+                    EntityKind::Value,
+                    Print::to_string(&var.var),
+                    var.var.id.span.clone(),
+                )
+            }),
+            span
+        ));
     }
-    let value = match iter {
-        ast::Iter::Opt => {
-            let value =
-                unwrap!(iter::map_opt(runner_ctx, ctx, span, vars, |runner_ctx, ctx_sub| {
-                    eval_exp(runner_ctx, ctx_sub, exp_inner)
-                }));
-            unwrap_from_result!(
-                make::opt(runner_ctx.arena_mut(), typ.clone(), value, Span::default()),
-                span
-            )
-        }
-        ast::Iter::List => {
-            let values =
-                unwrap!(iter::map_list(runner_ctx, ctx, span, vars, |runner_ctx, ctx_sub| {
-                    eval_exp(runner_ctx, ctx_sub, exp_inner)
-                }));
-            unwrap_from_result!(
-                make::list(runner_ctx.arena_mut(), typ.clone(), values, Span::default()),
-                span
-            )
-        }
-    };
-    ok!(value)
+    iter::map(runner_ctx, ctx, span, typ, exp_iter, |runner_ctx, ctx_sub| {
+        eval_exp(runner_ctx, ctx_sub, exp_inner)
+    })
 }

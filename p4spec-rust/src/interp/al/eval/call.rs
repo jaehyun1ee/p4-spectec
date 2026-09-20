@@ -1,6 +1,10 @@
 //! AL invocation and ordered candidate selection
 
 use super::super::backtrack::{choose_deterministic, choose_sequential};
+use crate::interp::shared::context::ReadContext;
+use crate::runtime::envs::interp::al::ast_prepared as ast;
+use crate::runtime::envs::interp::shared::frame::FrameLayout;
+use std::rc::Rc;
 
 use super::super::{
     AlInterp,
@@ -15,7 +19,7 @@ use crate::interp::shared::{
 };
 use crate::lang::data::value::{ValueArena, ValueKind};
 use crate::{
-    lang::{al::ast, data::value::Value, traits::print::Print},
+    lang::{data::value::Value, traits::print::Print},
     runner::{Extern, Interface, InterfaceError, RunnerContext},
     runtime::typdef::TypeDef,
 };
@@ -29,7 +33,7 @@ pub(in crate::interp::al) fn check_rel_inputs(
     values: &[Value],
 ) -> Backtrack<()> {
     let rel = unwrap_from_result!(ctx.find_rel(id), &id.span);
-    let (not_typ, inputs) = match rel {
+    let (not_typ, inputs) = match &rel.def {
         ast::RelDef::Extern(rel) => (&rel.not_typ, &rel.input_hint),
         ast::RelDef::Defined(rel) => (&rel.not_typ, &rel.input_hint),
     };
@@ -137,7 +141,8 @@ pub(in crate::interp::al) fn cache_rel<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     id: &ast::Id,
 ) -> bool {
-    runner_ctx.interp().config.cache && matches!(ctx.find_rel(id), Ok(ast::RelDef::Defined(_)))
+    runner_ctx.interp().config.cache
+        && matches!(ctx.find_rel(id), Ok(rel) if matches!(&rel.def, ast::RelDef::Defined(_)))
 }
 
 pub(in crate::interp::al) fn cache_func<Iface: Interface, Ext: Extern>(
@@ -147,8 +152,8 @@ pub(in crate::interp::al) fn cache_func<Iface: Interface, Ext: Extern>(
     values: &[Value],
 ) -> bool {
     runner_ctx.interp().config.cache
-        && matches!(ctx.find_func(id), Ok((Scope::Global, func))
-            if !matches!(func.as_ref(), ast::MetaFuncDef::Extern(_)))
+        && matches!(ctx.find_func_with_scope(id), Ok((Scope::Global, func))
+            if !matches!(&func.def, ast::MetaFuncDef::Extern(_)))
         && !values
             .iter()
             .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
@@ -173,9 +178,12 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
     runner_ctx.interp_mut().cache.begin();
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
         let rel = unwrap_from_result!(ctx.find_rel(id), &id.span);
-        match rel {
+        let layout = &rel.layout;
+        match &rel.def {
             ast::RelDef::Extern(rel) => invoke_extern_rel(runner_ctx, ctx, id, rel, values),
-            ast::RelDef::Defined(rel) => invoke_defined_rel(runner_ctx, ctx, id, rel, values),
+            ast::RelDef::Defined(rel) => {
+                invoke_defined_rel(runner_ctx, ctx, layout, id, rel, values)
+            }
         }
     });
     let pure = runner_ctx.interp_mut().cache.end();
@@ -227,6 +235,7 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
 fn eval_rule_path<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
+    layout: &Rc<FrameLayout>,
     rule_match: &ast::RuleMatch,
     path: &ast::RulePath,
     values: &[Value],
@@ -241,7 +250,7 @@ fn eval_rule_path<Iface: Interface, Ext: Extern>(
     ));
     let ctx = unwrap!(assign::assign_exps(
         runner_ctx.arena_mut(),
-        ctx.localize(),
+        ctx.localize_with_layout(layout),
         &rule_match.exps_input,
         values
     ));
@@ -253,6 +262,7 @@ fn eval_rule_path<Iface: Interface, Ext: Extern>(
 fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
+    layout: &Rc<FrameLayout>,
     id: &ast::Id,
     rel: &ast::DefinedRel,
     values: &[Value],
@@ -270,7 +280,7 @@ fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
         })
         .collect();
     let mut evaluate = |&(group, path): &(&ast::RuleGroupKind, &ast::RulePath)| {
-        eval_rule_path(runner_ctx, ctx, &group.rule_match, path, values).nest(
+        eval_rule_path(runner_ctx, ctx, layout, &group.rule_match, path, values).nest(
             id.span.clone(),
             || {
                 ErrorKind::Trace(TraceErrorKind::Evaluation {
@@ -302,6 +312,7 @@ fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
             Some(group) => eval_rule_path(
                 runner_ctx,
                 ctx,
+                layout,
                 &group.node.rule_match,
                 &group.node.rule_path,
                 values,
@@ -338,17 +349,20 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
     }
     runner_ctx.interp_mut().cache.begin();
     let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        let (_, func) = unwrap_from_result!(ctx.find_func(id), &id.span);
-        match func.as_ref() {
+        let func = unwrap_from_result!(ctx.find_func(id), &id.span);
+        let layout = &func.layout;
+        match &func.def {
             ast::MetaFuncDef::Extern(func) => {
                 invoke_extern_func(runner_ctx, ctx, id, func, targs, values)
             }
             ast::MetaFuncDef::Builtin(func) => {
                 invoke_builtin_func(runner_ctx, ctx, id, func, targs, values)
             }
-            ast::MetaFuncDef::Table(func) => invoke_table_func(runner_ctx, ctx, func, values),
+            ast::MetaFuncDef::Table(func) => {
+                invoke_table_func(runner_ctx, ctx, layout, func, values)
+            }
             ast::MetaFuncDef::Defined(func) => {
-                invoke_defined_func(runner_ctx, ctx, func, targs, values)
+                invoke_defined_func(runner_ctx, ctx, layout, func, targs, values)
             }
         }
     });
@@ -435,6 +449,7 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
 fn eval_table_row<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
+    layout: &Rc<FrameLayout>,
     table_row: &ast::TableRow,
     values: &[Value],
 ) -> Backtrack<Value> {
@@ -450,7 +465,7 @@ fn eval_table_row<Iface: Interface, Ext: Extern>(
         let ctx = unwrap!(assign::assign_args(
             runner_ctx.arena_mut(),
             ctx,
-            ctx.localize(),
+            ctx.localize_with_layout(layout),
             &table_row.node.args,
             values
         ));
@@ -465,11 +480,12 @@ fn eval_table_row<Iface: Interface, Ext: Extern>(
 fn invoke_table_func<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
+    layout: &Rc<FrameLayout>,
     table_func: &ast::TableFunc,
     values: &[Value],
 ) -> Backtrack<Value> {
     choose_sequential(&table_func.table_rows, |table_row| {
-        eval_table_row(runner_ctx, ctx, table_row, values)
+        eval_table_row(runner_ctx, ctx, layout, table_row, values)
     })
 }
 
@@ -509,6 +525,7 @@ fn eval_clause<Iface: Interface, Ext: Extern>(
 fn invoke_defined_func<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
+    layout: &Rc<FrameLayout>,
     defined_func: &ast::DefinedFunc,
     targs: &[ast::Typ],
     values: &[Value],
@@ -521,7 +538,7 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
             actual: targs.len()
         })
     ));
-    let mut ctx_local = ctx.localize();
+    let mut ctx_local = ctx.localize_with_layout(layout);
     for (tparam, targ) in defined_func.tparams.iter().zip(targs) {
         let def_typ =
             crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());

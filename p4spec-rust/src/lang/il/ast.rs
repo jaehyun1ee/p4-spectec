@@ -3,6 +3,7 @@
 use std::rc::Rc;
 
 use crate::lang::{
+    common::prim::num,
     common::{
         self,
         notation::{atom, mixfix::Mixfix, mixop},
@@ -10,7 +11,6 @@ use crate::lang::{
     },
     data, el,
     hints::input::InputHint,
-    xl::num,
 };
 
 // Numbers
@@ -39,12 +39,7 @@ pub type Iter = common::Iter;
 
 // Variables
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Var {
-    pub id: Id,
-    pub typ: Typ,
-    pub iters: Vec<Iter>,
-}
+pub type Var = crate::lang::data::var::Var;
 
 // Types
 
@@ -77,10 +72,25 @@ pub enum DefTypKind {
     Variant(Vec<TypCase>),
 }
 
-pub type TypField = (Phrase<atom::Atom>, Typ);
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypField {
+    pub atom: Atom,
+    pub typ: Typ,
+}
+
 pub type TypOrigin = Phrase<TypOriginKind>;
-pub type TypOriginKind = (Id, Vec<Targ>);
-pub type TypCase = (NotTyp, TypOrigin, Vec<Hint>);
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypOriginKind {
+    pub id: Id,
+    pub targs: Vec<Targ>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TypCase {
+    pub not_typ: NotTyp,
+    pub typ_origin: TypOrigin,
+    pub hints: Vec<Hint>,
+}
 
 // == Values
 
@@ -105,10 +115,10 @@ pub enum OpTyp {
 
 // Expressions
 
-pub type Exp = NotePhrase<ExpKind, Rc<TypKind>>;
+pub type Exp<I = Id, V = Var> = NotePhrase<ExpKind<I, V>, Rc<TypKind>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExpKind {
+pub enum ExpKind<I = Id, V = Var> {
     /// `bool`
     Bool(bool),
     /// `num`
@@ -116,56 +126,66 @@ pub enum ExpKind {
     /// `text`
     Text(Text),
     /// `varid`
-    Var(Id),
+    Id(I),
     /// `unop exp`
-    Un(UnOp, OpTyp, Box<Exp>),
+    Un(UnOp, OpTyp, Box<Exp<I, V>>),
     /// `exp binop exp`
-    Bin(BinOp, OpTyp, Box<Exp>, Box<Exp>),
+    Bin(BinOp, OpTyp, Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp cmpop exp`
-    Cmp(CmpOp, OpTyp, Box<Exp>, Box<Exp>),
+    Cmp(CmpOp, OpTyp, Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp as typ`
-    UpCast(Box<Typ>, Box<Exp>),
+    UpCast(Box<Typ>, Box<Exp<I, V>>),
     /// `exp as typ`
-    DownCast(Box<Typ>, Box<Exp>),
+    DownCast(Box<Typ>, Box<Exp<I, V>>),
     /// `exp <: typ`
-    Sub(Box<Exp>, Box<Typ>, Box<Subcheck>),
+    Sub(Box<Exp<I, V>>, Box<Typ>, Box<Subcheck>),
     /// `exp matches pattern`
-    Match(Box<Exp>, Pattern),
+    Match(Box<Exp<I, V>>, Pattern),
     /// `(` exp* `)`
-    Tuple(Vec<Exp>),
+    Tuple(Vec<Exp<I, V>>),
     /// `notexp`
-    Case(Box<NotExp>),
+    Case(Box<NotExp<I, V>>),
     /// `{` expfield* `}`
-    Str(Vec<ExpField>),
+    Str(Vec<ExpField<I, V>>),
     /// `exp?`
-    Opt(Option<Box<Exp>>),
+    Opt(Option<Box<Exp<I, V>>>),
     /// `[` exp* `]`
-    List(Vec<Exp>),
+    List(Vec<Exp<I, V>>),
     /// `exp :: exp`
-    Cons(Box<Exp>, Box<Exp>),
+    Cons(Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp ++ exp`
-    Cat(Box<Exp>, Box<Exp>),
+    Cat(Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp <- exp`
-    Mem(Box<Exp>, Box<Exp>),
+    Mem(Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `|` exp `|`
-    Len(Box<Exp>),
+    Len(Box<Exp<I, V>>),
     /// `exp.atom`
-    Dot(Box<Exp>, Atom),
+    Dot(Box<Exp<I, V>>, Atom),
     /// `exp [` exp `]`
-    Idx(Box<Exp>, Box<Exp>),
+    Idx(Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp [` exp `:` exp `]`
-    Slice(Box<Exp>, Box<Exp>, Box<Exp>),
+    Slice(Box<Exp<I, V>>, Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `exp [` path `=` exp `]`
-    Upd(Box<Exp>, Box<Path>, Box<Exp>),
+    Upd(Box<Exp<I, V>>, Box<Path<I, V>>, Box<Exp<I, V>>),
     /// `$id<` targ* `>(` arg* `)`
-    Call(Id, Vec<Targ>, Vec<Arg>),
+    Call(Id, Vec<Targ>, Vec<Arg<I, V>>),
     /// `exp iterexp`
-    Iter(Box<Exp>, ExpIter),
+    Iter(Box<Exp<I, V>>, ExpIter<V>),
 }
 
-pub type NotExp = Mixfix<Exp>;
-pub type ExpField = (Atom, Exp);
-pub type ExpIter = (Iter, Vec<Var>);
+pub type NotExp<I = Id, V = Var> = Mixfix<Exp<I, V>>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExpField<I = Id, V = Var> {
+    pub atom: Atom,
+    pub exp: Exp<I, V>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExpIter<V = Var> {
+    pub iter: Iter,
+    pub vars: Vec<V>,
+}
 
 // Patterns
 
@@ -191,17 +211,17 @@ pub enum OptPattern {
 
 // Paths
 
-pub type Path = NotePhrase<PathKind, Rc<TypKind>>;
+pub type Path<I = Id, V = Var> = NotePhrase<PathKind<I, V>, Rc<TypKind>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum PathKind {
+pub enum PathKind<I = Id, V = Var> {
     Root,
     /// `path [` exp `]`
-    Idx(Box<Path>, Box<Exp>),
+    Idx(Box<Path<I, V>>, Box<Exp<I, V>>),
     /// `path [` exp `:` exp `]`
-    Slice(Box<Path>, Box<Exp>, Box<Exp>),
+    Slice(Box<Path<I, V>>, Box<Exp<I, V>>, Box<Exp<I, V>>),
     /// `path . atom`
-    Dot(Box<Path>, Atom),
+    Dot(Box<Path<I, V>>, Atom),
 }
 
 // Parameters
@@ -222,12 +242,12 @@ pub type TParam = common::TId;
 
 // Arguments
 
-pub type Arg = Phrase<ArgKind>;
+pub type Arg<I = Id, V = Var> = Phrase<ArgKind<I, V>>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ArgKind {
+pub enum ArgKind<I = Id, V = Var> {
     /// `exp`
-    Exp(Box<Exp>),
+    Exp(Box<Exp<I, V>>),
     /// `$id`
     Def(Id),
 }
@@ -294,10 +314,10 @@ pub enum PremKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct PremIter {
+pub struct PremIter<V = Var> {
     pub iter: Iter,
-    pub vars_bound: Vec<Var>,
-    pub vars_bind: Vec<Var>,
+    pub vars_bound: Vec<V>,
+    pub vars_bind: Vec<V>,
 }
 
 // Rules
@@ -312,10 +332,20 @@ pub struct RuleKind {
 }
 
 pub type RuleGroup = Phrase<RuleGroupKind>;
-pub type RuleGroupKind = (Id, Vec<Rule>);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleGroupKind {
+    pub id: Id,
+    pub rules: Vec<Rule>,
+}
 
 pub type ElseGroup = Phrase<ElseGroupKind>;
-pub type ElseGroupKind = (Id, Rule);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ElseGroupKind {
+    pub id: Id,
+    pub rule: Rule,
+}
 
 // Clauses
 
@@ -334,7 +364,12 @@ pub type ElseClauseKind = ClauseKind;
 // Table rows
 
 pub type TableRow = Phrase<TableRowKind>;
-pub type TableRowKind = (Vec<Arg>, Exp);
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableRowKind {
+    pub args: Vec<Arg>,
+    pub exp: Exp,
+}
 
 // Hints
 

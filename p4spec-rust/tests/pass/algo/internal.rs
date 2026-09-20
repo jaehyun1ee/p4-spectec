@@ -1,6 +1,7 @@
 use crate::{
     lang::{
         al::ast as ast_al,
+        common::prim,
         common::{
             Id,
             ds::set::IdSet,
@@ -11,7 +12,6 @@ use crate::{
         hints::input::InputHint,
         il::ast,
         traits::eq::SyntaxEq,
-        xl,
     },
     pass::algo::{
         self, AlgoErrorKind,
@@ -47,18 +47,18 @@ fn exp(kind: ast::ExpKind, note: ast::TypKind, line: usize) -> ast::Exp {
     crate::note_phrase! { node: kind, note:  note, span:  span(line) }
 }
 
-fn var_exp(name: &str, line: usize) -> ast::Exp {
-    exp(ast::ExpKind::Var(id(name, line)), ast::TypKind::Bool, line)
+fn id_exp(name: &str, line: usize) -> ast::Exp {
+    crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id(name, line)), note: ast::TypKind::Bool, span: span(line))
 }
 
-fn typed_var_exp(name: &str, typ: &ast::Typ, line: usize) -> ast::Exp {
-    exp(ast::ExpKind::Var(id(name, line)), typ.node.clone(), line)
+fn typed_id_exp(name: &str, typ: &ast::Typ, line: usize) -> ast::Exp {
+    crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id(name, line)), note: typ.node.clone(), span: span(line))
 }
 
-fn iterated_var_exp(name: &str, typ: &ast::Typ, iter: ast::Iter, line: usize) -> ast::Exp {
-    let exp_inner = typed_var_exp(name, typ, line);
+fn iterated_id_exp(name: &str, typ: &ast::Typ, iter: ast::Iter, line: usize) -> ast::Exp {
+    let exp_inner = typed_id_exp(name, typ, line);
     exp(
-        ast::ExpKind::Iter(Box::new(exp_inner), (iter, vec![])),
+        ast::ExpKind::Iter(Box::new(exp_inner), ast::ExpIter { iter, vars: vec![] }),
         ast::TypKind::Iter(Box::new(typ.clone()), iter),
         line,
     )
@@ -124,7 +124,7 @@ fn joint_iteration(names: &[(&str, usize)], iter: ast::Iter, line: usize) -> ast
     let typ_bool = typ::make::bool();
     let exps = names
         .iter()
-        .map(|(name, line)| typed_var_exp(name, &typ_bool, *line))
+        .map(|(name, line)| typed_id_exp(name, &typ_bool, *line))
         .collect::<Vec<_>>();
     let vars = names
         .iter()
@@ -133,7 +133,7 @@ fn joint_iteration(names: &[(&str, usize)], iter: ast::Iter, line: usize) -> ast
     let typ_tuple = crate::phrase! { node: ast::TypKind::Tuple(vec![typ_bool; names.len()]), span:  span(line) };
     let exp_inner = exp(ast::ExpKind::Tuple(exps), typ_tuple.node.clone(), line);
     exp(
-        ast::ExpKind::Iter(Box::new(exp_inner), (iter, vars)),
+        ast::ExpKind::Iter(Box::new(exp_inner), ast::ExpIter { iter, vars }),
         ast::TypKind::Iter(Box::new(typ_tuple), iter),
         line,
     )
@@ -148,13 +148,13 @@ fn dimension_exp(name: &str, iter: ast::Iter, line: usize) -> ast::Exp {
 
 fn len_exp(name: &str, line: usize) -> ast::Exp {
     let exp_inner = dimension_exp(name, ast::Iter::List, line);
-    exp(ast::ExpKind::Len(Box::new(exp_inner)), ast::TypKind::Num(xl::num::Typ::Nat), line)
+    exp(ast::ExpKind::Len(Box::new(exp_inner)), ast::TypKind::Num(prim::num::Typ::Nat), line)
 }
 
 fn equality_prem(exp_l: ast::Exp, exp_r: ast::Exp, line: usize) -> ast::Prem {
     let condition = exp(
         ast::ExpKind::Cmp(
-            ast::CmpOp::Bool(xl::bool::CmpOp::Eq),
+            ast::CmpOp::Bool(prim::bool::CmpOp::Eq),
             ast::OpTyp::Bool,
             Box::new(exp_l),
             Box::new(exp_r),
@@ -178,7 +178,7 @@ fn literal_index_exp(value: bool, line: usize) -> ast::Exp {
     );
     let exp_idx = exp(
         ast::ExpKind::Num(ast::Num::Nat(0_u64.into())),
-        ast::TypKind::Num(xl::num::Typ::Nat),
+        ast::TypKind::Num(prim::num::Typ::Nat),
         line,
     );
     indexed_exp(base, exp_idx, ast::TypKind::Bool, line)
@@ -192,7 +192,7 @@ fn assert_index_guard_span(prem: &ast_al::Prem, expected_span: Span) {
     assert_eq!(if_prem.exp.span, expected_span);
     assert!(matches!(
         if_prem.exp.node,
-        ast::ExpKind::Cmp(ast::CmpOp::Num(xl::num::CmpOp::Lt), _, _, _)
+        ast::ExpKind::Cmp(ast::CmpOp::Num(prim::num::CmpOp::Lt), _, _, _)
     ));
 }
 
