@@ -1,497 +1,28 @@
 //! Lift nested calls into explicit SL let instructions
 
-use crate::lang::{
-    common::ds::{map::IdMap, set::IdSet},
-    hints::input,
-    il::{self, ast as il_ast},
-    sl::ast as sl,
-    traits::free::Free,
-};
+mod free;
+mod lift;
 
+use crate::lang::{common::ds::set::IdSet, hints::input, sl::ast as sl, traits::free::Free};
+
+use self::lift::{
+    LiftedCall, RootCallPolicy, ids_bound_by_exp_iters, ids_bound_by_instr_iters, lift_first_exp,
+    lift_first_exps,
+};
 use super::{ProseError, ProseErrorKind};
 
-// == Call extraction state
+// == Instruction lifting
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CallCount {
-    Yes,
-    No,
-    SkipOne,
-}
-
-struct Binding {
-    exp_l: sl::Exp,
-    exp_r: sl::Exp,
-    vars_inner: Vec<sl::Var>,
-    vars_outer: Vec<sl::Var>,
-    var_new: sl::Var,
-    iter_exps: Vec<sl::ExpIter>,
-}
-
-// == Variable collection
-
-fn var_eq(var_a: &sl::Var, var_b: &sl::Var) -> bool {
-    var_a.id.node == var_b.id.node && var_a.iters == var_b.iters
-}
-
-fn vars_insert(vars: &mut Vec<sl::Var>, var: sl::Var) {
-    if !vars.iter().any(|var_other| var_eq(var_other, &var)) {
-        vars.push(var);
-    }
-}
-
-fn vars_extend(vars: &mut Vec<sl::Var>, vars_other: impl IntoIterator<Item = sl::Var>) {
-    for var in vars_other {
-        vars_insert(vars, var);
-    }
-}
-
-fn free_vars_arg(arg_sl: &sl::Arg) -> Vec<sl::Var> {
-    match &arg_sl.node {
-        il_ast::ArgKind::Exp(exp_sl) => free_vars_exp(exp_sl),
-        il_ast::ArgKind::Def(_) => Vec::new(),
-    }
-}
-
-fn free_vars_args(args_sl: &[sl::Arg]) -> Vec<sl::Var> {
-    let mut vars = Vec::new();
-    for arg_sl in args_sl {
-        vars_extend(&mut vars, free_vars_arg(arg_sl));
-    }
-    vars
-}
-
-fn free_vars_path(path_sl: &sl::Path) -> Vec<sl::Var> {
-    match &path_sl.node {
-        il_ast::PathKind::Root => Vec::new(),
-        il_ast::PathKind::Idx(path_inner_sl, exp_sl) => {
-            let mut vars = free_vars_path(path_inner_sl);
-            vars_extend(&mut vars, free_vars_exp(exp_sl));
-            vars
-        }
-        il_ast::PathKind::Slice(path_inner_sl, exp_idx_sl, exp_len_sl) => {
-            let mut vars = free_vars_path(path_inner_sl);
-            vars_extend(&mut vars, free_vars_exp(exp_idx_sl));
-            vars_extend(&mut vars, free_vars_exp(exp_len_sl));
-            vars
-        }
-        il_ast::PathKind::Dot(path_inner_sl, _) => free_vars_path(path_inner_sl),
-    }
-}
-
-fn free_vars_exp(exp_sl: &sl::Exp) -> Vec<sl::Var> {
-    match &exp_sl.node {
-        il_ast::ExpKind::Bool(_) | il_ast::ExpKind::Num(_) | il_ast::ExpKind::Text(_) => Vec::new(),
-        il_ast::ExpKind::Var(id) => vec![sl::Var {
-            id: id.clone(),
-            typ: crate::phrase! {
-                node: exp_sl.note.as_ref().clone(),
-                span: exp_sl.span.clone(),
-            },
-            iters: Vec::new(),
-        }],
-        il_ast::ExpKind::Un(_, _, exp_inner_sl)
-        | il_ast::ExpKind::UpCast(_, exp_inner_sl)
-        | il_ast::ExpKind::DownCast(_, exp_inner_sl)
-        | il_ast::ExpKind::Sub(exp_inner_sl, _, _)
-        | il_ast::ExpKind::Match(exp_inner_sl, _)
-        | il_ast::ExpKind::Len(exp_inner_sl)
-        | il_ast::ExpKind::Dot(exp_inner_sl, _) => free_vars_exp(exp_inner_sl),
-        il_ast::ExpKind::Bin(_, _, exp_l_sl, exp_r_sl)
-        | il_ast::ExpKind::Cmp(_, _, exp_l_sl, exp_r_sl)
-        | il_ast::ExpKind::Cons(exp_l_sl, exp_r_sl)
-        | il_ast::ExpKind::Cat(exp_l_sl, exp_r_sl)
-        | il_ast::ExpKind::Mem(exp_l_sl, exp_r_sl)
-        | il_ast::ExpKind::Idx(exp_l_sl, exp_r_sl) => {
-            let mut vars = free_vars_exp(exp_l_sl);
-            vars_extend(&mut vars, free_vars_exp(exp_r_sl));
-            vars
-        }
-        il_ast::ExpKind::Tuple(exps_sl) | il_ast::ExpKind::List(exps_sl) => {
-            let mut vars = Vec::new();
-            for exp_sl in exps_sl {
-                vars_extend(&mut vars, free_vars_exp(exp_sl));
-            }
-            vars
-        }
-        il_ast::ExpKind::Case(not_exp_sl) => {
-            let mut vars = Vec::new();
-            for exp_sl in not_exp_sl.args() {
-                vars_extend(&mut vars, free_vars_exp(exp_sl));
-            }
-            vars
-        }
-        il_ast::ExpKind::Str(fields_sl) => {
-            let mut vars = Vec::new();
-            for (_, exp_sl) in fields_sl {
-                vars_extend(&mut vars, free_vars_exp(exp_sl));
-            }
-            vars
-        }
-        il_ast::ExpKind::Opt(exp_opt_sl) => {
-            exp_opt_sl.as_deref().map(free_vars_exp).unwrap_or_default()
-        }
-        il_ast::ExpKind::Slice(exp_base_sl, exp_idx_sl, exp_len_sl) => {
-            let mut vars = free_vars_exp(exp_base_sl);
-            vars_extend(&mut vars, free_vars_exp(exp_idx_sl));
-            vars_extend(&mut vars, free_vars_exp(exp_len_sl));
-            vars
-        }
-        il_ast::ExpKind::Upd(exp_base_sl, path_sl, exp_field_sl) => {
-            let mut vars = free_vars_exp(exp_base_sl);
-            vars_extend(&mut vars, free_vars_path(path_sl));
-            vars_extend(&mut vars, free_vars_exp(exp_field_sl));
-            vars
-        }
-        il_ast::ExpKind::Call(_, _, args_sl) => free_vars_args(args_sl),
-        il_ast::ExpKind::Iter(exp_inner_sl, (iter, vars_bound)) => {
-            let mut vars = free_vars_exp(exp_inner_sl);
-            for var in &mut vars {
-                if vars_bound.iter().any(|var_bound| var_eq(var_bound, var)) {
-                    var.iters.push(*iter);
-                }
-            }
-            vars
-        }
-    }
-}
-
-fn add_outer_vars(mut binding: Binding, vars: Vec<sl::Var>) -> Binding {
-    vars_extend(&mut binding.vars_outer, vars);
-    binding
-}
-
-// == Call extraction
-
-fn count_call(call_count: CallCount, exp_sl: &sl::Exp) -> CallCount {
-    match exp_sl.node {
-        il_ast::ExpKind::Call(..) => {
-            if call_count == CallCount::No {
-                CallCount::SkipOne
-            } else {
-                CallCount::Yes
-            }
-        }
-        il_ast::ExpKind::Iter(..) => call_count,
-        _ => CallCount::Yes,
-    }
-}
-
-fn args_reference_local(iter_locals: &IdSet, args_sl: &[sl::Arg]) -> bool {
-    args_sl.free().iter().any(|id| iter_locals.contains(id))
-}
-
-fn extract_root_call(
-    exp_target_sl: &mut sl::Exp,
-    call_count: CallCount,
-    iter_locals: &IdSet,
-    ids_used: &mut IdSet,
-) -> Option<Binding> {
-    let il_ast::ExpKind::Call(_, _, args_sl) = &exp_target_sl.node else {
-        return None;
-    };
-    if call_count != CallCount::Yes
-        || args_sl.is_empty()
-        || args_reference_local(iter_locals, args_sl)
-    {
-        return None;
-    }
-
-    let typ = crate::phrase! {
-        node: exp_target_sl.note.as_ref().clone(),
-        span: exp_target_sl.span.clone(),
-    };
-    let var_new =
-        il::fresh::var_from_typ(&IdMap::new(), ids_used, exp_target_sl.span.clone(), &typ);
-    ids_used.insert(var_new.id.clone());
-    let exp_new_sl = il::var::as_exp(true, &var_new);
-    let exp_orig_sl = std::mem::replace(exp_target_sl, exp_new_sl.clone());
-    let il_ast::ExpKind::Call(_, _, args_sl) = &exp_orig_sl.node else {
-        unreachable!();
-    };
-    let vars_inner = free_vars_args(args_sl);
-    Some(Binding {
-        exp_l: exp_new_sl,
-        exp_r: exp_orig_sl,
-        vars_inner,
-        vars_outer: Vec::new(),
-        var_new,
-        iter_exps: Vec::new(),
-    })
-}
-
-fn extract_exps(
-    exps_sl: &mut [sl::Exp],
-    call_count: CallCount,
-    iter_locals: &IdSet,
-    ids_used: &mut IdSet,
-) -> Option<Binding> {
-    for idx in 0..exps_sl.len() {
-        if let Some(binding) = extract_exp(&mut exps_sl[idx], call_count, iter_locals, ids_used) {
-            let mut vars_outer = Vec::new();
-            for (idx_other, exp_other_sl) in exps_sl.iter().enumerate() {
-                if idx_other != idx {
-                    vars_extend(&mut vars_outer, free_vars_exp(exp_other_sl));
-                }
-            }
-            return Some(add_outer_vars(binding, vars_outer));
-        }
-    }
-    None
-}
-
-fn extract_args(
-    args_sl: &mut [sl::Arg],
-    call_count: CallCount,
-    iter_locals: &IdSet,
-    ids_used: &mut IdSet,
-) -> Option<Binding> {
-    for idx in 0..args_sl.len() {
-        if let il_ast::ArgKind::Exp(exp_sl) = &mut args_sl[idx].node
-            && let Some(binding) = extract_exp(exp_sl, call_count, iter_locals, ids_used)
-        {
-            let mut vars_outer = Vec::new();
-            for (idx_other, arg_other_sl) in args_sl.iter().enumerate() {
-                if idx_other != idx {
-                    vars_extend(&mut vars_outer, free_vars_arg(arg_other_sl));
-                }
-            }
-            return Some(add_outer_vars(binding, vars_outer));
-        }
-    }
-    None
-}
-
-fn extract_path(
-    path_sl: &mut sl::Path,
-    call_count: CallCount,
-    iter_locals: &IdSet,
-    ids_used: &mut IdSet,
-) -> Option<Binding> {
-    match &mut path_sl.node {
-        il_ast::PathKind::Root => None,
-        il_ast::PathKind::Idx(path_inner_sl, exp_idx_sl) => {
-            if let Some(binding) = extract_path(path_inner_sl, call_count, iter_locals, ids_used) {
-                Some(add_outer_vars(binding, free_vars_exp(exp_idx_sl)))
-            } else {
-                extract_exp(exp_idx_sl, call_count, iter_locals, ids_used)
-                    .map(|binding| add_outer_vars(binding, free_vars_path(path_inner_sl)))
-            }
-        }
-        il_ast::PathKind::Slice(path_inner_sl, exp_idx_sl, exp_len_sl) => {
-            if let Some(binding) = extract_path(path_inner_sl, call_count, iter_locals, ids_used) {
-                let mut vars_outer = free_vars_exp(exp_idx_sl);
-                vars_extend(&mut vars_outer, free_vars_exp(exp_len_sl));
-                Some(add_outer_vars(binding, vars_outer))
-            } else if let Some(binding) = extract_exp(exp_idx_sl, call_count, iter_locals, ids_used)
-            {
-                let mut vars_outer = free_vars_path(path_inner_sl);
-                vars_extend(&mut vars_outer, free_vars_exp(exp_len_sl));
-                Some(add_outer_vars(binding, vars_outer))
-            } else {
-                extract_exp(exp_len_sl, call_count, iter_locals, ids_used).map(|binding| {
-                    let mut vars_outer = free_vars_path(path_inner_sl);
-                    vars_extend(&mut vars_outer, free_vars_exp(exp_idx_sl));
-                    add_outer_vars(binding, vars_outer)
-                })
-            }
-        }
-        il_ast::PathKind::Dot(path_inner_sl, _) => {
-            extract_path(path_inner_sl, call_count, iter_locals, ids_used)
-        }
-    }
-}
-
-fn extract_exp(
-    exp_target_sl: &mut sl::Exp,
-    call_count: CallCount,
-    iter_locals: &IdSet,
-    ids_used: &mut IdSet,
-) -> Option<Binding> {
-    let call_count = count_call(call_count, exp_target_sl);
-    if let Some(binding) = extract_root_call(exp_target_sl, call_count, iter_locals, ids_used) {
-        return Some(binding);
-    }
-
-    match &mut exp_target_sl.node {
-        il_ast::ExpKind::Bool(_)
-        | il_ast::ExpKind::Num(_)
-        | il_ast::ExpKind::Text(_)
-        | il_ast::ExpKind::Var(_) => None,
-        il_ast::ExpKind::Un(_, _, exp_inner_sl)
-        | il_ast::ExpKind::UpCast(_, exp_inner_sl)
-        | il_ast::ExpKind::DownCast(_, exp_inner_sl)
-        | il_ast::ExpKind::Sub(exp_inner_sl, _, _)
-        | il_ast::ExpKind::Match(exp_inner_sl, _)
-        | il_ast::ExpKind::Len(exp_inner_sl)
-        | il_ast::ExpKind::Dot(exp_inner_sl, _) => {
-            extract_exp(exp_inner_sl, call_count, iter_locals, ids_used)
-        }
-        il_ast::ExpKind::Bin(_, _, exp_l_sl, exp_r_sl)
-        | il_ast::ExpKind::Cmp(_, _, exp_l_sl, exp_r_sl)
-        | il_ast::ExpKind::Cons(exp_l_sl, exp_r_sl)
-        | il_ast::ExpKind::Cat(exp_l_sl, exp_r_sl)
-        | il_ast::ExpKind::Mem(exp_l_sl, exp_r_sl)
-        | il_ast::ExpKind::Idx(exp_l_sl, exp_r_sl) => {
-            if let Some(binding) = extract_exp(exp_l_sl, call_count, iter_locals, ids_used) {
-                Some(add_outer_vars(binding, free_vars_exp(exp_r_sl)))
-            } else {
-                extract_exp(exp_r_sl, call_count, iter_locals, ids_used)
-                    .map(|binding| add_outer_vars(binding, free_vars_exp(exp_l_sl)))
-            }
-        }
-        il_ast::ExpKind::Tuple(exps_sl) | il_ast::ExpKind::List(exps_sl) => {
-            extract_exps(exps_sl, call_count, iter_locals, ids_used)
-        }
-        il_ast::ExpKind::Case(not_exp_sl) => {
-            let mut exps_sl = not_exp_sl.args().into_iter().cloned().collect::<Vec<_>>();
-            let binding = extract_exps(&mut exps_sl, call_count, iter_locals, ids_used)?;
-            let mut exps_sl = exps_sl.into_iter();
-            **not_exp_sl = not_exp_sl.map(|_| exps_sl.next().unwrap());
-            Some(binding)
-        }
-        il_ast::ExpKind::Str(fields_sl) => {
-            for idx in 0..fields_sl.len() {
-                if let Some(binding) =
-                    extract_exp(&mut fields_sl[idx].1, call_count, iter_locals, ids_used)
-                {
-                    let mut vars_outer = Vec::new();
-                    for (idx_other, (_, exp_other_sl)) in fields_sl.iter().enumerate() {
-                        if idx_other != idx {
-                            vars_extend(&mut vars_outer, free_vars_exp(exp_other_sl));
-                        }
-                    }
-                    return Some(add_outer_vars(binding, vars_outer));
-                }
-            }
-            None
-        }
-        il_ast::ExpKind::Opt(exp_opt_sl) => exp_opt_sl
-            .as_deref_mut()
-            .and_then(|exp_sl| extract_exp(exp_sl, call_count, iter_locals, ids_used)),
-        il_ast::ExpKind::Slice(exp_base_sl, exp_idx_sl, exp_len_sl) => {
-            if let Some(binding) = extract_exp(exp_base_sl, call_count, iter_locals, ids_used) {
-                let mut vars_outer = free_vars_exp(exp_idx_sl);
-                vars_extend(&mut vars_outer, free_vars_exp(exp_len_sl));
-                Some(add_outer_vars(binding, vars_outer))
-            } else if let Some(binding) = extract_exp(exp_idx_sl, call_count, iter_locals, ids_used)
-            {
-                let mut vars_outer = free_vars_exp(exp_base_sl);
-                vars_extend(&mut vars_outer, free_vars_exp(exp_len_sl));
-                Some(add_outer_vars(binding, vars_outer))
-            } else {
-                extract_exp(exp_len_sl, call_count, iter_locals, ids_used).map(|binding| {
-                    let mut vars_outer = free_vars_exp(exp_base_sl);
-                    vars_extend(&mut vars_outer, free_vars_exp(exp_idx_sl));
-                    add_outer_vars(binding, vars_outer)
-                })
-            }
-        }
-        il_ast::ExpKind::Upd(exp_base_sl, path_sl, exp_field_sl) => {
-            if let Some(binding) = extract_exp(exp_base_sl, call_count, iter_locals, ids_used) {
-                let mut vars_outer = free_vars_path(path_sl);
-                vars_extend(&mut vars_outer, free_vars_exp(exp_field_sl));
-                Some(add_outer_vars(binding, vars_outer))
-            } else if let Some(binding) = extract_path(path_sl, call_count, iter_locals, ids_used) {
-                let mut vars_outer = free_vars_exp(exp_base_sl);
-                vars_extend(&mut vars_outer, free_vars_exp(exp_field_sl));
-                Some(add_outer_vars(binding, vars_outer))
-            } else {
-                extract_exp(exp_field_sl, call_count, iter_locals, ids_used).map(|binding| {
-                    let mut vars_outer = free_vars_exp(exp_base_sl);
-                    vars_extend(&mut vars_outer, free_vars_path(path_sl));
-                    add_outer_vars(binding, vars_outer)
-                })
-            }
-        }
-        il_ast::ExpKind::Call(_, _, args_sl) => {
-            extract_args(args_sl, call_count, iter_locals, ids_used)
-        }
-        il_ast::ExpKind::Iter(exp_inner_sl, (iter, vars_bound)) => {
-            let mut binding = extract_exp(exp_inner_sl, call_count, iter_locals, ids_used)?;
-            let vars_matched = binding
-                .vars_inner
-                .iter()
-                .filter(|var_inner| {
-                    vars_bound
-                        .iter()
-                        .any(|var_bound| var_eq(var_bound, var_inner))
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-            if vars_matched.is_empty() {
-                return Some(binding);
-            }
-
-            for var_inner in &mut binding.vars_inner {
-                if vars_matched
-                    .iter()
-                    .any(|var_matched| var_eq(var_matched, var_inner))
-                {
-                    var_inner.iters.push(*iter);
-                }
-            }
-            let vars_iter = vars_bound
-                .iter()
-                .filter(|var_bound| {
-                    vars_matched
-                        .iter()
-                        .any(|var_matched| var_eq(var_matched, var_bound))
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-            let vars_kept = vars_bound
-                .iter()
-                .filter(|var_bound| {
-                    !vars_matched
-                        .iter()
-                        .any(|var_matched| var_eq(var_matched, var_bound))
-                        || binding
-                            .vars_outer
-                            .iter()
-                            .any(|var_outer| var_eq(var_outer, var_bound))
-                })
-                .cloned()
-                .collect::<Vec<_>>();
-            let var_new_inner = binding.var_new.clone();
-            binding.var_new.iters.push(*iter);
-            binding.iter_exps.push((*iter, vars_iter));
-            *vars_bound = std::iter::once(var_new_inner).chain(vars_kept).collect();
-            Some(binding)
-        }
-    }
-}
-
-// == Iterator locals
-
-fn ids_of_vars<'a>(vars: impl IntoIterator<Item = &'a sl::Var>) -> IdSet {
-    vars.into_iter().map(|var| var.id.clone()).collect()
-}
-
-fn iter_locals_instr(iter_instrs: &[sl::InstrIter]) -> IdSet {
-    iter_instrs
-        .iter()
-        .flat_map(|iter_instr| iter_instr.vars_bound.iter())
-        .map(|var| var.id.clone())
-        .collect()
-}
-
-fn iter_locals_exp(iter_exps: &[sl::ExpIter]) -> IdSet {
-    ids_of_vars(iter_exps.iter().flat_map(|(_, vars)| vars))
-}
-
-// == Instruction expansion
-
-fn extract_instr(
+fn lift_instr_call(
     instr_sl: &mut sl::Instr,
     ids_used: &mut IdSet,
-) -> Result<Option<Binding>, ProseError> {
+) -> Result<Option<LiftedCall>, ProseError> {
     let span = instr_sl.span.clone();
     Ok(match &mut instr_sl.node {
-        sl::InstrKind::Let(instr_sl) => extract_exp(
+        sl::InstrKind::Let(instr_sl) => lift_first_exp(
             &mut instr_sl.exp_r,
-            CallCount::No,
-            &iter_locals_instr(&instr_sl.iter_instrs),
+            RootCallPolicy::Preserve,
+            &ids_bound_by_instr_iters(&instr_sl.iter_instrs),
             ids_used,
         ),
         sl::InstrKind::Rule(instr_sl) => {
@@ -504,20 +35,20 @@ fn extract_instr(
             let (mut exps_input_sl, exps_output_sl) =
                 input::split(&instr_sl.input_hint, exps_sl)
                     .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
-            let binding = extract_exps(
+            let lifted_call = lift_first_exps(
                 &mut exps_input_sl,
-                CallCount::SkipOne,
-                &iter_locals_instr(&instr_sl.iter_instrs),
+                RootCallPolicy::Lift,
+                &ids_bound_by_instr_iters(&instr_sl.iter_instrs),
                 ids_used,
             );
-            if binding.is_some() {
+            if lifted_call.is_some() {
                 let exps_sl =
                     input::combine(&instr_sl.input_hint, exps_input_sl, exps_output_sl)
                         .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span))?;
                 let mut exps_sl = exps_sl.into_iter();
                 instr_sl.not_exp = instr_sl.not_exp.map(|_| exps_sl.next().unwrap());
             }
-            binding
+            lifted_call
         }
         sl::InstrKind::Hold(instr_sl) => {
             let mut exps_sl = instr_sl
@@ -526,23 +57,23 @@ fn extract_instr(
                 .into_iter()
                 .cloned()
                 .collect::<Vec<_>>();
-            let binding = extract_exps(
+            let lifted_call = lift_first_exps(
                 &mut exps_sl,
-                CallCount::SkipOne,
-                &iter_locals_exp(&instr_sl.iter_exps),
+                RootCallPolicy::Lift,
+                &ids_bound_by_exp_iters(&instr_sl.iter_exps),
                 ids_used,
             );
-            if binding.is_some() {
+            if lifted_call.is_some() {
                 let mut exps_sl = exps_sl.into_iter();
                 instr_sl.not_exp = instr_sl.not_exp.map(|_| exps_sl.next().unwrap());
             }
-            binding
+            lifted_call
         }
         sl::InstrKind::Result(instr_sl) => {
-            extract_exps(&mut instr_sl.exps, CallCount::No, &IdSet::new(), ids_used)
+            lift_first_exps(&mut instr_sl.exps, RootCallPolicy::Preserve, &IdSet::new(), ids_used)
         }
         sl::InstrKind::Return(instr_sl) => {
-            extract_exp(&mut instr_sl.exp, CallCount::No, &IdSet::new(), ids_used)
+            lift_first_exp(&mut instr_sl.exp, RootCallPolicy::Preserve, &IdSet::new(), ids_used)
         }
         sl::InstrKind::If(_)
         | sl::InstrKind::Case(_)
@@ -550,6 +81,8 @@ fn extract_instr(
         | sl::InstrKind::Debug(_) => None,
     })
 }
+
+// == Nested blocks
 
 fn expand_hold_case(
     ids_used: &mut IdSet,
@@ -608,43 +141,17 @@ fn expand_subblocks(ids_used: &mut IdSet, instr_sl: sl::Instr) -> Result<sl::Ins
     Ok(crate::phrase! { node: instr_kind_sl, span: span })
 }
 
-fn wrap_binding(binding: Binding, instr_sl: sl::Instr) -> sl::Instr {
-    let Binding { exp_l, exp_r, var_new, iter_exps, .. } = binding;
-    let num_iters_enclosing = iter_exps.len();
-    let num_iters_callee = var_new.iters.len() - num_iters_enclosing;
-    let mut var_bind = sl::Var {
-        id: var_new.id,
-        typ: var_new.typ,
-        iters: var_new.iters[..num_iters_callee].to_vec(),
-    };
-    let mut iter_instrs = Vec::new();
-    for (iter, vars_bound) in iter_exps {
-        iter_instrs.push(sl::InstrIter { iter, vars_bound, vars_bind: vec![var_bind.clone()] });
-        var_bind.iters.push(iter);
+fn expand_instr(ids_used: &mut IdSet, instr_sl: sl::Instr) -> Result<sl::Instr, ProseError> {
+    let mut instr_sl = expand_subblocks(ids_used, instr_sl)?;
+    let mut calls_lifted = Vec::new();
+    while let Some(call_lifted) = lift_instr_call(&mut instr_sl, ids_used)? {
+        calls_lifted.push(call_lifted);
     }
-    let span = instr_sl.span.clone();
-    crate::phrase! {
-        node: sl::InstrKind::Let(sl::LetInstr {
-            exp_l,
-            exp_r,
-            iter_instrs,
-            block: vec![instr_sl],
-        }),
-        span: span,
-    }
-}
-
-fn expand_instr(ids_used: &mut IdSet, mut instr_sl: sl::Instr) -> Result<sl::Instr, ProseError> {
-    instr_sl = expand_subblocks(ids_used, instr_sl)?;
-    let mut bindings = Vec::new();
-    while let Some(binding) = extract_instr(&mut instr_sl, ids_used)? {
-        bindings.push(binding);
-    }
-    if bindings.is_empty() {
+    if calls_lifted.is_empty() {
         return Ok(instr_sl);
     }
-    for binding in bindings.into_iter().rev() {
-        instr_sl = wrap_binding(binding, instr_sl);
+    for call_lifted in calls_lifted.into_iter().rev() {
+        instr_sl = call_lifted.wrap_instr(instr_sl);
     }
     expand_instr(ids_used, instr_sl)
 }
