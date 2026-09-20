@@ -1,4 +1,8 @@
 //! Typed failures produced during algorithm structuring
+//!
+//! A `StructureError` pairs a stable `StructureErrorKind` with a source span.
+//! Kinds cover premise shapes the pass rejects, anti-unification of inputs,
+//! totalization of case analyses, and duplicate definitions while loading.
 
 use thiserror::Error;
 
@@ -7,7 +11,7 @@ use crate::{
     runtime::ops::typ::{TypeError, TypeErrorKind},
 };
 
-/// Stable semantic category of a structuring failure
+/// Stable semantic category of a structuring failure.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum StructureErrorKind {
     #[error("parameter and input argument do not match")]
@@ -44,7 +48,7 @@ pub enum StructureErrorKind {
     Type(TypeErrorKind),
 }
 
-/// A structuring failure paired with its source span
+/// A structuring failure paired with its source span.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("{kind} at {span}")]
 pub struct StructureError {
