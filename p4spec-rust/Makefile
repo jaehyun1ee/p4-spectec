@@ -99,11 +99,12 @@ test-run-sl:
 
 test-expected: test-p4parse test-elab test-algo test-structure test-prose test-run-al test-run-sl
 
-# Rerun elab/algo and update snapshots; does not approve a previous run
+# Rerun elab/algo/prose and update snapshots; does not approve a previous run
 # P4 parser/structure/AL expected and excludes are never promoted
 test-promote:
 	UPDATE_EXPECT=1 $(DRIVER) elab
 	UPDATE_EXPECT=1 $(DRIVER) algo
+	UPDATE_EXPECT=1 $(DRIVER) prose
 
 # Native simulation uses source-derived expectations in both cached modes
 .PHONY: test-sim-al test-sim-sl

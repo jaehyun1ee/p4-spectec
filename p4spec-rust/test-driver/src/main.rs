@@ -63,14 +63,15 @@ fn execute(command: Command) -> Result<()> {
         command,
         Command::P4parse
             | Command::Structure
-            | Command::Prose
             | Command::RunAl
             | Command::RunSl { .. }
             | Command::SimAl { .. }
             | Command::SimSl { .. }
     ) && std::env::var_os("UPDATE_EXPECT").is_some()
     {
-        return Err(Error::Invalid("UPDATE_EXPECT is supported only for elab and algo".to_owned()));
+        return Err(Error::Invalid(
+            "UPDATE_EXPECT is supported only for elab, algo, and prose".to_owned(),
+        ));
     }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
