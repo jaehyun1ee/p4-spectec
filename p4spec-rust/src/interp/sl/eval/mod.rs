@@ -1,4 +1,8 @@
 //! SL assignment, expression, instruction, and invocation evaluation
+//!
+//! `Invoker` for `SlInterp` delegates to `call`;
+//! `instr` evaluates blocks and instructions into flows;
+//! `assign` adds parameter assignment; `expr` re-exports the shared evaluation.
 
 use crate::runtime::envs::interp::sl::ast_prepared as ast;
 pub mod assign;
