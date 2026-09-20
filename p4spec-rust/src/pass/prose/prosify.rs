@@ -159,6 +159,30 @@ fn hints_of_let_instr(exp_l_pl: &pl::Exp) -> annot::Hints {
     }
 }
 
+fn hints_of_def(ctx: &Context, def_kind_sl: &sl::DefKind) -> Result<annot::Hints, ProseError> {
+    match def_kind_sl {
+        sl::DefKind::Rel(sl::RelDef::Extern(def_rel_sl)) => {
+            hints_of_rel_def(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)
+        }
+        sl::DefKind::Rel(sl::RelDef::Defined(def_rel_sl)) => {
+            hints_of_rel_def(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)
+        }
+        sl::DefKind::MetaFunc(sl::MetaFuncDef::Extern(def_func_sl)) => {
+            Ok(hints_of_func_def(ctx, &def_func_sl.id))
+        }
+        sl::DefKind::MetaFunc(sl::MetaFuncDef::Builtin(def_func_sl)) => {
+            Ok(hints_of_func_def(ctx, &def_func_sl.id))
+        }
+        sl::DefKind::MetaFunc(sl::MetaFuncDef::Table(def_func_sl)) => {
+            Ok(hints_of_func_def(ctx, &def_func_sl.id))
+        }
+        sl::DefKind::MetaFunc(sl::MetaFuncDef::Defined(def_func_sl)) => {
+            Ok(hints_of_func_def(ctx, &def_func_sl.id))
+        }
+        sl::DefKind::Typ(_) | sl::DefKind::Var(_) => Ok(annot::Hints::default()),
+    }
+}
+
 // == Hint validation
 
 fn validate_hint_alter(
@@ -208,8 +232,37 @@ fn validate_hint_split(
 
 // == Expressions
 
+// - Expression
+
 fn prosify_exp(ctx: &Context, exp_sl: &sl::Exp) -> Result<pl::Exp, ProseError> {
-    let exp_kind_pl = match &exp_sl.node {
+    let exp_kind_pl = prosify_exp_kind(ctx, &exp_sl.node)?;
+    let hints = match &exp_sl.node {
+        il::ExpKind::Case(not_exp_sl) => {
+            let hints = hints_of_case_exp(ctx, exp_sl, not_exp_sl);
+            let num_args = not_exp_sl.args().len();
+            validate_hint_alter(&exp_sl.span, &hints, num_args)?;
+            validate_hint_fields(&exp_sl.span, &hints, num_args)?;
+            hints
+        }
+        il::ExpKind::Call(id, _, args_sl) => {
+            let hints = hints_of_call_exp(ctx, id);
+            validate_hint_alter(&exp_sl.span, &hints, args_sl.len())?;
+            hints
+        }
+        _ => annot::Hints::default(),
+    };
+    Ok(crate::annotated! {
+        node: crate::note_phrase! {
+            node: exp_kind_pl,
+            note: exp_sl.note.as_ref().clone(),
+            span: exp_sl.span.clone(),
+        },
+        hints: hints,
+    })
+}
+
+fn prosify_exp_kind(ctx: &Context, exp_kind_sl: &sl::ExpKind) -> Result<pl::ExpKind, ProseError> {
+    let exp_kind_pl = match exp_kind_sl {
         il::ExpKind::Bool(value) => pl::ExpKind::Bool(*value),
         il::ExpKind::Num(num) => pl::ExpKind::Num(num.clone()),
         il::ExpKind::Text(text) => pl::ExpKind::Text(text.clone()),
@@ -305,30 +358,10 @@ fn prosify_exp(ctx: &Context, exp_sl: &sl::Exp) -> Result<pl::Exp, ProseError> {
             pl::ExpKind::Iter(Box::new(prosify_exp(ctx, exp_inner_sl)?), iter_exp.clone())
         }
     };
-    let hints = match &exp_sl.node {
-        il::ExpKind::Case(not_exp_sl) => {
-            let hints = hints_of_case_exp(ctx, exp_sl, not_exp_sl);
-            let num_args = not_exp_sl.args().len();
-            validate_hint_alter(&exp_sl.span, &hints, num_args)?;
-            validate_hint_fields(&exp_sl.span, &hints, num_args)?;
-            hints
-        }
-        il::ExpKind::Call(id, _, args_sl) => {
-            let hints = hints_of_call_exp(ctx, id);
-            validate_hint_alter(&exp_sl.span, &hints, args_sl.len())?;
-            hints
-        }
-        _ => annot::Hints::default(),
-    };
-    Ok(crate::annotated! {
-        node: crate::note_phrase! {
-            node: exp_kind_pl,
-            note: exp_sl.note.as_ref().clone(),
-            span: exp_sl.span.clone(),
-        },
-        hints: hints,
-    })
+    Ok(exp_kind_pl)
 }
+
+// - Expression list
 
 fn prosify_exps(ctx: &Context, exps_sl: &[sl::Exp]) -> Result<Vec<pl::Exp>, ProseError> {
     exps_sl
@@ -336,6 +369,8 @@ fn prosify_exps(ctx: &Context, exps_sl: &[sl::Exp]) -> Result<Vec<pl::Exp>, Pros
         .map(|exp_sl| prosify_exp(ctx, exp_sl))
         .collect()
 }
+
+// - Notation expression
 
 fn prosify_not_exp(ctx: &Context, not_exp_sl: &sl::NotExp) -> Result<pl::NotExp, ProseError> {
     Ok(match not_exp_sl {
@@ -363,7 +398,19 @@ fn prosify_not_exp(ctx: &Context, not_exp_sl: &sl::NotExp) -> Result<pl::NotExp,
 // == Paths
 
 fn prosify_path(ctx: &Context, path_sl: &sl::Path) -> Result<pl::Path, ProseError> {
-    let path_kind_pl = match &path_sl.node {
+    let path_kind_pl = prosify_path_kind(ctx, &path_sl.node)?;
+    Ok(crate::note_phrase! {
+        node: path_kind_pl,
+        note: path_sl.note.as_ref().clone(),
+        span: path_sl.span.clone(),
+    })
+}
+
+fn prosify_path_kind(
+    ctx: &Context,
+    path_kind_sl: &sl::PathKind,
+) -> Result<pl::PathKind, ProseError> {
+    let path_kind_pl = match path_kind_sl {
         il::PathKind::Root => pl::PathKind::Root,
         il::PathKind::Idx(path_inner_sl, exp_idx_sl) => pl::PathKind::Idx(
             Box::new(prosify_path(ctx, path_inner_sl)?),
@@ -378,27 +425,36 @@ fn prosify_path(ctx: &Context, path_sl: &sl::Path) -> Result<pl::Path, ProseErro
             pl::PathKind::Dot(Box::new(prosify_path(ctx, path_inner_sl)?), atom.clone())
         }
     };
-    Ok(crate::note_phrase! {
-        node: path_kind_pl,
-        note: path_sl.note.as_ref().clone(),
-        span: path_sl.span.clone(),
-    })
+    Ok(path_kind_pl)
 }
 
 // == Arguments
 
 fn prosify_arg(ctx: &Context, arg_sl: &sl::Arg) -> Result<pl::Arg, ProseError> {
-    let arg_kind_pl = match &arg_sl.node {
+    let arg_kind_pl = prosify_arg_kind(ctx, &arg_sl.node)?;
+    Ok(crate::phrase! { node: arg_kind_pl, span: arg_sl.span.clone() })
+}
+
+fn prosify_arg_kind(ctx: &Context, arg_kind_sl: &sl::ArgKind) -> Result<pl::ArgKind, ProseError> {
+    let arg_kind_pl = match arg_kind_sl {
         il::ArgKind::Exp(exp_sl) => pl::ArgKind::Exp(Box::new(prosify_exp(ctx, exp_sl)?)),
         il::ArgKind::Def(id) => pl::ArgKind::Def(id.clone()),
     };
-    Ok(crate::phrase! { node: arg_kind_pl, span: arg_sl.span.clone() })
+    Ok(arg_kind_pl)
 }
 
 // == Parameters
 
 fn prosify_param(ctx: &Context, param_sl: &sl::Param) -> Result<pl::Param, ProseError> {
-    let param_kind_pl = match &param_sl.node {
+    let param_kind_pl = prosify_param_kind(ctx, &param_sl.node)?;
+    Ok(crate::phrase! { node: param_kind_pl, span: param_sl.span.clone() })
+}
+
+fn prosify_param_kind(
+    ctx: &Context,
+    param_kind_sl: &sl::ParamKind,
+) -> Result<pl::ParamKind, ProseError> {
+    let param_kind_pl = match param_kind_sl {
         sl::ParamKind::Exp(typ, exp_sl) => {
             pl::ParamKind::Exp(typ.clone(), Box::new(prosify_exp(ctx, exp_sl)?))
         }
@@ -412,7 +468,14 @@ fn prosify_param(ctx: &Context, param_sl: &sl::Param) -> Result<pl::Param, Prose
             typ.clone(),
         ),
     };
-    Ok(crate::phrase! { node: param_kind_pl, span: param_sl.span.clone() })
+    Ok(param_kind_pl)
+}
+
+fn prosify_params(ctx: &Context, params_sl: &[sl::Param]) -> Result<Vec<pl::Param>, ProseError> {
+    params_sl
+        .iter()
+        .map(|param_sl| prosify_param(ctx, param_sl))
+        .collect()
 }
 
 // == Guards
@@ -450,68 +513,68 @@ fn make_instr_with_hints<Tier>(
     }
 }
 
-// == Blocks
+// == Dispatch instructions
 
-// - Dispatch tier
+// - Instruction
 
-fn prosify_block_dispatch(
+fn prosify_instr_dispatch(
     ctx: &Context,
-    block_sl: sl::Block,
+    instr_sl: sl::Instr,
 ) -> Result<pl::BlockDispatch, ProseError> {
-    match block_sl.len() {
-        0 => Ok(Vec::new()),
-        1 => prosify_instr_dispatch(ctx, block_sl.into_iter().next().unwrap()),
-        _ => {
-            let span = Span::over(
-                &block_sl
-                    .iter()
-                    .map(|instr_sl| instr_sl.span.clone())
-                    .collect::<Vec<_>>(),
-            );
-            let blocks_pl = block_sl
-                .into_iter()
-                .map(|instr_sl| prosify_instr_dispatch(ctx, instr_sl))
-                .collect::<Result<_, _>>()?;
-            Ok(vec![make_instr(
-                pl::InstrKind::Tier(pl::TierInstr {
-                    tier: pl::InstrDispatch::Route(pl::RouteDispatchInstr { blocks: blocks_pl }),
-                }),
-                span,
-            )])
+    prosify_instr_kind_dispatch(ctx, instr_sl.node, instr_sl.span)
+}
+
+fn prosify_instr_kind_dispatch(
+    ctx: &Context,
+    instr_kind_sl: sl::InstrKind,
+    span: Span,
+) -> Result<pl::BlockDispatch, ProseError> {
+    match instr_kind_sl {
+        sl::InstrKind::If(instr_sl) => prosify_if_instr_dispatch(ctx, instr_sl, span),
+        sl::InstrKind::Hold(instr_sl) => prosify_hold_instr_dispatch(ctx, instr_sl, span),
+        sl::InstrKind::Case(instr_sl) => prosify_case_instr_dispatch(ctx, instr_sl, span),
+        sl::InstrKind::Let(instr_sl) => prosify_let_instr_dispatch(ctx, instr_sl, span),
+        sl::InstrKind::Debug(instr_sl) => prosify_debug_instr_dispatch(ctx, instr_sl, span),
+        sl::InstrKind::Group(instr_sl) => prosify_group_instr_dispatch(ctx, instr_sl, span),
+        sl::InstrKind::Rule(_) | sl::InstrKind::Result(_) | sl::InstrKind::Return(_) => {
+            Err(ProseError::new(ProseErrorKind::InvalidDispatchTier, span))
         }
     }
 }
 
-// - Group tier
+// - If instruction
 
-fn prosify_block_group(ctx: &Context, block_sl: sl::Block) -> Result<pl::BlockGroup, ProseError> {
-    match block_sl.len() {
-        0 => Ok(Vec::new()),
-        1 => prosify_instr_group(ctx, block_sl.into_iter().next().unwrap()),
-        _ => {
-            let span = Span::over(
-                &block_sl
-                    .iter()
-                    .map(|instr_sl| instr_sl.span.clone())
-                    .collect::<Vec<_>>(),
-            );
-            let blocks_pl = block_sl
-                .into_iter()
-                .map(|instr_sl| prosify_instr_group(ctx, instr_sl))
-                .collect::<Result<_, _>>()?;
-            Ok(vec![make_instr(
-                pl::InstrKind::Tier(pl::TierInstr {
-                    tier: pl::InstrGroup::Backtrack(pl::BacktrackGroupInstr { blocks: blocks_pl }),
-                }),
-                span,
-            )])
-        }
-    }
+fn prosify_if_instr_dispatch(
+    ctx: &Context,
+    instr_sl: sl::IfInstr,
+    span: Span,
+) -> Result<pl::BlockDispatch, ProseError> {
+    let instr_kind_pl = pl::InstrKind::If(pl::IfInstr {
+        exp: prosify_exp(ctx, &instr_sl.exp)?,
+        iter_exps: instr_sl.iter_exps,
+        block: prosify_block_dispatch(ctx, instr_sl.block)?,
+        dangle: instr_sl.dangle,
+    });
+    Ok(vec![make_instr(instr_kind_pl, span)])
 }
 
-// == Holding conditions
+// - Hold instruction
 
-// - Dispatch tier
+fn prosify_hold_instr_dispatch(
+    ctx: &Context,
+    instr_sl: sl::HoldInstr,
+    span: Span,
+) -> Result<pl::BlockDispatch, ProseError> {
+    let hints = hints_of_hold_instr(ctx, &instr_sl.id);
+    validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
+    let instr_kind_pl = pl::InstrKind::Hold(pl::HoldInstr {
+        id: instr_sl.id,
+        not_exp: prosify_not_exp(ctx, &instr_sl.not_exp)?,
+        iter_exps: instr_sl.iter_exps,
+        hold_case: prosify_hold_case_dispatch(ctx, instr_sl.hold_case)?,
+    });
+    Ok(vec![make_instr_with_hints(instr_kind_pl, span, hints)])
+}
 
 fn prosify_hold_case_dispatch(
     ctx: &Context,
@@ -531,7 +594,174 @@ fn prosify_hold_case_dispatch(
     })
 }
 
-// - Group tier
+// - Case instruction
+
+fn prosify_case_instr_dispatch(
+    ctx: &Context,
+    instr_sl: sl::CaseInstr,
+    span: Span,
+) -> Result<pl::BlockDispatch, ProseError> {
+    let cases_pl = instr_sl
+        .cases
+        .into_iter()
+        .map(|case_sl| {
+            Ok(pl::Case {
+                guard: prosify_guard(ctx, &case_sl.guard)?,
+                block: prosify_block_dispatch(ctx, case_sl.block)?,
+            })
+        })
+        .collect::<Result<_, ProseError>>()?;
+    let instr_kind_pl = pl::InstrKind::Case(pl::CaseInstr {
+        exp: prosify_exp(ctx, &instr_sl.exp)?,
+        cases: cases_pl,
+        dangle: instr_sl.dangle,
+    });
+    Ok(vec![make_instr(instr_kind_pl, span)])
+}
+
+// - Let instruction
+
+fn prosify_let_instr_dispatch(
+    ctx: &Context,
+    instr_sl: sl::LetInstr,
+    span: Span,
+) -> Result<pl::BlockDispatch, ProseError> {
+    let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
+    let hints = hints_of_let_instr(&exp_l_pl);
+    let instr_kind_pl = pl::InstrKind::Let(pl::LetInstr {
+        exp_l: exp_l_pl,
+        exp_r: prosify_exp(ctx, &instr_sl.exp_r)?,
+        iter_instrs: instr_sl.iter_instrs,
+    });
+    let mut instrs_pl = vec![make_instr_with_hints(instr_kind_pl, span, hints)];
+    instrs_pl.extend(prosify_block_dispatch(ctx, instr_sl.block)?);
+    Ok(instrs_pl)
+}
+
+// - Debug instruction
+
+fn prosify_debug_instr_dispatch(
+    ctx: &Context,
+    instr_sl: sl::DebugInstr,
+    span: Span,
+) -> Result<pl::BlockDispatch, ProseError> {
+    let instr_kind_pl =
+        pl::InstrKind::Debug(pl::DebugInstr { exp: prosify_exp(ctx, &instr_sl.exp)? });
+    let mut instrs_pl = vec![make_instr(instr_kind_pl, span)];
+    instrs_pl.extend(prosify_instr_dispatch(ctx, *instr_sl.instr)?);
+    Ok(instrs_pl)
+}
+
+// - Group instruction
+
+fn prosify_group_instr_dispatch(
+    ctx: &Context,
+    instr_sl: sl::GroupInstr,
+    span: Span,
+) -> Result<pl::BlockDispatch, ProseError> {
+    let hints = hints_of_group_instr(ctx);
+    input::validate(&instr_sl.rel_signature.input_hint, instr_sl.exps.len())
+        .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
+    validate_hint_alter(&span, &hints, instr_sl.rel_signature.input_hint.indices().len())?;
+    let instr_kind_pl = pl::InstrKind::Tier(pl::TierInstr {
+        tier: pl::InstrDispatch::Group(pl::GroupDispatchInstr {
+            id_rel: ctx.namespace().clone(),
+            id_group: instr_sl.id,
+            rel_signature: instr_sl.rel_signature,
+            exps_input: prosify_exps(ctx, &instr_sl.exps)?,
+            block: prosify_block_group(ctx, instr_sl.block)?,
+        }),
+    });
+    Ok(vec![make_instr_with_hints(instr_kind_pl, span, hints)])
+}
+
+// - Block
+
+fn prosify_block_dispatch(
+    ctx: &Context,
+    block_sl: sl::Block,
+) -> Result<pl::BlockDispatch, ProseError> {
+    match block_sl.len() {
+        0 => Ok(Vec::new()),
+        1 => prosify_instr_dispatch(ctx, block_sl.into_iter().next().unwrap()),
+        _ => {
+            let span = Span::over(
+                &block_sl
+                    .iter()
+                    .map(|instr_sl| instr_sl.span.clone())
+                    .collect::<Vec<_>>(),
+            );
+            let blocks_pl = block_sl
+                .into_iter()
+                .map(|instr_sl| prosify_instr_dispatch(ctx, instr_sl))
+                .collect::<Result<_, _>>()?;
+            let instr_kind_pl = pl::InstrKind::Tier(pl::TierInstr {
+                tier: pl::InstrDispatch::Route(pl::RouteDispatchInstr { blocks: blocks_pl }),
+            });
+            Ok(vec![make_instr(instr_kind_pl, span)])
+        }
+    }
+}
+
+// == Group instructions
+
+// - Instruction
+
+fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGroup, ProseError> {
+    prosify_instr_kind_group(ctx, instr_sl.node, instr_sl.span)
+}
+
+fn prosify_instr_kind_group(
+    ctx: &Context,
+    instr_kind_sl: sl::InstrKind,
+    span: Span,
+) -> Result<pl::BlockGroup, ProseError> {
+    match instr_kind_sl {
+        sl::InstrKind::If(instr_sl) => prosify_if_instr_group(ctx, instr_sl, span),
+        sl::InstrKind::Hold(instr_sl) => prosify_hold_instr_group(ctx, instr_sl, span),
+        sl::InstrKind::Case(instr_sl) => prosify_case_instr_group(ctx, instr_sl, span),
+        sl::InstrKind::Let(instr_sl) => prosify_let_instr_group(ctx, instr_sl, span),
+        sl::InstrKind::Debug(instr_sl) => prosify_debug_instr_group(ctx, instr_sl, span),
+        sl::InstrKind::Rule(instr_sl) => prosify_rule_instr_group(ctx, instr_sl, span),
+        sl::InstrKind::Result(instr_sl) => prosify_result_instr_group(ctx, instr_sl, span),
+        sl::InstrKind::Return(instr_sl) => prosify_return_instr_group(ctx, instr_sl, span),
+        sl::InstrKind::Group(_) => Err(ProseError::new(ProseErrorKind::InvalidGroupTier, span)),
+    }
+}
+
+// - If instruction
+
+fn prosify_if_instr_group(
+    ctx: &Context,
+    instr_sl: sl::IfInstr,
+    span: Span,
+) -> Result<pl::BlockGroup, ProseError> {
+    let instr_kind_pl = pl::InstrKind::If(pl::IfInstr {
+        exp: prosify_exp(ctx, &instr_sl.exp)?,
+        iter_exps: instr_sl.iter_exps,
+        block: prosify_block_group(ctx, instr_sl.block)?,
+        dangle: instr_sl.dangle,
+    });
+    Ok(vec![make_instr(instr_kind_pl, span)])
+}
+
+// - Hold instruction
+
+fn prosify_hold_instr_group(
+    ctx: &Context,
+    instr_sl: sl::HoldInstr,
+    span: Span,
+) -> Result<pl::BlockGroup, ProseError> {
+    let hints = hints_of_hold_instr(ctx, &instr_sl.id);
+    validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
+    let instr_kind_pl = pl::InstrKind::Hold(pl::HoldInstr {
+        id: instr_sl.id,
+        not_exp: prosify_not_exp(ctx, &instr_sl.not_exp)?,
+        iter_exps: instr_sl.iter_exps,
+        hold_case: prosify_hold_case_group(ctx, instr_sl.hold_case)?,
+    });
+    Ok(vec![make_instr_with_hints(instr_kind_pl, span, hints)])
+}
 
 fn prosify_hold_case_group(
     ctx: &Context,
@@ -551,356 +781,355 @@ fn prosify_hold_case_group(
     })
 }
 
-// == Instructions
+// - Case instruction
 
-// - Dispatch tier
-
-fn prosify_instr_dispatch(
+fn prosify_case_instr_group(
     ctx: &Context,
-    instr_sl: sl::Instr,
-) -> Result<pl::BlockDispatch, ProseError> {
-    let span = instr_sl.span;
-    Ok(match instr_sl.node {
-        sl::InstrKind::If(instr_sl) => vec![make_instr(
-            pl::InstrKind::If(pl::IfInstr {
-                exp: prosify_exp(ctx, &instr_sl.exp)?,
-                iter_exps: instr_sl.iter_exps,
-                block: prosify_block_dispatch(ctx, instr_sl.block)?,
-                dangle: instr_sl.dangle,
-            }),
-            span,
-        )],
-        sl::InstrKind::Hold(instr_sl) => {
-            let hints = hints_of_hold_instr(ctx, &instr_sl.id);
-            validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
-            vec![make_instr_with_hints(
-                pl::InstrKind::Hold(pl::HoldInstr {
-                    id: instr_sl.id,
-                    not_exp: prosify_not_exp(ctx, &instr_sl.not_exp)?,
-                    iter_exps: instr_sl.iter_exps,
-                    hold_case: prosify_hold_case_dispatch(ctx, instr_sl.hold_case)?,
-                }),
-                span,
-                hints,
-            )]
+    instr_sl: sl::CaseInstr,
+    span: Span,
+) -> Result<pl::BlockGroup, ProseError> {
+    let cases_pl = instr_sl
+        .cases
+        .into_iter()
+        .map(|case_sl| {
+            Ok(pl::Case {
+                guard: prosify_guard(ctx, &case_sl.guard)?,
+                block: prosify_block_group(ctx, case_sl.block)?,
+            })
+        })
+        .collect::<Result<_, ProseError>>()?;
+    let instr_kind_pl = pl::InstrKind::Case(pl::CaseInstr {
+        exp: prosify_exp(ctx, &instr_sl.exp)?,
+        cases: cases_pl,
+        dangle: instr_sl.dangle,
+    });
+    Ok(vec![make_instr(instr_kind_pl, span)])
+}
+
+// - Let instruction
+
+fn prosify_let_instr_group(
+    ctx: &Context,
+    instr_sl: sl::LetInstr,
+    span: Span,
+) -> Result<pl::BlockGroup, ProseError> {
+    let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
+    let hints = hints_of_let_instr(&exp_l_pl);
+    let instr_kind_pl = pl::InstrKind::Let(pl::LetInstr {
+        exp_l: exp_l_pl,
+        exp_r: prosify_exp(ctx, &instr_sl.exp_r)?,
+        iter_instrs: instr_sl.iter_instrs,
+    });
+    let mut instrs_pl = vec![make_instr_with_hints(instr_kind_pl, span, hints)];
+    instrs_pl.extend(prosify_block_group(ctx, instr_sl.block)?);
+    Ok(instrs_pl)
+}
+
+// - Debug instruction
+
+fn prosify_debug_instr_group(
+    ctx: &Context,
+    instr_sl: sl::DebugInstr,
+    span: Span,
+) -> Result<pl::BlockGroup, ProseError> {
+    let instr_kind_pl =
+        pl::InstrKind::Debug(pl::DebugInstr { exp: prosify_exp(ctx, &instr_sl.exp)? });
+    let mut instrs_pl = vec![make_instr(instr_kind_pl, span)];
+    instrs_pl.extend(prosify_instr_group(ctx, *instr_sl.instr)?);
+    Ok(instrs_pl)
+}
+
+// - Rule instruction
+
+fn prosify_rule_instr_group(
+    ctx: &Context,
+    instr_sl: sl::RuleInstr,
+    span: Span,
+) -> Result<pl::BlockGroup, ProseError> {
+    let hints = hints_of_rule_instr(ctx, &instr_sl.id, &instr_sl.input_hint);
+    let num_args = instr_sl.not_exp.args().len();
+    input::validate(&instr_sl.input_hint, num_args)
+        .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
+    let num_inputs = instr_sl.input_hint.indices().len();
+    validate_hint_split(&span, &hints, num_inputs, num_args - num_inputs)?;
+    let instr_kind_pl = pl::InstrKind::Tier(pl::TierInstr {
+        tier: pl::InstrGroup::Rule(pl::RuleGroupInstr {
+            id: instr_sl.id,
+            not_exp: prosify_not_exp(ctx, &instr_sl.not_exp)?,
+            input_hint: instr_sl.input_hint,
+            iter_instrs: instr_sl.iter_instrs,
+        }),
+    });
+    let mut instrs_pl = vec![make_instr_with_hints(instr_kind_pl, span, hints)];
+    instrs_pl.extend(prosify_block_group(ctx, instr_sl.block)?);
+    Ok(instrs_pl)
+}
+
+// - Result instruction
+
+fn prosify_result_instr_group(
+    ctx: &Context,
+    instr_sl: sl::ResultInstr,
+    span: Span,
+) -> Result<pl::BlockGroup, ProseError> {
+    let hints = hints_of_result_instr(ctx, &instr_sl.rel_signature.input_hint);
+    validate_hint_alter(&span, &hints, instr_sl.exps.len())?;
+    let instr_kind_pl = pl::InstrKind::Tier(pl::TierInstr {
+        tier: pl::InstrGroup::Result(pl::ResultGroupInstr {
+            rel_signature: instr_sl.rel_signature,
+            exps_output: prosify_exps(ctx, &instr_sl.exps)?,
+        }),
+    });
+    Ok(vec![make_instr_with_hints(instr_kind_pl, span, hints)])
+}
+
+// - Return instruction
+
+fn prosify_return_instr_group(
+    ctx: &Context,
+    instr_sl: sl::ReturnInstr,
+    span: Span,
+) -> Result<pl::BlockGroup, ProseError> {
+    let instr_kind_pl = pl::InstrKind::Tier(pl::TierInstr {
+        tier: pl::InstrGroup::Return(pl::ReturnGroupInstr {
+            exp: prosify_exp(ctx, &instr_sl.exp)?,
+        }),
+    });
+    Ok(vec![make_instr(instr_kind_pl, span)])
+}
+
+// - Block
+
+fn prosify_block_group(ctx: &Context, block_sl: sl::Block) -> Result<pl::BlockGroup, ProseError> {
+    match block_sl.len() {
+        0 => Ok(Vec::new()),
+        1 => prosify_instr_group(ctx, block_sl.into_iter().next().unwrap()),
+        _ => {
+            let span = Span::over(
+                &block_sl
+                    .iter()
+                    .map(|instr_sl| instr_sl.span.clone())
+                    .collect::<Vec<_>>(),
+            );
+            let blocks_pl = block_sl
+                .into_iter()
+                .map(|instr_sl| prosify_instr_group(ctx, instr_sl))
+                .collect::<Result<_, _>>()?;
+            let instr_kind_pl = pl::InstrKind::Tier(pl::TierInstr {
+                tier: pl::InstrGroup::Backtrack(pl::BacktrackGroupInstr { blocks: blocks_pl }),
+            });
+            Ok(vec![make_instr(instr_kind_pl, span)])
         }
-        sl::InstrKind::Case(instr_sl) => vec![make_instr(
-            pl::InstrKind::Case(pl::CaseInstr {
-                exp: prosify_exp(ctx, &instr_sl.exp)?,
-                cases: instr_sl
-                    .cases
-                    .into_iter()
-                    .map(|case_sl| {
-                        Ok(pl::Case {
-                            guard: prosify_guard(ctx, &case_sl.guard)?,
-                            block: prosify_block_dispatch(ctx, case_sl.block)?,
-                        })
-                    })
-                    .collect::<Result<_, ProseError>>()?,
-                dangle: instr_sl.dangle,
-            }),
-            span,
-        )],
-        sl::InstrKind::Let(instr_sl) => {
-            let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
-            let hints = hints_of_let_instr(&exp_l_pl);
-            let mut instrs_pl = vec![make_instr_with_hints(
-                pl::InstrKind::Let(pl::LetInstr {
-                    exp_l: exp_l_pl,
-                    exp_r: prosify_exp(ctx, &instr_sl.exp_r)?,
-                    iter_instrs: instr_sl.iter_instrs,
-                }),
-                span,
-                hints,
-            )];
-            instrs_pl.extend(prosify_block_dispatch(ctx, instr_sl.block)?);
-            instrs_pl
-        }
-        sl::InstrKind::Debug(instr_sl) => {
-            let mut instrs_pl = vec![make_instr(
-                pl::InstrKind::Debug(pl::DebugInstr { exp: prosify_exp(ctx, &instr_sl.exp)? }),
-                span,
-            )];
-            instrs_pl.extend(prosify_instr_dispatch(ctx, *instr_sl.instr)?);
-            instrs_pl
-        }
-        sl::InstrKind::Group(instr_sl) => {
-            let hints = hints_of_group_instr(ctx);
-            input::validate(&instr_sl.rel_signature.input_hint, instr_sl.exps.len())
-                .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
-            validate_hint_alter(&span, &hints, instr_sl.rel_signature.input_hint.indices().len())?;
-            vec![make_instr_with_hints(
-                pl::InstrKind::Tier(pl::TierInstr {
-                    tier: pl::InstrDispatch::Group(pl::GroupDispatchInstr {
-                        id_rel: ctx.namespace().clone(),
-                        id_group: instr_sl.id,
-                        rel_signature: instr_sl.rel_signature,
-                        exps_input: prosify_exps(ctx, &instr_sl.exps)?,
-                        block: prosify_block_group(ctx, instr_sl.block)?,
-                    }),
-                }),
-                span,
-                hints,
-            )]
-        }
-        sl::InstrKind::Rule(_) | sl::InstrKind::Result(_) | sl::InstrKind::Return(_) => {
-            return Err(ProseError::new(ProseErrorKind::InvalidDispatchTier, span));
-        }
+    }
+}
+
+// == Table rows
+
+fn prosify_table_row(ctx: &Context, row_sl: sl::TableRow) -> Result<pl::TableRow, ProseError> {
+    Ok(pl::TableRow {
+        exps_input: prosify_exps(ctx, &row_sl.exps_input)?,
+        exp: prosify_exp(ctx, &row_sl.exp)?,
+        block: prosify_block_group(ctx, row_sl.block)?,
     })
 }
 
-// - Group tier
+// == Type definitions
 
-fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGroup, ProseError> {
-    let span = instr_sl.span;
-    Ok(match instr_sl.node {
-        sl::InstrKind::If(instr_sl) => vec![make_instr(
-            pl::InstrKind::If(pl::IfInstr {
-                exp: prosify_exp(ctx, &instr_sl.exp)?,
-                iter_exps: instr_sl.iter_exps,
-                block: prosify_block_group(ctx, instr_sl.block)?,
-                dangle: instr_sl.dangle,
-            }),
-            span,
-        )],
-        sl::InstrKind::Hold(instr_sl) => {
-            let hints = hints_of_hold_instr(ctx, &instr_sl.id);
-            validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
-            vec![make_instr_with_hints(
-                pl::InstrKind::Hold(pl::HoldInstr {
-                    id: instr_sl.id,
-                    not_exp: prosify_not_exp(ctx, &instr_sl.not_exp)?,
-                    iter_exps: instr_sl.iter_exps,
-                    hold_case: prosify_hold_case_group(ctx, instr_sl.hold_case)?,
-                }),
-                span,
-                hints,
-            )]
+// - Type definition
+
+fn prosify_typ_def(typdef_sl: sl::TypDef) -> pl::TypDef {
+    match typdef_sl {
+        sl::TypDef::Extern(def_typ_sl) => pl::TypDef::Extern(prosify_extern_typ_def(def_typ_sl)),
+        sl::TypDef::Defined(def_typ_sl) => {
+            pl::TypDef::Defined(Box::new(prosify_defined_typ_def(*def_typ_sl)))
         }
-        sl::InstrKind::Case(instr_sl) => vec![make_instr(
-            pl::InstrKind::Case(pl::CaseInstr {
-                exp: prosify_exp(ctx, &instr_sl.exp)?,
-                cases: instr_sl
-                    .cases
-                    .into_iter()
-                    .map(|case_sl| {
-                        Ok(pl::Case {
-                            guard: prosify_guard(ctx, &case_sl.guard)?,
-                            block: prosify_block_group(ctx, case_sl.block)?,
-                        })
-                    })
-                    .collect::<Result<_, ProseError>>()?,
-                dangle: instr_sl.dangle,
-            }),
-            span,
-        )],
-        sl::InstrKind::Let(instr_sl) => {
-            let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
-            let hints = hints_of_let_instr(&exp_l_pl);
-            let mut instrs_pl = vec![make_instr_with_hints(
-                pl::InstrKind::Let(pl::LetInstr {
-                    exp_l: exp_l_pl,
-                    exp_r: prosify_exp(ctx, &instr_sl.exp_r)?,
-                    iter_instrs: instr_sl.iter_instrs,
-                }),
-                span,
-                hints,
-            )];
-            instrs_pl.extend(prosify_block_group(ctx, instr_sl.block)?);
-            instrs_pl
+    }
+}
+
+// - External type definition
+
+fn prosify_extern_typ_def(def_typ_sl: sl::ExternTyp) -> pl::ExternTyp {
+    pl::ExternTyp { id: def_typ_sl.id }
+}
+
+// - Defined type definition
+
+fn prosify_defined_typ_def(def_typ_sl: sl::DefinedTyp) -> pl::DefinedTyp {
+    pl::DefinedTyp { id: def_typ_sl.id, tparams: def_typ_sl.tparams, def_typ: def_typ_sl.def_typ }
+}
+
+// == Meta-variable definitions
+
+fn prosify_var_def(def_var_sl: sl::VarDef) -> pl::VarDef {
+    pl::VarDef { id: def_var_sl.id, typ: def_var_sl.typ }
+}
+
+// == Relation definitions
+
+// - Relation definition
+
+fn prosify_rel_def(ctx: &mut Context, def_rel_sl: sl::RelDef) -> Result<pl::RelDef, ProseError> {
+    match def_rel_sl {
+        sl::RelDef::Extern(def_rel_sl) => {
+            Ok(pl::RelDef::Extern(prosify_extern_rel_def(ctx, def_rel_sl)?))
         }
-        sl::InstrKind::Debug(instr_sl) => {
-            let mut instrs_pl = vec![make_instr(
-                pl::InstrKind::Debug(pl::DebugInstr { exp: prosify_exp(ctx, &instr_sl.exp)? }),
-                span,
-            )];
-            instrs_pl.extend(prosify_instr_group(ctx, *instr_sl.instr)?);
-            instrs_pl
+        sl::RelDef::Defined(def_rel_sl) => {
+            Ok(pl::RelDef::Defined(prosify_defined_rel_def(ctx, def_rel_sl)?))
         }
-        sl::InstrKind::Rule(instr_sl) => {
-            let hints = hints_of_rule_instr(ctx, &instr_sl.id, &instr_sl.input_hint);
-            let num_args = instr_sl.not_exp.args().len();
-            input::validate(&instr_sl.input_hint, num_args)
-                .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
-            let num_inputs = instr_sl.input_hint.indices().len();
-            validate_hint_split(&span, &hints, num_inputs, num_args - num_inputs)?;
-            let mut instrs_pl = vec![make_instr_with_hints(
-                pl::InstrKind::Tier(pl::TierInstr {
-                    tier: pl::InstrGroup::Rule(pl::RuleGroupInstr {
-                        id: instr_sl.id,
-                        not_exp: prosify_not_exp(ctx, &instr_sl.not_exp)?,
-                        input_hint: instr_sl.input_hint,
-                        iter_instrs: instr_sl.iter_instrs,
-                    }),
-                }),
-                span,
-                hints,
-            )];
-            instrs_pl.extend(prosify_block_group(ctx, instr_sl.block)?);
-            instrs_pl
+    }
+}
+
+// - External relation definition
+
+fn prosify_extern_rel_def(
+    ctx: &Context,
+    def_rel_sl: sl::ExternRel,
+) -> Result<pl::ExternRel, ProseError> {
+    Ok(pl::ExternRel {
+        id: def_rel_sl.id,
+        rel_signature: def_rel_sl.rel_signature,
+        exps_input: prosify_exps(ctx, &def_rel_sl.exps_input)?,
+    })
+}
+
+// - Defined relation definition
+
+fn prosify_defined_rel_def(
+    ctx: &mut Context,
+    def_rel_sl: sl::DefinedRel,
+) -> Result<pl::DefinedRel, ProseError> {
+    ctx.set_namespace(def_rel_sl.id.clone());
+    Ok(pl::DefinedRel {
+        id: def_rel_sl.id,
+        rel_signature: def_rel_sl.rel_signature,
+        exps_input: prosify_exps(ctx, &def_rel_sl.exps_input)?,
+        block: prosify_block_dispatch(ctx, def_rel_sl.block)?,
+        block_else_opt: def_rel_sl
+            .block_else
+            .map(|block_sl| prosify_block_dispatch(ctx, block_sl))
+            .transpose()?,
+    })
+}
+
+// == Meta-function definitions
+
+// - Meta-function definition
+
+fn prosify_func_def(
+    ctx: &mut Context,
+    def_func_sl: sl::MetaFuncDef,
+) -> Result<pl::MetaFuncDef, ProseError> {
+    match def_func_sl {
+        sl::MetaFuncDef::Extern(def_func_sl) => {
+            Ok(pl::MetaFuncDef::Extern(prosify_extern_func_def(ctx, def_func_sl)?))
         }
-        sl::InstrKind::Result(instr_sl) => {
-            let hints = hints_of_result_instr(ctx, &instr_sl.rel_signature.input_hint);
-            validate_hint_alter(&span, &hints, instr_sl.exps.len())?;
-            vec![make_instr_with_hints(
-                pl::InstrKind::Tier(pl::TierInstr {
-                    tier: pl::InstrGroup::Result(pl::ResultGroupInstr {
-                        rel_signature: instr_sl.rel_signature,
-                        exps_output: prosify_exps(ctx, &instr_sl.exps)?,
-                    }),
-                }),
-                span,
-                hints,
-            )]
+        sl::MetaFuncDef::Builtin(def_func_sl) => {
+            Ok(pl::MetaFuncDef::Builtin(prosify_builtin_func_def(ctx, def_func_sl)?))
         }
-        sl::InstrKind::Return(instr_sl) => vec![make_instr(
-            pl::InstrKind::Tier(pl::TierInstr {
-                tier: pl::InstrGroup::Return(pl::ReturnGroupInstr {
-                    exp: prosify_exp(ctx, &instr_sl.exp)?,
-                }),
-            }),
-            span,
-        )],
-        sl::InstrKind::Group(_) => {
-            return Err(ProseError::new(ProseErrorKind::InvalidGroupTier, span));
+        sl::MetaFuncDef::Table(def_func_sl) => {
+            Ok(pl::MetaFuncDef::Table(prosify_table_func_def(ctx, def_func_sl)?))
         }
+        sl::MetaFuncDef::Defined(def_func_sl) => {
+            Ok(pl::MetaFuncDef::Defined(prosify_defined_func_def(ctx, def_func_sl)?))
+        }
+    }
+}
+
+// - External function definition
+
+fn prosify_extern_func_def(
+    ctx: &Context,
+    def_func_sl: sl::ExternFunc,
+) -> Result<pl::ExternFunc, ProseError> {
+    ctx.validate_tparams(&def_func_sl.tparams)?;
+    Ok(pl::ExternFunc {
+        id: def_func_sl.id,
+        tparams: def_func_sl.tparams,
+        params: prosify_params(ctx, &def_func_sl.params)?,
+        typ: def_func_sl.typ,
+    })
+}
+
+// - Builtin function definition
+
+fn prosify_builtin_func_def(
+    ctx: &Context,
+    def_func_sl: sl::BuiltinFunc,
+) -> Result<pl::BuiltinFunc, ProseError> {
+    ctx.validate_tparams(&def_func_sl.tparams)?;
+    Ok(pl::BuiltinFunc {
+        id: def_func_sl.id,
+        tparams: def_func_sl.tparams,
+        params: prosify_params(ctx, &def_func_sl.params)?,
+        typ: def_func_sl.typ,
+    })
+}
+
+// - Table function definition
+
+fn prosify_table_func_def(
+    ctx: &mut Context,
+    def_func_sl: sl::TableFunc,
+) -> Result<pl::TableFunc, ProseError> {
+    ctx.set_namespace(def_func_sl.id.clone());
+    Ok(pl::TableFunc {
+        id: def_func_sl.id,
+        params: prosify_params(ctx, &def_func_sl.params)?,
+        typ: def_func_sl.typ,
+        rows: def_func_sl
+            .table_rows
+            .into_iter()
+            .map(|row_sl| prosify_table_row(ctx, row_sl))
+            .collect::<Result<_, _>>()?,
+    })
+}
+
+// - Defined function definition
+
+fn prosify_defined_func_def(
+    ctx: &mut Context,
+    def_func_sl: sl::DefinedFunc,
+) -> Result<pl::DefinedFunc, ProseError> {
+    ctx.validate_tparams(&def_func_sl.tparams)?;
+    ctx.set_namespace(def_func_sl.id.clone());
+    Ok(pl::DefinedFunc {
+        id: def_func_sl.id,
+        tparams: def_func_sl.tparams,
+        params: prosify_params(ctx, &def_func_sl.params)?,
+        typ: def_func_sl.typ,
+        block: prosify_block_group(ctx, def_func_sl.block)?,
+        block_else_opt: def_func_sl
+            .block_else
+            .map(|block_sl| prosify_block_group(ctx, block_sl))
+            .transpose()?,
     })
 }
 
 // == Definitions
 
+// - Definition
+
 fn prosify_def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError> {
-    let hints = match &def_sl.node {
-        sl::DefKind::Rel(sl::RelDef::Extern(def_rel_sl)) => {
-            hints_of_rel_def(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)?
-        }
-        sl::DefKind::Rel(sl::RelDef::Defined(def_rel_sl)) => {
-            hints_of_rel_def(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)?
-        }
-        sl::DefKind::MetaFunc(sl::MetaFuncDef::Extern(def_func_sl)) => {
-            hints_of_func_def(ctx, &def_func_sl.id)
-        }
-        sl::DefKind::MetaFunc(sl::MetaFuncDef::Builtin(def_func_sl)) => {
-            hints_of_func_def(ctx, &def_func_sl.id)
-        }
-        sl::DefKind::MetaFunc(sl::MetaFuncDef::Table(def_func_sl)) => {
-            hints_of_func_def(ctx, &def_func_sl.id)
-        }
-        sl::DefKind::MetaFunc(sl::MetaFuncDef::Defined(def_func_sl)) => {
-            hints_of_func_def(ctx, &def_func_sl.id)
-        }
-        sl::DefKind::Typ(_) | sl::DefKind::Var(_) => annot::Hints::default(),
-    };
-    let span = def_sl.span;
-    let def_kind_pl = match def_sl.node {
-        sl::DefKind::Typ(typ_def_sl) => pl::DefKind::Typ(match typ_def_sl {
-            sl::TypDef::Extern(def_typ_sl) => {
-                pl::TypDef::Extern(pl::ExternTyp { id: def_typ_sl.id })
-            }
-            sl::TypDef::Defined(def_typ_sl) => pl::TypDef::Defined(Box::new(pl::DefinedTyp {
-                id: def_typ_sl.id,
-                tparams: def_typ_sl.tparams,
-                def_typ: def_typ_sl.def_typ,
-            })),
-        }),
-        sl::DefKind::Var(def_var_sl) => {
-            pl::DefKind::Var(pl::VarDef { id: def_var_sl.id, typ: def_var_sl.typ })
-        }
-        sl::DefKind::Rel(rel_def_sl) => pl::DefKind::Rel(match rel_def_sl {
-            sl::RelDef::Extern(def_rel_sl) => pl::RelDef::Extern(pl::ExternRel {
-                id: def_rel_sl.id,
-                rel_signature: def_rel_sl.rel_signature,
-                exps_input: prosify_exps(ctx, &def_rel_sl.exps_input)?,
-            }),
-            sl::RelDef::Defined(def_rel_sl) => {
-                ctx.set_namespace(def_rel_sl.id.clone());
-                pl::RelDef::Defined(pl::DefinedRel {
-                    id: def_rel_sl.id,
-                    rel_signature: def_rel_sl.rel_signature,
-                    exps_input: prosify_exps(ctx, &def_rel_sl.exps_input)?,
-                    block: prosify_block_dispatch(ctx, def_rel_sl.block)?,
-                    block_else_opt: def_rel_sl
-                        .block_else
-                        .map(|block_sl| prosify_block_dispatch(ctx, block_sl))
-                        .transpose()?,
-                })
-            }
-        }),
-        sl::DefKind::MetaFunc(meta_func_def_sl) => pl::DefKind::MetaFunc(match meta_func_def_sl {
-            sl::MetaFuncDef::Extern(def_func_sl) => {
-                ctx.validate_tparams(&def_func_sl.tparams)?;
-                pl::MetaFuncDef::Extern(pl::ExternFunc {
-                    id: def_func_sl.id,
-                    tparams: def_func_sl.tparams,
-                    params: def_func_sl
-                        .params
-                        .iter()
-                        .map(|param_sl| prosify_param(ctx, param_sl))
-                        .collect::<Result<_, _>>()?,
-                    typ: def_func_sl.typ,
-                })
-            }
-            sl::MetaFuncDef::Builtin(def_func_sl) => {
-                ctx.validate_tparams(&def_func_sl.tparams)?;
-                pl::MetaFuncDef::Builtin(pl::BuiltinFunc {
-                    id: def_func_sl.id,
-                    tparams: def_func_sl.tparams,
-                    params: def_func_sl
-                        .params
-                        .iter()
-                        .map(|param_sl| prosify_param(ctx, param_sl))
-                        .collect::<Result<_, _>>()?,
-                    typ: def_func_sl.typ,
-                })
-            }
-            sl::MetaFuncDef::Table(def_func_sl) => {
-                ctx.set_namespace(def_func_sl.id.clone());
-                pl::MetaFuncDef::Table(pl::TableFunc {
-                    id: def_func_sl.id,
-                    params: def_func_sl
-                        .params
-                        .iter()
-                        .map(|param_sl| prosify_param(ctx, param_sl))
-                        .collect::<Result<_, _>>()?,
-                    typ: def_func_sl.typ,
-                    rows: def_func_sl
-                        .table_rows
-                        .into_iter()
-                        .map(|row_sl| {
-                            Ok(pl::TableRow {
-                                exps_input: prosify_exps(ctx, &row_sl.exps_input)?,
-                                exp: prosify_exp(ctx, &row_sl.exp)?,
-                                block: prosify_block_group(ctx, row_sl.block)?,
-                            })
-                        })
-                        .collect::<Result<_, ProseError>>()?,
-                })
-            }
-            sl::MetaFuncDef::Defined(def_func_sl) => {
-                ctx.validate_tparams(&def_func_sl.tparams)?;
-                ctx.set_namespace(def_func_sl.id.clone());
-                pl::MetaFuncDef::Defined(pl::DefinedFunc {
-                    id: def_func_sl.id,
-                    tparams: def_func_sl.tparams,
-                    params: def_func_sl
-                        .params
-                        .iter()
-                        .map(|param_sl| prosify_param(ctx, param_sl))
-                        .collect::<Result<_, _>>()?,
-                    typ: def_func_sl.typ,
-                    block: prosify_block_group(ctx, def_func_sl.block)?,
-                    block_else_opt: def_func_sl
-                        .block_else
-                        .map(|block_sl| prosify_block_group(ctx, block_sl))
-                        .transpose()?,
-                })
-            }
-        }),
-    };
+    let hints = hints_of_def(ctx, &def_sl.node)?;
+    let def_kind_pl = prosify_def_kind(ctx, def_sl.node)?;
     Ok(crate::annotated! {
-        node: crate::phrase! { node: def_kind_pl, span: span },
+        node: crate::phrase! { node: def_kind_pl, span: def_sl.span },
         hints: hints,
     })
+}
+
+fn prosify_def_kind(
+    ctx: &mut Context,
+    def_kind_sl: sl::DefKind,
+) -> Result<pl::DefKind, ProseError> {
+    match def_kind_sl {
+        sl::DefKind::Typ(typdef_sl) => Ok(pl::DefKind::Typ(prosify_typ_def(typdef_sl))),
+        sl::DefKind::Var(def_var_sl) => Ok(pl::DefKind::Var(prosify_var_def(def_var_sl))),
+        sl::DefKind::Rel(def_rel_sl) => Ok(pl::DefKind::Rel(prosify_rel_def(ctx, def_rel_sl)?)),
+        sl::DefKind::MetaFunc(def_func_sl) => {
+            Ok(pl::DefKind::MetaFunc(prosify_func_def(ctx, def_func_sl)?))
+        }
+    }
 }
 
 // == Entry point
