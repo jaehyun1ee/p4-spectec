@@ -2,6 +2,8 @@
 
 use super::ast::*;
 
+// == Expressions
+
 /// Reports whether expression evaluation can invoke a fallible call
 pub fn is_partial_exp(exp: &Exp) -> bool {
     match &exp.node.node {
@@ -34,6 +36,8 @@ pub fn is_partial_exp(exp: &Exp) -> bool {
     }
 }
 
+// == Paths
+
 /// Reports whether path evaluation can invoke a fallible call
 pub fn is_partial_path(path: &Path) -> bool {
     match &path.node {
@@ -45,6 +49,8 @@ pub fn is_partial_path(path: &Path) -> bool {
         PathKind::Dot(path, _) => is_partial_path(path),
     }
 }
+
+// == Cases and guards
 
 /// Reports whether a case guard can invoke a fallible call
 pub fn is_partial_case<Tier>(case: &Case<Tier>) -> bool {
@@ -60,6 +66,8 @@ pub fn is_partial_guard(guard: &Guard) -> bool {
         }
     }
 }
+
+// == Instructions
 
 /// Reports whether a group-tier instruction can fail before entering nested blocks
 pub fn is_partial_instr_group(instr: &InstrGroup) -> bool {

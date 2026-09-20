@@ -7,6 +7,8 @@ use crate::lang::{
     pl::{annot::Annotated, ast as pl},
 };
 
+// == Expression aliases
+
 fn eq_exp_var(exp_a: &pl::Exp, exp_b: &pl::Exp) -> bool {
     match (&exp_a.node.node, &exp_b.node.node) {
         (pl::ExpKind::Var(id_a), pl::ExpKind::Var(id_b)) => id_a.node == id_b.node,
@@ -41,6 +43,8 @@ fn take_leading_target<Tier>(block: &mut pl::Block<Tier>) -> pl::Exp {
     exp_l
 }
 
+// == Case guards
+
 fn shorten_case_guards<Tier>(instr: &mut pl::Instr<Tier>) {
     let pl::InstrKind::Case(pl::CaseInstr { exp, cases, .. }) = &mut instr.node.node else {
         return;
@@ -65,6 +69,8 @@ fn shorten_case_guards<Tier>(instr: &mut pl::Instr<Tier>) {
         }
     }
 }
+
+// == Checked bindings
 
 fn shorten_check_let<Tier>(instr: &mut pl::Instr<Tier>) {
     enum Check {
@@ -120,6 +126,8 @@ fn shorten_check_let<Tier>(instr: &mut pl::Instr<Tier>) {
     };
 }
 
+// == Destructuring
+
 fn visible(exp: &pl::Exp) -> bool {
     match &exp.node.node {
         pl::ExpKind::Var(id) => !id.node.starts_with('_'),
@@ -159,6 +167,8 @@ fn shorten_single<Tier>(mut instr: pl::Instr<Tier>) -> pl::Instr<Tier> {
     shorten_destruct(&mut instr);
     instr
 }
+
+// == Option extraction
 
 fn shorten_option_get<Tier>(
     instrs_pending: &mut VecDeque<pl::Instr<Tier>>,
@@ -237,6 +247,8 @@ fn shorten_option_get<Tier>(
         hints: instr_source.hints,
     })
 }
+
+// == Recursive traversal
 
 trait ShortenTier: Sized {
     fn shorten(self) -> Self;
@@ -342,6 +354,8 @@ impl ShortenTier for pl::InstrGroup {
     }
 }
 
+// == Definitions
+
 fn shorten_def(mut def: pl::Def) -> pl::Def {
     def.node.node = match def.node.node {
         pl::DefKind::Rel(pl::RelDef::Defined(mut def_rel)) => {
@@ -364,6 +378,8 @@ fn shorten_def(mut def: pl::Def) -> pl::Def {
     };
     def
 }
+
+// == Entry point
 
 pub(super) fn spec(spec: pl::Spec) -> pl::Spec {
     spec.into_iter().map(shorten_def).collect()

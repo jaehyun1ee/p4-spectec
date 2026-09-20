@@ -13,40 +13,46 @@ use crate::runtime::envs::algo::MEnv;
 
 use super::{ProseError, ProseErrorKind};
 
+// == Context
+
 #[derive(Debug)]
 pub(super) struct Context {
     id_namespace: Option<Id>,
     hints_func: IdMap<Hints>,
     hints_rel: IdMap<Hints>,
     hints_case: Vec<(String, Mixop, Hints)>,
-    metavars: MEnv,
-    types: IdMap<()>,
+    menv: MEnv,
+    ids_typ: IdMap<()>,
 }
 
 impl Context {
+    // - Constructor
+
     fn init() -> Self {
-        let mut metavars = MEnv::new();
-        for (name, typ) in [
+        let mut menv = MEnv::new();
+        for (text_name, typ) in [
             ("bool", typ::make::bool()),
             ("nat", typ::make::nat()),
             ("int", typ::make::int()),
             ("text", typ::make::text()),
         ] {
-            let id = crate::phrase! { node: name.to_owned(), span: Span::default() };
-            metavars.insert(id, typ);
+            let id = crate::phrase! { node: text_name.to_owned(), span: Span::default() };
+            menv.insert(id, typ);
         }
         Self {
             id_namespace: None,
             hints_func: IdMap::new(),
             hints_rel: IdMap::new(),
             hints_case: Vec::new(),
-            metavars,
-            types: IdMap::new(),
+            menv,
+            ids_typ: IdMap::new(),
         }
     }
 
-    pub(super) fn set_namespace(&mut self, id: Id) {
-        self.id_namespace = Some(id);
+    // - Namespace
+
+    pub(super) fn set_namespace(&mut self, id_namespace: Id) {
+        self.id_namespace = Some(id_namespace);
     }
 
     pub(super) fn namespace(&self) -> &Id {
@@ -55,50 +61,81 @@ impl Context {
             .expect("relation conversion establishes its namespace")
     }
 
-    pub(super) fn func_hints(&self, id: &Id) -> Hints {
-        self.hints_func.get(id).cloned().unwrap_or_default()
+    // - Hint lookup
+
+    pub(super) fn hints_func(&self, id_func: &Id) -> Hints {
+        self.hints_func.get(id_func).cloned().unwrap_or_default()
     }
 
-    pub(super) fn rel_hints(&self, id: &Id) -> Hints {
-        self.hints_rel.get(id).cloned().unwrap_or_default()
+    pub(super) fn hints_rel(&self, id_rel: &Id) -> Hints {
+        self.hints_rel.get(id_rel).cloned().unwrap_or_default()
     }
 
-    pub(super) fn case_hints(&self, id: &Id, mixop: &Mixop) -> Hints {
+    pub(super) fn hints_case(&self, id_typ: &Id, mixop: &Mixop) -> Hints {
         self.hints_case
             .iter()
-            .find(|(id_typ, mixop_case, _)| id_typ == &id.node && mixop_case.syntax_eq(mixop))
+            .find(|(text_typ, mixop_case, _)| {
+                text_typ == &id_typ.node && mixop_case.syntax_eq(mixop)
+            })
             .map(|(_, _, hints)| hints.clone())
             .unwrap_or_default()
     }
 
-    pub(super) fn metavars(&self) -> &MEnv {
-        &self.metavars
+    // - Metavariables
+
+    pub(super) fn menv(&self) -> &MEnv {
+        &self.menv
     }
 
+    // - Type parameters
+
     pub(super) fn validate_tparams(&self, tparams: &[il::ast::TParam]) -> Result<(), ProseError> {
-        let mut types_local = IdMap::new();
-        for id in tparams {
-            if self.types.contains_key(id) || types_local.contains_key(id) {
-                return Err(ProseError::new(ProseErrorKind::DuplicateType, id.span.clone()));
+        let mut ids_typ_local = IdMap::new();
+        for id_tparam in tparams {
+            if self.ids_typ.contains_key(id_tparam) || ids_typ_local.contains_key(id_tparam) {
+                return Err(ProseError::new(ProseErrorKind::DuplicateType, id_tparam.span.clone()));
             }
-            types_local.insert(id.clone(), ());
+            ids_typ_local.insert(id_tparam.clone(), ());
         }
         Ok(())
     }
 
+    // - Adders
+
+    fn add_metavar(&mut self, id_metavar: Id, typ: il::ast::Typ) -> Result<(), ProseError> {
+        if self.menv.contains_key(&id_metavar) {
+            return Err(ProseError::new(
+                ProseErrorKind::DuplicateMetavariable,
+                id_metavar.span.clone(),
+            ));
+        }
+        self.menv.insert(id_metavar, typ);
+        Ok(())
+    }
+
+    fn add_type(&mut self, id_typ: Id) -> Result<(), ProseError> {
+        if self.ids_typ.contains_key(&id_typ) {
+            return Err(ProseError::new(ProseErrorKind::DuplicateType, id_typ.span.clone()));
+        }
+        self.ids_typ.insert(id_typ, ());
+        Ok(())
+    }
+
+    // - Hint loading
+
     fn load_hints(hints_sl: &[sl::Hint]) -> Result<Hints, ProseError> {
         let mut hints = Hints::default();
         for (id_hint, exp_hint) in hints_sl {
-            let hint_name = id_hint.node.as_str();
-            match hint_name {
+            let text_hint = id_hint.node.as_str();
+            match text_hint {
                 "prose" | "prose_in" | "prose_out" | "prose_true" | "prose_false" => {
                     let hint = alter::init(exp_hint).ok_or_else(|| {
                         ProseError::new(
-                            ProseErrorKind::InvalidHintExpression(hint_name.to_owned()),
+                            ProseErrorKind::InvalidHintExpression(text_hint.to_owned()),
                             exp_hint.span.clone(),
                         )
                     })?;
-                    match hint_name {
+                    match text_hint {
                         "prose" => hints.prose = Some(hint),
                         "prose_in" => hints.prose_in = Some(hint),
                         "prose_out" => hints.prose_out = Some(hint),
@@ -110,7 +147,7 @@ impl Context {
                 "prose_fields" => {
                     hints.prose_fields = Some(fields::init(exp_hint).ok_or_else(|| {
                         ProseError::new(
-                            ProseErrorKind::InvalidHintExpression(hint_name.to_owned()),
+                            ProseErrorKind::InvalidHintExpression(text_hint.to_owned()),
                             exp_hint.span.clone(),
                         )
                     })?);
@@ -120,6 +157,8 @@ impl Context {
         }
         Ok(hints)
     }
+
+    // - Definition loading
 
     pub(super) fn load(spec_sl: &sl::Spec) -> Result<Self, ProseError> {
         let mut ctx = Self::init();
@@ -182,21 +221,5 @@ impl Context {
             }
         }
         Ok(ctx)
-    }
-
-    fn add_metavar(&mut self, id: Id, typ: il::ast::Typ) -> Result<(), ProseError> {
-        if self.metavars.contains_key(&id) {
-            return Err(ProseError::new(ProseErrorKind::DuplicateMetavariable, id.span.clone()));
-        }
-        self.metavars.insert(id, typ);
-        Ok(())
-    }
-
-    fn add_type(&mut self, id: Id) -> Result<(), ProseError> {
-        if self.types.contains_key(&id) {
-            return Err(ProseError::new(ProseErrorKind::DuplicateType, id.span.clone()));
-        }
-        self.types.insert(id, ());
-        Ok(())
     }
 }

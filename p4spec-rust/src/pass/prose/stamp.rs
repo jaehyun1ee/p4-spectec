@@ -2,7 +2,9 @@
 
 use crate::lang::pl::{ast as pl, group, partial};
 
-fn stamp_group_hold_case(
+// == Group tier
+
+fn stamp_hold_case_group(
     fallthrough: &pl::Fallthrough,
     hold_case: pl::HoldCase<pl::InstrGroup>,
 ) -> pl::HoldCase<pl::InstrGroup> {
@@ -33,7 +35,7 @@ fn stamp_instr_group(
             pl::InstrKind::If(instr_if)
         }
         pl::InstrKind::Hold(mut instr_hold) => {
-            instr_hold.hold_case = stamp_group_hold_case(fallthrough, instr_hold.hold_case);
+            instr_hold.hold_case = stamp_hold_case_group(fallthrough, instr_hold.hold_case);
             pl::InstrKind::Hold(instr_hold)
         }
         pl::InstrKind::Case(mut instr_case) => {
@@ -57,15 +59,18 @@ fn stamp_instr_group(
         pl::InstrKind::Tier(pl::TierInstr {
             tier: pl::InstrGroup::Backtrack(mut instr_backtrack),
         }) => {
-            let last = instr_backtrack.blocks.len().saturating_sub(1);
+            let idx_last = instr_backtrack.blocks.len().saturating_sub(1);
             instr_backtrack.blocks = instr_backtrack
                 .blocks
                 .into_iter()
                 .enumerate()
-                .map(|(index, block)| {
-                    let destination =
-                        if index < last { pl::Fallthrough::FallNext } else { fallthrough.clone() };
-                    stamp_block_group(&destination, block)
+                .map(|(idx, block)| {
+                    let fallthrough = if idx < idx_last {
+                        pl::Fallthrough::FallNext
+                    } else {
+                        fallthrough.clone()
+                    };
+                    stamp_block_group(&fallthrough, block)
                 })
                 .collect();
             pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrGroup::Backtrack(instr_backtrack) })
@@ -87,70 +92,74 @@ fn stamp_block_group(fallthrough: &pl::Fallthrough, block: pl::BlockGroup) -> pl
 
 type DispatchFallthroughs = Vec<(String, pl::Fallthrough)>;
 
-fn stamp_dispatch_hold_case(
-    destinations: &DispatchFallthroughs,
+// == Dispatch tier
+
+fn stamp_hold_case_dispatch(
+    fallthroughs_dispatch: &DispatchFallthroughs,
     hold_case: pl::HoldCase<pl::InstrDispatch>,
 ) -> pl::HoldCase<pl::InstrDispatch> {
     match hold_case {
         pl::HoldCase::Both(block_hold, block_not_hold) => pl::HoldCase::Both(
-            stamp_block_dispatch(destinations, block_hold),
-            stamp_block_dispatch(destinations, block_not_hold),
+            stamp_block_dispatch(fallthroughs_dispatch, block_hold),
+            stamp_block_dispatch(fallthroughs_dispatch, block_not_hold),
         ),
         pl::HoldCase::Hold(block, dangle) => {
-            pl::HoldCase::Hold(stamp_block_dispatch(destinations, block), dangle)
+            pl::HoldCase::Hold(stamp_block_dispatch(fallthroughs_dispatch, block), dangle)
         }
         pl::HoldCase::NotHold(block, dangle) => {
-            pl::HoldCase::NotHold(stamp_block_dispatch(destinations, block), dangle)
+            pl::HoldCase::NotHold(stamp_block_dispatch(fallthroughs_dispatch, block), dangle)
         }
     }
 }
 
 fn stamp_instr_dispatch(
-    destinations: &DispatchFallthroughs,
+    fallthroughs_dispatch: &DispatchFallthroughs,
     mut instr: pl::Instr<pl::InstrDispatch>,
 ) -> pl::Instr<pl::InstrDispatch> {
     instr.node.node = match instr.node.node {
         pl::InstrKind::If(mut instr_if) => {
-            instr_if.block = stamp_block_dispatch(destinations, instr_if.block);
+            instr_if.block = stamp_block_dispatch(fallthroughs_dispatch, instr_if.block);
             pl::InstrKind::If(instr_if)
         }
         pl::InstrKind::Hold(mut instr_hold) => {
-            instr_hold.hold_case = stamp_dispatch_hold_case(destinations, instr_hold.hold_case);
+            instr_hold.hold_case =
+                stamp_hold_case_dispatch(fallthroughs_dispatch, instr_hold.hold_case);
             pl::InstrKind::Hold(instr_hold)
         }
         pl::InstrKind::Case(mut instr_case) => {
             for case in &mut instr_case.cases {
-                case.block = stamp_block_dispatch(destinations, std::mem::take(&mut case.block));
+                case.block =
+                    stamp_block_dispatch(fallthroughs_dispatch, std::mem::take(&mut case.block));
             }
             pl::InstrKind::Case(instr_case)
         }
         pl::InstrKind::CheckLetSub(mut instr_check) => {
-            instr_check.block = stamp_block_dispatch(destinations, instr_check.block);
+            instr_check.block = stamp_block_dispatch(fallthroughs_dispatch, instr_check.block);
             pl::InstrKind::CheckLetSub(instr_check)
         }
         pl::InstrKind::CheckLetMatch(mut instr_check) => {
-            instr_check.block = stamp_block_dispatch(destinations, instr_check.block);
+            instr_check.block = stamp_block_dispatch(fallthroughs_dispatch, instr_check.block);
             pl::InstrKind::CheckLetMatch(instr_check)
         }
         pl::InstrKind::OptionGet(mut instr_get) => {
-            instr_get.block = stamp_block_dispatch(destinations, instr_get.block);
+            instr_get.block = stamp_block_dispatch(fallthroughs_dispatch, instr_get.block);
             pl::InstrKind::OptionGet(instr_get)
         }
         pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrDispatch::Route(mut instr_route) }) => {
             instr_route.blocks = instr_route
                 .blocks
                 .into_iter()
-                .map(|block| stamp_block_dispatch(destinations, block))
+                .map(|block| stamp_block_dispatch(fallthroughs_dispatch, block))
                 .collect();
             pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrDispatch::Route(instr_route) })
         }
         pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrDispatch::Group(mut instr_group) }) => {
-            let destination = destinations
+            let fallthrough = fallthroughs_dispatch
                 .iter()
-                .find(|(id, _)| id == &instr_group.id_group.node)
-                .map(|(_, destination)| destination)
+                .find(|(id_group, _)| id_group == &instr_group.id_group.node)
+                .map(|(_, fallthrough)| fallthrough)
                 .expect("every dispatched group has a failure destination");
-            instr_group.block = stamp_block_group(destination, instr_group.block);
+            instr_group.block = stamp_block_group(fallthrough, instr_group.block);
             pl::InstrKind::Tier(pl::TierInstr { tier: pl::InstrDispatch::Group(instr_group) })
         }
         kind @ (pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_)) => {
@@ -161,20 +170,22 @@ fn stamp_instr_dispatch(
 }
 
 fn stamp_block_dispatch(
-    destinations: &DispatchFallthroughs,
+    fallthroughs_dispatch: &DispatchFallthroughs,
     block: pl::BlockDispatch,
 ) -> pl::BlockDispatch {
     block
         .into_iter()
-        .map(|instr| stamp_instr_dispatch(destinations, instr))
+        .map(|instr| stamp_instr_dispatch(fallthroughs_dispatch, instr))
         .collect()
 }
 
+// == Dispatch fallthroughs
+
 fn collect_dispatch_fallthroughs(
-    final_destination: pl::Fallthrough,
+    fallthrough_final: pl::Fallthrough,
     block: &pl::BlockDispatch,
 ) -> DispatchFallthroughs {
-    let arms = match block.as_slice() {
+    let blocks_dispatch = match block.as_slice() {
         [instr]
             if matches!(
                 instr.node.node,
@@ -190,31 +201,33 @@ fn collect_dispatch_fallthroughs(
         }
         _ => vec![block],
     };
-    let groups_by_arm = arms
+    let groups_dispatch_arms = blocks_dispatch
         .into_iter()
         .map(group::collect_groups)
         .filter(|groups| !groups.is_empty())
         .collect::<Vec<_>>();
-    let mut destinations = Vec::new();
-    for (index, groups) in groups_by_arm.iter().enumerate() {
-        let destination = groups_by_arm
-            .get(index + 1)
+    let mut fallthroughs_dispatch = Vec::new();
+    for (idx, groups_dispatch_arm) in groups_dispatch_arms.iter().enumerate() {
+        let fallthrough = groups_dispatch_arms
+            .get(idx + 1)
             .and_then(|groups_next| groups_next.first())
             .map(|group_next| pl::Fallthrough::FallGroup(group_next.id_rulegroup.clone()))
-            .unwrap_or_else(|| final_destination.clone());
-        destinations.extend(
-            groups
+            .unwrap_or_else(|| fallthrough_final.clone());
+        fallthroughs_dispatch.extend(
+            groups_dispatch_arm
                 .iter()
-                .map(|group| (group.id_rulegroup.node.clone(), destination.clone())),
+                .map(|group| (group.id_rulegroup.node.clone(), fallthrough.clone())),
         );
     }
-    destinations
+    fallthroughs_dispatch
 }
+
+// == Definitions
 
 fn stamp_def(mut def: pl::Def) -> pl::Def {
     def.node.node = match def.node.node {
         pl::DefKind::Rel(pl::RelDef::Defined(mut def_rel)) => {
-            let final_destination = if def_rel
+            let fallthrough_final = if def_rel
                 .block_else_opt
                 .as_ref()
                 .is_some_and(|block_else| !block_else.is_empty())
@@ -223,12 +236,13 @@ fn stamp_def(mut def: pl::Def) -> pl::Def {
             } else {
                 pl::Fallthrough::FallFail
             };
-            let destinations = collect_dispatch_fallthroughs(final_destination, &def_rel.block);
-            def_rel.block = stamp_block_dispatch(&destinations, def_rel.block);
+            let fallthroughs_dispatch =
+                collect_dispatch_fallthroughs(fallthrough_final, &def_rel.block);
+            def_rel.block = stamp_block_dispatch(&fallthroughs_dispatch, def_rel.block);
             pl::DefKind::Rel(pl::RelDef::Defined(def_rel))
         }
         pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(mut def_func)) => {
-            let destination = if def_func
+            let fallthrough = if def_func
                 .block_else_opt
                 .as_ref()
                 .is_some_and(|block_else| !block_else.is_empty())
@@ -237,13 +251,15 @@ fn stamp_def(mut def: pl::Def) -> pl::Def {
             } else {
                 pl::Fallthrough::FallFail
             };
-            def_func.block = stamp_block_group(&destination, def_func.block);
+            def_func.block = stamp_block_group(&fallthrough, def_func.block);
             pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(def_func))
         }
         kind => kind,
     };
     def
 }
+
+// == Entry point
 
 pub(super) fn spec(spec: pl::Spec) -> pl::Spec {
     spec.into_iter().map(stamp_def).collect()

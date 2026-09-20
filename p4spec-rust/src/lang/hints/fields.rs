@@ -3,6 +3,8 @@
 use crate::lang::el::ast::{Exp, ExpKind, Text};
 use thiserror::Error;
 
+// == Field hints
+
 /// Field labels for prose rendering
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FieldHint {
@@ -32,6 +34,8 @@ impl FieldHint {
     }
 }
 
+// == Initialization
+
 /// Initializes a field hint from one text or a sequence of texts
 pub fn init(exp: &Exp) -> Option<FieldHint> {
     let fields = match &exp.node {
@@ -47,6 +51,8 @@ pub fn init(exp: &Exp) -> Option<FieldHint> {
     };
     Some(FieldHint::new(fields))
 }
+
+// == Validation
 
 /// Validates that the field count matches `arity`
 pub fn validate(hint: &FieldHint, arity: usize) -> Result<(), FieldError> {

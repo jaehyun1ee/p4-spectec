@@ -11,24 +11,10 @@ use crate::lang::{
 
 use super::{Context, ProseError, ProseErrorKind};
 
-fn validate_alterations(
-    span: &Span,
-    hints: &annot::Hints,
-    item_count: usize,
-) -> Result<(), ProseError> {
-    for hint in
-        [&hints.prose, &hints.prose_in, &hints.prose_out, &hints.prose_true, &hints.prose_false]
-            .into_iter()
-            .flatten()
-    {
-        alter::validate_count(hint, item_count)
-            .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
-    }
-    Ok(())
-}
+// == Hint lookup
 
-fn call_hints(ctx: &Context, id: &sl::Id) -> annot::Hints {
-    let hints_func = ctx.func_hints(id);
+fn hints_of_call_exp(ctx: &Context, id_func: &sl::Id) -> annot::Hints {
+    let hints_func = ctx.hints_func(id_func);
     annot::Hints {
         prose_in: hints_func.prose_in,
         prose_true: hints_func.prose_true,
@@ -37,36 +23,11 @@ fn call_hints(ctx: &Context, id: &sl::Id) -> annot::Hints {
     }
 }
 
-fn validate_fields(span: &Span, hints: &annot::Hints, arity: usize) -> Result<(), ProseError> {
-    if let Some(hint) = &hints.prose_fields {
-        fields::validate(hint, arity)
-            .map_err(|error| ProseError::new(ProseErrorKind::Field(error), span.clone()))?;
-    }
-    Ok(())
-}
-
-fn validate_split(
-    span: &Span,
-    hints: &annot::Hints,
-    input_count: usize,
-    output_count: usize,
-) -> Result<(), ProseError> {
-    if let Some(hint) = &hints.prose_in {
-        alter::validate_count(hint, input_count)
-            .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
-    }
-    if let Some(hint) = &hints.prose_out {
-        alter::validate_count(hint, output_count)
-            .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
-    }
-    Ok(())
-}
-
-fn case_hints(ctx: &Context, exp_sl: &sl::Exp, not_exp_sl: &sl::NotExp) -> annot::Hints {
+fn hints_of_case_exp(ctx: &Context, exp_sl: &sl::Exp, not_exp_sl: &sl::NotExp) -> annot::Hints {
     let il::TypKind::Var(id_typ, _) = exp_sl.note.as_ref() else {
         return annot::Hints::default();
     };
-    let hints_case = ctx.case_hints(id_typ, &not_exp_sl.to_mixop());
+    let hints_case = ctx.hints_case(id_typ, &not_exp_sl.to_mixop());
     annot::Hints {
         prose: hints_case.prose,
         prose_fields: hints_case.prose_fields,
@@ -74,8 +35,8 @@ fn case_hints(ctx: &Context, exp_sl: &sl::Exp, not_exp_sl: &sl::NotExp) -> annot
     }
 }
 
-fn hold_hints(ctx: &Context, id: &sl::Id) -> annot::Hints {
-    let hints_rel = ctx.rel_hints(id);
+fn hints_of_hold_instr(ctx: &Context, id_rel: &sl::Id) -> annot::Hints {
+    let hints_rel = ctx.hints_rel(id_rel);
     annot::Hints {
         prose_true: hints_rel.prose_true,
         prose_false: hints_rel.prose_false,
@@ -83,8 +44,12 @@ fn hold_hints(ctx: &Context, id: &sl::Id) -> annot::Hints {
     }
 }
 
-fn rule_hints(ctx: &Context, id: &sl::Id, input_hint: &input::InputHint) -> annot::Hints {
-    let hints_rel = ctx.rel_hints(id);
+fn hints_of_rule_instr(
+    ctx: &Context,
+    id_rel: &sl::Id,
+    input_hint: &input::InputHint,
+) -> annot::Hints {
+    let hints_rel = ctx.hints_rel(id_rel);
     annot::Hints {
         prose_in: hints_rel.prose_in,
         prose_out: hints_rel
@@ -94,8 +59,8 @@ fn rule_hints(ctx: &Context, id: &sl::Id, input_hint: &input::InputHint) -> anno
     }
 }
 
-fn result_hints(ctx: &Context, input_hint: &input::InputHint) -> annot::Hints {
-    let hints_rel = ctx.rel_hints(ctx.namespace());
+fn hints_of_result_instr(ctx: &Context, input_hint: &input::InputHint) -> annot::Hints {
+    let hints_rel = ctx.hints_rel(ctx.namespace());
     annot::Hints {
         prose_out: hints_rel
             .prose_out
@@ -104,8 +69,8 @@ fn result_hints(ctx: &Context, input_hint: &input::InputHint) -> annot::Hints {
     }
 }
 
-fn group_hints(ctx: &Context) -> annot::Hints {
-    let hints_rel = ctx.rel_hints(ctx.namespace());
+fn hints_of_group_instr(ctx: &Context) -> annot::Hints {
+    let hints_rel = ctx.hints_rel(ctx.namespace());
     annot::Hints {
         prose_in: hints_rel.prose_in,
         prose_true: hints_rel.prose_true,
@@ -113,16 +78,16 @@ fn group_hints(ctx: &Context) -> annot::Hints {
     }
 }
 
-fn func_def_hints(ctx: &Context, id: &sl::Id) -> annot::Hints {
-    call_hints(ctx, id)
+fn hints_of_func_def(ctx: &Context, id_func: &sl::Id) -> annot::Hints {
+    hints_of_call_exp(ctx, id_func)
 }
 
-fn rel_def_hints(
+fn hints_of_rel_def(
     ctx: &Context,
-    id: &sl::Id,
+    id_rel: &sl::Id,
     rel_signature: &sl::RelSignature,
 ) -> Result<annot::Hints, ProseError> {
-    let hints_rel = ctx.rel_hints(id);
+    let hints_rel = ctx.hints_rel(id_rel);
     let prose_out = hints_rel
         .prose_out
         .as_ref()
@@ -136,21 +101,23 @@ fn rel_def_hints(
             .cloned()
             .collect::<Vec<_>>();
         let (typs_input, typs_output) = input::split(&rel_signature.input_hint, typs)
-            .map_err(|error| ProseError::new(ProseErrorKind::Input(error), id.span.clone()))?;
-        let fresh_exps = |typs: Vec<sl::Typ>| {
+            .map_err(|error| ProseError::new(ProseErrorKind::Input(error), id_rel.span.clone()))?;
+        let fresh_exps_from_typs = |typs: Vec<sl::Typ>| {
             let mut ids_used = IdSet::new();
             typs.into_iter()
                 .map(|typ| {
                     let (ids_fresh, exp_sl) =
-                        al::fresh::exp_from_typ(true, ctx.metavars(), &ids_used, &typ);
+                        al::fresh::exp_from_typ(true, ctx.menv(), &ids_used, &typ);
                     ids_used = ids_fresh;
                     exp_sl
                 })
                 .collect::<Vec<_>>()
         };
-        let exps_input = Some(fresh_exps(typs_input));
-        let exps_output = prose_out.is_some().then(|| fresh_exps(typs_output));
-        (exps_input, exps_output)
+        let exps_input_sl = Some(fresh_exps_from_typs(typs_input));
+        let exps_output_sl = prose_out
+            .is_some()
+            .then(|| fresh_exps_from_typs(typs_output));
+        (exps_input_sl, exps_output_sl)
     } else {
         (None, None)
     };
@@ -165,6 +132,66 @@ fn rel_def_hints(
         prose_fields: None,
     })
 }
+
+fn hints_of_let_instr(exp_l_pl: &pl::Exp) -> annot::Hints {
+    if matches!(exp_l_pl.node.node, pl::ExpKind::Case(_)) {
+        annot::Hints {
+            prose_fields: exp_l_pl.hints.prose_fields.clone(),
+            ..annot::Hints::default()
+        }
+    } else {
+        annot::Hints::default()
+    }
+}
+
+// == Hint validation
+
+fn validate_hint_alter(
+    span: &Span,
+    hints: &annot::Hints,
+    num_items: usize,
+) -> Result<(), ProseError> {
+    for hint in
+        [&hints.prose, &hints.prose_in, &hints.prose_out, &hints.prose_true, &hints.prose_false]
+            .into_iter()
+            .flatten()
+    {
+        alter::validate_count(hint, num_items)
+            .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
+    }
+    Ok(())
+}
+
+fn validate_hint_fields(
+    span: &Span,
+    hints: &annot::Hints,
+    num_fields: usize,
+) -> Result<(), ProseError> {
+    if let Some(hint) = &hints.prose_fields {
+        fields::validate(hint, num_fields)
+            .map_err(|error| ProseError::new(ProseErrorKind::Field(error), span.clone()))?;
+    }
+    Ok(())
+}
+
+fn validate_hint_split(
+    span: &Span,
+    hints: &annot::Hints,
+    num_inputs: usize,
+    num_outputs: usize,
+) -> Result<(), ProseError> {
+    if let Some(hint) = &hints.prose_in {
+        alter::validate_count(hint, num_inputs)
+            .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
+    }
+    if let Some(hint) = &hints.prose_out {
+        alter::validate_count(hint, num_outputs)
+            .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
+    }
+    Ok(())
+}
+
+// == Expressions
 
 fn prosify_exp(ctx: &Context, exp_sl: &sl::Exp) -> Result<pl::Exp, ProseError> {
     let exp_kind_pl = match &exp_sl.node {
@@ -265,15 +292,15 @@ fn prosify_exp(ctx: &Context, exp_sl: &sl::Exp) -> Result<pl::Exp, ProseError> {
     };
     let hints = match &exp_sl.node {
         il::ExpKind::Case(not_exp_sl) => {
-            let hints = case_hints(ctx, exp_sl, not_exp_sl);
-            let arity = not_exp_sl.args().len();
-            validate_alterations(&exp_sl.span, &hints, arity)?;
-            validate_fields(&exp_sl.span, &hints, arity)?;
+            let hints = hints_of_case_exp(ctx, exp_sl, not_exp_sl);
+            let num_args = not_exp_sl.args().len();
+            validate_hint_alter(&exp_sl.span, &hints, num_args)?;
+            validate_hint_fields(&exp_sl.span, &hints, num_args)?;
             hints
         }
         il::ExpKind::Call(id, _, args_sl) => {
-            let hints = call_hints(ctx, id);
-            validate_alterations(&exp_sl.span, &hints, args_sl.len())?;
+            let hints = hints_of_call_exp(ctx, id);
+            validate_hint_alter(&exp_sl.span, &hints, args_sl.len())?;
             hints
         }
         _ => annot::Hints::default(),
@@ -318,6 +345,8 @@ fn prosify_not_exp(ctx: &Context, not_exp_sl: &sl::NotExp) -> Result<pl::NotExp,
     })
 }
 
+// == Paths
+
 fn prosify_path(ctx: &Context, path_sl: &sl::Path) -> Result<pl::Path, ProseError> {
     let path_kind_pl = match &path_sl.node {
         il::PathKind::Root => pl::PathKind::Root,
@@ -341,6 +370,8 @@ fn prosify_path(ctx: &Context, path_sl: &sl::Path) -> Result<pl::Path, ProseErro
     })
 }
 
+// == Arguments
+
 fn prosify_arg(ctx: &Context, arg_sl: &sl::Arg) -> Result<pl::Arg, ProseError> {
     let arg_kind_pl = match &arg_sl.node {
         il::ArgKind::Exp(exp_sl) => pl::ArgKind::Exp(Box::new(prosify_exp(ctx, exp_sl)?)),
@@ -348,6 +379,8 @@ fn prosify_arg(ctx: &Context, arg_sl: &sl::Arg) -> Result<pl::Arg, ProseError> {
     };
     Ok(crate::phrase! { node: arg_kind_pl, span: arg_sl.span.clone() })
 }
+
+// == Parameters
 
 fn prosify_param(ctx: &Context, param_sl: &sl::Param) -> Result<pl::Param, ProseError> {
     let param_kind_pl = match &param_sl.node {
@@ -367,6 +400,8 @@ fn prosify_param(ctx: &Context, param_sl: &sl::Param) -> Result<pl::Param, Prose
     Ok(crate::phrase! { node: param_kind_pl, span: param_sl.span.clone() })
 }
 
+// == Guards
+
 fn prosify_guard(ctx: &Context, guard_sl: &sl::Guard) -> Result<pl::Guard, ProseError> {
     Ok(match guard_sl {
         sl::Guard::Bool(value) => pl::Guard::Bool(*value),
@@ -379,11 +414,13 @@ fn prosify_guard(ctx: &Context, guard_sl: &sl::Guard) -> Result<pl::Guard, Prose
     })
 }
 
-fn instr<Tier>(instr_kind_pl: pl::InstrKind<Tier>, span: Span) -> pl::Instr<Tier> {
-    instr_with_hints(instr_kind_pl, span, annot::Hints::default())
+// == Instruction construction
+
+fn make_instr<Tier>(instr_kind_pl: pl::InstrKind<Tier>, span: Span) -> pl::Instr<Tier> {
+    make_instr_with_hints(instr_kind_pl, span, annot::Hints::default())
 }
 
-fn instr_with_hints<Tier>(
+fn make_instr_with_hints<Tier>(
     instr_kind_pl: pl::InstrKind<Tier>,
     span: Span,
     hints: annot::Hints,
@@ -398,16 +435,9 @@ fn instr_with_hints<Tier>(
     }
 }
 
-fn let_hints(exp_l_pl: &pl::Exp) -> annot::Hints {
-    if matches!(exp_l_pl.node.node, pl::ExpKind::Case(_)) {
-        annot::Hints {
-            prose_fields: exp_l_pl.hints.prose_fields.clone(),
-            ..annot::Hints::default()
-        }
-    } else {
-        annot::Hints::default()
-    }
-}
+// == Blocks
+
+// - Dispatch tier
 
 fn prosify_block_dispatch(
     ctx: &Context,
@@ -423,19 +453,21 @@ fn prosify_block_dispatch(
                     .map(|instr_sl| instr_sl.span.clone())
                     .collect::<Vec<_>>(),
             );
-            let blocks = block_sl
+            let blocks_pl = block_sl
                 .into_iter()
                 .map(|instr_sl| prosify_instr_dispatch(ctx, instr_sl))
                 .collect::<Result<_, _>>()?;
-            Ok(vec![instr(
+            Ok(vec![make_instr(
                 pl::InstrKind::Tier(pl::TierInstr {
-                    tier: pl::InstrDispatch::Route(pl::RouteDispatchInstr { blocks }),
+                    tier: pl::InstrDispatch::Route(pl::RouteDispatchInstr { blocks: blocks_pl }),
                 }),
                 span,
             )])
         }
     }
 }
+
+// - Group tier
 
 fn prosify_block_group(ctx: &Context, block_sl: sl::Block) -> Result<pl::BlockGroup, ProseError> {
     match block_sl.len() {
@@ -448,19 +480,23 @@ fn prosify_block_group(ctx: &Context, block_sl: sl::Block) -> Result<pl::BlockGr
                     .map(|instr_sl| instr_sl.span.clone())
                     .collect::<Vec<_>>(),
             );
-            let blocks = block_sl
+            let blocks_pl = block_sl
                 .into_iter()
                 .map(|instr_sl| prosify_instr_group(ctx, instr_sl))
                 .collect::<Result<_, _>>()?;
-            Ok(vec![instr(
+            Ok(vec![make_instr(
                 pl::InstrKind::Tier(pl::TierInstr {
-                    tier: pl::InstrGroup::Backtrack(pl::BacktrackGroupInstr { blocks }),
+                    tier: pl::InstrGroup::Backtrack(pl::BacktrackGroupInstr { blocks: blocks_pl }),
                 }),
                 span,
             )])
         }
     }
 }
+
+// == Holding conditions
+
+// - Dispatch tier
 
 fn prosify_hold_case_dispatch(
     ctx: &Context,
@@ -480,6 +516,8 @@ fn prosify_hold_case_dispatch(
     })
 }
 
+// - Group tier
+
 fn prosify_hold_case_group(
     ctx: &Context,
     hold_case_sl: sl::HoldCase,
@@ -498,13 +536,17 @@ fn prosify_hold_case_group(
     })
 }
 
+// == Instructions
+
+// - Dispatch tier
+
 fn prosify_instr_dispatch(
     ctx: &Context,
     instr_sl: sl::Instr,
 ) -> Result<pl::BlockDispatch, ProseError> {
     let span = instr_sl.span;
     Ok(match instr_sl.node {
-        sl::InstrKind::If(instr_sl) => vec![instr(
+        sl::InstrKind::If(instr_sl) => vec![make_instr(
             pl::InstrKind::If(pl::IfInstr {
                 exp: prosify_exp(ctx, &instr_sl.exp)?,
                 iter_exps: instr_sl.iter_exps,
@@ -514,9 +556,9 @@ fn prosify_instr_dispatch(
             span,
         )],
         sl::InstrKind::Hold(instr_sl) => {
-            let hints = hold_hints(ctx, &instr_sl.id);
-            validate_alterations(&span, &hints, instr_sl.not_exp.args().len())?;
-            vec![instr_with_hints(
+            let hints = hints_of_hold_instr(ctx, &instr_sl.id);
+            validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
+            vec![make_instr_with_hints(
                 pl::InstrKind::Hold(pl::HoldInstr {
                     id: instr_sl.id,
                     not_exp: prosify_not_exp(ctx, &instr_sl.not_exp)?,
@@ -527,7 +569,7 @@ fn prosify_instr_dispatch(
                 hints,
             )]
         }
-        sl::InstrKind::Case(instr_sl) => vec![instr(
+        sl::InstrKind::Case(instr_sl) => vec![make_instr(
             pl::InstrKind::Case(pl::CaseInstr {
                 exp: prosify_exp(ctx, &instr_sl.exp)?,
                 cases: instr_sl
@@ -546,8 +588,8 @@ fn prosify_instr_dispatch(
         )],
         sl::InstrKind::Let(instr_sl) => {
             let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
-            let hints = let_hints(&exp_l_pl);
-            let mut instrs_output = vec![instr_with_hints(
+            let hints = hints_of_let_instr(&exp_l_pl);
+            let mut instrs_pl = vec![make_instr_with_hints(
                 pl::InstrKind::Let(pl::LetInstr {
                     exp_l: exp_l_pl,
                     exp_r: prosify_exp(ctx, &instr_sl.exp_r)?,
@@ -556,23 +598,23 @@ fn prosify_instr_dispatch(
                 span,
                 hints,
             )];
-            instrs_output.extend(prosify_block_dispatch(ctx, instr_sl.block)?);
-            instrs_output
+            instrs_pl.extend(prosify_block_dispatch(ctx, instr_sl.block)?);
+            instrs_pl
         }
         sl::InstrKind::Debug(instr_sl) => {
-            let mut instrs_output = vec![instr(
+            let mut instrs_pl = vec![make_instr(
                 pl::InstrKind::Debug(pl::DebugInstr { exp: prosify_exp(ctx, &instr_sl.exp)? }),
                 span,
             )];
-            instrs_output.extend(prosify_instr_dispatch(ctx, *instr_sl.instr)?);
-            instrs_output
+            instrs_pl.extend(prosify_instr_dispatch(ctx, *instr_sl.instr)?);
+            instrs_pl
         }
         sl::InstrKind::Group(instr_sl) => {
-            let hints = group_hints(ctx);
+            let hints = hints_of_group_instr(ctx);
             input::validate(&instr_sl.rel_signature.input_hint, instr_sl.exps.len())
                 .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
-            validate_alterations(&span, &hints, instr_sl.rel_signature.input_hint.indices().len())?;
-            vec![instr_with_hints(
+            validate_hint_alter(&span, &hints, instr_sl.rel_signature.input_hint.indices().len())?;
+            vec![make_instr_with_hints(
                 pl::InstrKind::Tier(pl::TierInstr {
                     tier: pl::InstrDispatch::Group(pl::GroupDispatchInstr {
                         id_rel: ctx.namespace().clone(),
@@ -592,10 +634,12 @@ fn prosify_instr_dispatch(
     })
 }
 
+// - Group tier
+
 fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGroup, ProseError> {
     let span = instr_sl.span;
     Ok(match instr_sl.node {
-        sl::InstrKind::If(instr_sl) => vec![instr(
+        sl::InstrKind::If(instr_sl) => vec![make_instr(
             pl::InstrKind::If(pl::IfInstr {
                 exp: prosify_exp(ctx, &instr_sl.exp)?,
                 iter_exps: instr_sl.iter_exps,
@@ -605,9 +649,9 @@ fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGr
             span,
         )],
         sl::InstrKind::Hold(instr_sl) => {
-            let hints = hold_hints(ctx, &instr_sl.id);
-            validate_alterations(&span, &hints, instr_sl.not_exp.args().len())?;
-            vec![instr_with_hints(
+            let hints = hints_of_hold_instr(ctx, &instr_sl.id);
+            validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
+            vec![make_instr_with_hints(
                 pl::InstrKind::Hold(pl::HoldInstr {
                     id: instr_sl.id,
                     not_exp: prosify_not_exp(ctx, &instr_sl.not_exp)?,
@@ -618,7 +662,7 @@ fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGr
                 hints,
             )]
         }
-        sl::InstrKind::Case(instr_sl) => vec![instr(
+        sl::InstrKind::Case(instr_sl) => vec![make_instr(
             pl::InstrKind::Case(pl::CaseInstr {
                 exp: prosify_exp(ctx, &instr_sl.exp)?,
                 cases: instr_sl
@@ -637,8 +681,8 @@ fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGr
         )],
         sl::InstrKind::Let(instr_sl) => {
             let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
-            let hints = let_hints(&exp_l_pl);
-            let mut instrs_output = vec![instr_with_hints(
+            let hints = hints_of_let_instr(&exp_l_pl);
+            let mut instrs_pl = vec![make_instr_with_hints(
                 pl::InstrKind::Let(pl::LetInstr {
                     exp_l: exp_l_pl,
                     exp_r: prosify_exp(ctx, &instr_sl.exp_r)?,
@@ -647,25 +691,25 @@ fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGr
                 span,
                 hints,
             )];
-            instrs_output.extend(prosify_block_group(ctx, instr_sl.block)?);
-            instrs_output
+            instrs_pl.extend(prosify_block_group(ctx, instr_sl.block)?);
+            instrs_pl
         }
         sl::InstrKind::Debug(instr_sl) => {
-            let mut instrs_output = vec![instr(
+            let mut instrs_pl = vec![make_instr(
                 pl::InstrKind::Debug(pl::DebugInstr { exp: prosify_exp(ctx, &instr_sl.exp)? }),
                 span,
             )];
-            instrs_output.extend(prosify_instr_group(ctx, *instr_sl.instr)?);
-            instrs_output
+            instrs_pl.extend(prosify_instr_group(ctx, *instr_sl.instr)?);
+            instrs_pl
         }
         sl::InstrKind::Rule(instr_sl) => {
-            let hints = rule_hints(ctx, &instr_sl.id, &instr_sl.input_hint);
-            let arity = instr_sl.not_exp.args().len();
-            input::validate(&instr_sl.input_hint, arity)
+            let hints = hints_of_rule_instr(ctx, &instr_sl.id, &instr_sl.input_hint);
+            let num_args = instr_sl.not_exp.args().len();
+            input::validate(&instr_sl.input_hint, num_args)
                 .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
-            let input_count = instr_sl.input_hint.indices().len();
-            validate_split(&span, &hints, input_count, arity - input_count)?;
-            let mut instrs_output = vec![instr_with_hints(
+            let num_inputs = instr_sl.input_hint.indices().len();
+            validate_hint_split(&span, &hints, num_inputs, num_args - num_inputs)?;
+            let mut instrs_pl = vec![make_instr_with_hints(
                 pl::InstrKind::Tier(pl::TierInstr {
                     tier: pl::InstrGroup::Rule(pl::RuleGroupInstr {
                         id: instr_sl.id,
@@ -677,13 +721,13 @@ fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGr
                 span,
                 hints,
             )];
-            instrs_output.extend(prosify_block_group(ctx, instr_sl.block)?);
-            instrs_output
+            instrs_pl.extend(prosify_block_group(ctx, instr_sl.block)?);
+            instrs_pl
         }
         sl::InstrKind::Result(instr_sl) => {
-            let hints = result_hints(ctx, &instr_sl.rel_signature.input_hint);
-            validate_alterations(&span, &hints, instr_sl.exps.len())?;
-            vec![instr_with_hints(
+            let hints = hints_of_result_instr(ctx, &instr_sl.rel_signature.input_hint);
+            validate_hint_alter(&span, &hints, instr_sl.exps.len())?;
+            vec![make_instr_with_hints(
                 pl::InstrKind::Tier(pl::TierInstr {
                     tier: pl::InstrGroup::Result(pl::ResultGroupInstr {
                         rel_signature: instr_sl.rel_signature,
@@ -694,7 +738,7 @@ fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGr
                 hints,
             )]
         }
-        sl::InstrKind::Return(instr_sl) => vec![instr(
+        sl::InstrKind::Return(instr_sl) => vec![make_instr(
             pl::InstrKind::Tier(pl::TierInstr {
                 tier: pl::InstrGroup::Return(pl::ReturnGroupInstr {
                     exp: prosify_exp(ctx, &instr_sl.exp)?,
@@ -708,25 +752,27 @@ fn prosify_instr_group(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::BlockGr
     })
 }
 
+// == Definitions
+
 fn prosify_def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError> {
     let hints = match &def_sl.node {
         sl::DefKind::Rel(sl::RelDef::Extern(def_rel_sl)) => {
-            rel_def_hints(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)?
+            hints_of_rel_def(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)?
         }
         sl::DefKind::Rel(sl::RelDef::Defined(def_rel_sl)) => {
-            rel_def_hints(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)?
+            hints_of_rel_def(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)?
         }
         sl::DefKind::MetaFunc(sl::MetaFuncDef::Extern(def_func_sl)) => {
-            func_def_hints(ctx, &def_func_sl.id)
+            hints_of_func_def(ctx, &def_func_sl.id)
         }
         sl::DefKind::MetaFunc(sl::MetaFuncDef::Builtin(def_func_sl)) => {
-            func_def_hints(ctx, &def_func_sl.id)
+            hints_of_func_def(ctx, &def_func_sl.id)
         }
         sl::DefKind::MetaFunc(sl::MetaFuncDef::Table(def_func_sl)) => {
-            func_def_hints(ctx, &def_func_sl.id)
+            hints_of_func_def(ctx, &def_func_sl.id)
         }
         sl::DefKind::MetaFunc(sl::MetaFuncDef::Defined(def_func_sl)) => {
-            func_def_hints(ctx, &def_func_sl.id)
+            hints_of_func_def(ctx, &def_func_sl.id)
         }
         sl::DefKind::Typ(_) | sl::DefKind::Var(_) => annot::Hints::default(),
     };
@@ -838,6 +884,8 @@ fn prosify_def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError
     };
     Ok(annot::Annotated { node: crate::phrase! { node: def_kind_pl, span: span }, hints })
 }
+
+// == Entry point
 
 pub(super) fn prosify(spec_sl: sl::Spec) -> Result<pl::Spec, ProseError> {
     let mut ctx = Context::load(&spec_sl)?;

@@ -2,6 +2,8 @@
 
 use super::{annot, ast::*};
 
+// == Rule groups
+
 /// A borrowed rule group extracted from a dispatch block
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RuleGroup<'a> {
@@ -12,6 +14,8 @@ pub struct RuleGroup<'a> {
     pub exps: &'a [Exp],
     pub body: &'a BlockGroup,
 }
+
+// == Collection
 
 /// Collects nested rule groups in depth-first source order
 pub fn collect_groups(block: &BlockDispatch) -> Vec<RuleGroup<'_>> {

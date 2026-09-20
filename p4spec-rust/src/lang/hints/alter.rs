@@ -4,7 +4,7 @@ use crate::lang::el::ast::{Atom, Exp, ExpKind, Hole as ElHole, Text};
 use crate::lang::hints::input::InputHint;
 use thiserror::Error;
 
-// Alternation hints
+// == Alteration hints
 
 /// A positional hole in an alteration hint
 #[derive(Clone, Debug, PartialEq)]
@@ -54,7 +54,7 @@ pub fn init(exp: &Exp) -> Option<AlterationHint> {
     })
 }
 
-// Validating hints
+// == Validation
 
 /// Validates every hole against `items`
 pub fn validate<Item>(hint: &AlterationHint, items: &[Item]) -> Result<(), AlterationError> {
@@ -91,7 +91,7 @@ fn validate_at(
     }
 }
 
-// Re-alignment of alternation indices
+// == Index realignment
 
 /// Renumbers output holes after relation input positions
 pub fn realign(hint: &AlterationHint, hint_input: &InputHint) -> AlterationHint {
@@ -153,7 +153,7 @@ pub fn realign(hint: &AlterationHint, hint_input: &InputHint) -> AlterationHint 
     apply(hint, &idx_pairs)
 }
 
-// Alternation
+// == Rendering
 
 /// Renders alteration pieces into a caller-defined output
 pub trait Renderer<Item> {
