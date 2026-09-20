@@ -182,6 +182,7 @@ impl fmt::Display for ElabError {
         if self.traces.is_empty() {
             return write!(f, "{} at {}", self.diagnostic, self.span);
         }
+        // With traces, print the tree of tried alternatives instead
         let mut first = true;
         for trace in &self.traces {
             trace.fmt(f, 0, &mut first)?;

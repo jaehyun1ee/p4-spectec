@@ -38,6 +38,7 @@ fn reject_noninvertible(
 /// Collects the binders of an expression.
 pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
     match &exp.node {
+        // Literals bind nothing
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {
             let benv = BEnv::new();
             Ok(benv)
@@ -53,77 +54,95 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
                 Ok(benv)
             }
         }
+        // Unary operator: not invertible, so a binder below is an error
         ast::ExpKind::Un(_, _, exp_inner) => {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "unary operator", benv)
         }
+        // Binary operator: not invertible
         ast::ExpKind::Bin(_, _, exp_l, exp_r) => {
             let benv_l = collect_exp(ctx, exp_l)?;
             let benv_r = collect_exp(ctx, exp_r)?;
             let benv = benv_l.union(benv_r)?;
             reject_noninvertible(exp.span.clone(), "binary operator", benv)
         }
+        // Comparison: not invertible
         ast::ExpKind::Cmp(_, _, exp_l, exp_r) => {
             let benv_l = collect_exp(ctx, exp_l)?;
             let benv_r = collect_exp(ctx, exp_r)?;
             let benv = benv_l.union(benv_r)?;
             reject_noninvertible(exp.span.clone(), "comparison operator", benv)
         }
-        // Upcasts are invertible, downcasts are not
+        // Upcast: invertible, binders pass through
         ast::ExpKind::UpCast(_, exp_inner) => collect_exp(ctx, exp_inner),
+        // Downcast: not invertible
         ast::ExpKind::DownCast(_, exp_inner) => {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "downcast operator", benv)
         }
+        // Subtype test: not invertible
         ast::ExpKind::Sub(exp_inner, _, _) => {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "subtype check operator", benv)
         }
+        // Pattern test: not invertible
         ast::ExpKind::Match(exp_inner, _) => {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "match check operator", benv)
         }
+        // Tuple or list: binders in every component
         ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => collect_exps(ctx, exps),
+        // Case: binders in the arguments
         ast::ExpKind::Case(not_exp) => collect_exps(ctx, not_exp.args()),
+        // Struct: binders in the fields
         ast::ExpKind::Str(fields) => {
             collect_exps(ctx, fields.iter().map(|ast::ExpField { exp, .. }| exp))
         }
+        // Option: binders in the payload
         ast::ExpKind::Opt(Some(exp_inner)) => collect_exp(ctx, exp_inner),
+        // Empty option binds nothing
         ast::ExpKind::Opt(None) => {
             let benv = BEnv::new();
             Ok(benv)
         }
+        // Cons: binders in head and tail
         ast::ExpKind::Cons(exp_l, exp_r) => {
             let benv_l = collect_exp(ctx, exp_l)?;
             let benv_r = collect_exp(ctx, exp_r)?;
             benv_l.union(benv_r)
         }
+        // Concatenation: not invertible
         ast::ExpKind::Cat(exp_l, exp_r) => {
             let benv_l = collect_exp(ctx, exp_l)?;
             let benv_r = collect_exp(ctx, exp_r)?;
             let benv = benv_l.union(benv_r)?;
             reject_noninvertible(exp.span.clone(), "concatenation operator", benv)
         }
+        // Membership: not invertible
         ast::ExpKind::Mem(exp_l, exp_r) => {
             let benv_l = collect_exp(ctx, exp_l)?;
             let benv_r = collect_exp(ctx, exp_r)?;
             let benv = benv_l.union(benv_r)?;
             reject_noninvertible(exp.span.clone(), "set membership operator", benv)
         }
+        // Length: not invertible
         ast::ExpKind::Len(exp_inner) => {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "length operator", benv)
         }
+        // Field access: not invertible
         ast::ExpKind::Dot(exp_inner, _) => {
             let benv = collect_exp(ctx, exp_inner)?;
             reject_noninvertible(exp_inner.span.clone(), "dot operator", benv)
         }
+        // Indexing: not invertible
         ast::ExpKind::Idx(exp_base, exp_idx) => {
             let benv_base = collect_exp(ctx, exp_base)?;
             let benv_idx = collect_exp(ctx, exp_idx)?;
             let benv = benv_base.union(benv_idx)?;
             reject_noninvertible(exp.span.clone(), "indexing operator", benv)
         }
+        // Slicing: not invertible
         ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             let benv_base = collect_exp(ctx, exp_base)?;
             let benv_idx = collect_exp(ctx, exp_idx)?;
@@ -132,6 +151,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             let benv = benv.union(benv_len)?;
             reject_noninvertible(exp.span.clone(), "slicing operator", benv)
         }
+        // Update: not invertible
         ast::ExpKind::Upd(exp_base, path, exp_field) => {
             let benv_base = collect_exp(ctx, exp_base)?;
             let benv_path = collect_path(ctx, path)?;
@@ -140,6 +160,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
             let benv = benv.union(benv_path)?;
             reject_noninvertible(exp.span.clone(), "update operator", benv)
         }
+        // Call: not invertible
         ast::ExpKind::Call(_, _, args) => {
             let benv = collect_args(ctx, args)?;
             reject_noninvertible(exp.span.clone(), "call operator", benv)

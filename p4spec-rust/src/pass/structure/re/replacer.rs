@@ -74,15 +74,18 @@ impl Replacer {
     /// Fresh names avoid the binders, the block's free names,
     /// replacement keys and free names, and names already chosen in this call.
     pub(crate) fn freshen_binders(&self, frees: &IdSet, block: &ol::Block) -> Renamer {
+        // Free names of the replacements
         let ids_codom = self
             .exps
             .iter()
             .fold(IdSet::new(), |ids, (_, exp)| ids.union(exp.free()));
+        // Binders those names would capture
         let ids_collide: IdSet = frees
             .iter()
             .filter(|id| ids_codom.contains(id))
             .cloned()
             .collect();
+        // Avoid every name in play, then pick fresh ones
         let mut ids_avoid = frees
             .clone()
             .union(block.free())
@@ -112,6 +115,7 @@ impl Replacer {
     pub(crate) fn replace_exp(&self, exp: Exp) -> Exp {
         let exp_kind = match exp.node {
             ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp.node,
+            // Substitution applies at identifiers; other nodes recurse
             ExpKind::Id(id) => return self.replace_id_exp(id, exp.note, exp.span),
             ExpKind::Un(op, op_typ, exp) => {
                 ExpKind::Un(op, op_typ, Box::new(self.replace_exp(*exp)))
@@ -367,6 +371,7 @@ impl Replacer {
         let frees_l = exp_l.free();
         let replacer = self.filter(|id, _| !frees_l.contains(id));
         let renamer_fresh = replacer.freshen_binders(&frees_l, &block);
+        // Then substitute in the source, iterators, and body
         let exp_l = renamer_fresh.rename_exp(&mut false, exp_l);
         let iter_instrs = renamer_fresh.rename_iterinstrs_bound(&mut false, iter_instrs);
         let block = renamer_fresh.rename_block(&mut false, block)?;
@@ -385,6 +390,7 @@ impl Replacer {
         span: &Span,
     ) -> Result<ol::InstrKind, StructureError> {
         let ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
+        // Split the arguments by the input hint
         let exps = not_exp.args().into_iter().cloned().collect();
         let (exps_input, exps_output) = input::split(&input_hint, exps)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
@@ -392,10 +398,12 @@ impl Replacer {
         let exps_input = self.replace_exps(exps_input);
         let frees_output = exps_output.as_slice().free();
         let replacer = self.filter(|id, _| !frees_output.contains(id));
+        // Freshen output binders that would capture an inserted name
         let renamer_fresh = replacer.freshen_binders(&frees_output, &block);
         let exps_output = renamer_fresh.rename_exps(&mut false, exps_output);
         let iter_instrs = renamer_fresh.rename_iterinstrs_bound(&mut false, iter_instrs);
         let block = renamer_fresh.rename_block(&mut false, block)?;
+        // Rebuild the notation, then substitute in iterators and body
         let exps = input::combine(&input_hint, exps_input, exps_output)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
         let mixop = not_exp.to_mixop();

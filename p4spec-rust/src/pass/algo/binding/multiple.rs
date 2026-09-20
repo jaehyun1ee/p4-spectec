@@ -78,6 +78,7 @@ impl RenameEnv {
 
 /// Appends primes to `id` until no identifier with the same base clashes.
 fn fresh_id(ids: &IdSet, id: &Id) -> Id {
+    // Only identifiers with the same base can clash
     let base = id.strip_suffix().node;
     let ids_same_base = ids
         .iter()
@@ -106,16 +107,21 @@ fn rename_id_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &I
 /// Renames repeated binders inside an invertible expression.
 pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> ast::Exp {
     let kind = match &exp.node {
+        // A repeated identifier gets its rename
         ast::ExpKind::Id(id) => return rename_id_exp(ctx, renv, exp, id),
+        // Upcast: rename inside
         ast::ExpKind::UpCast(typ, exp_inner) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
             ast::ExpKind::UpCast(typ.clone(), Box::new(exp_inner))
         }
+        // Tuple: rename every component
         ast::ExpKind::Tuple(exps) => ast::ExpKind::Tuple(rename_exps(ctx, renv, exps)),
+        // Case: rename the arguments
         ast::ExpKind::Case(not_exp) => {
             let not_exp = not_exp.map(|exp| rename_exp(ctx, renv, exp));
             ast::ExpKind::Case(Box::new(not_exp))
         }
+        // Struct: rename the fields
         ast::ExpKind::Str(fields) => {
             let fields = fields
                 .iter()
@@ -126,17 +132,22 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
                 .collect();
             ast::ExpKind::Str(fields)
         }
+        // Option: rename the payload
         ast::ExpKind::Opt(Some(exp_inner)) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
             ast::ExpKind::Opt(Some(Box::new(exp_inner)))
         }
+        // Empty option has nothing to rename
         ast::ExpKind::Opt(None) => return exp.clone(),
+        // List: rename every element
         ast::ExpKind::List(exps) => ast::ExpKind::List(rename_exps(ctx, renv, exps)),
+        // Cons: rename head and tail
         ast::ExpKind::Cons(exp_head, exp_tail) => {
             let exp_head = rename_exp(ctx, renv, exp_head);
             let exp_tail = rename_exp(ctx, renv, exp_tail);
             ast::ExpKind::Cons(Box::new(exp_head), Box::new(exp_tail))
         }
+        // Iteration: rename inside, then its variables
         ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
             // Iteration variables follow renamed occurrences still used inside
@@ -165,6 +176,7 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
                 ast::ExpIter { iter: *iter, vars: vars_renamed },
             )
         }
+        // Non-invertible nodes hold no binders
         _ => return exp.clone(),
     };
     note_phrase!(node: kind, note: exp.note.clone(), span: exp.span.clone())

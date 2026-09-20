@@ -140,6 +140,7 @@ impl ICtx {
                     typ: dim.typ.clone(),
                     iters: dim.iters.clone(),
                 }));
+            // Each outer level sees the variables under one more iteration
             venv = Self::add_iter(venv, entry.iter);
         }
     }
@@ -175,6 +176,7 @@ impl ICtx {
 
     /// Wraps a premise in one iteration premise per level, innermost first.
     pub fn iterate_prem(&self, mut prem: al::ast::Prem) -> al::ast::Prem {
+        // Wrap innermost first
         for entry in &self.0 {
             let span = prem.span.clone();
             let prem_iter = al::ast::PremIter {

@@ -161,6 +161,7 @@ fn analyze_args_as_bind(
     ctx: &mut Context,
     args_il: &[ast::Arg],
 ) -> Result<(VEnv, Vec<ast::Arg>, Vec<al::ast::Prem>), AlgoError> {
+    // Collect binders, then rename repeated occurrences
     let benv = collect::collect_args(ctx, args_il)?;
     let mut venv = benv.flatten();
 
@@ -170,6 +171,7 @@ fn analyze_args_as_bind(
     let prem_sideconditions_multiple_al =
         multiple::generate_side_conditions(&ICtx::new(), &renv_multiple);
 
+    // Desugar partially bound patterns
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_arg = ICtx::new();
     let args_al =
@@ -194,6 +196,7 @@ fn analyze_args_as_bind_shallow(
         return Err(AlgoError::new(AlgoErrorKind::BindingsNotShallow, span));
     }
 
+    // Collect binders and rename repeated occurrences
     let benv = collect::collect_args(ctx, args_il)?;
     let mut venv = benv.flatten();
     let mut renv_multiple = multiple::RenameEnv::from_bindings(&benv);
@@ -211,6 +214,7 @@ fn analyze_args_as_bind_shallow(
         ));
     }
 
+    // Desugar partially bound patterns
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_arg = ICtx::new();
     let args_al =
@@ -365,6 +369,7 @@ fn analyze_if_prem(
     span: &Span,
     if_prem_il: &ast::IfPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
+    // An equality may bind one of its sides
     if let ast::ExpKind::Cmp(ast::CmpOp::Bool(prim::bool::CmpOp::Eq), _, exp_l_il, exp_r_il) =
         &if_prem_il.exp.node
     {
@@ -390,6 +395,7 @@ fn analyze_if_hold_prem(
     span: &Span,
     if_prem_il: &ast::IfHoldPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
+    // Every argument must already be bound
     for exp_il in if_prem_il.not_exp.args() {
         analyze_exp_as_bound(ctx, exp_il)?;
     }
@@ -412,6 +418,7 @@ fn analyze_if_not_hold_prem(
     span: &Span,
     if_prem_il: &ast::IfNotHoldPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
+    // Every argument must already be bound
     for exp_il in if_prem_il.not_exp.args() {
         analyze_exp_as_bound(ctx, exp_il)?;
     }
@@ -641,6 +648,7 @@ fn analyze_else_group(
 ) -> Result<al::ast::ElseGroup, AlgoError> {
     let span = else_group_il.span;
     let ast::ElseGroupKind { id: id_group, rule: rule_il } = else_group_il.node;
+    // Reuse the rule group analysis on the single rule
     let rule_group_il = phrase! {
         node: ast::RuleGroupKind { id: id_group, rules: vec![rule_il] },
         span: span.clone(),
@@ -673,12 +681,14 @@ fn analyze_clause(
     ctx.add_frees(&clause_il.free());
     let span = clause_il.span;
     let ast::ClauseKind { args: args_il, exp: exp_il, prems: prems_il } = clause_il.node;
+    // Arguments bind first, then premises in order, then the body must be bound
     let (venv, args_al, prem_sideconditions_al) = analyze_args_as_bind(&mut ctx, &args_il)?;
     ctx.add_bounds(&venv);
     let prems_al = analyze_prems(&mut ctx, prems_il)?;
     analyze_exp_as_bound(&ctx, &exp_il)?;
     let mut prems_all_al = prem_sideconditions_al;
     prems_all_al.extend(prems_al);
+    // An otherwise clause may not contain partial premises
     if is_else {
         check_prems_in_else(&span, &prems_all_al)?;
     }
@@ -799,9 +809,11 @@ fn analyze_table_row(
     ctx.add_frees(&row_il.free());
     let span = row_il.span;
     let ast::TableRowKind { args: args_il, exp: exp_il } = row_il.node;
+    // Arguments bind, shallowly
     let (venv, args_input_al, prems_al) = analyze_args_as_bind_shallow(&mut ctx, &args_il, &span)?;
     ctx.add_bounds(&venv);
     analyze_args_as_bound_shallow(&ctx, &args_il)?;
+    // The signature patterns are the argument expressions themselves
     let mut exps_signature_al = Vec::with_capacity(args_il.len());
     for arg_il in args_il {
         let ast::ArgKind::Exp(exp_il) = arg_il.node else {
@@ -809,6 +821,7 @@ fn analyze_table_row(
         };
         exps_signature_al.push(*exp_il);
     }
+    // The body must be bound
     analyze_exp_as_bound(&ctx, &exp_il)?;
     let row_al = phrase! {
         node: al::ast::TableRowKind {
@@ -833,6 +846,7 @@ fn analyze_table_rows(
     for row_il in rows_il {
         rows_al.push(analyze_table_row(ctx, row_il)?);
     }
+    // Table parameters must be plain expressions
     let mut typs_match_il = Vec::with_capacity(params_il.len());
     for param_il in params_il {
         let ast::ParamKind::Exp(typ_il) = &param_il.node else {
@@ -916,6 +930,7 @@ fn analyze_defined_rel(
         defined_rel_il;
     let mut rule_groups_al = Vec::with_capacity(rule_groups.len());
     for rule_group_il in rule_groups {
+        // The group keeps its source span
         let span = rule_group_il.span.clone();
         let mut rule_group_al = analyze_rule_group(ctx, &input_hint, rule_group_il, false)?;
         rule_group_al.span = span;
@@ -1002,6 +1017,7 @@ fn analyze_defined_func(
     for clause_il in defined_func_il.clauses {
         clauses_al.push(analyze_clause(ctx, clause_il, false)?);
     }
+    // The otherwise clause is analyzed as the fallback
     let else_clause_al = defined_func_il
         .else_clause
         .map(|clause_il| analyze_clause(ctx, clause_il, true))

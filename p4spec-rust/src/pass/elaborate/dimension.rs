@@ -105,12 +105,14 @@ impl DimContext {
 /// Collects identifier occurrences of an expression under its iterations.
 fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
     match &exp.node {
+        // Literals mention no identifiers
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
         // An identifier occurs at its own type under the enclosing iterations
         ast::ExpKind::Id(id) => {
             let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
             dim_ctx.add(id, Dim::new(typ, iters.to_vec()));
         }
+        // Unary forms collect from the operand
         ast::ExpKind::Un(_, _, exp_inner)
         | ast::ExpKind::UpCast(_, exp_inner)
         | ast::ExpKind::DownCast(_, exp_inner)
@@ -118,6 +120,7 @@ fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
         | ast::ExpKind::Match(exp_inner, _)
         | ast::ExpKind::Len(exp_inner)
         | ast::ExpKind::Dot(exp_inner, _) => infer_exp(dim_ctx, exp_inner, iters),
+        // Binary forms collect from both operands
         ast::ExpKind::Bin(_, _, exp_l, exp_r)
         | ast::ExpKind::Cmp(_, _, exp_l, exp_r)
         | ast::ExpKind::Cons(exp_l, exp_r)
@@ -127,30 +130,37 @@ fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
             infer_exp(dim_ctx, exp_l, iters);
             infer_exp(dim_ctx, exp_r, iters);
         }
+        // Tuple or list: every element
         ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => {
             infer_exps(dim_ctx, exps, iters);
         }
+        // Case: the arguments
         ast::ExpKind::Case(not_exp) => infer_not_exp(dim_ctx, not_exp, iters),
+        // Struct: the fields
         ast::ExpKind::Str(fields) => {
             for ast::ExpField { exp, .. } in fields {
                 infer_exp(dim_ctx, exp, iters);
             }
         }
+        // Option: the payload, if any
         ast::ExpKind::Opt(exp_inner) => {
             if let Some(exp_inner) = exp_inner {
                 infer_exp(dim_ctx, exp_inner, iters);
             }
         }
+        // Slice: base, index, and length
         ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             infer_exp(dim_ctx, exp_base, iters);
             infer_exp(dim_ctx, exp_idx, iters);
             infer_exp(dim_ctx, exp_len, iters);
         }
+        // Update: base, path, and field
         ast::ExpKind::Upd(exp_base, path, exp_field) => {
             infer_exp(dim_ctx, exp_base, iters);
             infer_path(dim_ctx, path, iters);
             infer_exp(dim_ctx, exp_field, iters);
         }
+        // Call: the arguments
         ast::ExpKind::Call(_, _, args) => infer_args(dim_ctx, args, iters),
         // The innermost iteration comes first
         ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, .. }) => {

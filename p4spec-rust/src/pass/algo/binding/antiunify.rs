@@ -105,6 +105,7 @@ fn overlap_exp_kind(
         (ast::ExpKind::Id(id_template), _) if ids_unifier.contains(id_template) => {
             Ok(exp_template.node.clone())
         }
+        // Upcasts with the same type overlap their operands
         (
             ast::ExpKind::UpCast(typ_template, exp_template_inner),
             ast::ExpKind::UpCast(typ, exp_inner),
@@ -114,6 +115,7 @@ fn overlap_exp_kind(
             let exp_template_inner = Box::new(exp_template_inner);
             Ok(ast::ExpKind::UpCast(typ_template.clone(), exp_template_inner))
         }
+        // Tuples overlap componentwise
         (ast::ExpKind::Tuple(exps_template), ast::ExpKind::Tuple(exps)) => {
             let exps_template = overlap_exps(
                 tdenv,
@@ -125,11 +127,13 @@ fn overlap_exp_kind(
             )?;
             Ok(ast::ExpKind::Tuple(exps_template))
         }
+        // Cases with the same mixfix overlap their arguments
         (ast::ExpKind::Case(not_exp_template), ast::ExpKind::Case(not_exp))
             if not_exp_template.eq_shape(not_exp) =>
         {
             overlap_case_exp(tdenv, menv, ids_free, ids_unifier, not_exp_template, not_exp)
         }
+        // Structs with the same atoms overlap their fields
         (ast::ExpKind::Str(exp_fields_template), ast::ExpKind::Str(exp_fields))
             if exp_fields_template.len() == exp_fields.len()
                 && exp_fields_template.iter().zip(exp_fields).all(
@@ -140,6 +144,7 @@ fn overlap_exp_kind(
         {
             overlap_str_exp(tdenv, menv, ids_free, ids_unifier, exp_fields_template, exp_fields)
         }
+        // Different shapes cannot overlap
         _ => {
             let error = AlgoError::new(AlgoErrorKind::AntiUnification, exp.span.clone());
             Err(error)
