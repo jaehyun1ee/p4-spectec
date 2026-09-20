@@ -1,8 +1,9 @@
-//! Rewriting of repeated binding occurrences:
+//! Rewriting of repeated binding occurrences
 //!
-//! The leftmost occurrence keeps its identifier. Each later occurrence is
-//! renamed, and a side condition requires every renamed occurrence to equal the
-//! leftmost one.
+//! The leftmost occurrence keeps its identifier.
+//! Each later occurrence is renamed,
+//! and a side condition requires every renamed occurrence
+//! to equal the leftmost one.
 //!
 //! -- let (int, int, int) = ...
 //!
@@ -34,7 +35,7 @@ use super::{
 
 // == Rename environment
 
-/// Ordered renamed occurrences for each repeated source identifier
+/// Ordered renamed occurrences for each repeated source identifier.
 #[derive(Clone, Debug)]
 pub struct RenameEnv {
     renames: IdMap<Vec<Id>>,
@@ -42,6 +43,7 @@ pub struct RenameEnv {
 }
 
 impl RenameEnv {
+    /// Starts an empty rename list for every `Multiple` binding.
     pub fn from_bindings(benv: &BEnv) -> Self {
         let mut renames = IdMap::new();
         let mut dimensions = IdMap::new();
@@ -74,6 +76,7 @@ impl RenameEnv {
 
 // == Binding renaming
 
+/// Appends primes to `id` until no identifier with the same base clashes.
 fn fresh_id(ids: &IdSet, id: &Id) -> Id {
     let base = id.strip_suffix().node;
     let ids_same_base = ids
@@ -88,16 +91,19 @@ fn fresh_id(ids: &IdSet, id: &Id) -> Id {
     id_fresh
 }
 
+/// Keeps the first occurrence of a repeated identifier, renaming later ones.
 fn rename_id_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp, id: &Id) -> ast::Exp {
     let Some(ids_rename) = renv.get_mut(id) else {
         return exp.clone();
     };
+    // The first occurrence keeps its name, later ones get a fresh prime
     let id_rename = if ids_rename.is_empty() { id.clone() } else { fresh_id(&ctx.frees, id) };
     ctx.add_free(id_rename.clone());
     ids_rename.push(id_rename.clone());
     crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id_rename), note: exp.note.clone(), span: exp.span.clone())
 }
 
+/// Renames repeated binders inside an invertible expression.
 pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> ast::Exp {
     let kind = match &exp.node {
         ast::ExpKind::Id(id) => return rename_id_exp(ctx, renv, exp, id),
@@ -133,6 +139,7 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
         }
         ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
+            // Iteration variables follow renamed occurrences still used inside
             let frees = exp_inner.free();
             let mut vars_renamed = Vec::new();
             for var in vars {
@@ -181,6 +188,7 @@ pub fn rename_args(ctx: &mut Context, renv: &mut RenameEnv, args: &[ast::Arg]) -
 
 // == Side-condition generation
 
+/// Builds `id = id_rename`.
 fn gen_exp_equality(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
     let exp_l = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id.clone()), note: typ.node.clone(), span: id.span.clone());
     let exp_r = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id_rename.clone()), note: typ.node.clone(), span: id.span.clone());
@@ -196,6 +204,9 @@ fn gen_exp_equality(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
     }
 }
 
+/// Builds `x = x' /\ x = x''` for one repeated identifier under its iterations.
+///
+/// Returns `None` when the identifier occurred only once.
 fn generate_side_condition(
     dim: &Dim,
     iter_ctx: &ICtx,
@@ -204,9 +215,11 @@ fn generate_side_condition(
 ) -> Option<al::ast::Prem> {
     let mut ids_repeated = ids_rename.iter().skip(1);
     let id_rename = ids_repeated.next()?;
+    // Locate the condition at the last occurrence
     let mut id_condition = id.clone();
     id_condition.span = ids_rename.last()?.span.clone();
     let mut exp = gen_exp_equality(&id_condition, id_rename, &dim.typ);
+    // Conjoin one equality per renamed occurrence
     for id_rename in ids_repeated {
         let exp_r = gen_exp_equality(&id_condition, id_rename, &dim.typ);
         exp = note_phrase! {
@@ -225,6 +238,7 @@ fn generate_side_condition(
         span: id_condition.span.clone(),
     };
 
+    // Iterate over the identifier's own dimension and the enclosing iterations
     let mut iterations = dim.iters.clone();
     iterations.extend(iter_ctx.iters());
     let mut iter_ctx_side = ICtx::from_iterations(
@@ -241,6 +255,7 @@ fn generate_side_condition(
     Some(iter_ctx_side.iterate_prem(prem))
 }
 
+/// Builds one side condition per repeated identifier.
 pub fn generate_side_conditions(iter_ctx: &ICtx, renv: &RenameEnv) -> Vec<al::ast::Prem> {
     renv.iter()
         .filter_map(|(id, ids_rename)| {

@@ -1,4 +1,4 @@
-//! Rewriting of partially bound patterns:
+//! Rewriting of partially bound patterns
 //!
 //! Bound values inside a binder become fresh variables plus equality premises.
 //!
@@ -49,6 +49,7 @@ use super::{
 
 // == Helpers
 
+/// Checks whether a type is a variant with exactly one case, through aliases.
 fn is_singleton_case(ctx: &Context, typ: &ast::Typ) -> Result<bool, AlgoError> {
     let ast::TypKind::Var(id, targs) = &typ.node else {
         return Ok(false);
@@ -57,6 +58,7 @@ fn is_singleton_case(ctx: &Context, typ: &ast::Typ) -> Result<bool, AlgoError> {
         return Ok(false);
     };
     match &def_typ.node {
+        // Follow a plain alias with its type arguments substituted
         ast::DefTypKind::Plain(typ_inner) => {
             let theta = Theta::from_lists(tparams, targs).map_err(|mismatch| {
                 AlgoError::new(
@@ -75,6 +77,7 @@ fn is_singleton_case(ctx: &Context, typ: &ast::Typ) -> Result<bool, AlgoError> {
     }
 }
 
+/// Checks for an upcast of a nullary case, which still needs its subtype guard.
 fn is_upcast_terminal(exp: &ast::Exp) -> bool {
     matches!(
         &exp.node,
@@ -85,21 +88,28 @@ fn is_upcast_terminal(exp: &ast::Exp) -> bool {
 
 // == Rename environment
 
+/// What a fresh destination variable stands for.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 enum Source {
+    /// A bound sub-expression, checked after binding.
     Bound { exp_from: ast::Exp },
+    /// A binder injected into a variant, option, or list case.
     BindMatch { pattern: ast::Pattern, exp_from: ast::Exp },
+    /// A binder injected into a supertype.
     BindSub { typ_sub: ast::Typ, exp_sub: ast::Exp, exp_from: ast::Exp },
 }
 
+/// A fresh variable standing for a rewritten sub-pattern.
 #[derive(Debug)]
 pub(crate) struct Rename {
     pub(crate) destination: ast::Var,
     source: Source,
+    /// Iterations enclosing the sub-pattern at rewrite time.
     pub(crate) iter_ctx: ICtx,
 }
 
+/// Renames in the order their premises must appear.
 #[derive(Debug)]
 pub struct RenameEnv {
     pub(crate) renames: Vec<Rename>,
@@ -121,6 +131,10 @@ impl RenameEnv {
 
 // == Premise generation
 
+/// Builds the premise checking a bound sub-expression against its destination.
+///
+/// Nullary cases, options, and the empty list become match tests;
+/// anything else becomes an equality.
 fn gen_prem_bound(
     ctx: &Context,
     destination: &ast::Var,
@@ -160,6 +174,7 @@ fn gen_prem_bound(
         node: al::ast::PremKind::If(al::ast::IfPrem { exp: exp_cond }),
         span: exp_from.span.clone(),
     };
+    // Keep only the ranged-over variables the source expression uses
     let mut iter_ctx = iter_ctx.clone();
     let venv = dimension::infer_exp(exp_from);
     iter_ctx.filter_bound(|var| {
@@ -175,6 +190,7 @@ fn gen_prem_bound(
     Ok(prem)
 }
 
+/// Builds `if x matches PATTERN` followed by `let PATTERN = x`.
 fn gen_prem_bind_match(
     destination: &ast::Var,
     pattern: &ast::Pattern,
@@ -193,6 +209,7 @@ fn gen_prem_bind_match(
         }),
         span: exp_from.span.clone(),
     };
+    // The guard ranges over the destination only
     let mut iter_ctx_match = ICtx::from_iterations(
         iter_ctx
             .as_slice()
@@ -213,6 +230,7 @@ fn gen_prem_bind_match(
         }),
         span: exp_from.span.clone(),
     };
+    // The binding also binds the pattern's own variables
     let mut iter_ctx_bind = ICtx::from_iterations(
         iter_ctx
             .as_slice()
@@ -231,6 +249,7 @@ fn gen_prem_bind_match(
     vec![prem_match, prem_bind]
 }
 
+/// Builds a subtype guard on the destination, then a let with the downcast.
 fn gen_prem_bind_sub(
     ctx: &Context,
     destination: &ast::Var,
@@ -255,6 +274,7 @@ fn gen_prem_bind_sub(
         node: al::ast::PremKind::If(al::ast::IfPrem { exp: exp_guard_sub }),
         span: exp_from.span.clone(),
     };
+    // The guard ranges over the destination only
     let mut iter_ctx_sub = ICtx::from_iterations(
         iter_ctx
             .as_slice()
@@ -268,6 +288,7 @@ fn gen_prem_bind_sub(
         destination.iters.clone(),
     );
 
+    // Bind the inner pattern to the downcast destination
     let exp_downcast = note_phrase! {
         node: ast::ExpKind::DownCast(Box::new(typ_sub.clone()), Box::new(exp_to)),
         note: typ_sub.node.clone(),
@@ -298,6 +319,7 @@ fn gen_prem_bind_sub(
     Ok(vec![prem_sub, prem_bind])
 }
 
+/// Builds the premises of one rename under the enclosing iterations.
 fn gen_prem(
     ctx: &Context,
     rename: &Rename,
@@ -321,6 +343,7 @@ fn gen_prem(
     }
 }
 
+/// Builds the premises of every rename in order.
 pub fn gen_prems(
     ctx: &Context,
     iter_ctx_prem: &ICtx,
@@ -335,6 +358,7 @@ pub fn gen_prems(
 
 // == Expression rewriting
 
+/// Replaces an injected binder by a fresh variable and records a match rename.
 fn rename_exp_bind_match(
     ctx: &mut Context,
     renv: &mut RenameEnv,
@@ -351,6 +375,7 @@ fn rename_exp_bind_match(
         source: Source::BindMatch { pattern, exp_from },
         iter_ctx: iter_ctx.clone(),
     });
+    // The fresh variable takes the sub-pattern's place in the iteration
     iter_ctx.filter_bound(|var| !bounds.contains(&var.id));
     iter_ctx.add_var_bound(
         destination.id.clone(),
@@ -360,6 +385,7 @@ fn rename_exp_bind_match(
     var::as_exp(true, &destination)
 }
 
+/// Replaces an upcast binder by a fresh variable and records a subtype rename.
 fn rename_exp_bind_sub(
     ctx: &mut Context,
     renv: &mut RenameEnv,
@@ -377,6 +403,7 @@ fn rename_exp_bind_sub(
         source: Source::BindSub { typ_sub, exp_sub, exp_from },
         iter_ctx: iter_ctx.clone(),
     });
+    // The fresh variable takes the sub-pattern's place in the iteration
     iter_ctx.filter_bound(|var| !bounds.contains(&var.id));
     iter_ctx.add_var_bound(
         destination.id.clone(),
@@ -386,6 +413,7 @@ fn rename_exp_bind_sub(
     var::as_exp(true, &destination)
 }
 
+/// Rewrites a pattern; sub-expressions without binders become bound checks.
 pub fn rename_exp(
     ctx: &mut Context,
     binds: &IdSet,
@@ -402,6 +430,7 @@ pub fn rename_exp(
     rename_exp_bind(ctx, binds, renv, iter_ctx, exp)
 }
 
+/// Replaces a bound sub-expression by a fresh variable, recording the rename.
 fn rename_exp_bound(
     ctx: &mut Context,
     renv: &mut RenameEnv,
@@ -417,6 +446,7 @@ fn rename_exp_bound(
         source: Source::Bound { exp_from: exp },
         iter_ctx: iter_ctx.clone(),
     });
+    // The fresh variable takes the sub-expression's place in the iteration
     iter_ctx.filter_bound(|var| !bounds.contains(&var.id));
     iter_ctx.add_var_bound(
         destination.id.clone(),
@@ -426,6 +456,7 @@ fn rename_exp_bound(
     var::as_exp(true, &destination)
 }
 
+/// Rewrites a binder pattern node by node, injecting guards where needed.
 fn rename_exp_bind(
     ctx: &mut Context,
     binds: &IdSet,
@@ -436,6 +467,7 @@ fn rename_exp_bind(
     let span = exp.span;
     let note = exp.note;
     match exp.node {
+        // Upcast: rewrite the inner pattern, then guard the subtype
         ast::ExpKind::UpCast(typ, exp_inner) => {
             let exp_sub = rename_exp(ctx, binds, renv, iter_ctx, *exp_inner)?;
             let exp_from = note_phrase! {
@@ -464,6 +496,7 @@ fn rename_exp_bind(
                 span: span.clone(),
             };
             let typ = phrase!(node: note.as_ref().clone(), span: span.clone());
+            // A singleton case needs no match guard
             if is_singleton_case(ctx, &typ)? {
                 Ok(exp_from)
             } else {
@@ -511,6 +544,7 @@ fn rename_exp_bind(
                 note: note,
                 span: span.clone(),
             };
+            // Lists match on their length
             let pattern = if exps_len == 0 {
                 ast::ListPattern::Nil
             } else {
@@ -533,6 +567,7 @@ fn rename_exp_bind(
             Ok(exp)
         }
         ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
+            // Rewrite under a new iteration scope, keeping its variables
             let iteration = Iteration { iter, vars_bound: vars, vars_bind: vec![] };
             let mut iter_scope = iter_ctx.scope(iteration);
             let exp_inner = rename_exp(ctx, binds, renv, &mut iter_scope, *exp_inner)?;
@@ -547,10 +582,12 @@ fn rename_exp_bind(
             };
             Ok(exp)
         }
+        // Remaining nodes are leaves
         kind => Ok(note_phrase!(node: kind, note: note, span: span)),
     }
 }
 
+/// Rewrites patterns left to right, appending each pattern's renames in order.
 pub fn rename_exps(
     ctx: &mut Context,
     binds: &IdSet,
@@ -570,6 +607,7 @@ pub fn rename_exps(
 
 // == Argument rewriting
 
+/// Rewrites an expression argument pattern; function arguments are unchanged.
 fn rename_arg(
     ctx: &mut Context,
     binds: &IdSet,
