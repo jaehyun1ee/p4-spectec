@@ -1,4 +1,8 @@
-//! AL assignment, expression, argument, path, premise, and invocation evaluation
+//! AL assignment, expression, premise, and invocation evaluation
+//!
+//! `Invoker` for `AlInterp` delegates to `call`;
+//! `prem` evaluates premises into extended contexts;
+//! `assign` and `expr` re-export the shared evaluation.
 
 pub mod assign;
 pub mod call;

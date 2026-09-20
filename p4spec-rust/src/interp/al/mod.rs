@@ -1,4 +1,10 @@
 //! Algorithmic-language execution over the composed runner context
+//!
+//! `AlInterp` runs AL definitions:
+//! a relation call tries its rule paths in order, or all of them under `det`,
+//! a function call tries its clauses;
+//! `Unmatch` from one candidate moves on to the next, `Err` aborts.
+//! `Config` toggles memoization, determinism checks, and call-boundary guards.
 
 pub mod backtrack;
 pub mod context;
@@ -12,10 +18,13 @@ use crate::{
 };
 use context::{Context, Global};
 
-/// Configuration for the AL interpreter
+/// Configuration for the AL interpreter.
 pub struct Config {
+    /// Memoize pure calls.
     cache: bool,
+    /// Require exactly one matching candidate.
     det: bool,
+    /// Check argument and result types at call boundaries.
     guard: bool,
 }
 
@@ -25,6 +34,7 @@ impl Config {
     }
 }
 
+/// The AL interpreter: configuration plus the call cache.
 pub struct AlInterp {
     config: Config,
     cache: Cache,
@@ -61,9 +71,11 @@ impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for AlInterp {
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, Error> {
+        // Public entries start from a fresh cache
         runner_ctx.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner_ctx.spec());
+        // Guard the inputs unless the call would be served from the cache
         if runner_ctx.interp().config.guard && !eval::call::cache_rel(runner_ctx, &ctx, &id) {
             eval::call::check_rel_inputs(runner_ctx.arena(), &ctx, &id, values).finish()?;
         }
@@ -76,9 +88,11 @@ impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for AlInterp {
         targs: &[ast::Typ],
         values: &[Value],
     ) -> Result<Value, Error> {
+        // Public entries start from a fresh cache
         runner_ctx.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = Context::new(runner_ctx.spec());
+        // Guard the inputs unless the call would be served from the cache
         if runner_ctx.interp().config.guard
             && !eval::call::cache_func(runner_ctx, &ctx, &id, values)
         {

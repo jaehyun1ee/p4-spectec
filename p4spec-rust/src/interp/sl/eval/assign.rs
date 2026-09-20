@@ -1,4 +1,7 @@
 //! Expression and parameter assignment
+//!
+//! Re-exports the shared assignment and adds parameters,
+//! whose patterns live in the parameter, not in a separate argument list.
 
 use super::super::context::Context;
 use crate::interp::shared::error::{AssignErrorKind, ErrorKind};
@@ -12,6 +15,7 @@ pub use crate::interp::shared::eval::assign::*;
 
 // = Parameter assignment
 
+/// Assigns a value to a parameter: to its pattern, or as a function definition.
 fn assign_param<'global>(
     arena: &mut ValueArena,
     ctx_caller: &Context<'_>,
@@ -25,6 +29,7 @@ fn assign_param<'global>(
     }
 }
 
+/// Assigns values to parameters pairwise, requiring equal counts.
 pub(in crate::interp::sl) fn assign_params<'global>(
     arena: &mut ValueArena,
     ctx_caller: &Context<'_>,
@@ -32,6 +37,7 @@ pub(in crate::interp::sl) fn assign_params<'global>(
     params: &[ast::Param],
     values: &[Value],
 ) -> Backtrack<Context<'global>> {
+    // Argument count must match the parameters
     unwrap!(Backtrack::check(
         params.len() == values.len(),
         crate::lang::common::source::Span::default(),
@@ -40,6 +46,7 @@ pub(in crate::interp::sl) fn assign_params<'global>(
             actual: values.len()
         })
     ));
+    // Bind pairwise, threading the context
     for (param, value) in params.iter().zip(values) {
         ctx = unwrap!(assign_param(arena, ctx_caller, ctx, param, *value));
     }

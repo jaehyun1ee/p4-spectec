@@ -1,4 +1,10 @@
 //! AL premise evaluation and iterative bindings
+//!
+//! A premise extends the context or fails:
+//! rule premises bind outputs, `if` premises test a boolean,
+//! hold premises test whether a relation applies, let premises assign,
+//! iteration premises repeat under `iter::yield`.
+//! A failed premise is an `Unmatch`, so the enclosing candidate is skipped.
 
 use super::super::{AlInterp, context::Context};
 use super::{assign, expr};
@@ -16,6 +22,7 @@ use crate::{
 
 // = Premise evaluation
 
+/// Evaluates a premise, nesting failures under an evaluation trace.
 pub fn eval_prem<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
@@ -30,11 +37,13 @@ pub fn eval_prem<'global, Iface: Interface, Ext: Extern>(
         ast::PremKind::Iter(prem) => eval_iter_prem(runner_ctx, ctx, prem),
         ast::PremKind::Debug(prem) => eval_debug_prem(runner_ctx, ctx, prem),
     };
+    // Trace the premise on failure
     result.nest(prem.span.clone(), || {
         ErrorKind::Trace(TraceErrorKind::Evaluation { text: Print::to_string(prem) })
     })
 }
 
+/// Evaluates premises in order, threading the context.
 pub fn eval_prems<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     mut ctx: Context<'global>,
@@ -48,11 +57,13 @@ pub fn eval_prems<'global, Iface: Interface, Ext: Extern>(
 
 // - Rule premise
 
+/// Calls the relation on the input positions and binds the outputs.
 fn eval_rule_prem<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
     prem: &ast::RulePrem,
 ) -> Backtrack<Context<'global>> {
+    // Split by the input hint, evaluate inputs, bind outputs
     let exps = prem.not_exp.args();
     let (exps_input, exps_output) =
         unwrap_from_result!(input::split(&prem.input_hint, exps), &prem.id.span);
@@ -63,6 +74,7 @@ fn eval_rule_prem<'global, Iface: Interface, Ext: Extern>(
 
 // - If premise
 
+/// Passes when the condition holds; otherwise a mismatch.
 fn eval_if_prem<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
@@ -81,6 +93,7 @@ fn eval_if_prem<'global, Iface: Interface, Ext: Extern>(
 
 // - Hold premise
 
+/// Passes when the relation applies; its mismatch becomes the premise's.
 fn eval_if_hold_prem<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
@@ -89,8 +102,11 @@ fn eval_if_hold_prem<'global, Iface: Interface, Ext: Extern>(
     let exps: Vec<_> = prem.not_exp.args();
     let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
+        // The relation applied: the premise passes
         ok!(_) => ok!(ctx),
+        // Fatal errors propagate
         err!(errors) => err!(errors),
+        // It did not apply: the premise fails, naming the relation
         unmatch!(errors) => unmatch!(errors).nest(prem.id.span.clone(), || {
             ErrorKind::Prem(PremErrorKind::HoldConditionNotMet { relation: prem.id.node.clone() })
         }),
@@ -99,6 +115,7 @@ fn eval_if_hold_prem<'global, Iface: Interface, Ext: Extern>(
 
 // - Not-hold premise
 
+/// Passes when the relation does not apply; a match is the mismatch.
 fn eval_if_not_hold_prem<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
@@ -107,19 +124,23 @@ fn eval_if_not_hold_prem<'global, Iface: Interface, Ext: Extern>(
     let exps: Vec<_> = prem.not_exp.args();
     let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
+        // The relation applied: the premise fails
         ok!(_) => unmatch!(
             prem.id.span.clone(),
             ErrorKind::Prem(PremErrorKind::NotHoldConditionNotMet {
                 relation: prem.id.node.clone(),
             }),
         ),
+        // Fatal errors propagate
         err!(errors) => err!(errors),
+        // It did not apply: the premise passes
         unmatch!(_) => ok!(ctx),
     }
 }
 
 // - Let premise
 
+/// Evaluates the right side and assigns it to the pattern.
 fn eval_let_prem<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
@@ -131,6 +152,7 @@ fn eval_let_prem<'global, Iface: Interface, Ext: Extern>(
 
 // - Iteration premise
 
+/// Repeats the inner premise per element, gathering its bindings.
 fn eval_iter_prem<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
@@ -143,6 +165,7 @@ fn eval_iter_prem<'global, Iface: Interface, Ext: Extern>(
 
 // - Debug premise
 
+/// Prints the expression and its value, then continues.
 fn eval_debug_prem<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: Context<'global>,
@@ -151,6 +174,7 @@ fn eval_debug_prem<'global, Iface: Interface, Ext: Extern>(
     let value = unwrap!(expr::eval_exp(runner_ctx, &ctx, &prem.exp));
     let exp_text = Print::to_string(&prem.exp);
     println!("{}: {}", prem.exp.span, exp_text);
+    // Print the value's source span when it has one
     let span_text = runner_ctx.arena().span(&value).to_string();
     if span_text.is_empty() {
         println!("{}", runner_ctx.arena().to_string(&value));
