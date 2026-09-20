@@ -11,9 +11,9 @@
 //! if xs matches nonempty-list { return xs }
 //! ```
 //!
-//! Likewise, equality with an empty option becomes a `none` match, and
-//! `x != STOP` becomes `not (x matches STOP)` when STOP has no arguments
-//! Only the outer comparison is rewritten; nested expressions are left alone
+//! Likewise, equality with an empty option becomes a `none` match,
+//! and `x != STOP` becomes `not (x matches STOP)` when `STOP` has no arguments.
+//! Only the outer comparison is rewritten; nested expressions are left alone.
 
 use crate::lang::common::source::Span;
 use crate::lang::{
@@ -24,6 +24,7 @@ use crate::pass::structure::ol::ast::*;
 
 // == Expressions
 
+/// Rewrites a terminal comparison into a pattern match; other expressions stay.
 fn matchify_exp(exp: Exp) -> Exp {
     let ExpKind::Cmp(op, op_typ, exp_l, exp_r) = exp.node else {
         return exp;
@@ -116,6 +117,7 @@ fn matchify_block(block: Block) -> Block {
 
 // - If instruction
 
+/// Rewrites the condition of an If, then its body.
 fn matchify_if_instr(instr_ol: IfInstr, span: Span) -> Instr {
     let IfInstr { exp, iter_exps, block } = instr_ol;
     let exp = matchify_exp(exp);
@@ -179,6 +181,7 @@ fn matchify_rule_instr(instr_ol: RuleInstr, span: Span) -> Instr {
 
 // == Entry point
 
+/// Rewrites terminal comparisons in every If condition of the block.
 pub(crate) fn apply(block: Block) -> Block {
     matchify_block(block)
 }

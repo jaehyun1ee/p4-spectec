@@ -1,6 +1,6 @@
 //! Remove matches whose expanded variant type has exactly one constructor
 //!
-//! `remove_if_instr` replaces a singleton-variant test with its OL body
+//! `remove_if_instr` replaces a singleton-variant test with its OL body.
 //! For a value `x` whose type contains only constructor WRAP:
 //!
 //! ```text
@@ -11,8 +11,8 @@
 //! return x
 //! ```
 //!
-//! Type aliases are expanded before counting constructors; tests on types
-//! with multiple constructors remain
+//! Type aliases are expanded before counting constructors;
+//! tests on types with multiple constructors remain.
 
 use crate::pass::structure::{StructureError, ol::ast::*, opt::overlap::typ_as_variant};
 use crate::{
@@ -22,6 +22,7 @@ use crate::{
 
 // == Singleton matches
 
+/// Checks for a match on a value whose variant type has a single constructor.
 fn is_singleton_match(tdenv: &TDEnv, exp: &Exp) -> Result<bool, StructureError> {
     match &exp.node {
         ExpKind::Match(exp, _) => {
@@ -69,6 +70,7 @@ fn remove_block(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
 
 // - If instruction
 
+/// Replaces an If on a singleton match by its body.
 fn remove_if_instr(tdenv: &TDEnv, instr_ol: IfInstr, span: Span) -> Result<Block, StructureError> {
     let IfInstr { exp, iter_exps, block } = instr_ol;
     if is_singleton_match(tdenv, &exp)? {
@@ -161,6 +163,7 @@ fn remove_rule_instr(
 
 // == Entry point
 
+/// Removes singleton-variant matches throughout the block.
 pub(crate) fn apply(tdenv: &TDEnv, block: Block) -> Result<Block, StructureError> {
     remove_block(tdenv, block)
 }

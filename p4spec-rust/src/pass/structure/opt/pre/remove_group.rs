@@ -10,7 +10,7 @@
 //! if p { return a }; if q { return b }
 //! ```
 //!
-//! Nested groups are removed too; their bodies stay in the same order
+//! Nested groups are removed too; their bodies stay in the same order.
 
 use crate::lang::common::source::Span;
 use crate::pass::structure::ol::ast::*;
@@ -21,6 +21,7 @@ fn remove_instr(instr_ol: Instr) -> Block {
     remove_instr_kind(instr_ol.node, instr_ol.span)
 }
 
+/// Splices a group's body in place; other instructions keep their nesting.
 fn remove_instr_kind(instr_kind_ol: InstrKind, span: Span) -> Block {
     match instr_kind_ol {
         InstrKind::If(instr_ol) => remove_if_instr(instr_ol, span),
@@ -80,6 +81,7 @@ fn remove_case_instr(instr_ol: CaseInstr, span: Span) -> Block {
 
 // - Group instruction
 
+/// Drops the group wrapper, keeping its body.
 fn remove_group_instr(instr_ol: GroupInstr) -> Block {
     let GroupInstr { block, .. } = instr_ol;
     remove_block(block)
@@ -107,6 +109,7 @@ fn remove_rule_instr(instr_ol: RuleInstr, span: Span) -> Block {
 
 // == Entry point
 
+/// Removes every rule group in the block.
 pub(crate) fn apply(block: Block) -> Block {
     remove_block(block)
 }
