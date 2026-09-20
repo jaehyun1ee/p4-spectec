@@ -1,8 +1,8 @@
 //! Capture-avoiding identifier renaming for OL instructions
 //!
 //! With `x -> y`, `let y = z { return x }` becomes
-//! `let y' = z { return y }`, assuming `y'` is fresh
-//! The local binder is renamed so it does not capture the introduced `y`
+//! `let y' = z { return y }`, assuming `y'` is fresh.
+//! The local binder is renamed so it does not capture the introduced `y`.
 
 use super::super::{StructureError, StructureErrorKind, ol::ast as ol};
 use crate::lang::{
@@ -19,6 +19,7 @@ use crate::{note_phrase, phrase};
 
 // == Environment
 
+/// Identifier renaming `id -> id_renamed`, applied to OL without capture.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Renamer {
     ids: IdMap<Id>,
@@ -47,6 +48,7 @@ impl Renamer {
         self.ids.insert(id, id_renamed);
     }
 
+    /// Keeps only the renames the predicate accepts.
     pub(crate) fn filter(&self, mut predicate: impl FnMut(&Id, &Id) -> bool) -> Self {
         Self {
             ids: self
@@ -60,7 +62,7 @@ impl Renamer {
 
     // == Capture avoidance
 
-    /// Builds fresh names for binders in `frees` that collide with rename targets
+    /// Freshens the binders in `frees` that collide with rename targets.
     ///
     /// ```text
     /// Rename x -> y:
@@ -68,10 +70,11 @@ impl Renamer {
     ///   after:  let y' = w { return (y, y') }
     /// ```
     ///
-    /// Returns `y -> y'`, assuming `y'` is fresh; the caller applies this map
-    /// to the binder and its uses along with the original renaming
-    /// Fresh names avoid the binders, the block's free names, both sides of
-    /// this renamer, and names already chosen in this call
+    /// Returns `y -> y'`, assuming `y'` is fresh;
+    /// the caller applies this map to the binder and its uses
+    /// along with the original renaming.
+    /// Fresh names avoid the binders, the block's free names,
+    /// both sides of this renamer, and names already chosen in this call.
     pub(crate) fn freshen_binders(&self, frees: &IdSet, block: &ol::Block) -> Self {
         let ids_collide: IdSet = self
             .values()
@@ -97,6 +100,7 @@ impl Renamer {
 
     // == Variables
 
+    /// Renames one identifier, flagging `changed` when the spelling differs.
     fn rename_id(&self, changed: &mut bool, id: Id) -> Id {
         let Some(id_renamed) = self.ids.get(&id) else {
             return id;
@@ -118,6 +122,7 @@ impl Renamer {
 
     // == Expressions
 
+    /// Renames identifiers throughout an expression.
     pub(crate) fn rename_exp(&self, changed: &mut bool, exp: Exp) -> Exp {
         if self.ids.is_empty() {
             return exp;
@@ -295,6 +300,7 @@ impl Renamer {
 
     // - Guards
 
+    /// Renames inside the guards that carry an expression.
     pub(crate) fn rename_guard(&self, changed: &mut bool, guard: ol::Guard) -> ol::Guard {
         match guard {
             ol::Guard::Bool(_) | ol::Guard::Sub(..) | ol::Guard::Match(_) => guard,
@@ -307,6 +313,7 @@ impl Renamer {
 
     // == Instructions
 
+    /// Renames identifiers throughout an instruction, avoiding capture.
     pub(crate) fn rename_instr(
         &self,
         changed: &mut bool,
@@ -412,6 +419,7 @@ impl Renamer {
 
     // - Let instruction
 
+    /// Renames a let; its binders shadow the renaming and may be freshened.
     fn rename_let_instr(
         &self,
         changed: &mut bool,
@@ -419,10 +427,12 @@ impl Renamer {
     ) -> Result<ol::InstrKind, StructureError> {
         let ol::LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
         let exp_r = self.rename_exp(changed, exp_r);
+        // Names bound here are not renamed below, except to avoid capture
         let frees_l = exp_l.free();
         let mut renamer = self.filter(|id, _| !frees_l.contains(id));
         let renamer_fresh = renamer.freshen_binders(&frees_l, &block);
         let exp_l = renamer_fresh.rename_exp(changed, exp_l);
+        // The fresh binder names apply to the body as well
         renamer.ids.extend(
             renamer_fresh
                 .ids
@@ -436,6 +446,7 @@ impl Renamer {
 
     // - Rule instruction
 
+    /// Renames a rule call; output binders shadow it and may be freshened.
     fn rename_rule_instr(
         &self,
         changed: &mut bool,
@@ -446,6 +457,7 @@ impl Renamer {
         let exps = not_exp.args().into_iter().cloned().collect();
         let (exps_input, exps_output) = input::split(&input_hint, exps)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
+        // Inputs are uses, outputs are binders
         let exps_input = self.rename_exps(changed, exps_input);
         let frees_output = exps_output.as_slice().free();
         let mut renamer = self.filter(|id, _| !frees_output.contains(id));
@@ -513,6 +525,7 @@ impl Renamer {
 
     // - Bound variables
 
+    /// Renames the ranged-over variables of an instruction iterator.
     pub(crate) fn rename_iterinstr_bound(
         &self,
         changed: &mut bool,
@@ -536,6 +549,7 @@ impl Renamer {
 
     // - Binding variables
 
+    /// Renames the binding variables of an instruction iterator.
     pub(crate) fn rename_iterinstr_bind(
         &self,
         changed: &mut bool,

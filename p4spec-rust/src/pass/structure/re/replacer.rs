@@ -1,8 +1,9 @@
 //! Capture-avoiding expression replacement for OL instructions
 //!
 //! With `x -> y + z`, `let y = w { return x }` becomes
-//! `let y' = w { return y + z }`, assuming `y'` is fresh
-//! Renamer first moves the local binder away from the replacement's free names
+//! `let y' = w { return y + z }`, assuming `y'` is fresh.
+//! `Renamer` first moves the local binder
+//! away from the replacement's free names.
 
 use super::super::{StructureError, StructureErrorKind, ol::ast as ol};
 use super::renamer::Renamer;
@@ -20,6 +21,7 @@ use crate::{note_phrase, phrase};
 
 // == Environment
 
+/// Expression substitution `id -> exp`, applied to OL without capture.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Replacer {
     exps: IdMap<Exp>,
@@ -44,6 +46,7 @@ impl Replacer {
         self.exps.insert(id, exp);
     }
 
+    /// Keeps only the substitutions the predicate accepts.
     pub(crate) fn filter(&self, mut predicate: impl FnMut(&Id, &Exp) -> bool) -> Self {
         Self {
             exps: self
@@ -57,7 +60,7 @@ impl Replacer {
 
     // == Capture avoidance
 
-    /// Builds fresh names for binders in `frees` that occur free in replacements
+    /// Freshens the binders in `frees` that occur free in replacements.
     ///
     /// ```text
     /// Replace x -> y + z:
@@ -65,10 +68,11 @@ impl Replacer {
     ///   after:  let y' = w { return (y + z, y') }
     /// ```
     ///
-    /// Returns `y -> y'`, assuming `y'` is fresh; the caller renames the binder
-    /// and its uses before replacing `x`, so the inserted `y` stays free
-    /// Fresh names avoid the binders, the block's free names, replacement keys
-    /// and free names, and names already chosen in this call
+    /// Returns `y -> y'`, assuming `y'` is fresh;
+    /// the caller renames the binder and its uses before replacing `x`,
+    /// so the inserted `y` stays free.
+    /// Fresh names avoid the binders, the block's free names,
+    /// replacement keys and free names, and names already chosen in this call.
     pub(crate) fn freshen_binders(&self, frees: &IdSet, block: &ol::Block) -> Renamer {
         let ids_codom = self
             .exps
@@ -95,6 +99,7 @@ impl Replacer {
 
     // == Variables
 
+    /// Drops substituted iteration variables, which are no longer variables.
     fn filter_vars(&self, vars: Vec<Var>) -> Vec<Var> {
         vars.into_iter()
             .filter(|var| !self.exps.contains_key(&var.id))
@@ -103,6 +108,7 @@ impl Replacer {
 
     // == Expressions
 
+    /// Substitutes expressions for identifiers throughout an expression.
     pub(crate) fn replace_exp(&self, exp: Exp) -> Exp {
         let exp_kind = match exp.node {
             ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) => exp.node,
@@ -183,6 +189,7 @@ impl Replacer {
 
     // - Identifier expression
 
+    /// Substitutes an identifier in the domain, otherwise keeps it.
     fn replace_id_exp(&self, id: Id, note: std::rc::Rc<TypKind>, span: Span) -> Exp {
         self.exps.get(&id).cloned().unwrap_or(note_phrase!(
             node: ExpKind::Id(id),
@@ -258,6 +265,7 @@ impl Replacer {
 
     // - Guards
 
+    /// Substitutes inside the guards that carry an expression.
     pub(crate) fn replace_guard(&self, guard: ol::Guard) -> ol::Guard {
         match guard {
             ol::Guard::Bool(_) | ol::Guard::Sub(..) | ol::Guard::Match(_) => guard,
@@ -268,6 +276,7 @@ impl Replacer {
 
     // == Instructions
 
+    /// Substitutes throughout an instruction, avoiding capture at binders.
     pub(crate) fn replace_instr(&self, instr_ol: ol::Instr) -> Result<ol::Instr, StructureError> {
         let instr_kind_ol = self.replace_instr_kind(instr_ol.node, &instr_ol.span)?;
         Ok(phrase!(node: instr_kind_ol, span: instr_ol.span))
@@ -351,8 +360,10 @@ impl Replacer {
 
     // - Let instruction
 
+    /// Substitutes in a let; its binders shadow it and are freshened first.
     fn replace_let_instr(&self, instr_ol: ol::LetInstr) -> Result<ol::InstrKind, StructureError> {
         let ol::LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
+        // Freshen colliding binders first so inserted names stay free
         let frees_l = exp_l.free();
         let replacer = self.filter(|id, _| !frees_l.contains(id));
         let renamer_fresh = replacer.freshen_binders(&frees_l, &block);
@@ -367,6 +378,7 @@ impl Replacer {
 
     // - Rule instruction
 
+    /// Substitutes in a rule call; output binders shadow it, freshened first.
     fn replace_rule_instr(
         &self,
         instr_ol: ol::RuleInstr,
@@ -376,6 +388,7 @@ impl Replacer {
         let exps = not_exp.args().into_iter().cloned().collect();
         let (exps_input, exps_output) = input::split(&input_hint, exps)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
+        // Inputs are uses, outputs are binders
         let exps_input = self.replace_exps(exps_input);
         let frees_output = exps_output.as_slice().free();
         let replacer = self.filter(|id, _| !frees_output.contains(id));
@@ -429,6 +442,7 @@ impl Replacer {
 
     // == Instruction iterators
 
+    /// Drops substituted identifiers from an iterator's binding variables.
     pub(crate) fn replace_iterinstr_bound(&self, iter_instr: ol::InstrIter) -> ol::InstrIter {
         let ol::InstrIter { iter, vars_bound, vars_bind } = iter_instr;
         let vars_bind = self.filter_vars(vars_bind);
