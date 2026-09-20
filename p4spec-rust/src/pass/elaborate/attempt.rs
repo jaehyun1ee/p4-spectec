@@ -1,9 +1,12 @@
 //! Backtracking state for elaboration alternatives
 //!
-//! Many constructs have several readings, such as `a ++ b` being a list or a
-//! text concatenation. `choose_sequential` runs the first alternative on a
-//! copy of the context and falls back to the second, keeping the failure
-//! traces of both so that `finish` can report the most informative error
+//! Many constructs have several readings,
+//! such as `a ++ b` being a list or a text concatenation.
+//!
+//! `choose_sequential` runs the first alternative on a copy of the context
+//! and falls back to the second,
+//! keeping the failure traces of both
+//! so that `finish` can report the most informative error
 //! when every alternative fails.
 
 use crate::{lang::common::source::Span, runtime::ops::typ::TypeError};
@@ -27,8 +30,8 @@ pub(super) fn fail_silent<T>() -> Attempt<T> {
 
 /// Tries the first alternative and falls back to the second on failure.
 ///
-/// Only the context of the successful alternative is kept; the traces of
-/// both failures are merged when neither succeeds.
+/// Only the context of the successful alternative is kept;
+/// the traces of both failures are merged when neither succeeds.
 pub(super) fn choose_sequential<T>(
     ctx: &mut Context,
     first: impl FnOnce(&mut Context) -> Attempt<T>,
@@ -81,8 +84,9 @@ impl Backtrack {
 
     /// Visits a trace tree and keeps the most informative error.
     ///
-    /// Located errors beat unlocated ones, specific kinds beat the generic
-    /// no-match kind, and deeper errors beat shallower ones.
+    /// Located errors beat unlocated ones,
+    /// specific kinds beat the generic no-match kind,
+    /// and deeper errors beat shallower ones.
     fn best_error_in<'a>(
         trace: &'a ElabTrace,
         depth: usize,

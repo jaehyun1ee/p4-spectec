@@ -1,8 +1,10 @@
 //! Typed failures produced while elaborating surface-language syntax
 //!
-//! An `ElabError` pairs a stable `ElabErrorKind` with the source span and a
-//! diagnostic. When several alternatives were tried, the error also carries
-//! their traces and prints them as an indented tree:
+//! An `ElabError` pairs a stable `ElabErrorKind`
+//! with the source span and a diagnostic.
+//!
+//! When several alternatives were tried,
+//! the error also carries their traces and prints them as an indented tree:
 //!
 //! ```text
 //! - expression elaboration failed at 12.3-12.9

@@ -1,12 +1,17 @@
 //! Elaboration-language validation and conversion to intermediate syntax
 //!
-//! `elaborate` walks EL definitions in source order and builds the `Context`
-//! as declarations appear; `populate_defs` then moves the collected rule
-//! groups and clauses into their relation and function definitions, and
-//! `dimension::analyze_spec` annotates iterations. Expressions elaborate
-//! bidirectionally: `infer_exp` synthesizes a type bottom-up, while
-//! `elab_exp` checks against an expected type and inserts casts, so a `nat`
-//! variable where `int` is expected becomes an upcast.
+//! `elaborate` walks EL definitions in source order
+//! and builds the `Context` as declarations appear;
+//!
+//! `populate_defs` then moves the collected rule groups and clauses
+//! into their relation and function definitions;
+//!
+//! `dimension::analyze_spec` annotates iterations.
+//!
+//! Expressions elaborate bidirectionally:
+//! `infer_exp` synthesizes a type bottom-up,
+//! while `elab_exp` checks against an expected type and inserts casts,
+//! so a `nat` variable where `int` is expected becomes an upcast.
 
 use crate::{
     lang::{
@@ -227,8 +232,9 @@ fn elab_not_typ(ctx: &Context, typ: &el::Typ) -> Result<il::NotTyp, ElabError> {
 
 /// Expands a plain type used as a variant case into the cases it names.
 ///
-/// With `syntax u = A | B`, the case `u` in `syntax t = u | C` contributes `A`
-/// and `B`, with the type arguments of `u` substituted.
+/// With `syntax u = A | B`,
+/// the case `u` in `syntax t = u | C` contributes `A` and `B`,
+/// with the type arguments of `u` substituted.
 fn elab_typ_case_plain(ctx: &Context, typ_il: &il::Typ) -> Result<Vec<il::TypCase>, ElabError> {
     let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
     let il::TypKind::Var(id, targs_il) = &typ_il.node else {
@@ -382,8 +388,8 @@ fn fail_infer<T>(span: &Span, construct: &str) -> Attempt<T> {
 
 /// Synthesizes the type of an expression bottom-up.
 ///
-/// Constructs such as `eps`, structs, and notation only elaborate against an
-/// expected type and fail here.
+/// Constructs such as `eps`, structs, and notation
+/// only elaborate against an expected type and fail here.
 fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Attempt<il::Exp> {
     match &exp.node {
         el::ExpKind::Bool(value) => infer_bool_exp(ctx, &exp.span, *value),
@@ -600,8 +606,10 @@ fn infer_bin_exp(
 
 // - Comparison expression inference
 
-/// Infers a comparison, checking one side against the other for equality or
-/// trying each numeric type for ordering.
+/// Infers a comparison.
+///
+/// Equality checks one side against the other;
+/// ordering tries each numeric type for both sides.
 fn infer_cmp_exp(
     ctx: &mut Context,
     span: &Span,
@@ -1149,8 +1157,8 @@ fn respan_parenthesized_exp(exp_il: &mut il::Exp, span: &Span) {
 
 /// Elaborates an expression against an expected type.
 ///
-/// Failures are nested under one error for the whole expression so that
-/// traces stay readable.
+/// Failures are nested under one error for the whole expression
+/// so that traces stay readable.
 fn elab_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
     let error = ElabError::new(
         ElabErrorKind::NoMatchingAlternative,
@@ -1215,9 +1223,10 @@ fn elab_singleton_iter_exp(
 
 /// Elaborates by inference and cast, falling back to contextual elaboration.
 ///
-/// When inference fails, a wildcard becomes a fresh variable, a named
-/// expected type is unfolded into its plain, struct, or variant body, and
-/// other constructs elaborate against the expected type directly.
+/// When inference fails,
+/// a wildcard becomes a fresh variable,
+/// a named expected type is unfolded into its plain, struct, or variant body,
+/// and other constructs elaborate against the expected type directly.
 fn elab_exp_normal(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
     // Try inference first, keeping its context only on success
     let mut ctx_candidate = ctx.clone();
@@ -1837,9 +1846,9 @@ fn typ_of_param(param_il: &il::Param) -> il::Typ {
 
 /// Elaborates an argument against its parameter.
 ///
-/// A function argument in a defining clause (`as_def`) declares the
-/// parameter as a local function; elsewhere it must name a function with an
-/// equivalent signature.
+/// A function argument in a defining clause (`as_def`)
+/// declares the parameter as a local function;
+/// elsewhere it must name a function with an equivalent signature.
 fn elab_arg(
     ctx: &mut Context,
     param_il: &il::Param,

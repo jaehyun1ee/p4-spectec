@@ -1,13 +1,17 @@
 //! Elaboration bindings and operation-local fresh state
 //!
-//! `Context` holds the type, meta-variable, relation, and function
-//! environments built while walking definitions, plus the free identifiers
-//! of the rule or clause under elaboration. A declaration registers an empty
-//! definition (`add_defined_rel`), later definitions attach bodies to it
-//! (`add_defined_rule_group`), and population takes the completed body back
-//! out (`take_defined_rel`). Lookups come in three forms: `find_*_opt`
-//! returns an option, `find_*` a located undefined error, and `bound_*` a
-//! boolean.
+//! `Context` holds the type, meta-variable, relation, and function environments
+//! built while walking definitions,
+//! plus the free identifiers of the rule or clause under elaboration.
+//!
+//! A declaration registers an empty definition (`add_defined_rel`),
+//! later definitions attach bodies to it (`add_defined_rule_group`),
+//! and population takes the completed body back out (`take_defined_rel`).
+//!
+//! Lookups come in three forms:
+//! `find_*_opt` returns an option,
+//! `find_*` a located undefined error,
+//! and `bound_*` a boolean.
 
 use crate::{
     lang::{
@@ -43,8 +47,8 @@ pub(super) struct Context {
 impl Context {
     // == Constructors
 
-    /// Creates a context with the primitive meta-variables `bool`, `nat`,
-    /// `int`, and `text` bound to their types.
+    /// Creates a context with the primitive meta-variables
+    /// `bool`, `nat`, `int`, and `text` bound to their types.
     pub(super) fn new() -> Self {
         let mut menv = MEnv::new();
         for (name, typ) in [

@@ -1,11 +1,13 @@
 //! Surface-language validation and conversion to the intermediate language
 //!
 //! `convert` elaborates an EL specification into a typed IL specification.
-//! Definitions are checked in source order, rule groups and clauses are
-//! attached to the relation or function they define, and iterations are
-//! annotated with the variables they range over. For example,
-//! `-- if (n_x = n_y)*` becomes `-- if (n_x = n_y)*{n_x <- n_x*}` once the
-//! dimensions of `n_x` and `n_y` are known.
+//!
+//! Definitions are checked in source order,
+//! rule groups and clauses are attached to their relation or function,
+//! and iterations are annotated with the variables they range over.
+//!
+//! For example, `-- if (n_x = n_y)*` becomes `-- if (n_x = n_y)*{n_x <- n_x*}`
+//! once the dimensions of `n_x` and `n_y` are known.
 
 #![allow(clippy::result_large_err)]
 
