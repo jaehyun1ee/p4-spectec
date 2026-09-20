@@ -1,6 +1,8 @@
 //! Runtime substitution for intermediate-language type variables
 //!
-//! Function-type binders are freshened before applying the outer substitution
+//! Function-type binders are freshened before applying the outer substitution,
+//! so a substituted type cannot capture a bound type parameter.
+//! Substituting a type variable that has arguments is rejected as higher-order.
 
 use crate::lang::{
     common::{
@@ -13,6 +15,7 @@ use crate::phrase;
 
 use super::{Fresh, TypeError, TypeErrorKind};
 
+/// A substitution from type parameters to types.
 #[derive(Default)]
 pub struct Theta(IdMap<ast::Typ>);
 
@@ -21,6 +24,7 @@ impl Theta {
         Self(IdMap::new())
     }
 
+    /// Pairs parameters with arguments; the counts must match.
     pub fn from_lists(tparams: &[ast::TParam], targs: &[ast::Typ]) -> Result<Self, ArityMismatch> {
         let theta = IdMap::from_lists(tparams, targs)?;
         Ok(Self(theta))
@@ -35,6 +39,7 @@ impl Theta {
     }
 }
 
+/// Renames binders to fresh variables, returning both the map and the binders.
 fn freshen_tparams(fresh: &mut Fresh, tparams: &[ast::TParam]) -> (Theta, Vec<ast::TParam>) {
     let mut theta = Theta::new();
     let mut tparams_fresh = Vec::with_capacity(tparams.len());
@@ -48,7 +53,7 @@ fn freshen_tparams(fresh: &mut Fresh, tparams: &[ast::TParam]) -> (Theta, Vec<as
 
 // == Types
 
-/// Substitutes type variables while freshening nested function binders
+/// Substitutes type variables while freshening nested function binders.
 pub fn subst_typ<'env>(
     find_subst: &dyn Fn(&ast::Id) -> Option<&'env ast::Typ>,
     typ: &ast::Typ,
@@ -57,31 +62,41 @@ pub fn subst_typ<'env>(
     subst_typ_inner(&mut fresh, find_subst, typ)
 }
 
+/// Substitution sharing the fresh counter of an enclosing operation.
 pub(crate) fn subst_typ_inner<'env>(
     fresh: &mut Fresh,
     find_subst: &dyn Fn(&ast::Id) -> Option<&'env ast::Typ>,
     typ: &ast::Typ,
 ) -> Result<ast::Typ, TypeError> {
     let typ_kind = match &typ.node {
+        // Primitives have no variables
         TypKind::Bool | TypKind::Num(_) | TypKind::Text => return Ok(typ.clone()),
+        // A variable is replaced when substituted, else its arguments recurse
         TypKind::Var(id, targs) => match find_subst(id) {
+            // A substituted variable cannot take arguments
             Some(_) if !targs.is_empty() => {
                 return Err(TypeError::new(
                     TypeErrorKind::HigherOrderSubstitution,
                     typ.span.clone(),
                 ));
             }
+            // Replace the whole variable
             Some(typ_subst) => return Ok(typ_subst.clone()),
+            // Not substituted: recurse into the arguments
             None => TypKind::Var(id.clone(), subst_typs_inner(fresh, find_subst, targs)?),
         },
+        // Componentwise
         TypKind::Tuple(typs) => TypKind::Tuple(subst_typs_inner(fresh, find_subst, typs)?),
+        // Into the element type
         TypKind::Iter(typ_inner, iter) => {
             let typ_inner = subst_typ_inner(fresh, find_subst, typ_inner)?;
             TypKind::Iter(Box::new(typ_inner), *iter)
         }
+        // Freshen the binders first, then substitute under them
         TypKind::Func(func_typ) => {
             let (theta_fresh, tparams) = freshen_tparams(fresh, &func_typ.tparams);
             let find_fresh = |id: &ast::Id| theta_fresh.get(id);
+            // Rename to fresh binders, then apply the outer substitution
             let typs_params = subst_typs_inner(fresh, &find_fresh, &func_typ.typs_params)?;
             let typs_params = subst_typs_inner(fresh, find_subst, &typs_params)?;
             let typ_ret = subst_typ_inner(fresh, &find_fresh, &func_typ.typ_ret)?;
@@ -92,7 +107,7 @@ pub(crate) fn subst_typ_inner<'env>(
     Ok(phrase!(node: typ_kind, span: typ.span.clone()))
 }
 
-/// Substitutes type variables in a type list
+/// Substitutes type variables in a type list.
 pub fn subst_typs<'env>(
     find_subst: &dyn Fn(&ast::Id) -> Option<&'env ast::Typ>,
     typs: &[ast::Typ],
@@ -101,6 +116,7 @@ pub fn subst_typs<'env>(
     subst_typs_inner(&mut fresh, find_subst, typs)
 }
 
+/// List substitution sharing the fresh counter.
 pub(crate) fn subst_typs_inner<'env>(
     fresh: &mut Fresh,
     find_subst: &dyn Fn(&ast::Id) -> Option<&'env ast::Typ>,
@@ -113,7 +129,7 @@ pub(crate) fn subst_typs_inner<'env>(
 
 // == Notation types
 
-/// Substitutes type variables in a notation type
+/// Substitutes type variables in a notation type.
 pub fn subst_not_typ<'env>(
     find_subst: &dyn Fn(&ast::Id) -> Option<&'env ast::Typ>,
     not_typ: &ast::NotTyp,
@@ -122,17 +138,20 @@ pub fn subst_not_typ<'env>(
     subst_not_typ_inner(&mut fresh, find_subst, not_typ)
 }
 
+/// Substitutes the arguments and refills the mixfix shape.
 pub(crate) fn subst_not_typ_inner<'env>(
     fresh: &mut Fresh,
     find_subst: &dyn Fn(&ast::Id) -> Option<&'env ast::Typ>,
     not_typ: &ast::NotTyp,
 ) -> Result<ast::NotTyp, TypeError> {
+    // Substitute the arguments
     let typs = not_typ
         .node
         .args()
         .into_iter()
         .map(|typ| subst_typ_inner(fresh, find_subst, typ))
         .collect::<Result<Vec<_>, _>>()?;
+    // Refill the mixfix shape with them
     let mixop = not_typ.node.to_mixop();
     let not_typ_kind = Mixop::fill(&mixop, typs)
         .expect("arguments obtained from the same mixfix must match its arity");
@@ -141,13 +160,16 @@ pub(crate) fn subst_not_typ_inner<'env>(
 
 // == Parameters
 
+/// Substitutes a parameter's type, freshening a function parameter's binders.
 fn subst_param_inner<'env>(
     fresh: &mut Fresh,
     find_subst: &dyn Fn(&ast::Id) -> Option<&'env ast::Typ>,
     param: &ast::Param,
 ) -> Result<ast::Param, TypeError> {
     let kind = match &param.node {
+        // A value parameter: its type
         ast::ParamKind::Exp(typ) => ast::ParamKind::Exp(subst_typ_inner(fresh, find_subst, typ)?),
+        // A function parameter: freshen its binders, then substitute under them
         ast::ParamKind::Def(id, tparams, params, typ) => {
             let (theta_fresh, tparams) = freshen_tparams(fresh, tparams);
             let find_fresh = |id: &ast::Id| theta_fresh.get(id);
@@ -164,7 +186,7 @@ fn subst_param_inner<'env>(
     })
 }
 
-/// Substitutes type variables in parameters while sharing fresh state
+/// Substitutes type variables in parameters while sharing fresh state.
 pub(crate) fn subst_params<'env>(
     find_subst: &dyn Fn(&ast::Id) -> Option<&'env ast::Typ>,
     params: &[ast::Param],
@@ -173,6 +195,7 @@ pub(crate) fn subst_params<'env>(
     subst_params_inner(&mut fresh, find_subst, params)
 }
 
+/// Parameter-list substitution sharing the fresh counter.
 fn subst_params_inner<'env>(
     fresh: &mut Fresh,
     find_subst: &dyn Fn(&ast::Id) -> Option<&'env ast::Typ>,
