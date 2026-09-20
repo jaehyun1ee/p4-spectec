@@ -1,7 +1,7 @@
 //! Dimension analysis
 //!
 //! For each rule or clause, collect the dimension of all occurrences of every
-//! identifier. The minimal dimension is the ambient dimension of the
+//! identifier. The minimal dimension is the bound dimension of the
 //! identifier in the rule or clause.
 //!
 //! ```text
@@ -15,7 +15,7 @@
 //!
 //! Annotate iteration constructs with the variables they iterate over.
 //!
-//! - Variables with iterated dimensions at most the ambient dimension
+//! - Variables with iterated dimensions at most the bound dimension
 //! - Check that iteration is non-empty
 //!
 //! ```text
@@ -45,14 +45,17 @@ use super::{ElabError, ElabErrorKind};
 
 // - Context for dimension analysis
 
+/// A dimension tagged with the span of the occurrence that produced it.
 type DimPhrase = Phrase<Dim>;
 
+/// Every dimension at which each identifier occurs in one rule or clause.
 #[derive(Clone, Debug, Default)]
 struct DimContext(IdMap<Vec<DimPhrase>>);
 
 impl DimContext {
     // - Occurrence collection
 
+    /// Records one occurrence of `id` at dimension `dim`.
     fn add(&mut self, id: &Id, dim: Dim) {
         let occurrence = phrase!(node: dim, span: id.span.clone());
         if let Some(occurrences) = self.0.get_mut(id) {
@@ -64,13 +67,18 @@ impl DimContext {
 
     // - Bound inference
 
+    /// Takes the minimal dimension of each identifier as its bound dimension.
+    ///
+    /// Every other occurrence must contain that minimum as a sub-dimension.
     fn into_bounds(self) -> Result<VEnv, ElabError> {
         let mut bounds = VEnv::new();
         for (id, occurrences) in self.0.iter() {
+            // The fewest iterations give the bound dimension
             let dim_min = occurrences
                 .iter()
                 .min_by_key(|occurrence| occurrence.node.iters.len())
                 .expect("identifier has an occurrence");
+            // Every occurrence must extend the bound dimension
             if let Some(dim_conflict) = occurrences
                 .iter()
                 .find(|occurrence| !dim_min.node.sub(&occurrence.node))
@@ -94,9 +102,11 @@ impl DimContext {
 
 // - Expression inference
 
+/// Collects identifier occurrences of an expression under its iterations.
 fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
     match &exp.node {
         ast::ExpKind::Bool(_) | ast::ExpKind::Num(_) | ast::ExpKind::Text(_) => {}
+        // An identifier occurs at its own type under the enclosing iterations
         ast::ExpKind::Id(id) => {
             let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
             dim_ctx.add(id, Dim::new(typ, iters.to_vec()));
@@ -142,6 +152,7 @@ fn infer_exp(dim_ctx: &mut DimContext, exp: &ast::Exp, iters: &[ast::Iter]) {
             infer_exp(dim_ctx, exp_field, iters);
         }
         ast::ExpKind::Call(_, _, args) => infer_args(dim_ctx, args, iters),
+        // The innermost iteration comes first
         ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, .. }) => {
             let mut iters_inner = Vec::with_capacity(iters.len() + 1);
             iters_inner.push(*iter);
@@ -197,6 +208,7 @@ fn infer_args(dim_ctx: &mut DimContext, args: &[ast::Arg], iters: &[ast::Iter]) 
 
 // - Premise inference
 
+/// Collects occurrences in a premise, rejecting pre-annotated iterations.
 fn infer_prem(
     dim_ctx: &mut DimContext,
     prem: &ast::Prem,
@@ -208,6 +220,7 @@ fn infer_prem(
         ast::PremKind::IfHold(if_prem) => infer_not_exp(dim_ctx, &if_prem.not_exp, iters),
         ast::PremKind::IfNotHold(if_prem) => infer_not_exp(dim_ctx, &if_prem.not_exp, iters),
         ast::PremKind::Iter(iter_prem) => {
+            // Iterated premises must arrive without binding annotations
             if !iter_prem.prem_iter.vars_bound.is_empty()
                 || !iter_prem.prem_iter.vars_bind.is_empty()
             {
@@ -236,6 +249,7 @@ fn infer_prems(dim_ctx: &mut DimContext, prems: &[ast::Prem]) -> Result<(), Elab
 
 // - Rule inference
 
+/// Collects occurrences over the conclusion and premises of a rule.
 fn infer_rule(rule: &ast::Rule) -> Result<DimContext, ElabError> {
     let mut dim_ctx = DimContext::default();
     infer_not_exp(&mut dim_ctx, &rule.node.not_exp, &[]);
@@ -245,6 +259,7 @@ fn infer_rule(rule: &ast::Rule) -> Result<DimContext, ElabError> {
 
 // - Clause inference
 
+/// Collects occurrences over the arguments, premises, and body of a clause.
 fn infer_clause(clause: &ast::Clause) -> Result<DimContext, ElabError> {
     let mut dim_ctx = DimContext::default();
     infer_args(&mut dim_ctx, &clause.node.args, &[]);
@@ -255,6 +270,7 @@ fn infer_clause(clause: &ast::Clause) -> Result<DimContext, ElabError> {
 
 // - Table row inference
 
+/// Collects occurrences over the pattern and body of a table row.
 fn infer_table_row(row: &ast::TableRow) -> DimContext {
     let mut dim_ctx = DimContext::default();
     infer_args(&mut dim_ctx, &row.node.args, &[]);
@@ -266,6 +282,7 @@ fn infer_table_row(row: &ast::TableRow) -> DimContext {
 
 // - Occurrences
 
+/// Identifiers occurring in a sub-term, with the dimension built up so far.
 struct Occurrences(VEnv);
 
 impl Occurrences {
@@ -273,15 +290,18 @@ impl Occurrences {
         Self(VEnv::new())
     }
 
+    /// A single identifier occurrence at dimension zero.
     fn singleton(id: &Id, typ: ast::Typ) -> Self {
         let mut occurs = VEnv::new();
         occurs.insert(id.clone(), Dim::new(typ, vec![]));
         Self(occurs)
     }
 
+    /// Merges occurrences, keeping the shallower dimension when shared.
     fn union(mut self, occurs_other: Self) -> Result<Self, ElabError> {
         for (id, dim_other) in occurs_other.0.iter() {
             if let Some(dim) = self.0.get(id) {
+                // A shared identifier must have the same type on both sides
                 if !dim.typ.syntax_eq(&dim_other.typ) {
                     return Err(ElabError::new(
                         ElabErrorKind::TypeMismatch,
@@ -294,6 +314,7 @@ impl Occurrences {
                         ),
                     ));
                 }
+                // Keep the occurrence with fewer iterations
                 if dim_other.iters.len() <= dim.iters.len() {
                     self.0.insert(id.clone(), dim_other.clone());
                 }
@@ -304,6 +325,7 @@ impl Occurrences {
         Ok(self)
     }
 
+    /// Extends the dimension of the iterated variables by one more `iter`.
     fn iterate(mut self, vars: &[ast::Var], iter: ast::Iter) -> Self {
         for var in vars {
             let mut iters = var.iters.clone();
@@ -321,6 +343,11 @@ impl Occurrences {
 
 // - Iteration variables
 
+/// Selects the occurring variables that the iteration `iter` ranges over.
+///
+/// A variable is iterated
+/// when adding `iter` to its current dimension
+/// still fits within its bound dimension.
 fn collect_iter_vars(bounds: &VEnv, occurs: &Occurrences, iter: ast::Iter) -> Vec<ast::Var> {
     occurs
         .iter()
@@ -328,6 +355,7 @@ fn collect_iter_vars(bounds: &VEnv, occurs: &Occurrences, iter: ast::Iter) -> Ve
             let dim_bound = bounds
                 .get(id)
                 .expect("occurring variable has inferred bound");
+            // Iterated once more, the variable must stay within its bound
             if dim.clone().add_iter(iter).sub(dim_bound) {
                 Some(ast::Var { id: id.clone(), typ: dim.typ.clone(), iters: dim.iters.clone() })
             } else {
@@ -339,6 +367,7 @@ fn collect_iter_vars(bounds: &VEnv, occurs: &Occurrences, iter: ast::Iter) -> Ve
 
 // - Expression annotation
 
+/// Annotates the iterations inside an expression and returns its occurrences.
 fn annotate_exp(bounds: &VEnv, exp: &mut ast::Exp) -> Result<Occurrences, ElabError> {
     let span = &exp.span;
     let typ_kind = exp.note.as_ref();
@@ -605,6 +634,7 @@ fn annotate_call_exp(bounds: &VEnv, args: &mut [ast::Arg]) -> Result<Occurrences
 
 // - Iteration expressions
 
+/// Fills in the variables an iterated expression ranges over.
 fn annotate_iter_exp(
     bounds: &VEnv,
     span: &Span,
@@ -612,6 +642,7 @@ fn annotate_iter_exp(
     iter: ast::Iter,
     vars: &mut Vec<ast::Var>,
 ) -> Result<Occurrences, ElabError> {
+    // Iterated expressions must arrive without annotations
     if !vars.is_empty() {
         return Err(ElabError::new(
             ElabErrorKind::InvalidIteration,
@@ -620,7 +651,9 @@ fn annotate_iter_exp(
         ));
     }
     let occurs = annotate_exp(bounds, exp_inner)?;
+    // Variables the iteration ranges over
     let vars_inner = collect_iter_vars(bounds, &occurs, iter);
+    // An iteration must range over at least one variable
     if vars_inner.is_empty() {
         return Err(ElabError::new(
             ElabErrorKind::InvalidIteration,
@@ -635,6 +668,7 @@ fn annotate_iter_exp(
 
 // - Notation expression annotation
 
+/// Annotates the argument expressions of a notation expression.
 fn annotate_not_exp(bounds: &VEnv, not_exp: &mut ast::NotExp) -> Result<Occurrences, ElabError> {
     match not_exp {
         Mixfix::Arg(exp) => annotate_arg_not_exp(bounds, exp),
@@ -696,6 +730,7 @@ fn annotate_seq_not_exp(
 
 // - Path annotation
 
+/// Annotates the index and slice expressions along a path.
 fn annotate_path(bounds: &VEnv, path: &mut ast::Path) -> Result<Occurrences, ElabError> {
     match &mut path.node {
         ast::PathKind::Root => Ok(annotate_root_path()),
@@ -766,6 +801,7 @@ fn annotate_args(bounds: &VEnv, args: &mut [ast::Arg]) -> Result<Occurrences, El
 
 // - Premise annotation
 
+/// Annotates the iterations inside a premise and returns its occurrences.
 fn annotate_prem(bounds: &VEnv, prem: &mut ast::Prem) -> Result<Occurrences, ElabError> {
     let span = &prem.span;
     match &mut prem.node {
@@ -819,11 +855,13 @@ fn annotate_if_not_hold_prem(
 
 // - Iteration premises
 
+/// Fills in the variables an iterated premise ranges over.
 fn annotate_iter_prem(
     bounds: &VEnv,
     span: &Span,
     iter_prem: &mut ast::IterPrem,
 ) -> Result<Occurrences, ElabError> {
+    // Iterated premises must arrive without binding annotations
     if !iter_prem.prem_iter.vars_bound.is_empty() || !iter_prem.prem_iter.vars_bind.is_empty() {
         return Err(ElabError::new(
             ElabErrorKind::InvalidIteration,
@@ -833,7 +871,9 @@ fn annotate_iter_prem(
     }
     let occurs = annotate_prem(bounds, &mut iter_prem.prem)?;
     let iter = iter_prem.prem_iter.iter;
+    // Variables the iteration ranges over
     let vars_bound = collect_iter_vars(bounds, &occurs, iter);
+    // An iteration must range over at least one variable
     if vars_bound.is_empty() {
         return Err(ElabError::new(
             ElabErrorKind::InvalidIteration,
@@ -859,6 +899,7 @@ fn annotate_debug_prem(
 
 // - Rules
 
+/// Infers the dimension bounds of a rule, then annotates its iterations.
 fn analyze_rule(rule: &mut ast::Rule) -> Result<(), ElabError> {
     let bounds = infer_rule(rule)?.into_bounds()?;
     annotate_not_exp(&bounds, &mut rule.node.not_exp)?;
@@ -883,6 +924,7 @@ fn analyze_else_group(group: &mut ast::ElseGroup) -> Result<(), ElabError> {
 
 // - Clauses
 
+/// Infers the dimension bounds of a clause, then annotates its iterations.
 fn analyze_clause(clause: &mut ast::Clause) -> Result<(), ElabError> {
     let bounds = infer_clause(clause)?.into_bounds()?;
     annotate_args(&bounds, &mut clause.node.args)?;
@@ -893,6 +935,7 @@ fn analyze_clause(clause: &mut ast::Clause) -> Result<(), ElabError> {
 
 // - Table rows
 
+/// Infers the dimension bounds of a table row, then annotates its iterations.
 fn analyze_table_row(row: &mut ast::TableRow) -> Result<(), ElabError> {
     let bounds = infer_table_row(row).into_bounds()?;
     annotate_args(&bounds, &mut row.node.args)?;
@@ -902,6 +945,7 @@ fn analyze_table_row(row: &mut ast::TableRow) -> Result<(), ElabError> {
 
 // - Relations
 
+/// Analyzes every rule of a defined relation; extern relations have none.
 fn analyze_rel_def(rel_def_il: &mut ast::RelDef) -> Result<(), ElabError> {
     let ast::RelDef::Defined(defined_rel_il) = rel_def_il else {
         return Ok(());
@@ -917,6 +961,7 @@ fn analyze_rel_def(rel_def_il: &mut ast::RelDef) -> Result<(), ElabError> {
 
 // - Meta-functions
 
+/// Analyzes the rows or clauses of a function; externs and builtins have none.
 fn analyze_meta_func_def(meta_func_def_il: &mut ast::MetaFuncDef) -> Result<(), ElabError> {
     match meta_func_def_il {
         ast::MetaFuncDef::Table(table_func_il) => analyze_table_func(table_func_il),
@@ -958,6 +1003,7 @@ fn analyze_def(def_il: &mut ast::Def) -> Result<(), ElabError> {
 
 // - Specification
 
+/// Annotates every iteration in the specification with its variables.
 pub(super) fn analyze_spec(spec_il: &mut ast::Spec) -> Result<(), ElabError> {
     for def_il in spec_il {
         analyze_def(def_il)?;

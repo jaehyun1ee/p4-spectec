@@ -1,4 +1,17 @@
 //! Elaboration bindings and operation-local fresh state
+//!
+//! `Context` holds the type, meta-variable, relation, and function environments
+//! built while walking definitions,
+//! plus the free identifiers of the rule or clause under elaboration.
+//!
+//! A declaration registers an empty definition (`add_defined_rel`),
+//! later definitions attach bodies to it (`add_defined_rule_group`),
+//! and population takes the completed body back out (`take_defined_rel`).
+//!
+//! Lookups come in three forms:
+//! `find_*_opt` returns an option,
+//! `find_*` a located undefined error,
+//! and `bound_*` a boolean.
 
 use crate::{
     lang::{
@@ -16,19 +29,26 @@ use crate::{
 
 use super::{ElabError, EntityKind};
 
-/// Bindings and fresh state threaded through one elaboration operation
+/// Bindings and fresh state threaded through one elaboration operation.
 #[derive(Clone, Debug)]
 pub(super) struct Context {
+    /// Free identifiers of the rule or clause under elaboration.
     pub(super) frees: IdSet,
+    /// Type definitions.
     pub(super) tdenv: TDEnv,
+    /// Meta-variable types.
     pub(super) menv: MEnv,
+    /// Relation definitions.
     pub(super) renv: REnv,
+    /// Function definitions.
     pub(super) fenv: FEnv,
 }
 
 impl Context {
     // == Constructors
 
+    /// Creates a context with the primitive meta-variables
+    /// `bool`, `nat`, `int`, and `text` bound to their types.
     pub(super) fn new() -> Self {
         let mut menv = MEnv::new();
         for (name, typ) in [
@@ -78,6 +98,7 @@ impl Context {
 
     // - Relations
 
+    /// Finds a relation only when it is defined rather than extern.
     pub(super) fn find_defined_rel_opt(&self, id: &Id) -> Option<&ast::DefinedRel> {
         match self.renv.get(id)? {
             ast::RelDef::Defined(defined_rel_il) => Some(defined_rel_il),
@@ -91,6 +112,7 @@ impl Context {
         })
     }
 
+    /// Finds the notation type and input hint of any relation.
     pub(super) fn find_rel_signature_opt(&self, id: &Id) -> Option<(&ast::NotTyp, &InputHint)> {
         match self.renv.get(id)? {
             ast::RelDef::Extern(extern_rel_il) => {
@@ -114,6 +136,7 @@ impl Context {
         self.find_rel_signature_opt(id).is_some()
     }
 
+    /// Checks whether the relation already has a group with this id.
     fn bound_rule_group(&self, relid: &Id, groupid: &Id) -> bool {
         let Some(defined_rel_il) = self.find_defined_rel_opt(relid) else {
             return false;
@@ -130,6 +153,7 @@ impl Context {
 
     // - Functions
 
+    /// Finds a function only when it is a table function.
     pub(super) fn find_table_func_opt(&self, id: &Id) -> Option<&ast::TableFunc> {
         match self.fenv.get(id)? {
             ast::MetaFuncDef::Table(table_func_il) => Some(table_func_il),
@@ -143,6 +167,7 @@ impl Context {
         })
     }
 
+    /// Finds a function only when it is defined by clauses.
     pub(super) fn find_defined_func_opt(&self, id: &Id) -> Option<&ast::DefinedFunc> {
         match self.fenv.get(id)? {
             ast::MetaFuncDef::Defined(defined_func_il) => Some(defined_func_il),
@@ -156,6 +181,7 @@ impl Context {
         })
     }
 
+    /// Finds the type parameters, parameters, and return type of any function.
     pub(super) fn find_func_signature_opt(
         &self,
         id: &Id,
@@ -167,6 +193,7 @@ impl Context {
             ast::MetaFuncDef::Builtin(builtin_func_il) => {
                 Some((&builtin_func_il.tparams, &builtin_func_il.params, &builtin_func_il.typ))
             }
+            // Table functions take no type parameters
             ast::MetaFuncDef::Table(table_func_il) => {
                 Some((&[], &table_func_il.params, &table_func_il.typ))
             }
@@ -226,6 +253,7 @@ impl Context {
         Ok(())
     }
 
+    /// Binds a type parameter as a type and as a meta-variable of that type.
     pub(super) fn add_tparam(&mut self, tparam: ast::TParam) -> Result<(), ElabError> {
         if self.bound_typdef(&tparam) {
             return Err(ElabError::duplicate(EntityKind::Type, &tparam.node, tparam.span));
@@ -273,6 +301,7 @@ impl Context {
         Ok(())
     }
 
+    /// Attaches an elaborated rule group to its defined relation.
     pub(super) fn add_defined_rule_group(
         &mut self,
         relid: &Id,
@@ -285,6 +314,7 @@ impl Context {
                 relid.span.clone(),
             ));
         }
+        // Group ids are unique within a relation
         let groupid = &rule_group.node.id;
         if self.bound_rule_group(relid, groupid) {
             return Err(ElabError::duplicate(
@@ -302,6 +332,7 @@ impl Context {
         Ok(())
     }
 
+    /// Attaches the single otherwise group to its defined relation.
     pub(super) fn add_defined_else_group(
         &mut self,
         relid: &Id,
@@ -327,6 +358,7 @@ impl Context {
         else {
             unreachable!("checked defined relation")
         };
+        // A relation has at most one otherwise group
         if defined_rel_il.else_group.is_some() {
             return Err(ElabError::duplicate(EntityKind::ElseGroup, &relid.node, else_group.span));
         }
@@ -379,6 +411,7 @@ impl Context {
         Ok(())
     }
 
+    /// Rejects a function id that any function kind already uses.
     fn ensure_func_unbound(&self, id: &Id) -> Result<(), ElabError> {
         if self.bound_func(id) {
             return Err(ElabError::duplicate(EntityKind::Function, &id.node, id.span.clone()));
@@ -386,6 +419,7 @@ impl Context {
         Ok(())
     }
 
+    /// Stores the rows of a declared table function, which must still be empty.
     pub(super) fn add_table_func_rows(
         &mut self,
         id: &Id,
@@ -397,6 +431,7 @@ impl Context {
                 .map_or_else(|| id.span.clone(), |row| row.span.clone());
             return Err(ElabError::undefined(EntityKind::TableFunction, &id.node, span));
         };
+        // Report a second table body at its first row
         if let Some(row) = table_func_il.rows.first() {
             return Err(ElabError::duplicate(
                 EntityKind::TableFunction,
@@ -412,6 +447,7 @@ impl Context {
         Ok(())
     }
 
+    /// Appends a clause to a declared function.
     pub(super) fn add_defined_func_clause(
         &mut self,
         id: &Id,
@@ -429,6 +465,7 @@ impl Context {
         Ok(())
     }
 
+    /// Sets the single otherwise clause of a declared function.
     pub(super) fn add_defined_func_else_clause(
         &mut self,
         id: &Id,
@@ -442,6 +479,7 @@ impl Context {
         else {
             unreachable!("checked defined function")
         };
+        // A function has at most one otherwise clause
         if defined_func_il.else_clause.is_some() {
             return Err(ElabError::duplicate(EntityKind::ElseClause, &id.node, else_clause.span));
         }
@@ -453,6 +491,7 @@ impl Context {
 
     // - Relations
 
+    /// Removes a defined relation and returns it with its rule groups.
     pub(super) fn take_defined_rel(&mut self, id: &Id) -> Result<ast::DefinedRel, ElabError> {
         self.find_defined_rel(id)?;
         let Some(ast::RelDef::Defined(defined_rel_il)) = self.renv.remove(id) else {
@@ -463,6 +502,7 @@ impl Context {
 
     // - Functions
 
+    /// Removes a table function and returns it with its collected rows.
     pub(super) fn take_table_func(&mut self, id: &Id) -> Result<ast::TableFunc, ElabError> {
         self.find_table_func(id)?;
         let Some(ast::MetaFuncDef::Table(table_func_il)) = self.fenv.remove(id) else {
@@ -471,6 +511,7 @@ impl Context {
         Ok(table_func_il)
     }
 
+    /// Removes a defined function and returns it with its collected clauses.
     pub(super) fn take_defined_func(&mut self, id: &Id) -> Result<ast::DefinedFunc, ElabError> {
         self.find_defined_func(id)?;
         let Some(ast::MetaFuncDef::Defined(defined_func_il)) = self.fenv.remove(id) else {
@@ -483,6 +524,7 @@ impl Context {
 
     // - Type definitions
 
+    /// Replaces the definition of an already-declared type.
     pub(super) fn update_typdef(&mut self, id: &Id, typdef: TypeDef) -> Result<(), ElabError> {
         if !self.bound_typdef(id) {
             return Err(ElabError::undefined(EntityKind::Type, &id.node, id.span.clone()));

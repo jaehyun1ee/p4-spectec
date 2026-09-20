@@ -1,4 +1,16 @@
 //! Typed failures produced while elaborating surface-language syntax
+//!
+//! An `ElabError` pairs a stable `ElabErrorKind`
+//! with the source span and a diagnostic.
+//!
+//! When several alternatives were tried,
+//! the error also carries their traces and prints them as an indented tree:
+//!
+//! ```text
+//! - expression elaboration failed at 12.3-12.9
+//!   - cannot destruct type as list at 12.3-12.5
+//!   - cannot cast inferred expression to expected type at 12.3-12.9
+//! ```
 
 use std::fmt;
 
@@ -9,7 +21,7 @@ use crate::{
     runtime::ops::typ::{TypeError, TypeErrorKind},
 };
 
-/// Namespace or definition family involved in a lookup failure
+/// Namespace or definition family involved in a lookup failure.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum EntityKind {
     #[error("type")]
@@ -34,7 +46,7 @@ pub enum EntityKind {
     ElseClause,
 }
 
-/// Structural type expected by a failed elaboration alternative
+/// Structural type expected by a failed elaboration alternative.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum TypeShape {
     #[error("text")]
@@ -49,7 +61,7 @@ pub enum TypeShape {
     Struct,
 }
 
-/// Stable semantic category of an elaboration failure
+/// Stable semantic category of an elaboration failure.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum ElabErrorKind {
     #[error("undefined {0}")]
@@ -98,6 +110,7 @@ pub enum ElabErrorKind {
     NoMatchingAlternative,
 }
 
+/// One failed alternative together with the nested failures it collected.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct ElabTrace {
     pub(super) error: ElabError,
@@ -109,6 +122,7 @@ impl ElabTrace {
         Self { error, children: vec![] }
     }
 
+    /// Prints this trace and its children as an indented list.
     fn fmt(&self, f: &mut fmt::Formatter<'_>, depth: usize, first: &mut bool) -> fmt::Result {
         if !*first {
             writeln!(f)?;
@@ -128,7 +142,7 @@ impl ElabTrace {
     }
 }
 
-/// An elaboration failure paired with the source span that caused it
+/// An elaboration failure paired with the source span that caused it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ElabError {
     pub kind: ElabErrorKind,
@@ -147,10 +161,12 @@ impl ElabError {
         self
     }
 
+    /// Builds an undefined-entity error for `name` at `span`.
     pub(crate) fn undefined(entity: EntityKind, name: &str, span: Span) -> Self {
         Self::new(ElabErrorKind::Undefined(entity), span, format!("{entity} `{name}` is undefined"))
     }
 
+    /// Builds a duplicate-definition error for `name` at `span`.
     pub(crate) fn duplicate(entity: EntityKind, name: &str, span: Span) -> Self {
         Self::new(
             ElabErrorKind::Duplicate(entity),
@@ -162,6 +178,7 @@ impl ElabError {
 
 impl fmt::Display for ElabError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Without traces, print the single diagnostic
         if self.traces.is_empty() {
             return write!(f, "{} at {}", self.diagnostic, self.span);
         }
