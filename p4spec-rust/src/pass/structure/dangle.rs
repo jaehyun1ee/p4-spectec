@@ -1,8 +1,8 @@
 //! Preserve semantic fallthrough when lowering optimized instructions to SL
 //!
-//! With no fallback, `If(p, [A])` gets `dangle=true`
-//! an explicit fallback makes it false
-//! A total Case also gets `dangle=false`
+//! With no fallback, `If(p, [A])` gets `dangle=true`;
+//! an explicit fallback makes it false.
+//! A total `Case` also gets `dangle=false`.
 
 use super::{
     error::{StructureError, StructureErrorKind},
@@ -12,6 +12,7 @@ use crate::lang::{common::source::Span, sl::ast as sl};
 
 // == Instructions
 
+/// Lowers an instruction to SL, propagating the dangle flag into its blocks.
 fn insert_instr(instr_ol: ol::Instr, dangle: bool) -> Result<sl::Instr, StructureError> {
     let instr_kind_sl = insert_instr_kind(instr_ol.node, dangle, &instr_ol.span)?;
     Ok(crate::phrase!(node: instr_kind_sl, span: instr_ol.span))
@@ -45,6 +46,7 @@ fn insert_if_instr(instr_ol: ol::IfInstr, dangle: bool) -> Result<sl::InstrKind,
 
 // - Hold instruction
 
+/// Lowers a hold instruction; only the present branches form the SL hold case.
 fn insert_hold_instr(
     instr_ol: ol::HoldInstr,
     dangle: bool,
@@ -60,6 +62,7 @@ fn insert_hold_instr(
     let block_hold_sl = insert_block(block_hold_ol, dangle)?;
     let block_not_hold_sl = insert_block(block_not_hold_ol, dangle)?;
     let hold_case = match (block_hold_sl.is_empty(), block_not_hold_sl.is_empty()) {
+        // A hold with neither branch has nothing to run
         (true, true) => {
             return Err(StructureError::new(StructureErrorKind::EmptyHold, span.clone()));
         }
@@ -78,6 +81,7 @@ fn insert_case(case_ol: ol::Case, dangle: bool) -> Result<sl::Case, StructureErr
     Ok(sl::Case { guard, block })
 }
 
+/// Lowers a case analysis; a total one never dangles.
 fn insert_case_instr(
     instr_ol: ol::CaseInstr,
     dangle: bool,
@@ -166,6 +170,9 @@ fn insert_dangle(block_ol: ol::Block) -> Result<sl::Block, StructureError> {
 
 // == Fallback handling
 
+/// Lowers a block and its optional otherwise block to SL.
+///
+/// Without an otherwise block, failing guards fall through (`dangle=true`).
 pub(crate) fn instrument(
     block_ol: ol::Block,
     block_else_ol: Option<ol::Block>,
@@ -183,6 +190,7 @@ pub(crate) fn instrument(
     }
 }
 
+/// Lowers a block that never falls through, such as a table row.
 pub(crate) fn instrument_without_else(block_ol: ol::Block) -> Result<sl::Block, StructureError> {
     insert_nothing(block_ol)
 }

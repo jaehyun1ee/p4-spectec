@@ -1,6 +1,6 @@
 //! Syntax equality for optimization-language data
 //!
-//! Ignores source regions
+//! Ignores source regions.
 
 use crate::lang::traits::eq::SyntaxEq;
 

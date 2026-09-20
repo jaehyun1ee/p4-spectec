@@ -1,7 +1,8 @@
 //! Convert AL premises to nested OL blocks, then optimize and lower them to SL
 //!
-//! `let y = x; if y > 0; return y` becomes `Let(y, x, [If(y > 0,
-//! [Return(y)])])` in OL and `If(x > 0, [Return(x)], dangle=true)` in SL
+//! `let y = x; if y > 0; return y`
+//! becomes `Let(y, x, [If(y > 0, [Return(y)])])` in OL
+//! and `If(x > 0, [Return(x)], dangle=true)` in SL.
 //!
 //! AL -> OL -> optimize -> totalize -> prettify -> SL with fallthrough flags
 
@@ -21,6 +22,7 @@ use crate::lang::{
 
 // - Parameter
 
+/// Structures a parameter; expression parameters get a fresh input variable.
 fn struct_param(ctx: &Context, frees: &mut IdSet, param_al: al::Param) -> sl::Param {
     let param_kind_sl = struct_param_kind(ctx, frees, param_al.node);
     crate::phrase! {node: param_kind_sl, span: param_al.span}
@@ -39,6 +41,7 @@ fn struct_param_kind(
     }
 }
 
+/// Structures parameters, keeping the fresh input names distinct across them.
 fn struct_params(ctx: &Context, params_al: Vec<al::Param>) -> Vec<sl::Param> {
     let mut frees = IdSet::new();
     params_al
@@ -49,6 +52,7 @@ fn struct_params(ctx: &Context, params_al: Vec<al::Param>) -> Vec<sl::Param> {
 
 // - Expression parameter
 
+/// Pairs an expression parameter's type with a fresh input variable.
 fn struct_exp_param(ctx: &Context, frees: &mut IdSet, typ: al::Typ) -> sl::ParamKind {
     let (frees_next, exp_input) = fresh::exp_from_typ(true, &ctx.menv, frees, &typ);
     *frees = frees_next;
@@ -73,6 +77,7 @@ fn struct_def_param(
 
 // - Parameter from argument
 
+/// Structures a parameter whose input is its anti-unified argument template.
 fn struct_param_from_arg(
     ctx: &Context,
     param_al: al::Param,
@@ -84,6 +89,7 @@ fn struct_param_from_arg(
     Ok(param_sl)
 }
 
+/// Pairs a parameter with its argument template; the kinds must match.
 fn struct_param_kind_from_arg(
     ctx: &Context,
     param_kind_al: al::ParamKind,
@@ -106,6 +112,7 @@ fn struct_param_kind_from_arg(
     }
 }
 
+/// Pairs parameters with argument templates of matching count.
 fn struct_params_from_args(
     ctx: &Context,
     params_al: Vec<al::Param>,
@@ -129,6 +136,7 @@ fn struct_params_from_args(
 
 // - Definition parameter from argument
 
+/// A function argument must name the function parameter it stands for.
 fn struct_def_param_from_arg(
     ctx: &Context,
     id: al::Id,
@@ -151,11 +159,13 @@ fn struct_def_param_from_arg(
 
 // - Premise
 
+/// Structures one premise into an instruction whose block holds the rest.
 fn struct_prem(
     prem_al: al::Prem,
     prems_tail: &mut impl Iterator<Item = al::Prem>,
     instr_ret: ol::Instr,
 ) -> Result<ol::Instr, StructureError> {
+    // Peel the enclosing iterations off the premise first
     let (prem_al, iter_prems) = internalize_iter(prem_al);
     let instr_kind_ol =
         struct_prem_kind(prem_al.node, &prem_al.span, iter_prems, prems_tail, instr_ret)?;
@@ -163,6 +173,7 @@ fn struct_prem(
     Ok(instr_ol)
 }
 
+/// Strips nested iteration premises into the core premise and its iterators.
 fn internalize_iter(mut prem_al: al::Prem) -> (al::Prem, Vec<al::PremIter>) {
     let mut iter_prems = vec![];
     loop {
@@ -208,6 +219,7 @@ fn struct_prem_kind(
     }
 }
 
+/// Nests a premise sequence into instructions ending in `instr_ret`.
 fn struct_prems(
     prems_al: &mut impl Iterator<Item = al::Prem>,
     instr_ret: ol::Instr,
@@ -218,8 +230,9 @@ fn struct_prems(
     }
 }
 
-// - Demoting premise iterators (with bindings) to expression iterators (without bindings)
+// - Demoting premise iterators to expression iterators
 
+/// Converts premise iterators to expression iterators, which cannot bind.
 fn demote_iter_prems(
     iter_prems: Vec<al::PremIter>,
     error_kind: StructureErrorKind,
@@ -240,6 +253,7 @@ fn demote_iter_prems(
 
 // - Rule premise
 
+/// Nests the remaining premises under a rule call.
 fn struct_rule_prem(
     prem_al: al::RulePrem,
     span: &Span,
@@ -261,6 +275,7 @@ fn struct_rule_prem(
 
 // - If premise
 
+/// Nests the remaining premises under a condition.
 fn struct_if_prem(
     prem_al: al::IfPrem,
     span: &Span,
@@ -279,6 +294,7 @@ fn struct_if_prem(
 
 // - If-hold premise
 
+/// Nests the remaining premises in the holding branch of a hold.
 fn struct_if_hold_prem(
     prem_al: al::IfHoldPrem,
     span: &Span,
@@ -298,6 +314,7 @@ fn struct_if_hold_prem(
 
 // - If-not-hold premise
 
+/// Nests the remaining premises in the non-holding branch of a hold.
 fn struct_if_not_hold_prem(
     prem_al: al::IfNotHoldPrem,
     span: &Span,
@@ -317,6 +334,7 @@ fn struct_if_not_hold_prem(
 
 // - Let premise
 
+/// Nests the remaining premises under a let binding.
 fn struct_let_prem(
     prem_al: al::LetPrem,
     iter_instrs: Vec<al::PremIter>,
@@ -333,6 +351,7 @@ fn struct_let_prem(
 
 // - Debug premise
 
+/// Wraps the remaining premises in a debug instruction.
 fn struct_debug_prem(
     prem_al: al::DebugPrem,
     prems_tail: &mut impl Iterator<Item = al::Prem>,
@@ -350,11 +369,13 @@ fn struct_debug_prem(
 
 // - Rule path
 
+/// Structures one rule's premises into a block ending in its result.
 fn struct_rule_path(
     rel_signature: &ol::RelSignature,
     rule_path: al::RulePath,
 ) -> Result<ol::Block, StructureError> {
     let al::RulePath { prems, exps_output, .. } = rule_path;
+    // Locate the result at the outputs, else the premises, else the signature
     let span = if exps_output.is_empty() {
         if prems.is_empty() {
             rel_signature.not_typ.span.clone()
@@ -383,18 +404,21 @@ fn struct_rule_path(
 
 // - Rule group
 
+/// Structures a rule group: shared premises, then a group of merged rule paths.
 fn struct_rule_group(
     rel_signature: &ol::RelSignature,
     mut prems_unified: Vec<al::Prem>,
     rule_group: al::RuleGroup,
 ) -> Result<ol::Block, StructureError> {
     let al::RuleGroupKind { id, rule_match, rule_paths } = rule_group.node;
+    // Anti-unification premises precede the group's own match premises
     let al::RuleMatch { exps_signature, prems, .. } = rule_match;
     prems_unified.extend(prems);
     let blocks = rule_paths
         .into_iter()
         .map(|rule_path| struct_rule_path(rel_signature, rule_path))
         .collect::<Result<_, _>>()?;
+    // Paths sharing a prefix are merged into one block
     let block = opt::merge::merge_blocks(blocks);
     let span = id.span.clone();
     let instr_ol =
@@ -409,6 +433,7 @@ fn struct_rule_group(
 
 // - Else group
 
+/// Structures the otherwise group like a rule group with a single path.
 fn struct_else_group(
     rel_signature: &ol::RelSignature,
     mut prems_unified: Vec<al::Prem>,
@@ -433,6 +458,7 @@ fn struct_else_group(
 
 // - Clause path
 
+/// Structures a clause's premises into a block ending in its return.
 fn struct_clause_path((prems, exp): (Vec<al::Prem>, al::Exp)) -> Result<ol::Block, StructureError> {
     let span = exp.span.clone();
     let instr_ol = ol::ReturnInstr { exp };
@@ -448,6 +474,7 @@ fn struct_clause_path((prems, exp): (Vec<al::Prem>, al::Exp)) -> Result<ol::Bloc
 
 // - Table row clause
 
+/// Splits a table row into its signature patterns and an argument clause.
 fn struct_table_row_clause(table_row_al: al::TableRow) -> (Vec<al::Exp>, al::Clause) {
     let al::TableRowKind { exps_signature, args, exp, prems } = table_row_al.node;
     let clause_kind = al::ClauseKind { args, exp, prems };
@@ -521,6 +548,7 @@ fn struct_rel_def(
 
 // - Fresh relation inputs
 
+/// Picks fresh input variables from the notation type by the input hint.
 fn struct_rel_exps_input(
     ctx: &Context,
     not_typ: &al::NotTyp,
@@ -545,6 +573,7 @@ fn struct_rel_exps_input(
 
 // - External relation definition
 
+/// Structures an extern relation with fresh inputs and no block.
 fn struct_extern_rel_def(
     ctx: &Context,
     def_rel_al: al::ExternRel,
@@ -559,6 +588,7 @@ fn struct_extern_rel_def(
 
 // - Defined relation definition
 
+/// Structures a defined relation through the whole pipeline.
 fn struct_defined_rel_def(
     ctx: &Context,
     def_rel_al: al::DefinedRel,
@@ -571,6 +601,7 @@ fn struct_defined_rel_def(
         let error_kind = StructureErrorKind::Input(error);
         StructureError::new(error_kind, span.clone())
     })?;
+    // Anti-unify the rule matches into one input template
     let exps_match_by_rule_group = rule_groups
         .iter()
         .map(|rule_group| rule_group.node.rule_match.exps_input.clone())
@@ -579,12 +610,14 @@ fn struct_defined_rel_def(
         .as_ref()
         .map(|else_group| else_group.node.rule_match.exps_input.as_slice());
     let (exps_template, prems_by_rule_group, prems_else) =
+        // A relation without rules still needs input variables
         if rule_groups.is_empty() && else_group.is_none() {
             let exps_input = struct_rel_exps_input(ctx, &not_typ, &input_hint, span)?;
             (exps_input, vec![], None)
         } else {
             antiunify::antiunify_rule_matches(frees, &exps_match_by_rule_group, exps_match_else)?
         };
+    // Merge the rule group blocks; the otherwise group stays separate
     let rel_signature = sl::RelSignature { not_typ, input_hint };
     let blocks = prems_by_rule_group
         .into_iter()
@@ -599,6 +632,7 @@ fn struct_defined_rel_def(
         }
         _ => None,
     };
+    // Optimize and totalize both blocks
     let block = opt::optimize(&ctx.tdenv, block, without_rule_groups)?;
     let block_else = block_else
         .map(|block_else| opt::optimize(&ctx.tdenv, block_else, without_rule_groups))
@@ -607,6 +641,7 @@ fn struct_defined_rel_def(
     let block_else = block_else
         .map(|block_else| totalize::totalize(&ctx.tdenv, block_else))
         .transpose()?;
+    // Prettify names, then mark fallthrough for SL
     let (exps_input, block, block_else) = pretty::pretty_rel(exps_template, block, block_else)?;
     let (block, block_else) = dangle::instrument(block, block_else)?;
     let def_rel_sl = sl::DefinedRel { id, rel_signature, exps_input, block, block_else, hints };
@@ -662,6 +697,7 @@ fn struct_builtin_dec_def(ctx: &Context, def_func_al: al::BuiltinFunc) -> sl::Bu
 
 // - Table function declaration
 
+/// Structures a table function row by row under one parameter template.
 fn struct_table_dec_def(
     ctx: &Context,
     def_func_al: al::TableFunc,
@@ -690,6 +726,7 @@ fn struct_table_dec_def(
         .into_iter()
         .map(|block_ol| totalize::totalize(&ctx.tdenv, block_ol))
         .collect::<Result<Vec<_>, _>>()?;
+    // Rows lower without fallthrough marks
     let blocks_sl = blocks_ol
         .into_iter()
         .map(dangle::instrument_without_else)
@@ -707,6 +744,7 @@ fn struct_table_dec_def(
 
 // - Function declaration
 
+/// Structures a defined function through the whole pipeline.
 fn struct_func_dec_def(
     ctx: &Context,
     def_func_al: al::DefinedFunc,
@@ -715,7 +753,9 @@ fn struct_func_dec_def(
 ) -> Result<sl::DefinedFunc, StructureError> {
     let al::DefinedFunc { id, tparams, params: params_al, typ, clauses, else_clause, hints } =
         def_func_al;
+    // Anti-unify the clause arguments into one parameter template
     let (args_template, paths, path_else) = antiunify::antiunify_clauses(clauses, else_clause)?;
+    // A function without clauses keeps its declared parameters
     if paths.is_empty() && path_else.is_none() {
         let params_sl = struct_params(ctx, params_al);
         let def_func_sl = sl::DefinedFunc {
@@ -729,12 +769,14 @@ fn struct_func_dec_def(
         };
         return Ok(def_func_sl);
     }
+    // Merge the clause blocks; the otherwise clause stays separate
     let blocks = paths
         .into_iter()
         .map(struct_clause_path)
         .collect::<Result<_, _>>()?;
     let block = opt::merge::merge_blocks(blocks);
     let block_else = path_else.map(struct_clause_path).transpose()?;
+    // Optimize and totalize both blocks
     let block = opt::optimize(&ctx.tdenv, block, without_rule_groups)?;
     let block_else = block_else
         .map(|block_else| opt::optimize(&ctx.tdenv, block_else, without_rule_groups))
@@ -743,6 +785,7 @@ fn struct_func_dec_def(
     let block_else = block_else
         .map(|block_else| totalize::totalize(&ctx.tdenv, block_else))
         .transpose()?;
+    // Prettify names, derive the parameters, then mark fallthrough for SL
     let (args_input, block, block_else) = pretty::pretty_func(args_template, block, block_else)?;
     let params_sl = struct_params_from_args(ctx, params_al, args_input, span)?;
     let (block, block_else) = dangle::instrument(block, block_else)?;
@@ -796,6 +839,7 @@ fn struct_def_kind(
 
 // - Entry point
 
+/// Structures every definition after loading the type environments.
 pub(super) fn r#struct(
     spec_al: al::Spec,
     without_rule_groups: bool,

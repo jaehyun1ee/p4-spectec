@@ -1,4 +1,12 @@
-//! Structure AL definitions into SL through pass-local ordered instructions
+//! Structure AL definitions into SL via the pass-local optimization language
+//!
+//! `convert` turns each AL relation or function into SL blocks.
+//!
+//! Rule and clause premises become nested OL instructions (`transform`),
+//! shared inputs are anti-unified into one signature (`antiunify`),
+//! the blocks are optimized (`opt`), totalized (`totalize`),
+//! and prettified (`pretty`),
+//! and `dangle` marks where SL execution falls through to the next alternative.
 
 mod antiunify;
 mod context;
@@ -21,7 +29,7 @@ mod tests;
 
 // == Entry point
 
-/// Converts algorithmic definitions, removing rule groups when requested
+/// Converts algorithmic definitions, removing rule groups when requested.
 pub fn convert(spec_al: al::Spec, without_rule_groups: bool) -> Result<sl::Spec, StructureError> {
     transform::r#struct(spec_al, without_rule_groups)
 }

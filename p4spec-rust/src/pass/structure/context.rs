@@ -1,4 +1,10 @@
 //! Type and metavariable environments used during structuring
+//!
+//! `Context::load` reads every type and meta-variable definition of the AL
+//! specification once;
+//! structuring then only queries `tdenv` and `menv`,
+//! for example to expand a variant type when totalizing a case analysis
+//! or to pick fresh input names from meta-variable types.
 
 use crate::{
     lang::{
@@ -15,15 +21,19 @@ use crate::{
 
 use super::{StructureError, StructureErrorKind};
 
+/// Type and meta-variable environments of the specification being structured.
 #[derive(Clone, Debug)]
 pub struct Context {
+    /// Type definitions.
     pub(crate) tdenv: TDEnv,
+    /// Meta-variable types.
     pub(crate) menv: MEnv,
 }
 
 impl Context {
     // - Constructor
 
+    /// Creates a context with the primitive meta-variables bound.
     fn init() -> Self {
         let mut menv = MEnv::new();
         for (text_name, typ) in [
@@ -61,6 +71,7 @@ impl Context {
 
     // - Definition loading
 
+    /// Loads a type or meta-variable definition; other definitions add nothing.
     fn load_def(&mut self, def_al: &ast::Def) -> Result<(), StructureError> {
         let def_kind_al = &def_al.node;
         match def_kind_al {
@@ -77,6 +88,7 @@ impl Context {
         }
     }
 
+    /// Registers an extern type and a meta-variable of that type.
     fn load_extern_typ(&mut self, extern_typ_al: &ast::ExternTyp) -> Result<(), StructureError> {
         let id = extern_typ_al.id.clone();
         let typ = typ::make::var(id.clone(), vec![]);
@@ -84,6 +96,7 @@ impl Context {
         self.add_typdef(id, TypeDef::Extern)
     }
 
+    /// Registers a defined type and, if unparameterized, a meta-variable of it.
     fn load_defined_typ(&mut self, defined_typ_al: &ast::DefinedTyp) -> Result<(), StructureError> {
         let id = defined_typ_al.id.clone();
         if defined_typ_al.tparams.is_empty() {
@@ -101,6 +114,7 @@ impl Context {
         self.add_metavar(def_var_al.id.clone(), def_var_al.typ.clone())
     }
 
+    /// Builds the context from every definition of the specification.
     pub fn load(spec_al: &ast::Spec) -> Result<Self, StructureError> {
         let mut ctx = Self::init();
         for def_al in spec_al {
