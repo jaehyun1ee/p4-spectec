@@ -14,6 +14,6 @@ use context::Context;
 use crate::lang::{pl::ast as pl, sl::ast as sl};
 
 /// Converts a rule-group-preserving SL specification to PL
-pub fn prosify(spec_sl: sl::Spec) -> Result<pl::Spec, ProseError> {
+pub fn convert(spec_sl: sl::Spec) -> Result<pl::Spec, ProseError> {
     prosify::prosify(spec_sl)
 }
