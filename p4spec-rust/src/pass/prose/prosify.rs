@@ -1160,7 +1160,6 @@ fn prosify_extern_func_def(
     ctx: &Context,
     def_func_sl: sl::ExternFunc,
 ) -> Result<pl::ExternFunc, ProseError> {
-    ctx.validate_tparams(&def_func_sl.tparams)?;
     let params_pl = prosify_params(ctx, &def_func_sl.params)?;
     Ok(pl::ExternFunc {
         id: def_func_sl.id,
@@ -1176,7 +1175,6 @@ fn prosify_builtin_func_def(
     ctx: &Context,
     def_func_sl: sl::BuiltinFunc,
 ) -> Result<pl::BuiltinFunc, ProseError> {
-    ctx.validate_tparams(&def_func_sl.tparams)?;
     let params_pl = prosify_params(ctx, &def_func_sl.params)?;
     Ok(pl::BuiltinFunc {
         id: def_func_sl.id,
@@ -1208,7 +1206,6 @@ fn prosify_defined_func_def(
     ctx: &mut Context,
     def_func_sl: sl::DefinedFunc,
 ) -> Result<pl::DefinedFunc, ProseError> {
-    ctx.validate_tparams(&def_func_sl.tparams)?;
     ctx.set_namespace(def_func_sl.id.clone());
     let params_pl = prosify_params(ctx, &def_func_sl.params)?;
     let block_pl = prosify_block_group(ctx, def_func_sl.block)?;

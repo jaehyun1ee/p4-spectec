@@ -624,7 +624,7 @@ fn test_fresh_names_are_scoped_independently_across_else_blocks() {
 }
 
 #[test]
-fn test_context_rejects_duplicate_metavariables_and_types_at_the_new_binding() {
+fn test_context_rejects_duplicate_metavariables_at_the_new_binding() {
     let span_metavar = span("duplicate-metavar", 4);
     let def_var = p4spec_rust::phrase! {
         node: sl::DefKind::Var(sl::VarDef {
@@ -637,50 +637,6 @@ fn test_context_rejects_duplicate_metavariables_and_types_at_the_new_binding() {
     let error = prose::convert(vec![def_var]).unwrap_err();
     assert_eq!(error.kind, ProseErrorKind::DuplicateMetavariable);
     assert_eq!(error.span, span_metavar);
-
-    let generic_type = |column: usize| {
-        let span_type = span("duplicate-type", column);
-        p4spec_rust::phrase! {
-            node: sl::DefKind::Typ(sl::TypDef::Defined(Box::new(sl::DefinedTyp {
-                id: p4spec_rust::phrase! {
-                    node: "duplicate".to_owned(),
-                    span: span_type.clone(),
-                },
-                tparams: vec![id("T")],
-                def_typ: p4spec_rust::phrase! {
-                    node: il::ast::DefTypKind::Plain(typ_bool()),
-                    span: span_type.clone(),
-                },
-                hints: Vec::new(),
-            }))),
-            span: span_type,
-        }
-    };
-    let span_second = span("duplicate-type", 8);
-    let error = prose::convert(vec![generic_type(2), generic_type(8)]).unwrap_err();
-    assert_eq!(error.kind, ProseErrorKind::DuplicateType);
-    assert_eq!(error.span, span_second);
-
-    let span_tparam = span("duplicate-tparam", 5);
-    let def_func = p4spec_rust::phrase! {
-        node: sl::DefKind::MetaFunc(sl::MetaFuncDef::Extern(sl::ExternFunc {
-            id: id("generic"),
-            tparams: vec![
-                id("T"),
-                p4spec_rust::phrase! {
-                    node: "T".to_owned(),
-                    span: span_tparam.clone(),
-                },
-            ],
-            params: Vec::new(),
-            typ: typ_bool(),
-            hints: Vec::new(),
-        })),
-        span: span("generic", 0),
-    };
-    let error = prose::convert(vec![def_func]).unwrap_err();
-    assert_eq!(error.kind, ProseErrorKind::DuplicateType);
-    assert_eq!(error.span, span_tparam);
 }
 
 #[test]
