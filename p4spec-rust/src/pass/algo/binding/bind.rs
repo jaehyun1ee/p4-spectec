@@ -1,4 +1,11 @@
 //! Singular and repeated identifier bindings
+//!
+//! `BEnv` records, for each identifier bound by a pattern,
+//! whether it occurs once (`Single`)
+//! or at several parallel positions (`Multiple`),
+//! together with its dimension.
+//! In `let (x, x) = e`, `x` is `Multiple`
+//! and later gets renamed with an equality side condition.
 
 use crate::{
     lang::{
@@ -10,10 +17,12 @@ use crate::{
 
 use super::super::{AlgoError, AlgoErrorKind};
 
-/// One binding occurrence or multiple parallel occurrences
+/// One binding occurrence or multiple parallel occurrences.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Binding {
+    /// The identifier is bound at one position.
     Single(Dim),
+    /// The identifier is bound at several parallel positions.
     Multiple(Dim),
 }
 
@@ -32,7 +41,7 @@ impl Binding {
     }
 }
 
-/// Binding environment keyed by source-insensitive identifier identity
+/// Binding environment keyed by source-insensitive identifier identity.
 #[derive(Clone, Debug)]
 pub struct BEnv(IdMap<Binding>);
 
@@ -41,6 +50,7 @@ impl BEnv {
         Self(IdMap::new())
     }
 
+    /// A single binding of `id` at dimension zero.
     pub fn singleton(id: Id, typ: ast::Typ) -> Self {
         let mut benv = Self::new();
         benv.insert(id, Binding::Single(Dim::new(typ, vec![])));
@@ -59,12 +69,14 @@ impl BEnv {
         self.0.iter()
     }
 
+    /// Drops the single/multiple distinction, keeping each dimension.
     pub fn flatten(&self) -> VEnv {
         self.iter()
             .map(|(id, binding)| (id.clone(), binding.dim().clone()))
             .collect()
     }
 
+    /// Adds one more iteration to every binding.
     pub fn add_iter(self, iter: ast::Iter) -> Self {
         let entries = self
             .iter()
@@ -73,7 +85,7 @@ impl BEnv {
         Self(entries)
     }
 
-    /// Combines parallel bindings
+    /// Combines parallel bindings; an identifier on both sides is `Multiple`.
     pub fn union(mut self, other: Self) -> Result<Self, AlgoError> {
         for (id, binding_r) in other.iter() {
             let binding_l = self
@@ -84,6 +96,7 @@ impl BEnv {
                 self.insert(id.clone(), binding_r.clone());
                 continue;
             };
+            // Both sides must agree on the dimension
             let dim_l = binding_l.dim();
             let dim_r = binding_r.dim();
             if !(dim_l.sub(dim_r) && dim_r.sub(dim_l)) {

@@ -1,4 +1,12 @@
 //! Binding analysis for algorithmic conversion
+//!
+//! `analyze` drives the pass over definitions;
+//! `collect` finds binding occurrences,
+//! `multiple` and `partial` rewrite repeated and partially bound patterns,
+//! `antiunify` merges rule inputs into one template,
+//! `iteration` and `dimension` track iteration scopes,
+//! `pattern` and `shallow` check table rows,
+//! and `context` and `bind` hold the environments.
 
 pub(in crate::pass::algo) mod analyze;
 pub(in crate::pass::algo) mod antiunify;

@@ -1,11 +1,16 @@
 //! Typed failures produced during algorithmic conversion
+//!
+//! An `AlgoError` pairs a stable `AlgoErrorKind`
+//! with the source span it applies to.
+//! Kinds cover binding analysis (invertibility, dimensions, shallowness),
+//! anti-unification, and table pattern checks.
 
 use thiserror::Error;
 
 use crate::lang::{common::source::Span, hints::input::InputError};
 use crate::runtime::ops::typ::{TypeError, TypeErrorKind};
 
-/// Stable semantic category of an algorithmic-conversion failure
+/// Stable semantic category of an algorithmic-conversion failure.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum AlgoErrorKind {
     #[error("type definition is undefined")]
@@ -54,7 +59,7 @@ pub enum AlgoErrorKind {
     MissingTablePatterns,
 }
 
-/// An algorithmic-conversion failure paired with its source span
+/// An algorithmic-conversion failure paired with its source span.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("{kind} at {span}")]
 pub struct AlgoError {

@@ -1,4 +1,10 @@
 //! Iteration state surrounding a binding operation
+//!
+//! `ICtx` is the stack of iterations enclosing the expression under analysis,
+//! innermost first.
+//! Each `Iteration` accumulates the variables it ranges over (`vars_bound`)
+//! and the variables it binds (`vars_bind`);
+//! `iterate_prem` finally wraps a premise in one `IterPrem` per level.
 
 use std::ops::{Deref, DerefMut};
 
@@ -14,17 +20,21 @@ use crate::{
 
 use super::super::{AlgoError, AlgoErrorKind};
 
+/// One enclosing iteration with the variables it ranges over and binds.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Iteration {
     pub iter: ast::Iter,
+    /// Variables bound outside that this iteration ranges over.
     pub vars_bound: Vec<ast::Var>,
+    /// Variables this iteration binds.
     pub vars_bind: Vec<ast::Var>,
 }
 
+/// Enclosing iterations, innermost first.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ICtx(Vec<Iteration>);
 
-/// An iteration scope that rolls back its context changes when dropped
+/// An iteration scope that rolls back its context changes when dropped.
 pub struct IterationScope<'a> {
     iter_ctx: &'a mut ICtx,
     original: Option<ICtx>,
@@ -46,6 +56,7 @@ impl DerefMut for IterationScope<'_> {
 
 impl Drop for IterationScope<'_> {
     fn drop(&mut self) {
+        // Restore the context unless `finish` committed the scope
         if let Some(original) = self.original.take() {
             *self.iter_ctx = original;
         }
@@ -53,6 +64,7 @@ impl Drop for IterationScope<'_> {
 }
 
 impl IterationScope<'_> {
+    /// Commits the scope, removing and returning the innermost iteration.
     pub fn finish(mut self) -> Iteration {
         let iteration = self.iter_ctx.0.remove(0);
         self.original = None;
@@ -81,6 +93,7 @@ impl ICtx {
 
     // == Transactions
 
+    /// Pushes an iteration; the returned scope rolls it back unless finished.
     pub fn scope(&mut self, iteration: Iteration) -> IterationScope<'_> {
         let original = self.clone();
         self.0.insert(0, iteration);
@@ -89,12 +102,14 @@ impl ICtx {
 
     // == Adders
 
+    /// Adds one iteration to every dimension.
     fn add_iter(venv: VEnv, iter: ast::Iter) -> VEnv {
         venv.iter()
             .map(|(id, dim)| (id.clone(), dim.clone().add_iter(iter)))
             .collect()
     }
 
+    /// Registers ranged-over variables at every level, one iteration per level.
     pub fn add_vars_bound(&mut self, mut venv: VEnv) {
         for entry in &mut self.0 {
             entry
@@ -104,6 +119,7 @@ impl ICtx {
                     typ: dim.typ.clone(),
                     iters: dim.iters.clone(),
                 }));
+            // Each outer level sees the variables under one more iteration
             venv = Self::add_iter(venv, entry.iter);
         }
     }
@@ -114,6 +130,7 @@ impl ICtx {
         self.add_vars_bound(venv);
     }
 
+    /// Registers binding variables at every level, iterating once per level.
     pub fn add_vars_bind(&mut self, mut venv: VEnv) {
         for entry in &mut self.0 {
             entry
@@ -129,6 +146,7 @@ impl ICtx {
 
     // == Filtering
 
+    /// Keeps only the ranged-over variables that satisfy the predicate.
     pub fn filter_bound(&mut self, mut predicate: impl FnMut(&ast::Var) -> bool) {
         for entry in &mut self.0 {
             entry.vars_bound.retain(&mut predicate);
@@ -137,9 +155,11 @@ impl ICtx {
 
     // == Validation
 
+    /// Rejects iterations that range over nothing.
     pub fn validate(&self, span: Span) -> Result<(), AlgoError> {
         for entry in &self.0 {
             if entry.vars_bound.is_empty() {
+                // Binding with nothing to range over has no determinable length
                 let kind = if entry.vars_bind.is_empty() {
                     AlgoErrorKind::EmptyIteration
                 } else {
@@ -153,6 +173,7 @@ impl ICtx {
 
     // == Iteration premises
 
+    /// Wraps a premise in one iteration premise per level, innermost first.
     pub fn iterate_prem(&self, mut prem: al::ast::Prem) -> al::ast::Prem {
         for entry in &self.0 {
             let span = prem.span.clone();
