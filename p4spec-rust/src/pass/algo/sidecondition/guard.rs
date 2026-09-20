@@ -1,4 +1,4 @@
-//! Explicit guard insertion for partial algorithmic expressions:
+//! Explicit guard insertion for partial algorithmic expressions
 //!
 //! - `a[n]` requires `n < |a|`
 //! - `e*{x <- x*, y <- y*, z <- z*}` requires
@@ -23,12 +23,14 @@ use crate::{
 
 // - Equivalence classes
 
+/// Which equivalence an `if` premise establishes.
 #[derive(Clone, Copy)]
 enum ClassKind {
     Equals,
     Equiv,
 }
 
+/// Expressions known equal, known equivalent, or a lone condition.
 #[allow(clippy::large_enum_variant)]
 enum Class<'a> {
     Equals(Vec<&'a ast::Exp>),
@@ -55,6 +57,7 @@ impl<'a> Class<'a> {
 
 // - Equivalence table
 
+/// Facts established by earlier premises, used to drop implied guards.
 #[derive(Default)]
 struct EquivalenceTable<'a> {
     classes: Vec<Class<'a>>,
@@ -75,6 +78,7 @@ impl<'a> EquivalenceTable<'a> {
         }
     }
 
+    /// Records equalities, equivalences, conjunction halves, or lone facts.
     fn add_if_exp(&mut self, exp: &'a ast::Exp) {
         match &exp.node {
             ast::ExpKind::Cmp(ast::CmpOp::Bool(prim::bool::CmpOp::Eq), _, exp_l, exp_r) => {
@@ -91,6 +95,7 @@ impl<'a> EquivalenceTable<'a> {
         }
     }
 
+    /// Finds the class containing a condition under the given kind.
     fn find(&self, kind: ClassKind, condition: &ast::Exp) -> Option<usize> {
         self.classes.iter().position(|class| {
             let Some(conditions) = class.conditions(kind) else {
@@ -111,11 +116,13 @@ impl<'a> EquivalenceTable<'a> {
         }
     }
 
+    /// Merges the classes of two conditions, creating or extending as needed.
     fn union(&mut self, kind: ClassKind, condition_l: &'a ast::Exp, condition_r: &'a ast::Exp) {
         let idx_l = self.find(kind, condition_l);
         let idx_r = self.find(kind, condition_r);
         match (idx_l, idx_r) {
             (Some(idx_l), Some(idx_r)) if idx_l == idx_r => {}
+            // Both known: merge the two classes
             (Some(idx_l), Some(idx_r)) => {
                 let idx_high = idx_l.max(idx_r);
                 let idx_low = idx_l.min(idx_r);
@@ -130,6 +137,7 @@ impl<'a> EquivalenceTable<'a> {
                 let class = Class::new(kind, conditions_l);
                 self.classes.insert(0, class);
             }
+            // One known: extend its class
             (Some(index), None) | (None, Some(index)) => {
                 let condition_new = if idx_l.is_some() { condition_r } else { condition_l };
                 let mut conditions = self.take_conditions(kind, index);
@@ -137,6 +145,7 @@ impl<'a> EquivalenceTable<'a> {
                 let class = Class::new(kind, conditions);
                 self.classes.insert(0, class);
             }
+            // Neither known: start a class
             (None, None) => {
                 let conditions = vec![condition_l, condition_r];
                 let class = Class::new(kind, conditions);
@@ -145,6 +154,7 @@ impl<'a> EquivalenceTable<'a> {
         }
     }
 
+    /// Checks whether two conditions are known to be in the same class.
     fn contains(&self, kind: ClassKind, condition_l: &ast::Exp, condition_r: &ast::Exp) -> bool {
         if condition_l.syntax_eq(condition_r) {
             return true;
@@ -160,6 +170,7 @@ impl<'a> EquivalenceTable<'a> {
             .any(|condition| condition.syntax_eq(condition_r))
     }
 
+    /// Checks whether the known facts entail a condition.
     fn implies_exp(&self, exp: &ast::Exp) -> bool {
         match &exp.node {
             ast::ExpKind::Cmp(ast::CmpOp::Bool(prim::bool::CmpOp::Eq), _, exp_l, exp_r) => {
@@ -187,8 +198,11 @@ impl<'a> EquivalenceTable<'a> {
 
 // == Collection result
 
-// Must-premises hold before evaluation; insert-premises guard partial operations
-
+/// Guards collected from one premise.
+///
+/// Must-premises are established by the premise itself
+/// and only filter later guards;
+/// insert-premises are checked before it.
 struct Collected {
     prems_must: Vec<ast::Prem>,
     prems_insert: Vec<ast::Prem>,
@@ -202,6 +216,7 @@ impl Collected {
     }
 }
 
+/// Drops insert-premises implied by or repeated among the known premises.
 fn filter_prems_insert(
     prems_base: &[&[ast::Prem]],
     prems_derived: &[ast::Prem],
@@ -229,6 +244,7 @@ fn filter_prems_insert(
         .collect()
 }
 
+/// Wraps a premise under an iteration over the variables it uses, if any.
 fn iterate_prem(iter: ast::Iter, vars: &[ast::Var], prem_al: ast::Prem) -> Option<ast::Prem> {
     let frees = prem_al.free();
     let vars_bound = vars
@@ -253,6 +269,7 @@ fn iterate_prems(iter: ast::Iter, vars: &[ast::Var], prems_al: Vec<ast::Prem>) -
         .collect()
 }
 
+/// Iterates must- and insert-premises over their respective variables.
 fn iterate_collected(
     iter: ast::Iter,
     vars_must: &[ast::Var],
@@ -267,6 +284,7 @@ fn iterate_collected(
 
 // == Guard generation
 
+/// Builds `if idx < |base|` for an index expression.
 fn gen_index_guard(
     exp_al: &ast::Exp,
     exp_base_al: &ast::Exp,
@@ -293,6 +311,7 @@ fn gen_index_guard(
     vec![prem_guard_al]
 }
 
+/// Builds `x? = eps` for an option variable.
 fn gen_exp_eq_epsilon(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     let mut var = var.clone();
     var.iters.push(iter);
@@ -316,6 +335,7 @@ fn gen_exp_eq_epsilon(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     }
 }
 
+/// Builds `|x*|` for a list variable.
 fn gen_exp_len(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     let mut var = var.clone();
     var.iters.push(iter);
@@ -328,6 +348,7 @@ fn gen_exp_len(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
     }
 }
 
+/// Pairs two guards: `<=>` for options, `=` for lists.
 fn gen_exp_pair(iter: ast::Iter, exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast::Exp {
     let span = Span::over(&[exp_l_al.span.clone(), exp_r_al.span.clone()]);
     let exp_kind = match iter {
@@ -361,8 +382,10 @@ fn gen_exp_and(exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast::Exp {
     }
 }
 
+/// Requires all iterated variables to agree in length or emptiness, pairwise.
 fn gen_iter_guard(exp_iter: &ast::ExpIter) -> Vec<ast::Prem> {
     let ast::ExpIter { iter, vars } = exp_iter;
+    // One variable iterates freely
     if vars.len() < 2 {
         return vec![];
     }
@@ -376,6 +399,7 @@ fn gen_iter_guard(exp_iter: &ast::ExpIter) -> Vec<ast::Prem> {
     let Some(mut exp_prev_al) = exps_al.next() else {
         return vec![];
     };
+    // Chain pairwise: (v1 ~ v2) /\ (v2 ~ v3) and so on
     let mut exp_guard_al = gen_exp_pair(*iter, exp_first_al, exp_prev_al.clone());
     for exp_al in exps_al {
         let exp_pair_al = gen_exp_pair(*iter, exp_prev_al, exp_al.clone());
@@ -392,6 +416,7 @@ fn gen_iter_guard(exp_iter: &ast::ExpIter) -> Vec<ast::Prem> {
 
 // - Expressions
 
+/// Collects the guards an expression needs before evaluation.
 fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
     match &exp_al.node {
         ast::ExpKind::Bool(_)
@@ -422,6 +447,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
         }
         ast::ExpKind::Opt(Some(exp_inner_al)) => collect_exp(exp_inner_al),
         ast::ExpKind::Opt(None) => vec![],
+        // Indexing needs a bounds guard
         ast::ExpKind::Idx(exp_base_al, exp_idx_al) => {
             let mut prems_insert = collect_exp(exp_base_al);
             let prems_idx_insert = collect_exp(exp_idx_al);
@@ -447,6 +473,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
             prems_insert
         }
         ast::ExpKind::Call(_, _, args) => collect_args(args),
+        // Inner guards iterate too, plus the length agreement guard
         ast::ExpKind::Iter(exp_inner_al, exp_iter) => {
             let prems_inner_insert = collect_exp(exp_inner_al);
             let mut prems_insert = iterate_prems(exp_iter.iter, &exp_iter.vars, prems_inner_insert);
@@ -541,19 +568,23 @@ fn collect_if_not_hold_prem(if_prem: &ast::IfNotHoldPrem) -> Collected {
     Collected { prems_must: vec![], prems_insert }
 }
 
+/// The pattern side establishes its guards; the value side needs them checked.
 fn collect_let_prem(let_prem: &ast::LetPrem) -> Collected {
     let prems_must = collect_exp(&let_prem.exp_l);
     let prems_insert = collect_exp(&let_prem.exp_r);
     Collected { prems_must, prems_insert }
 }
 
+/// Collects guards under an iteration premise.
 fn collect_iter_prem(iter_prem: &ast::IterPrem) -> Collected {
     let prem_iter = &iter_prem.prem_iter;
     let mut vars_must = prem_iter.vars_bound.clone();
     vars_must.extend(prem_iter.vars_bind.clone());
 
+    // Musts iterate over all variables, inserts over ranged-over ones only
     let collected = collect_prem(&iter_prem.prem);
     let collected = iterate_collected(prem_iter.iter, &vars_must, &prem_iter.vars_bound, collected);
+    // The iteration itself requires its variables to agree in length
     let collected_guard = Collected {
         prems_must: gen_iter_guard(&ast::ExpIter { iter: prem_iter.iter, vars: vars_must }),
         prems_insert: gen_iter_guard(&ast::ExpIter {
@@ -573,11 +604,15 @@ fn collect_debug_prem(debug_prem: &ast::DebugPrem) -> Collected {
 
 // - Premises
 
+/// Premises produced by inserting guards into one premise list.
 struct InsertedPrems {
+    /// Facts the premises establish, usable to filter later guards.
     derived: Vec<ast::Prem>,
+    /// The premises with their guards inserted before them.
     output: Vec<ast::Prem>,
 }
 
+/// Inserts the guards a premise needs, skipping those already known.
 fn insert_prem(
     prems_base: &[&[ast::Prem]],
     prems_derived: &mut Vec<ast::Prem>,
@@ -587,6 +622,7 @@ fn insert_prem(
     let collected = collect_prem(&prem_al);
     let mut prems_insert =
         filter_prems_insert(prems_base, prems_derived, prems_output, collected.prems_insert);
+    // Guards go before the premise, its own facts after
     prems_insert.push(prem_al);
     prems_derived.extend(collected.prems_must);
     prems_output.extend(prems_insert);
@@ -603,12 +639,15 @@ fn insert_prems(prems_base: &[&[ast::Prem]], prems_al: Vec<ast::Prem>) -> Insert
 
 // - Rule groups
 
+/// Inserts guards into the shared match and then into each rule path.
 fn insert_rule_group(mut rule_group_al: ast::RuleGroup) -> ast::RuleGroup {
+    // Guards of the inputs are assumed, not inserted
     let prems_input = collect_exps(rule_group_al.node.rule_match.exps_input.iter());
     let prems_match_al = std::mem::take(&mut rule_group_al.node.rule_match.prems);
     let prems_match = insert_prems(&[&prems_input], prems_match_al);
     rule_group_al.node.rule_match.prems = prems_match.output;
 
+    // Each path builds on the facts of the shared match
     for rule_path_al in &mut rule_group_al.node.rule_paths {
         let prems_base = [
             prems_input.as_slice(),
@@ -619,6 +658,7 @@ fn insert_rule_group(mut rule_group_al: ast::RuleGroup) -> ast::RuleGroup {
         let prems_path = insert_prems(&prems_base, prems_path_al);
         rule_path_al.prems = prems_path.output;
 
+        // Outputs need guards too, after the path premises
         let prems_output = collect_exps(rule_path_al.exps_output.iter());
         let prems_output = filter_prems_insert(
             &prems_base,
@@ -631,6 +671,7 @@ fn insert_rule_group(mut rule_group_al: ast::RuleGroup) -> ast::RuleGroup {
     rule_group_al
 }
 
+/// Inserts guards into an otherwise group, like a one-path rule group.
 fn insert_else_group(mut else_group_al: ast::ElseGroup) -> ast::ElseGroup {
     let prems_input = collect_exps(else_group_al.node.rule_match.exps_input.iter());
     let prems_match_al = std::mem::take(&mut else_group_al.node.rule_match.prems);
@@ -659,6 +700,7 @@ fn insert_else_group(mut else_group_al: ast::ElseGroup) -> ast::ElseGroup {
 
 // - Clauses
 
+/// Inserts guards into a clause's premises and body.
 fn insert_clause(mut clause_al: ast::Clause) -> ast::Clause {
     let prems_args = collect_args(&clause_al.node.args);
     let prems_clause_al = std::mem::take(&mut clause_al.node.prems);
@@ -694,6 +736,7 @@ fn insert_def(def_al: ast::Def) -> ast::Def {
     phrase!(node: def_kind_al, span: span)
 }
 
+/// Inserts guards into every rule group of a defined relation.
 fn insert_rel_def(rel_def_al: ast::RelDef) -> ast::RelDef {
     let ast::RelDef::Defined(mut defined_rel_al) = rel_def_al else {
         return rel_def_al;
@@ -707,6 +750,7 @@ fn insert_rel_def(rel_def_al: ast::RelDef) -> ast::RelDef {
     ast::RelDef::Defined(defined_rel_al)
 }
 
+/// Inserts guards into every clause of a defined function.
 fn insert_meta_func_def(meta_func_def_al: ast::MetaFuncDef) -> ast::MetaFuncDef {
     let ast::MetaFuncDef::Defined(mut defined_func_al) = meta_func_def_al else {
         return meta_func_def_al;
