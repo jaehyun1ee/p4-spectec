@@ -1,3 +1,0 @@
-dec $bad(bool) : bool
-def $bad(true) = false
-  -- (var x : bool)*

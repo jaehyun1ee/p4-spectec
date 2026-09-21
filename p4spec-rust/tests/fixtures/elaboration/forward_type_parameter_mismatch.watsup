@@ -1,2 +1,0 @@
-syntax box<T>
-syntax box<U> = U
