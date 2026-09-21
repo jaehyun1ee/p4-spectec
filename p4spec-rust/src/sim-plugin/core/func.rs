@@ -1,3 +1,9 @@
+//! Core extern functions `static_assert` and `verify`
+//!
+//! Both read their arguments from the specification's local context
+//! and return specification values:
+//! a boolean, or a parser `RETURN`/`REJECT` result.
+
 use crate::{
     lang::{
         common::source::Span,
@@ -11,8 +17,8 @@ use crate::{
 
 use super::super::spec::{func, unpack};
 
-/// Evaluates a boolean expression at compilation time and stops compilation
-/// with the supplied message when the expression is false
+/// Evaluates a boolean expression at compilation time
+/// and stops compilation with the supplied message when it is false.
 ///
 /// The boolean result can initialize a global constant, for example:
 /// ```text
@@ -36,6 +42,7 @@ where
     Ext: Extern,
     Interp: Interpreter<Iface, Ext>,
 {
+    // Arguments are bound as local variables of the call
     let value_check = func::find_var_value_t_local(ctx, value_ctx, "check")?;
     let value_message = if has_message {
         Some(func::find_var_value_t_local(ctx, value_ctx, "message")?)
@@ -43,9 +50,11 @@ where
         None
     };
     let check = unpack::p4_bool(ctx.arena(), &value_check).map_err(Interp::Error::from)?;
+    // A passing assertion evaluates to its check
     if check {
         return Ok(value_check);
     }
+    // The default message when the one-argument overload is used
     let message = match value_message {
         Some(value) => unpack::p4_string(ctx.arena(), &value).map_err(Interp::Error::from)?,
         None => "static_assert failed".to_owned(),
@@ -53,7 +62,7 @@ where
     Err(crate::runner::ExternError::Failure(message).into())
 }
 
-/// Checks a predicate in the parser, leaving execution unchanged when true
+/// Checks a predicate in the parser, leaving execution unchanged when true.
 ///
 /// A false predicate sets the parser error to `toSignal` and transitions to
 /// the `reject` state:
@@ -70,9 +79,11 @@ where
     Ext: Extern,
     Interp: Interpreter<Iface, Ext>,
 {
+    // Arguments are bound as local variables of the call
     let value_check = func::find_var_e_local(ctx, value_ctx, "check")?;
     let value_signal = func::find_var_e_local(ctx, value_ctx, "toSignal")?;
     let check = unpack::p4_bool(ctx.arena(), &value_check)?;
+    // True: return nothing; false: reject with the given error
     let value_call_result = if check {
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),

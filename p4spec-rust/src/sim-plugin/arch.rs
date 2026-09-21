@@ -1,4 +1,10 @@
 //! Architecture operations used by native STF execution
+//!
+//! An `Architecture` is an extern that also knows how to set up
+//! and drive its pipeline
+//! and how to apply the STF control-plane statements.
+//! Operations an architecture lacks default to a "not implemented" failure.
+//! The impls at the bottom delegate to each architecture's `pipe` module.
 
 use super::{io::Rx, state::SimState};
 use crate::{
@@ -8,11 +14,15 @@ use crate::{
 };
 use num_bigint::BigInt;
 
+/// What the STF runner needs from an architecture.
 pub trait Architecture: Extern {
+    /// The name used on the command line and in failure messages.
     const NAME: &'static str;
 
+    /// Rewrites an STF statement into the form this architecture executes.
     fn transform_stf_stmt(stmt: Statement) -> Statement;
 
+    /// Initializes the pipeline for a parsed program.
     fn init_pipe<Interp, Iface>(
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         program: Value,
@@ -21,6 +31,7 @@ pub trait Architecture: Extern {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
 
+    /// Pushes one packet through the pipeline, collecting outputs in the state.
     fn drive_pipe<Interp, Iface>(
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         state: &mut SimState,
@@ -30,6 +41,7 @@ pub trait Architecture: Extern {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
 
+    /// `mirroring_add`: maps a session to a port.
     fn add_mirror_session<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -47,6 +59,7 @@ pub trait Architecture: Extern {
         .into())
     }
 
+    /// `mirroring_add_mc`: maps a session to a multicast group.
     fn add_mirror_session_mc<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -64,6 +77,7 @@ pub trait Architecture: Extern {
         .into())
     }
 
+    /// `mc_mgrp_create`: creates a multicast group.
     fn mc_mgrp_create<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -80,6 +94,7 @@ pub trait Architecture: Extern {
         .into())
     }
 
+    /// `mc_node_create`: creates a replication node over ports.
     fn mc_node_create<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -97,6 +112,7 @@ pub trait Architecture: Extern {
         .into())
     }
 
+    /// `mc_node_associate`: adds a node to a group.
     fn mc_node_associate<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -114,6 +130,7 @@ pub trait Architecture: Extern {
         .into())
     }
 
+    /// `register_read`: reads a register cell.
     fn register_read<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -131,6 +148,7 @@ pub trait Architecture: Extern {
         .into())
     }
 
+    /// `register_write`: writes a register cell.
     fn register_write<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -149,6 +167,7 @@ pub trait Architecture: Extern {
         .into())
     }
 
+    /// `register_reset`: clears a register.
     fn register_reset<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _value_arch: Value,
@@ -166,6 +185,7 @@ pub trait Architecture: Extern {
     }
 }
 
+/// Implements the pipeline methods by forwarding to a `pipe` module.
 macro_rules! delegate_pipe {
     ($pipe:path) => {
         fn transform_stf_stmt(stmt: Statement) -> Statement {
@@ -200,6 +220,7 @@ macro_rules! delegate_pipe {
     };
 }
 
+/// Implements one control-plane method by forwarding to a `pipe` module.
 macro_rules! delegate_method {
     ($pipe:path, $name:ident $(, $arg:ident: $typ:ty)*) => {
         fn $name<Interp, Iface>(
@@ -217,12 +238,14 @@ macro_rules! delegate_method {
     };
 }
 
+// eBPF has no control plane beyond tables
 impl Architecture for super::ebpf::Ebpf {
     const NAME: &'static str = "ebpf";
 
     delegate_pipe!(super::ebpf::pipe);
 }
 
+// PSA has multicast and registers but no port mirroring
 impl Architecture for super::psa::Psa {
     const NAME: &'static str = "psa";
 
@@ -237,6 +260,7 @@ impl Architecture for super::psa::Psa {
     delegate_method!(super::psa::pipe, register_reset, name: &str);
 }
 
+// v1model supports every operation
 impl Architecture for super::v1model::V1Model {
     const NAME: &'static str = "v1model";
 

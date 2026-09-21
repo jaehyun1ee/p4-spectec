@@ -1,3 +1,8 @@
+//! Extern arguments by name
+//!
+//! The specification passes parameter names and argument values as two lists;
+//! `assoc` zips them and `find` looks one up.
+
 use crate::{
     lang::data::value::{Value, ValueArena, ValueError, get},
     runner::ExternError,
@@ -5,16 +10,19 @@ use crate::{
 
 // == Arguments
 
+/// Pairs parameter names with argument values; the counts must match.
 pub fn assoc(
     arena: &ValueArena,
     value_ids: Value,
     value_args: Value,
 ) -> Result<Vec<(String, Value)>, ExternError> {
+    // Names are texts, arguments any values
     let names = get::list(arena, &value_ids)?
         .iter()
         .map(|value_id| get::text(arena, value_id).map(str::to_owned))
         .collect::<Result<Vec<_>, _>>()?;
     let values = get::list(arena, &value_args)?;
+    // One value per name
     if names.len() != values.len() {
         return Err(
             ValueError::ExpectedCount { expected: names.len(), actual: values.len() }.into()
@@ -23,7 +31,7 @@ pub fn assoc(
     Ok(names.into_iter().zip(values.iter().copied()).collect())
 }
 
-/// Finds the first argument with the requested name
+/// Finds the first argument with the requested name.
 pub fn find(args: &[(String, Value)], name: &str) -> Result<Value, ExternError> {
     args.iter()
         .find(|(name_arg, _)| name_arg == name)

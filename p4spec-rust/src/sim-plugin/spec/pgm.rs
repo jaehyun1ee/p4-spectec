@@ -1,4 +1,7 @@
 //! Helpers for invoking relations taking a program in the spec
+//!
+//! Each architecture's `_init` relation takes the parsed program
+//! and returns the initial context and architecture values.
 
 use crate::{
     lang::data::value::{Value, get},
@@ -7,6 +10,7 @@ use crate::{
 
 // == eBPF
 
+/// Runs `EBPF_init` on a program.
 pub fn ebpf_init<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     program: Value,
@@ -23,6 +27,7 @@ where
 
 // == PSA
 
+/// Runs `PSA_init` on a program.
 pub fn psa_init<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     program: Value,
@@ -39,6 +44,7 @@ where
 
 // == v1model
 
+/// Runs `V1Model_init` on a program.
 pub fn v1model_init<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     program: Value,

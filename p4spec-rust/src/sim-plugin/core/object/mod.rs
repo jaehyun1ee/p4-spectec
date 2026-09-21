@@ -1,3 +1,9 @@
+//! Core extern objects, packets and their bit helpers
+//!
+//! `PacketIn` is the parser's input cursor,
+//! `PacketOut` the deparser's output buffer;
+//! `bits` converts between hex text, bit vectors, and integers.
+
 pub mod bits;
 pub mod packet;
 pub mod packet_in;
