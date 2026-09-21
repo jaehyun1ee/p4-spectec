@@ -6,6 +6,9 @@
 //! a let over a case notation with a `prose_fields` hint (`Destruct`),
 //! and a let followed by an `is Some` check that binds the content
 //! (`OptionGet`).
+//!
+//! For example, `let t = e; if t is Some { let ?(x) = t; B }` folds to the
+//! single `OptionGet` step `let x = !e { B }`.
 
 use std::collections::VecDeque;
 
