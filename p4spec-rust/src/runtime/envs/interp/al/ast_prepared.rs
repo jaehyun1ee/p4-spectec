@@ -1,4 +1,8 @@
 //! Slot instantiation of shared AL syntax
+//!
+//! The `Prepare` impls rebuild each node with slots in place of names,
+//! reserving slots in the callable's `FrameLayout` as they go.
+//! Extern and builtin definitions have no body and pass through unchanged.
 
 use crate::interp::shared::prepare::Prepare;
 pub use crate::interp::shared::prepare::ast::*;

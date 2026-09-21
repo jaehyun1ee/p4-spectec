@@ -1,9 +1,11 @@
 //! Static assembly of the specification execution components
 //!
 //! `Runner<Interp, Iface, Ext>` owns the arena, specification, interpreter,
-//! builtin interface, and extern implementation. The interpreter owns its
-//! configuration and cache. Each evaluation borrows these components through
-//! a context that also supports extern-to-interpreter reentry.
+//! builtin interface, and extern implementation.
+//! The interpreter owns its configuration and cache.
+//! Each evaluation borrows these components through a `RunnerContext`,
+//! which an extern can use to reenter the interpreter.
+//! `build_al` and `build_sl` assemble a runner from a specification.
 
 mod context;
 mod externs;
@@ -31,15 +33,22 @@ pub use interpreter::Interpreter;
 
 // == Runner construction
 
+/// A specification in either executable language.
 pub enum Spec {
+    /// An AL specification.
     Al(al::ast::Spec),
+    /// An SL specification.
     Sl(sl::ast::Spec),
 }
 
+/// Interpreter options, the same for both languages.
 #[derive(Clone, Copy)]
 pub struct Config {
+    /// Memoize pure calls.
     cache: bool,
+    /// Check determinism of candidate selection.
     det: bool,
+    /// Type-check arguments and results at call boundaries.
     guard: bool,
 }
 
@@ -49,33 +58,41 @@ impl Config {
     }
 }
 
+/// A failure while building a runner.
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
+    /// Loading the specification into the interpreter failed.
     #[error(transparent)]
     Interp(#[from] InterpError),
 }
 
+/// Builds an AL runner from a specification, with the P4 builtins.
 pub fn build_al<Ext: Extern>(
     spec: al::ast::Spec,
     config: Config,
     external: Ext,
 ) -> Result<Runner<AlInterp, BuiltinInterface, Ext>, BuildError> {
     let spec = Spec::Al(spec);
+    // Builtins are chosen from the specification before it is consumed
     let interface = builtin::p4(&spec);
     let Spec::Al(spec) = spec else { unreachable!() };
+    // Load and prepare the definitions
     let global = AlGlobal::load(spec)?;
     let config = AlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(global, AlInterp::new(config), interface, external))
 }
 
+/// Builds an SL runner from a specification, with the P4 builtins.
 pub fn build_sl<Ext: Extern>(
     spec: sl::ast::Spec,
     config: Config,
     external: Ext,
 ) -> Result<Runner<SlInterp, BuiltinInterface, Ext>, BuildError> {
     let spec = Spec::Sl(spec);
+    // Builtins are chosen from the specification before it is consumed
     let interface = builtin::p4(&spec);
     let Spec::Sl(spec) = spec else { unreachable!() };
+    // Load and prepare the definitions
     let global = SlGlobal::load(spec)?;
     let config = SlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(global, SlInterp::new(config), interface, external))
@@ -83,7 +100,7 @@ pub fn build_sl<Ext: Extern>(
 
 // == Runner assembly
 
-/// An interpreter and its host components sharing one value arena
+/// An interpreter and its host components sharing one value arena.
 pub struct Runner<Interp, Iface, Ext>
 where
     Interp: Interpreter<Iface, Ext>,
@@ -103,11 +120,12 @@ where
     Iface: Interface,
     Ext: Extern,
 {
+    /// Assembles the components around a fresh arena.
     pub fn new(spec: Interp::Spec, interp: Interp, interface: Iface, external: Ext) -> Self {
         Self { arena: ValueArena::new(), spec, interp, interface, external }
     }
 
-    /// Borrows the assembled components for a stage-specific evaluation entry
+    /// Borrows the assembled components for a stage-specific evaluation entry.
     pub fn context(&mut self) -> RunnerContext<'_, Interp, Iface, Ext> {
         RunnerContext::new(
             &mut self.arena,
@@ -128,6 +146,7 @@ where
 
     // - Evaluation
 
+    /// Runs the program entry through a fresh context.
     pub fn eval_program(
         &mut self,
         name: &str,
@@ -139,10 +158,11 @@ where
 
     // - Lifecycle
 
-    /// Starts an independent program while retaining definitions and configuration
+    /// Starts an independent program, keeping definitions and configuration.
     ///
-    /// All previously returned arena handles become invalid. Call this before
-    /// parsing the next program, after discarding the preceding program's values
+    /// All previously returned arena handles become invalid.
+    /// Call this before parsing the next program,
+    /// after discarding the preceding program's values.
     pub fn reset(&mut self) {
         self.interp.reset();
         self.external.clear();
