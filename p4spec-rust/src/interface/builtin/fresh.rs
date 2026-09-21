@@ -1,4 +1,7 @@
-//! Stateful fresh-type-id builtin.
+//! Stateful fresh-type-id builtin
+//!
+//! A process-wide counter names fresh types `FRESH__0`, `FRESH__1`, ...;
+//! `init` restarts it for each program so runs are reproducible.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -10,14 +13,15 @@ use crate::{
 
 use super::{BuiltinError, extract};
 
+/// Next fresh index.
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// Restarts the counter.
 pub fn init() {
     COUNTER.store(0, Ordering::Relaxed);
 }
 
-// dec $fresh_typeId() : typeId
-
+/// `dec $fresh_typeId() : typeId`, the next `FRESH__n` name.
 pub fn fresh_type_id(
     arena: &mut ValueArena,
     targs: &[Typ],

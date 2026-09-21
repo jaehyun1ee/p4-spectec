@@ -1,7 +1,9 @@
-//! Runtime implementations of the standard SpecTec builtins.
+//! Runtime implementations of the standard SpecTec builtins
 //!
-//! The dispatcher validates arity, then each family decodes its arguments and
-//! computes one result. For example, `$sum_int([2, 5])` returns the value `7`.
+//! The dispatcher validates arity,
+//! then each family decodes its arguments and computes one result.
+//! For example, `$sum_int([2, 5])` returns the value `7`.
+//! Every builtin has the signature `fn(&mut ValueArena, &[Typ], &[Value])`.
 
 pub mod call;
 pub mod error;
