@@ -1,3 +1,8 @@
+//! The `counter` extern with indexed packet and byte counters
+//!
+//! An array of `size` counters, each counting packets, bytes, or both;
+//! an out-of-range index leaves every counter unchanged.
+
 use crate::sim_plugin::{
     core::object::PacketIn,
     spec::{args, func, unpack},
@@ -17,28 +22,23 @@ use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Counter array by `CounterType`.
 pub enum Counter {
+    /// Packet counts.
     Packets(Vec<BigInt>),
+    /// Byte counts.
     Bytes(Vec<BigInt>),
+    /// Packet and byte counts.
     PacketsAndBytes(Vec<(BigInt, BigInt)>),
 }
 
 impl Counter {
-    /// A counter object is created by calling its constructor.  This
-    /// creates an array of counter states, with the number of counter
-    /// states specified by the size parameter.  The array indices are
-    /// in the range [0, size-1].
+    /// Creates `size` zeroed counters of the requested `CounterType`.
     ///
-    /// You must provide a choice of whether to maintain only a packet
-    /// count (CounterType.packets), only a byte count
-    /// (CounterType.bytes), or both (CounterType.packets_and_bytes).
-    ///
-    /// Counters can be updated from your P4 program, but can only be
-    /// read from the control plane.  If you need something that can be
-    /// both read and written from the P4 program, consider using a
-    /// register.
-    ///
+    /// Counters are updated by the program and read by the control plane:
+    /// ```text
     /// counter(bit<32> size, CounterType type);
+    /// ```
     pub fn init(
         arena: &ValueArena,
         _value_targs: Value,
@@ -50,6 +50,7 @@ impl Counter {
         let value_type = args::find(&args, "type")?;
         let size = usize::try_from(&unpack::p4_fixed_bit(arena, &value_size)?.1)?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
+        // The type argument selects what is counted
         match (id_enum.as_str(), id_type.as_str()) {
             ("CounterType", "packets") => Ok(Self::Packets(vec![BigInt::zero(); size])),
             ("CounterType", "bytes") => Ok(Self::Bytes(vec![BigInt::zero(); size])),
@@ -62,18 +63,12 @@ impl Counter {
         }
     }
 
-    /// count() causes the counter state with the specified index to be
-    ///  read, modified, and written back, atomically relative to the
-    ///  processing of other packets, updating the packet count, byte
-    ///  count, or both, depending upon the CounterType of the counter
-    ///  instance used when it was constructed.
+    /// Adds one packet, the packet's bytes, or both to the counter at `index`.
     ///
-    ///  @param index The index of the counter state in the array to be
-    ///               updated, normally a value in the range [0,
-    ///               size-1].  If index >= size, no counter state will be
-    ///               updated.
-    ///
+    /// `index >= size` updates nothing:
+    /// ```text
     /// void count(in bit<32> index);
+    /// ```
     pub fn count<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
@@ -89,6 +84,7 @@ impl Counter {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
         let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
             .map_err(ExternError::from)?;
+        // An out-of-range index leaves the array untouched
         match &mut self {
             Self::Packets(counts) => {
                 if let Some(count) = counts.get_mut(idx) {
@@ -107,6 +103,7 @@ impl Counter {
                 }
             }
         }
+        // Return without a value
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
