@@ -88,26 +88,26 @@ impl LiftedCall {
 
 /// Lifts the leftmost eligible call from an expression.
 fn lift_exp(
+    ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
     exp_target_sl: &mut sl::Exp,
     root_call_policy: RootCallPolicy,
-    ids_iter_local: &IdSet,
-    ids_used: &mut IdSet,
 ) -> Option<LiftedCall> {
     // Try the expression root when the owning instruction permits it
     if root_call_policy == RootCallPolicy::Lift
-        && let Some(call_lifted) = lift_root_call(exp_target_sl, ids_iter_local, ids_used)
+        && let Some(call_lifted) = lift_root_call(ids_used, ids_iter_local, exp_target_sl)
     {
         return Some(call_lifted);
     }
     // Continue into children in source order
-    lift_exp_kind(&mut exp_target_sl.node, root_call_policy, ids_iter_local, ids_used)
+    lift_exp_kind(ids_used, ids_iter_local, &mut exp_target_sl.node, root_call_policy)
 }
 
 fn lift_exp_kind(
+    ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
     exp_kind_sl: &mut sl::ExpKind,
     root_call_policy: RootCallPolicy,
-    ids_iter_local: &IdSet,
-    ids_used: &mut IdSet,
 ) -> Option<LiftedCall> {
     match exp_kind_sl {
         il_ast::ExpKind::Bool(_)
@@ -121,7 +121,7 @@ fn lift_exp_kind(
         | il_ast::ExpKind::Match(exp_inner_sl, _)
         | il_ast::ExpKind::Len(exp_inner_sl)
         | il_ast::ExpKind::Dot(exp_inner_sl, _) => {
-            lift_exp(exp_inner_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)
+            lift_exp(ids_used, ids_iter_local, exp_inner_sl, RootCallPolicy::Lift)
         }
         il_ast::ExpKind::Bin(_, _, exp_l_sl, exp_r_sl)
         | il_ast::ExpKind::Cmp(_, _, exp_l_sl, exp_r_sl)
@@ -129,26 +129,26 @@ fn lift_exp_kind(
         | il_ast::ExpKind::Cat(exp_l_sl, exp_r_sl)
         | il_ast::ExpKind::Mem(exp_l_sl, exp_r_sl)
         | il_ast::ExpKind::Idx(exp_l_sl, exp_r_sl) => {
-            lift_binary_exp(exp_l_sl, exp_r_sl, ids_iter_local, ids_used)
+            lift_binary_exp(ids_used, ids_iter_local, exp_l_sl, exp_r_sl)
         }
         il_ast::ExpKind::Tuple(exps_sl) | il_ast::ExpKind::List(exps_sl) => {
-            lift_exps(exps_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)
+            lift_exps(ids_used, ids_iter_local, exps_sl, RootCallPolicy::Lift)
         }
-        il_ast::ExpKind::Case(not_exp_sl) => lift_case_exp(not_exp_sl, ids_iter_local, ids_used),
-        il_ast::ExpKind::Str(fields_sl) => lift_fields(fields_sl, ids_iter_local, ids_used),
+        il_ast::ExpKind::Case(not_exp_sl) => lift_case_exp(ids_used, ids_iter_local, not_exp_sl),
+        il_ast::ExpKind::Str(fields_sl) => lift_struct_exp(ids_used, ids_iter_local, fields_sl),
         il_ast::ExpKind::Opt(Some(exp_sl)) => {
-            lift_exp(exp_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)
+            lift_exp(ids_used, ids_iter_local, exp_sl, RootCallPolicy::Lift)
         }
         il_ast::ExpKind::Opt(None) => None,
         il_ast::ExpKind::Slice(exp_base_sl, exp_idx_sl, exp_len_sl) => {
-            lift_slice_exp(exp_base_sl, exp_idx_sl, exp_len_sl, ids_iter_local, ids_used)
+            lift_slice_exp(ids_used, ids_iter_local, exp_base_sl, exp_idx_sl, exp_len_sl)
         }
         il_ast::ExpKind::Upd(exp_base_sl, path_sl, exp_field_sl) => {
-            lift_update_exp(exp_base_sl, path_sl, exp_field_sl, ids_iter_local, ids_used)
+            lift_update_exp(ids_used, ids_iter_local, exp_base_sl, path_sl, exp_field_sl)
         }
-        il_ast::ExpKind::Call(_, _, args_sl) => lift_args(args_sl, ids_iter_local, ids_used),
+        il_ast::ExpKind::Call(_, _, args_sl) => lift_call_exp(ids_used, ids_iter_local, args_sl),
         il_ast::ExpKind::Iter(exp_inner_sl, iter_exp_sl) => {
-            lift_iter_exp(exp_inner_sl, iter_exp_sl, root_call_policy, ids_iter_local, ids_used)
+            lift_iter_exp(ids_used, ids_iter_local, exp_inner_sl, iter_exp_sl, root_call_policy)
         }
     }
 }
@@ -157,9 +157,9 @@ fn lift_exp_kind(
 
 /// Lifts a call at the expression root when its arguments cross no local iteration.
 fn lift_root_call(
-    exp_target_sl: &mut sl::Exp,
-    ids_iter_local: &IdSet,
     ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
+    exp_target_sl: &mut sl::Exp,
 ) -> Option<LiftedCall> {
     // Reject non-calls and calls that cannot cross a local iteration
     let il_ast::ExpKind::Call(_, _, args_sl) = &exp_target_sl.node else {
@@ -205,19 +205,19 @@ fn args_reference_local(ids_iter_local: &IdSet, args_sl: &[sl::Arg]) -> bool {
 // - Binary expression
 
 fn lift_binary_exp(
+    ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
     exp_l_sl: &mut sl::Exp,
     exp_r_sl: &mut sl::Exp,
-    ids_iter_local: &IdSet,
-    ids_used: &mut IdSet,
 ) -> Option<LiftedCall> {
     // Search the left operand first
-    if let Some(call_lifted) = lift_exp(exp_l_sl, RootCallPolicy::Lift, ids_iter_local, ids_used) {
+    if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_l_sl, RootCallPolicy::Lift) {
         let vars_outer = exp_r_sl.free_vars();
         return Some(call_lifted.with_outer_vars(vars_outer));
     }
 
     // Keep left-operand variables when lifting from the right
-    let call_lifted = lift_exp(exp_r_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)?;
+    let call_lifted = lift_exp(ids_used, ids_iter_local, exp_r_sl, RootCallPolicy::Lift)?;
     let vars_outer = exp_l_sl.free_vars();
     Some(call_lifted.with_outer_vars(vars_outer))
 }
@@ -225,12 +225,12 @@ fn lift_binary_exp(
 // - Case expression
 
 fn lift_case_exp(
-    not_exp_sl: &mut sl::NotExp,
-    ids_iter_local: &IdSet,
     ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
+    not_exp_sl: &mut sl::NotExp,
 ) -> Option<LiftedCall> {
     let mut exps_sl = not_exp_sl.args().into_iter().cloned().collect::<Vec<_>>();
-    let call_lifted = lift_exps(&mut exps_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)?;
+    let call_lifted = lift_exps(ids_used, ids_iter_local, &mut exps_sl, RootCallPolicy::Lift)?;
     replace_not_exp_args(not_exp_sl, exps_sl);
     Some(call_lifted)
 }
@@ -240,17 +240,45 @@ fn replace_not_exp_args(not_exp_sl: &mut sl::NotExp, exps_sl: Vec<sl::Exp>) {
     *not_exp_sl = not_exp_sl.map(|_| exps_sl.next().expect("lifting preserves notation arity"));
 }
 
+// - Struct expression
+
+fn lift_struct_exp(
+    ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
+    fields_sl: &mut [il_ast::ExpField],
+) -> Option<LiftedCall> {
+    // Search field values in source order
+    for idx in 0..fields_sl.len() {
+        let (fields_before_sl, fields_rest_sl) = fields_sl.split_at_mut(idx);
+        let ((_, exp_sl), fields_after_sl) = fields_rest_sl
+            .split_first_mut()
+            .expect("the index comes from the field slice");
+        let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_sl, RootCallPolicy::Lift)
+        else {
+            continue;
+        };
+
+        // Preserve free variables from untouched fields
+        let mut vars_outer = Vec::new();
+        for (_, exp_other_sl) in fields_before_sl.iter().chain(fields_after_sl.iter()) {
+            exp_other_sl.free_vars_into(&mut vars_outer);
+        }
+        return Some(call_lifted.with_outer_vars(vars_outer));
+    }
+    None
+}
+
 // - Slice expression
 
 fn lift_slice_exp(
+    ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
     exp_base_sl: &mut sl::Exp,
     exp_idx_sl: &mut sl::Exp,
     exp_len_sl: &mut sl::Exp,
-    ids_iter_local: &IdSet,
-    ids_used: &mut IdSet,
 ) -> Option<LiftedCall> {
     // Search the base before slice operands
-    if let Some(call_lifted) = lift_exp(exp_base_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)
+    if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_base_sl, RootCallPolicy::Lift)
     {
         let mut vars_outer = exp_idx_sl.free_vars();
         exp_len_sl.free_vars_into(&mut vars_outer);
@@ -258,7 +286,7 @@ fn lift_slice_exp(
     }
 
     // Search the index before the length
-    if let Some(call_lifted) = lift_exp(exp_idx_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)
+    if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_idx_sl, RootCallPolicy::Lift)
     {
         let mut vars_outer = exp_base_sl.free_vars();
         exp_len_sl.free_vars_into(&mut vars_outer);
@@ -266,7 +294,7 @@ fn lift_slice_exp(
     }
 
     // Preserve base and index variables when lifting from the length
-    let call_lifted = lift_exp(exp_len_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)?;
+    let call_lifted = lift_exp(ids_used, ids_iter_local, exp_len_sl, RootCallPolicy::Lift)?;
     let mut vars_outer = exp_base_sl.free_vars();
     exp_idx_sl.free_vars_into(&mut vars_outer);
     Some(call_lifted.with_outer_vars(vars_outer))
@@ -275,14 +303,14 @@ fn lift_slice_exp(
 // - Update expression
 
 fn lift_update_exp(
+    ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
     exp_base_sl: &mut sl::Exp,
     path_sl: &mut sl::Path,
     exp_field_sl: &mut sl::Exp,
-    ids_iter_local: &IdSet,
-    ids_used: &mut IdSet,
 ) -> Option<LiftedCall> {
     // Search the base before the update path and field
-    if let Some(call_lifted) = lift_exp(exp_base_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)
+    if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_base_sl, RootCallPolicy::Lift)
     {
         let mut vars_outer = path_sl.free_vars();
         exp_field_sl.free_vars_into(&mut vars_outer);
@@ -290,30 +318,59 @@ fn lift_update_exp(
     }
 
     // Search the path before the replacement field
-    if let Some(call_lifted) = lift_path(path_sl, ids_iter_local, ids_used) {
+    if let Some(call_lifted) = lift_path(ids_used, ids_iter_local, path_sl) {
         let mut vars_outer = exp_base_sl.free_vars();
         exp_field_sl.free_vars_into(&mut vars_outer);
         return Some(call_lifted.with_outer_vars(vars_outer));
     }
 
     // Preserve base and path variables when lifting from the field
-    let call_lifted = lift_exp(exp_field_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)?;
+    let call_lifted = lift_exp(ids_used, ids_iter_local, exp_field_sl, RootCallPolicy::Lift)?;
     let mut vars_outer = exp_base_sl.free_vars();
     path_sl.free_vars_into(&mut vars_outer);
     Some(call_lifted.with_outer_vars(vars_outer))
+}
+
+// - Call expression
+
+fn lift_call_exp(
+    ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
+    args_sl: &mut [sl::Arg],
+) -> Option<LiftedCall> {
+    // Search expression arguments in source order
+    for idx in 0..args_sl.len() {
+        let (args_before_sl, args_rest_sl) = args_sl.split_at_mut(idx);
+        let (arg_sl, args_after_sl) = args_rest_sl
+            .split_first_mut()
+            .expect("the index comes from the argument slice");
+        let il_ast::ArgKind::Exp(exp_sl) = &mut arg_sl.node else {
+            continue;
+        };
+        let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_sl, RootCallPolicy::Lift)
+        else {
+            continue;
+        };
+
+        // Preserve free variables from untouched arguments
+        let mut vars_outer = args_before_sl.free_vars();
+        args_after_sl.free_vars_into(&mut vars_outer);
+        return Some(call_lifted.with_outer_vars(vars_outer));
+    }
+    None
 }
 
 // - Iterated expression
 
 /// Lifts a call through an iteration while preserving its variable dimensions.
 fn lift_iter_exp(
+    ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
     exp_inner_sl: &mut sl::Exp,
     (iter, vars_bound): &mut sl::ExpIter,
     root_call_policy: RootCallPolicy,
-    ids_iter_local: &IdSet,
-    ids_used: &mut IdSet,
 ) -> Option<LiftedCall> {
-    let mut call_lifted = lift_exp(exp_inner_sl, root_call_policy, ids_iter_local, ids_used)?;
+    let mut call_lifted = lift_exp(ids_used, ids_iter_local, exp_inner_sl, root_call_policy)?;
     // Find iteration variables used inside the lifted call
     let vars_matched = call_lifted
         .vars_inner
@@ -375,10 +432,10 @@ fn lift_iter_exp(
 
 /// Lifts the leftmost eligible call from a sequence of expressions.
 fn lift_exps(
+    ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
     exps_sl: &mut [sl::Exp],
     root_call_policy: RootCallPolicy,
-    ids_iter_local: &IdSet,
-    ids_used: &mut IdSet,
 ) -> Option<LiftedCall> {
     // Search expressions in source order
     for idx in 0..exps_sl.len() {
@@ -386,7 +443,7 @@ fn lift_exps(
         let (exp_sl, exps_after_sl) = exps_rest_sl
             .split_first_mut()
             .expect("the index comes from the expression slice");
-        let Some(call_lifted) = lift_exp(exp_sl, root_call_policy, ids_iter_local, ids_used) else {
+        let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_sl, root_call_policy) else {
             continue;
         };
 
@@ -401,46 +458,46 @@ fn lift_exps(
 // == Paths
 
 fn lift_path(
-    path_sl: &mut sl::Path,
-    ids_iter_local: &IdSet,
     ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
+    path_sl: &mut sl::Path,
 ) -> Option<LiftedCall> {
     match &mut path_sl.node {
         il_ast::PathKind::Root => None,
         il_ast::PathKind::Idx(path_inner_sl, exp_idx_sl) => {
-            if let Some(call_lifted) = lift_path(path_inner_sl, ids_iter_local, ids_used) {
+            if let Some(call_lifted) = lift_path(ids_used, ids_iter_local, path_inner_sl) {
                 let vars_outer = exp_idx_sl.free_vars();
                 return Some(call_lifted.with_outer_vars(vars_outer));
             }
-            let call_lifted = lift_exp(exp_idx_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)?;
+            let call_lifted = lift_exp(ids_used, ids_iter_local, exp_idx_sl, RootCallPolicy::Lift)?;
             let vars_outer = path_inner_sl.free_vars();
             Some(call_lifted.with_outer_vars(vars_outer))
         }
         il_ast::PathKind::Slice(path_inner_sl, exp_idx_sl, exp_len_sl) => {
-            lift_slice_path(path_inner_sl, exp_idx_sl, exp_len_sl, ids_iter_local, ids_used)
+            lift_slice_path(ids_used, ids_iter_local, path_inner_sl, exp_idx_sl, exp_len_sl)
         }
         il_ast::PathKind::Dot(path_inner_sl, _) => {
-            lift_path(path_inner_sl, ids_iter_local, ids_used)
+            lift_path(ids_used, ids_iter_local, path_inner_sl)
         }
     }
 }
 
 fn lift_slice_path(
+    ids_used: &mut IdSet,
+    ids_iter_local: &IdSet,
     path_inner_sl: &mut sl::Path,
     exp_idx_sl: &mut sl::Exp,
     exp_len_sl: &mut sl::Exp,
-    ids_iter_local: &IdSet,
-    ids_used: &mut IdSet,
 ) -> Option<LiftedCall> {
     // Search the inner path before slice operands
-    if let Some(call_lifted) = lift_path(path_inner_sl, ids_iter_local, ids_used) {
+    if let Some(call_lifted) = lift_path(ids_used, ids_iter_local, path_inner_sl) {
         let mut vars_outer = exp_idx_sl.free_vars();
         exp_len_sl.free_vars_into(&mut vars_outer);
         return Some(call_lifted.with_outer_vars(vars_outer));
     }
 
     // Search the index before the length
-    if let Some(call_lifted) = lift_exp(exp_idx_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)
+    if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_idx_sl, RootCallPolicy::Lift)
     {
         let mut vars_outer = path_inner_sl.free_vars();
         exp_len_sl.free_vars_into(&mut vars_outer);
@@ -448,65 +505,10 @@ fn lift_slice_path(
     }
 
     // Preserve path and index variables when lifting from the length
-    let call_lifted = lift_exp(exp_len_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)?;
+    let call_lifted = lift_exp(ids_used, ids_iter_local, exp_len_sl, RootCallPolicy::Lift)?;
     let mut vars_outer = path_inner_sl.free_vars();
     exp_idx_sl.free_vars_into(&mut vars_outer);
     Some(call_lifted.with_outer_vars(vars_outer))
-}
-
-// == Arguments and fields
-
-fn lift_args(
-    args_sl: &mut [sl::Arg],
-    ids_iter_local: &IdSet,
-    ids_used: &mut IdSet,
-) -> Option<LiftedCall> {
-    // Search expression arguments in source order
-    for idx in 0..args_sl.len() {
-        let (args_before_sl, args_rest_sl) = args_sl.split_at_mut(idx);
-        let (arg_sl, args_after_sl) = args_rest_sl
-            .split_first_mut()
-            .expect("the index comes from the argument slice");
-        let il_ast::ArgKind::Exp(exp_sl) = &mut arg_sl.node else {
-            continue;
-        };
-        let Some(call_lifted) = lift_exp(exp_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)
-        else {
-            continue;
-        };
-
-        // Preserve free variables from untouched arguments
-        let mut vars_outer = args_before_sl.free_vars();
-        args_after_sl.free_vars_into(&mut vars_outer);
-        return Some(call_lifted.with_outer_vars(vars_outer));
-    }
-    None
-}
-
-fn lift_fields(
-    fields_sl: &mut [il_ast::ExpField],
-    ids_iter_local: &IdSet,
-    ids_used: &mut IdSet,
-) -> Option<LiftedCall> {
-    // Search field values in source order
-    for idx in 0..fields_sl.len() {
-        let (fields_before_sl, fields_rest_sl) = fields_sl.split_at_mut(idx);
-        let ((_, exp_sl), fields_after_sl) = fields_rest_sl
-            .split_first_mut()
-            .expect("the index comes from the field slice");
-        let Some(call_lifted) = lift_exp(exp_sl, RootCallPolicy::Lift, ids_iter_local, ids_used)
-        else {
-            continue;
-        };
-
-        // Preserve free variables from untouched fields
-        let mut vars_outer = Vec::new();
-        for (_, exp_other_sl) in fields_before_sl.iter().chain(fields_after_sl.iter()) {
-            exp_other_sl.free_vars_into(&mut vars_outer);
-        }
-        return Some(call_lifted.with_outer_vars(vars_outer));
-    }
-    None
 }
 
 // == Instructions
@@ -514,24 +516,24 @@ fn lift_fields(
 // - Instruction
 
 fn lift_instr_call(
-    instr_sl: &mut sl::Instr,
     ids_used: &mut IdSet,
+    instr_sl: &mut sl::Instr,
 ) -> Result<Option<LiftedCall>, ProseError> {
     let span = instr_sl.span.clone();
     Ok(match &mut instr_sl.node {
         sl::InstrKind::Let(instr_sl) => lift_exp(
+            ids_used,
+            &ids_bound_by_instr_iters(&instr_sl.iter_instrs),
             &mut instr_sl.exp_r,
             RootCallPolicy::Preserve,
-            &ids_bound_by_instr_iters(&instr_sl.iter_instrs),
-            ids_used,
         ),
-        sl::InstrKind::Rule(instr_sl) => lift_rule_instr(instr_sl, &span, ids_used)?,
-        sl::InstrKind::Hold(instr_sl) => lift_hold_instr(instr_sl, ids_used),
+        sl::InstrKind::Rule(instr_sl) => lift_rule_instr(ids_used, instr_sl, &span)?,
+        sl::InstrKind::Hold(instr_sl) => lift_hold_instr(ids_used, instr_sl),
         sl::InstrKind::Result(instr_sl) => {
-            lift_exps(&mut instr_sl.exps, RootCallPolicy::Preserve, &IdSet::new(), ids_used)
+            lift_exps(ids_used, &IdSet::new(), &mut instr_sl.exps, RootCallPolicy::Preserve)
         }
         sl::InstrKind::Return(instr_sl) => {
-            lift_exp(&mut instr_sl.exp, RootCallPolicy::Preserve, &IdSet::new(), ids_used)
+            lift_exp(ids_used, &IdSet::new(), &mut instr_sl.exp, RootCallPolicy::Preserve)
         }
         sl::InstrKind::If(_)
         | sl::InstrKind::Case(_)
@@ -544,9 +546,9 @@ fn lift_instr_call(
 
 /// Lifts the leftmost eligible call from a rule instruction's inputs.
 fn lift_rule_instr(
+    ids_used: &mut IdSet,
     instr_sl: &mut sl::RuleInstr,
     span: &Span,
-    ids_used: &mut IdSet,
 ) -> Result<Option<LiftedCall>, ProseError> {
     // Separate relation inputs from result positions
     let exps_sl = instr_sl
@@ -558,10 +560,10 @@ fn lift_rule_instr(
     let (mut exps_input_sl, exps_output_sl) = input::split(&instr_sl.input_hint, exps_sl)
         .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
     let call_lifted = lift_exps(
+        ids_used,
+        &ids_bound_by_instr_iters(&instr_sl.iter_instrs),
         &mut exps_input_sl,
         RootCallPolicy::Lift,
-        &ids_bound_by_instr_iters(&instr_sl.iter_instrs),
-        ids_used,
     );
 
     // Restore notation only when an input changed
@@ -586,7 +588,7 @@ fn replace_rule_not_exp_args(
 // - Hold instruction
 
 /// Lifts the leftmost eligible call from a hold instruction's arguments.
-fn lift_hold_instr(instr_sl: &mut sl::HoldInstr, ids_used: &mut IdSet) -> Option<LiftedCall> {
+fn lift_hold_instr(ids_used: &mut IdSet, instr_sl: &mut sl::HoldInstr) -> Option<LiftedCall> {
     // Lift only calls owned by notation arguments
     let mut exps_sl = instr_sl
         .not_exp
@@ -595,10 +597,10 @@ fn lift_hold_instr(instr_sl: &mut sl::HoldInstr, ids_used: &mut IdSet) -> Option
         .cloned()
         .collect::<Vec<_>>();
     let call_lifted = lift_exps(
+        ids_used,
+        &ids_bound_by_exp_iters(&instr_sl.iter_exps),
         &mut exps_sl,
         RootCallPolicy::Lift,
-        &ids_bound_by_exp_iters(&instr_sl.iter_exps),
-        ids_used,
     );
 
     // Restore notation only when an argument changed
@@ -634,12 +636,12 @@ fn ids_bound_by_exp_iters(iter_exps: &[sl::ExpIter]) -> IdSet {
 ///
 /// The boolean reports whether the returned instruction contains new bindings.
 pub(super) fn lift_instr(
-    mut instr_sl: sl::Instr,
     ids_used: &mut IdSet,
+    mut instr_sl: sl::Instr,
 ) -> Result<(sl::Instr, bool), ProseError> {
     let mut calls_lifted = Vec::new();
     // Collect direct calls before nesting their bindings
-    while let Some(call_lifted) = lift_instr_call(&mut instr_sl, ids_used)? {
+    while let Some(call_lifted) = lift_instr_call(ids_used, &mut instr_sl)? {
         calls_lifted.push(call_lifted);
     }
     let was_lifted = !calls_lifted.is_empty();
