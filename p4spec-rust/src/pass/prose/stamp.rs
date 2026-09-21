@@ -1,10 +1,61 @@
-//! Stamp partial prose instructions with their failure destination
+//! Stamp fallible prose instructions with their failure destination
 
 use std::collections::HashMap;
 
-use crate::lang::pl::{ast as pl, group, partial};
+use crate::lang::{
+    pl::{ast as pl, group},
+    traits::has_call::HasCall,
+};
 
 type Fallthroughs = HashMap<String, pl::Fallthrough>;
+
+// == Failure classification
+
+/// Reports whether an instruction can fail before entering nested blocks.
+fn can_fail_instr(instr: &pl::Instr<pl::GroupInstr>) -> bool {
+    match &instr.node.node {
+        pl::InstrKind::If(pl::IfInstr { exp, .. }) => exp.has_call(),
+        pl::InstrKind::Hold(..) => true,
+        pl::InstrKind::Case(pl::CaseInstr { exp, cases, .. }) => {
+            exp.has_call() || cases.iter().any(can_fail_case)
+        }
+        pl::InstrKind::Let(pl::LetInstr { exp_r, .. }) => exp_r.has_call(),
+        pl::InstrKind::Debug(pl::DebugInstr { exp })
+        | pl::InstrKind::Destruct(pl::DestructInstr { exp, .. }) => exp.has_call(),
+        pl::InstrKind::CheckLetSub(..)
+        | pl::InstrKind::CheckLetMatch(..)
+        | pl::InstrKind::OptionGet(..) => true,
+        pl::InstrKind::Tier(pl::TierInstr { tier }) => can_fail_group_instr(tier),
+    }
+}
+
+fn can_fail_group_instr(instr: &pl::GroupInstr) -> bool {
+    match instr {
+        pl::GroupInstr::Rule(pl::RuleInstr { not_exp, .. }) => {
+            not_exp.args().into_iter().any(HasCall::has_call)
+        }
+        pl::GroupInstr::Result(pl::ResultInstr { exps_output, .. }) => {
+            exps_output.iter().any(HasCall::has_call)
+        }
+        pl::GroupInstr::Return(pl::ReturnInstr { exp }) => exp.has_call(),
+        pl::GroupInstr::Backtrack(_) => false,
+    }
+}
+
+fn can_fail_case(case: &pl::Case<pl::GroupInstr>) -> bool {
+    can_fail_guard(&case.guard)
+}
+
+fn can_fail_guard(guard: &pl::Guard) -> bool {
+    match guard {
+        pl::Guard::Bool(_) | pl::Guard::Sub(..) | pl::Guard::Match(_) | pl::Guard::Mem(_) => false,
+        pl::Guard::Cmp(_, _, exp)
+        | pl::Guard::CheckLetSub(_, _, exp)
+        | pl::Guard::CheckLetMatch(_, exp) => exp.has_call(),
+    }
+}
+
+// == Instruction stamping
 
 // - Group instruction
 
@@ -12,7 +63,7 @@ fn stamp_group_instr(
     fallthrough: &pl::Fallthrough,
     mut instr: pl::Instr<pl::GroupInstr>,
 ) -> pl::Instr<pl::GroupInstr> {
-    if partial::is_partial_instr(partial::is_partial_group_instr, &instr) {
+    if can_fail_instr(&instr) {
         instr.node.note = Some(fallthrough.clone());
     }
     instr.node.node = stamp_group_instr_kind(fallthrough, instr.node.node);
