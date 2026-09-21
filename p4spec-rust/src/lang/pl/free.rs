@@ -1,6 +1,6 @@
 //! Free identifiers in prose-language data
 
-use crate::lang::{common::ds::set::IdSet, traits::free::Free};
+use crate::lang::{common::ds::set::IdSet, traits::free::FreeIds};
 
 use super::ast::*;
 
@@ -8,8 +8,8 @@ use super::ast::*;
 
 // - Expressions
 
-impl Free for ExpKind {
-    fn free(&self) -> IdSet {
+impl FreeIds for ExpKind {
+    fn free_ids(&self) -> IdSet {
         match self {
             Self::Bool(_) | Self::Num(_) | Self::Text(_) => IdSet::new(),
             Self::Id(id) => IdSet::from([id.clone()]),
@@ -20,51 +20,54 @@ impl Free for ExpKind {
             | Self::Match(exp, _)
             | Self::Len(exp)
             | Self::Dot(exp, _)
-            | Self::Iter(exp, _) => exp.free(),
+            | Self::Iter(exp, _) => exp.free_ids(),
             Self::Bin(_, _, exp_l, exp_r)
             | Self::Cmp(_, _, exp_l, exp_r)
             | Self::Cons(exp_l, exp_r)
             | Self::Cat(exp_l, exp_r)
             | Self::Mem(exp_l, exp_r)
-            | Self::Idx(exp_l, exp_r) => exp_l.free().union(exp_r.free()),
-            Self::Tuple(exps) | Self::List(exps) => exps.as_slice().free(),
-            Self::Case(not_exp) => not_exp.free(),
+            | Self::Idx(exp_l, exp_r) => exp_l.free_ids().union(exp_r.free_ids()),
+            Self::Tuple(exps) | Self::List(exps) => exps.as_slice().free_ids(),
+            Self::Case(not_exp) => not_exp.free_ids(),
             Self::Str(fields) => fields
                 .iter()
-                .fold(IdSet::new(), |free, (_, exp)| free.union(exp.free())),
-            Self::Opt(exp) => exp.free(),
-            Self::Slice(exp_base, exp_idx, exp_len) => {
-                exp_base.free().union(exp_idx.free()).union(exp_len.free())
-            }
-            Self::Upd(exp_base, path, exp_field) => {
-                exp_base.free().union(path.free()).union(exp_field.free())
-            }
-            Self::Call(_, _, args) => args.as_slice().free(),
+                .fold(IdSet::new(), |free, (_, exp)| free.union(exp.free_ids())),
+            Self::Opt(exp) => exp.free_ids(),
+            Self::Slice(exp_base, exp_idx, exp_len) => exp_base
+                .free_ids()
+                .union(exp_idx.free_ids())
+                .union(exp_len.free_ids()),
+            Self::Upd(exp_base, path, exp_field) => exp_base
+                .free_ids()
+                .union(path.free_ids())
+                .union(exp_field.free_ids()),
+            Self::Call(_, _, args) => args.as_slice().free_ids(),
         }
     }
 }
 
 // - Paths
 
-impl Free for PathKind {
-    fn free(&self) -> IdSet {
+impl FreeIds for PathKind {
+    fn free_ids(&self) -> IdSet {
         match self {
             Self::Root => IdSet::new(),
-            Self::Idx(path, exp_idx) => path.free().union(exp_idx.free()),
-            Self::Slice(path, exp_idx, exp_len) => {
-                path.free().union(exp_idx.free()).union(exp_len.free())
-            }
-            Self::Dot(path, _) => path.free(),
+            Self::Idx(path, exp_idx) => path.free_ids().union(exp_idx.free_ids()),
+            Self::Slice(path, exp_idx, exp_len) => path
+                .free_ids()
+                .union(exp_idx.free_ids())
+                .union(exp_len.free_ids()),
+            Self::Dot(path, _) => path.free_ids(),
         }
     }
 }
 
 // - Parameters
 
-impl Free for ParamKind {
-    fn free(&self) -> IdSet {
+impl FreeIds for ParamKind {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::Exp(_, exp) => exp.free(),
+            Self::Exp(_, exp) => exp.free_ids(),
             Self::Def(..) => IdSet::new(),
         }
     }
@@ -72,10 +75,10 @@ impl Free for ParamKind {
 
 // - Arguments
 
-impl Free for ArgKind {
-    fn free(&self) -> IdSet {
+impl FreeIds for ArgKind {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::Exp(exp) => exp.free(),
+            Self::Exp(exp) => exp.free_ids(),
             Self::Def(_) => IdSet::new(),
         }
     }
@@ -83,329 +86,332 @@ impl Free for ArgKind {
 
 // - Instructions
 
-impl<Tier: Free> Free for InstrKind<Tier> {
-    fn free(&self) -> IdSet {
+impl<Tier: FreeIds> FreeIds for InstrKind<Tier> {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::If(instr) => instr.free(),
-            Self::Hold(instr) => instr.free(),
-            Self::Case(instr) => instr.free(),
-            Self::Let(instr) => instr.free(),
-            Self::Debug(instr) => instr.free(),
-            Self::Destruct(instr) => instr.free(),
-            Self::CheckLetSub(instr) => instr.free(),
-            Self::CheckLetMatch(instr) => instr.free(),
-            Self::OptionGet(instr) => instr.free(),
-            Self::Tier(instr) => instr.free(),
+            Self::If(instr) => instr.free_ids(),
+            Self::Hold(instr) => instr.free_ids(),
+            Self::Case(instr) => instr.free_ids(),
+            Self::Let(instr) => instr.free_ids(),
+            Self::Debug(instr) => instr.free_ids(),
+            Self::Destruct(instr) => instr.free_ids(),
+            Self::CheckLetSub(instr) => instr.free_ids(),
+            Self::CheckLetMatch(instr) => instr.free_ids(),
+            Self::OptionGet(instr) => instr.free_ids(),
+            Self::Tier(instr) => instr.free_ids(),
         }
     }
 }
 
-impl<Tier: Free> Free for IfInstr<Tier> {
-    fn free(&self) -> IdSet {
-        self.exp.free().union(self.block.free())
+impl<Tier: FreeIds> FreeIds for IfInstr<Tier> {
+    fn free_ids(&self) -> IdSet {
+        self.exp.free_ids().union(self.block.free_ids())
     }
 }
 
-impl<Tier: Free> Free for HoldInstr<Tier> {
-    fn free(&self) -> IdSet {
-        self.not_exp.free()
+impl<Tier: FreeIds> FreeIds for HoldInstr<Tier> {
+    fn free_ids(&self) -> IdSet {
+        self.not_exp.free_ids()
     }
 }
 
-impl<Tier: Free> Free for CaseInstr<Tier> {
-    fn free(&self) -> IdSet {
-        self.exp.free().union(self.cases.as_slice().free())
+impl<Tier: FreeIds> FreeIds for CaseInstr<Tier> {
+    fn free_ids(&self) -> IdSet {
+        self.exp.free_ids().union(self.cases.as_slice().free_ids())
     }
 }
 
-impl Free for LetInstr {
-    fn free(&self) -> IdSet {
-        self.exp_l.free().union(self.exp_r.free())
+impl FreeIds for LetInstr {
+    fn free_ids(&self) -> IdSet {
+        self.exp_l.free_ids().union(self.exp_r.free_ids())
     }
 }
 
-impl Free for DebugInstr {
-    fn free(&self) -> IdSet {
-        self.exp.free()
+impl FreeIds for DebugInstr {
+    fn free_ids(&self) -> IdSet {
+        self.exp.free_ids()
     }
 }
 
-impl Free for DestructInstr {
-    fn free(&self) -> IdSet {
+impl FreeIds for DestructInstr {
+    fn free_ids(&self) -> IdSet {
         self.bindings
             .iter()
-            .fold(IdSet::new(), |free, (_, exp)| free.union(exp.free()))
-            .union(self.exp.free())
+            .fold(IdSet::new(), |free, (_, exp)| free.union(exp.free_ids()))
+            .union(self.exp.free_ids())
     }
 }
 
-impl<Tier: Free> Free for CheckLetSubInstr<Tier> {
-    fn free(&self) -> IdSet {
+impl<Tier: FreeIds> FreeIds for CheckLetSubInstr<Tier> {
+    fn free_ids(&self) -> IdSet {
         self.exp_l
-            .free()
-            .union(self.exp_r.free())
-            .union(self.block.free())
+            .free_ids()
+            .union(self.exp_r.free_ids())
+            .union(self.block.free_ids())
     }
 }
 
-impl<Tier: Free> Free for CheckLetMatchInstr<Tier> {
-    fn free(&self) -> IdSet {
+impl<Tier: FreeIds> FreeIds for CheckLetMatchInstr<Tier> {
+    fn free_ids(&self) -> IdSet {
         self.exp_l
-            .free()
-            .union(self.exp_r.free())
-            .union(self.block.free())
+            .free_ids()
+            .union(self.exp_r.free_ids())
+            .union(self.block.free_ids())
     }
 }
 
-impl<Tier: Free> Free for OptionGetInstr<Tier> {
-    fn free(&self) -> IdSet {
+impl<Tier: FreeIds> FreeIds for OptionGetInstr<Tier> {
+    fn free_ids(&self) -> IdSet {
         self.exp_l
-            .free()
-            .union(self.exp_r.free())
-            .union(self.block.free())
+            .free_ids()
+            .union(self.exp_r.free_ids())
+            .union(self.block.free_ids())
     }
 }
 
-impl<Tier: Free> Free for TierInstr<Tier> {
-    fn free(&self) -> IdSet {
-        self.tier.free()
+impl<Tier: FreeIds> FreeIds for TierInstr<Tier> {
+    fn free_ids(&self) -> IdSet {
+        self.tier.free_ids()
     }
 }
 
 // - Group-body tier
 
-impl Free for InstrGroup {
-    fn free(&self) -> IdSet {
+impl FreeIds for GroupInstr {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::Result(instr) => instr.free(),
-            Self::Return(instr) => instr.free(),
-            Self::Rule(instr) => instr.free(),
-            Self::Backtrack(instr) => instr.free(),
+            Self::Result(instr) => instr.free_ids(),
+            Self::Return(instr) => instr.free_ids(),
+            Self::Rule(instr) => instr.free_ids(),
+            Self::Backtrack(instr) => instr.free_ids(),
         }
     }
 }
 
-impl Free for ResultGroupInstr {
-    fn free(&self) -> IdSet {
-        self.exps_output.as_slice().free()
+impl FreeIds for ResultInstr {
+    fn free_ids(&self) -> IdSet {
+        self.exps_output.as_slice().free_ids()
     }
 }
 
-impl Free for ReturnGroupInstr {
-    fn free(&self) -> IdSet {
-        self.exp.free()
+impl FreeIds for ReturnInstr {
+    fn free_ids(&self) -> IdSet {
+        self.exp.free_ids()
     }
 }
 
-impl Free for RuleGroupInstr {
-    fn free(&self) -> IdSet {
-        self.not_exp.free()
+impl FreeIds for RuleInstr {
+    fn free_ids(&self) -> IdSet {
+        self.not_exp.free_ids()
     }
 }
 
-impl Free for BacktrackGroupInstr {
-    fn free(&self) -> IdSet {
-        self.blocks.as_slice().free()
+impl FreeIds for BacktrackInstr {
+    fn free_ids(&self) -> IdSet {
+        self.blocks.as_slice().free_ids()
     }
 }
 
 // - Dispatch tier
 
-impl Free for InstrDispatch {
-    fn free(&self) -> IdSet {
+impl FreeIds for DispatchInstr {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::Group(instr) => instr.free(),
-            Self::Route(instr) => instr.free(),
+            Self::Group(instr) => instr.free_ids(),
+            Self::Route(instr) => instr.free_ids(),
         }
     }
 }
 
-impl Free for GroupDispatchInstr {
-    fn free(&self) -> IdSet {
-        self.exps_input.as_slice().free().union(self.block.free())
+impl FreeIds for RuleGroupInstr {
+    fn free_ids(&self) -> IdSet {
+        self.exps_input
+            .as_slice()
+            .free_ids()
+            .union(self.block.free_ids())
     }
 }
 
-impl Free for RouteDispatchInstr {
-    fn free(&self) -> IdSet {
-        self.blocks.as_slice().free()
+impl FreeIds for RouteInstr {
+    fn free_ids(&self) -> IdSet {
+        self.blocks.as_slice().free_ids()
     }
 }
 
 // - Holding conditions
 
-impl<Tier: Free> Free for HoldCase<Tier> {
-    fn free(&self) -> IdSet {
+impl<Tier: FreeIds> FreeIds for HoldCase<Tier> {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::Both(block_l, block_r) => block_l.free().union(block_r.free()),
-            Self::Hold(block, _) | Self::NotHold(block, _) => block.free(),
+            Self::Both(block_l, block_r) => block_l.free_ids().union(block_r.free_ids()),
+            Self::Hold(block, _) | Self::NotHold(block, _) => block.free_ids(),
         }
     }
 }
 
 // - Case analysis
 
-impl Free for Guard {
-    fn free(&self) -> IdSet {
+impl FreeIds for Guard {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::Cmp(_, _, exp) | Self::Mem(exp) => exp.free(),
-            Self::CheckLetSub(_, _, exp) | Self::CheckLetMatch(_, exp) => exp.free(),
+            Self::Cmp(_, _, exp) | Self::Mem(exp) => exp.free_ids(),
+            Self::CheckLetSub(_, _, exp) | Self::CheckLetMatch(_, exp) => exp.free_ids(),
             Self::Bool(_) | Self::Sub(..) | Self::Match(_) => IdSet::new(),
         }
     }
 }
 
-impl<Tier: Free> Free for Case<Tier> {
-    fn free(&self) -> IdSet {
-        self.guard.free().union(self.block.free())
+impl<Tier: FreeIds> FreeIds for Case<Tier> {
+    fn free_ids(&self) -> IdSet {
+        self.guard.free_ids().union(self.block.free_ids())
     }
 }
 
 // - Blocks
 
-impl<Tier: Free> Free for Block<Tier> {
-    fn free(&self) -> IdSet {
-        self.as_slice().free()
+impl<Tier: FreeIds> FreeIds for Block<Tier> {
+    fn free_ids(&self) -> IdSet {
+        self.as_slice().free_ids()
     }
 }
 
-impl Free for Fallthrough {
-    fn free(&self) -> IdSet {
+impl FreeIds for Fallthrough {
+    fn free_ids(&self) -> IdSet {
         IdSet::new()
     }
 }
 
 // - Table rows
 
-impl Free for TableRow {
-    fn free(&self) -> IdSet {
+impl FreeIds for TableRow {
+    fn free_ids(&self) -> IdSet {
         self.exps_input
             .as_slice()
-            .free()
-            .union(self.exp.free())
-            .union(self.block.free())
+            .free_ids()
+            .union(self.exp.free_ids())
+            .union(self.block.free_ids())
     }
 }
 
 // == Type definitions
 
-impl Free for TypDef {
-    fn free(&self) -> IdSet {
+impl FreeIds for TypDef {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::Extern(extern_typ) => extern_typ.free(),
-            Self::Defined(defined_typ) => defined_typ.free(),
+            Self::Extern(extern_typ) => extern_typ.free_ids(),
+            Self::Defined(defined_typ) => defined_typ.free_ids(),
         }
     }
 }
 
-impl Free for ExternTyp {
-    fn free(&self) -> IdSet {
+impl FreeIds for ExternTyp {
+    fn free_ids(&self) -> IdSet {
         IdSet::new()
     }
 }
 
-impl Free for DefinedTyp {
-    fn free(&self) -> IdSet {
+impl FreeIds for DefinedTyp {
+    fn free_ids(&self) -> IdSet {
         IdSet::new()
     }
 }
 
 // == Meta-variable definitions
 
-impl Free for VarDef {
-    fn free(&self) -> IdSet {
+impl FreeIds for VarDef {
+    fn free_ids(&self) -> IdSet {
         IdSet::new()
     }
 }
 
 // == Relation definitions
 
-impl Free for RelDef {
-    fn free(&self) -> IdSet {
+impl FreeIds for RelDef {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::Extern(extern_rel) => extern_rel.free(),
-            Self::Defined(defined_rel) => defined_rel.free(),
+            Self::Extern(extern_rel) => extern_rel.free_ids(),
+            Self::Defined(defined_rel) => defined_rel.free_ids(),
         }
     }
 }
 
-impl Free for ExternRel {
-    fn free(&self) -> IdSet {
-        self.exps_input.as_slice().free()
+impl FreeIds for ExternRel {
+    fn free_ids(&self) -> IdSet {
+        self.exps_input.as_slice().free_ids()
     }
 }
 
-impl Free for DefinedRel {
-    fn free(&self) -> IdSet {
+impl FreeIds for DefinedRel {
+    fn free_ids(&self) -> IdSet {
         self.exps_input
             .as_slice()
-            .free()
-            .union(self.block.free())
-            .union(self.block_else_opt.free())
+            .free_ids()
+            .union(self.block.free_ids())
+            .union(self.block_else_opt.free_ids())
     }
 }
 
 // == Meta-function definitions
 
-impl Free for MetaFuncDef {
-    fn free(&self) -> IdSet {
+impl FreeIds for MetaFuncDef {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::Extern(extern_func) => extern_func.free(),
-            Self::Builtin(builtin_func) => builtin_func.free(),
-            Self::Table(table_func) => table_func.free(),
-            Self::Defined(defined_func) => defined_func.free(),
+            Self::Extern(extern_func) => extern_func.free_ids(),
+            Self::Builtin(builtin_func) => builtin_func.free_ids(),
+            Self::Table(table_func) => table_func.free_ids(),
+            Self::Defined(defined_func) => defined_func.free_ids(),
         }
     }
 }
 
-impl Free for ExternFunc {
-    fn free(&self) -> IdSet {
-        self.params.as_slice().free()
+impl FreeIds for ExternFunc {
+    fn free_ids(&self) -> IdSet {
+        self.params.as_slice().free_ids()
     }
 }
 
-impl Free for BuiltinFunc {
-    fn free(&self) -> IdSet {
-        self.params.as_slice().free()
+impl FreeIds for BuiltinFunc {
+    fn free_ids(&self) -> IdSet {
+        self.params.as_slice().free_ids()
     }
 }
 
-impl Free for TableFunc {
-    fn free(&self) -> IdSet {
+impl FreeIds for TableFunc {
+    fn free_ids(&self) -> IdSet {
         self.params
             .as_slice()
-            .free()
-            .union(self.rows.as_slice().free())
+            .free_ids()
+            .union(self.rows.as_slice().free_ids())
     }
 }
 
-impl Free for DefinedFunc {
-    fn free(&self) -> IdSet {
+impl FreeIds for DefinedFunc {
+    fn free_ids(&self) -> IdSet {
         self.params
             .as_slice()
-            .free()
-            .union(self.block.free())
-            .union(self.block_else_opt.free())
+            .free_ids()
+            .union(self.block.free_ids())
+            .union(self.block_else_opt.free_ids())
     }
 }
 
 // == Definitions
 
-impl Free for DefKind {
-    fn free(&self) -> IdSet {
+impl FreeIds for DefKind {
+    fn free_ids(&self) -> IdSet {
         match self {
-            Self::Typ(typ_def) => typ_def.free(),
-            Self::Var(var_def) => var_def.free(),
-            Self::Rel(rel_def) => rel_def.free(),
-            Self::MetaFunc(meta_func_def) => meta_func_def.free(),
+            Self::Typ(typ_def) => typ_def.free_ids(),
+            Self::Var(var_def) => var_def.free_ids(),
+            Self::Rel(rel_def) => rel_def.free_ids(),
+            Self::MetaFunc(meta_func_def) => meta_func_def.free_ids(),
         }
     }
 }
 
 // == Specifications
 
-impl Free for Spec {
-    fn free(&self) -> IdSet {
-        self.as_slice().free()
+impl FreeIds for Spec {
+    fn free_ids(&self) -> IdSet {
+        self.as_slice().free_ids()
     }
 }

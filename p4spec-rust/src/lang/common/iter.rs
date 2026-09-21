@@ -10,7 +10,7 @@ use crate::lang::{
     traits::{
         cmp::SyntaxCmp,
         eq::SyntaxEq,
-        free::Free,
+        free::FreeIds,
         print::{Print, Printer},
     },
 };
@@ -47,8 +47,8 @@ impl SyntaxCmp for Iter {
     }
 }
 
-impl Free for Iter {
-    fn free(&self) -> IdSet {
+impl FreeIds for Iter {
+    fn free_ids(&self) -> IdSet {
         IdSet::new()
     }
 }

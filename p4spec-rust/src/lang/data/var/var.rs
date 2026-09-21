@@ -11,7 +11,7 @@ use crate::lang::{
     common::{Id, Iter, ds::set::IdSet},
     traits::{
         eq::SyntaxEq,
-        free::Free,
+        free::FreeIds,
         print::{Print, Printer},
     },
 };
@@ -63,8 +63,8 @@ impl SyntaxEq for Var {
     }
 }
 
-impl Free for Var {
-    fn free(&self) -> IdSet {
+impl FreeIds for Var {
+    fn free_ids(&self) -> IdSet {
         IdSet::new()
     }
 }

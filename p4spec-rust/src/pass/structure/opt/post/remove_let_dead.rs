@@ -16,45 +16,9 @@
 use crate::lang::{
     common::{ds::set::IdSet, source::Span},
     hints::input,
-    il::ast::{ExpField, ExpKind},
-    traits::free::Free,
+    traits::{free::FreeIds, has_call::HasCall},
 };
 use crate::pass::structure::{StructureError, StructureErrorKind, ol::ast::*};
-
-// == Removable expressions
-
-/// `x + 1` is removable; `f() + 1` is not because it contains a call.
-fn removable_let(exp_r: &Exp) -> bool {
-    match &exp_r.node {
-        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Id(_) => true,
-        ExpKind::Un(_, _, exp)
-        | ExpKind::UpCast(_, exp)
-        | ExpKind::DownCast(_, exp)
-        | ExpKind::Sub(exp, _, _)
-        | ExpKind::Match(exp, _)
-        | ExpKind::Len(exp)
-        | ExpKind::Dot(exp, _)
-        | ExpKind::Iter(exp, _) => removable_let(exp),
-        ExpKind::Bin(_, _, exp_l, exp_r)
-        | ExpKind::Cmp(_, _, exp_l, exp_r)
-        | ExpKind::Cons(exp_l, exp_r)
-        | ExpKind::Cat(exp_l, exp_r)
-        | ExpKind::Mem(exp_l, exp_r)
-        | ExpKind::Idx(exp_l, exp_r)
-        | ExpKind::Upd(exp_l, _, exp_r) => removable_let(exp_l) && removable_let(exp_r),
-        ExpKind::Tuple(exps) | ExpKind::List(exps) => exps.iter().all(removable_let),
-        ExpKind::Case(not_exp) => not_exp.args().into_iter().all(removable_let),
-        ExpKind::Str(exp_fields) => exp_fields
-            .iter()
-            .all(|ExpField { exp, .. }| removable_let(exp)),
-        ExpKind::Opt(exp) => exp.as_deref().is_none_or(removable_let),
-        ExpKind::Slice(exp_base, exp_idx, exp_len) => {
-            removable_let(exp_base) && removable_let(exp_idx) && removable_let(exp_len)
-        }
-        // Calls are the only non-removable leaf
-        ExpKind::Call(_, _, _) => false,
-    }
-}
 
 // == Downstream uses
 
@@ -78,11 +42,11 @@ fn downstream_instr_kind(
         InstrKind::Let(instr_ol) => downstream_let_instr(ids_defined, instr_ol),
         InstrKind::Rule(instr_ol) => downstream_rule_instr(ids_defined, instr_ol, span),
         InstrKind::Result(instr_ol) => {
-            let ids_used = instr_ol.exps.free().intersection(ids_defined);
+            let ids_used = instr_ol.exps.free_ids().intersection(ids_defined);
             Ok(ids_used)
         }
         InstrKind::Return(instr_ol) => {
-            let ids_used = instr_ol.exp.free().intersection(ids_defined);
+            let ids_used = instr_ol.exp.free_ids().intersection(ids_defined);
             Ok(ids_used)
         }
         InstrKind::Debug(instr_ol) => downstream_debug_instr(ids_defined, instr_ol),
@@ -103,7 +67,7 @@ fn downstream_block(ids_defined: &IdSet, block: &Block) -> Result<IdSet, Structu
         // Count this instruction's uses before excluding its new definitions
         ids_defined = match &instr_ol.node {
             InstrKind::Let(instr_ol) => {
-                let ids_bound = instr_ol.exp_l.free();
+                let ids_bound = instr_ol.exp_l.free_ids();
                 ids_defined.difference(&ids_bound)
             }
             InstrKind::Rule(instr_rule) => {
@@ -114,7 +78,7 @@ fn downstream_block(ids_defined: &IdSet, block: &Block) -> Result<IdSet, Structu
                     })?;
                 let mut ids_output = IdSet::new();
                 for exp in exps_output {
-                    exp.free_into(&mut ids_output);
+                    exp.free_ids_into(&mut ids_output);
                 }
                 ids_defined.difference(&ids_output)
             }
@@ -128,7 +92,7 @@ fn downstream_block(ids_defined: &IdSet, block: &Block) -> Result<IdSet, Structu
 
 fn downstream_if_instr(ids_defined: &IdSet, instr_ol: &IfInstr) -> Result<IdSet, StructureError> {
     let IfInstr { exp, block, .. } = instr_ol;
-    let ids_used = exp.free().intersection(ids_defined);
+    let ids_used = exp.free_ids().intersection(ids_defined);
     let ids_used_then = downstream_block(ids_defined, block)?;
     Ok(ids_used.union(ids_used_then))
 }
@@ -140,7 +104,7 @@ fn downstream_hold_instr(
     instr_ol: &HoldInstr,
 ) -> Result<IdSet, StructureError> {
     let HoldInstr { not_exp, block_hold, block_not_hold, .. } = instr_ol;
-    let ids_used = not_exp.free().intersection(ids_defined);
+    let ids_used = not_exp.free_ids().intersection(ids_defined);
     let ids_used_hold = downstream_block(ids_defined, block_hold)?;
     let ids_used_not_hold = downstream_block(ids_defined, block_not_hold)?;
     Ok(ids_used.union(ids_used_hold).union(ids_used_not_hold))
@@ -153,10 +117,10 @@ fn downstream_case_instr(
     instr_ol: &CaseInstr,
 ) -> Result<IdSet, StructureError> {
     let CaseInstr { exp, cases, .. } = instr_ol;
-    let mut ids_used = exp.free().intersection(ids_defined);
+    let mut ids_used = exp.free_ids().intersection(ids_defined);
     for case in cases {
         let Case { guard, block } = case;
-        let ids_used_guard = guard.free().intersection(ids_defined);
+        let ids_used_guard = guard.free_ids().intersection(ids_defined);
         ids_used.append(ids_used_guard);
         let ids_used_block = downstream_block(ids_defined, block)?;
         ids_used.append(ids_used_block);
@@ -171,7 +135,7 @@ fn downstream_group_instr(
     instr_ol: &GroupInstr,
 ) -> Result<IdSet, StructureError> {
     let GroupInstr { exps, block, .. } = instr_ol;
-    let ids_used = exps.free().intersection(ids_defined);
+    let ids_used = exps.free_ids().intersection(ids_defined);
     let ids_used_block = downstream_block(ids_defined, block)?;
     Ok(ids_used.union(ids_used_block))
 }
@@ -180,7 +144,7 @@ fn downstream_group_instr(
 
 fn downstream_let_instr(ids_defined: &IdSet, instr_ol: &LetInstr) -> Result<IdSet, StructureError> {
     let LetInstr { exp_r, block, .. } = instr_ol;
-    let ids_used = exp_r.free().intersection(ids_defined);
+    let ids_used = exp_r.free_ids().intersection(ids_defined);
     let ids_used_block = downstream_block(ids_defined, block)?;
     Ok(ids_used.union(ids_used_block))
 }
@@ -198,7 +162,7 @@ fn downstream_rule_instr(
         .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
     let mut ids_input = IdSet::new();
     for exp in exps_input {
-        exp.free_into(&mut ids_input);
+        exp.free_ids_into(&mut ids_input);
     }
     let ids_used = ids_input.intersection(ids_defined);
     let ids_used_block = downstream_block(ids_defined, block)?;
@@ -212,7 +176,7 @@ fn downstream_debug_instr(
     instr_ol: &DebugInstr,
 ) -> Result<IdSet, StructureError> {
     let DebugInstr { exp, instr } = instr_ol;
-    let ids_used = exp.free().intersection(ids_defined);
+    let ids_used = exp.free_ids().intersection(ids_defined);
     let ids_used_instr = downstream_instr(ids_defined, instr)?;
     Ok(ids_used.union(ids_used_instr))
 }
@@ -304,8 +268,8 @@ fn upstream_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, Structure
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     // Inspect uses before deleting inner Lets: `let x = 1 { let y = (x,) {} }`
     // becomes `let x = 1 {}`; the outer Let is not revisited in this pass
-    if removable_let(&exp_r) {
-        let ids_defined = exp_l.free();
+    if !exp_r.has_call() {
+        let ids_defined = exp_l.free_ids();
         let ids_used = downstream_block(&ids_defined, &block)?;
         if ids_used.is_empty() {
             return upstream_block(block);

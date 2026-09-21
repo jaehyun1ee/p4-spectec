@@ -1,5 +1,5 @@
 use super::super::*;
-use crate::lang::{common::ds::set::IdSet, traits::free::Free};
+use crate::lang::{common::ds::set::IdSet, traits::free::FreeIds};
 #[test]
 fn test_let_patterns_and_both_hold_blocks_are_collected() {
     let instr_let = instr(ast_ol::InstrKind::Let(ast_ol::LetInstr {
@@ -27,7 +27,7 @@ fn test_let_patterns_and_both_hold_blocks_are_collected() {
         .into_iter()
         .map(id)
         .collect();
-    assert_eq!(instr_hold.free(), ids);
+    assert_eq!(instr_hold.free_ids(), ids);
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn test_nested_collection_preserves_first_identifier_spans_and_existing_names() 
     let instr_case = instr(ast_ol::InstrKind::Case(instr_case));
     let instr_if = ast_ol::IfInstr { exp: exp_head, iter_exps: vec![], block: vec![instr_case] };
     let block = vec![instr(ast_ol::InstrKind::If(instr_if))];
-    let ids = block.free();
+    let ids = block.free_ids();
     let texts: Vec<_> = ids.iter().map(|id| id.node.as_str()).collect();
     assert_eq!(texts, ["case", "debug", "group_arg", "guard", "result", "rule_arg", "shared"]);
     assert_eq!(ids.iter().find(|id| id.node == "shared").unwrap(), &id_head);
@@ -70,7 +70,7 @@ fn test_nested_collection_preserves_first_identifier_spans_and_existing_names() 
     let mut id_existing = id("shared");
     id_existing.span = span(8);
     let mut ids = IdSet::from([id_existing.clone(), id("existing")]);
-    block.free_into(&mut ids);
+    block.free_ids_into(&mut ids);
     assert_eq!(ids.len(), 8);
     assert!(ids.contains(&id("existing")));
     assert_eq!(ids.iter().find(|id| id.node == "shared").unwrap(), &id_existing);

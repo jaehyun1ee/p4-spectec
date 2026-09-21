@@ -71,7 +71,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
         ),
     ];
     for (exp, expected) in exps {
-        assert_eq!(exp.free(), expected);
+        assert_eq!(exp.free_ids(), expected);
     }
 
     let paths = vec![
@@ -102,16 +102,16 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
         ),
     ];
     for (path, expected) in paths {
-        assert_eq!(path.free(), expected);
+        assert_eq!(path.free_ids(), expected);
     }
 
-    assert_eq!(arg_exp("x").free(), ids(&["x"]));
+    assert_eq!(arg_exp("x").free_ids(), ids(&["x"]));
     assert_eq!(
         p4spec_rust::phrase! {
             node: il::ast::ArgKind::Def(id("x")),
             span: span("def"),
         }
-        .free(),
+        .free_ids(),
         ids(&[])
     );
     let prems = vec![
@@ -161,7 +161,7 @@ fn test_free_expression_path_argument_and_premise_variants_collect_identifier_te
                 node: prem,
                 span: span("premise"),
             }
-            .free(),
+            .free_ids(),
             expected
         );
     }
@@ -203,12 +203,12 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
         prems: vec![prem()],
     }, span: span("table") };
 
-    assert_eq!(rule_match.free(), ids(&["s", "i", "p"]));
-    assert_eq!(rule_path.free(), ids(&["p", "o"]));
-    assert_eq!(group.free(), ids(&["s", "i", "p", "o"]));
-    assert_eq!(else_group.free(), ids(&["s", "i", "p", "o"]));
-    assert_eq!(clause.free(), ids(&["a", "c", "p"]));
-    assert_eq!(table.free(), ids(&["a", "t", "p"]));
+    assert_eq!(rule_match.free_ids(), ids(&["s", "i", "p"]));
+    assert_eq!(rule_path.free_ids(), ids(&["p", "o"]));
+    assert_eq!(group.free_ids(), ids(&["s", "i", "p", "o"]));
+    assert_eq!(else_group.free_ids(), ids(&["s", "i", "p", "o"]));
+    assert_eq!(clause.free_ids(), ids(&["a", "c", "p"]));
+    assert_eq!(table.free_ids(), ids(&["a", "t", "p"]));
 
     let def_typ = p4spec_rust::phrase! {
         node: il::ast::DefTypKind::Plain(typ()),
@@ -303,6 +303,6 @@ fn test_free_al_shapes_and_definition_arms_are_exhaustive() {
         ),
     ];
     for (def, expected) in defs {
-        assert_eq!(def.free(), expected);
+        assert_eq!(def.free_ids(), expected);
     }
 }

@@ -10,7 +10,7 @@ use p4spec_rust::{
         el,
         hints::input::InputHint,
         il,
-        traits::{eq::SyntaxEq, free::Free, print::Print},
+        traits::{eq::SyntaxEq, free::FreeIds, print::Print},
     },
 };
 

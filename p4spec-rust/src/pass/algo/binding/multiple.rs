@@ -21,7 +21,7 @@ use crate::{
             ds::{map::IdMap, set::IdSet},
         },
         il::ast,
-        traits::free::Free,
+        traits::free::FreeIds,
     },
     note_phrase, phrase,
     runtime::{dim::Dim, envs::algo::VEnv},
@@ -151,7 +151,7 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
         ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
             let exp_inner = rename_exp(ctx, renv, exp_inner);
             // Iteration variables follow renamed occurrences still used inside
-            let frees = exp_inner.free();
+            let frees = exp_inner.free_ids();
             let mut vars_renamed = Vec::new();
             for var in vars {
                 match renv.get(&var.id) {

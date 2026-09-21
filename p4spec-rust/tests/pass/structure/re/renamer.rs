@@ -84,7 +84,7 @@ fn test_iterator_bound_and_binding_are_distinct() {
 
 #[test]
 fn test_change_tracking_follows_filtered_and_capture_avoiding_renamers() {
-    use crate::lang::traits::free::Free;
+    use crate::lang::traits::free::FreeIds;
     let mut changed = false;
     let renamer = Renamer::singleton(id("x"), id("y"));
     let renamer = renamer.filter(|_, _| true);
@@ -95,7 +95,7 @@ fn test_change_tracking_follows_filtered_and_capture_avoiding_renamers() {
     assert!(changed);
 
     changed = false;
-    let renamer_fresh = renamer.freshen_binders(&id_exp("y").free(), &vec![]);
+    let renamer_fresh = renamer.freshen_binders(&id_exp("y").free_ids(), &vec![]);
     assert!(!changed);
     renamer_fresh.rename_exp(&mut changed, id_exp("y"));
     assert!(changed);

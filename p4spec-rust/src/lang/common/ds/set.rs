@@ -2,7 +2,7 @@
 //!
 //! `PhraseSet` is a persistent ordered set over `ByKey`;
 //! inserting an equivalent key keeps the first one stored.
-//! `IdSet` is the set of identifiers the `Free` traversals collect.
+//! `IdSet` is the set of identifiers the `FreeIds` traversals collect.
 
 use crate::lang::{common::Id, traits::cmp::SyntaxCmp};
 use imbl::{GenericOrdSet, shared_ptr::RcK};

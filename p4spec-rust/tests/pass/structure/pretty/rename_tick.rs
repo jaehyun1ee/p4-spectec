@@ -1,5 +1,5 @@
 use super::super::{id_exp, ret};
-use crate::lang::traits::free::Free;
+use crate::lang::traits::free::FreeIds;
 use crate::pass::structure::pretty::rename_tick;
 #[test]
 fn test_ticks_fill_smallest_available_gap() {
@@ -8,10 +8,10 @@ fn test_ticks_fill_smallest_available_gap() {
         (vec![id_exp("x'''")], vec![ret("x'''"), ret("x"), ret("x''")], Some(vec![ret("x'''")])),
     )
     .unwrap();
-    let id = exps_match[0].free().iter().next().unwrap().clone();
+    let id = exps_match[0].free_ids().iter().next().unwrap().clone();
     assert_eq!(id.node, "x'");
-    assert!(block[0].free().contains(&id));
-    assert!(block_else.unwrap()[0].free().contains(&id));
+    assert!(block[0].free_ids().contains(&id));
+    assert!(block_else.unwrap()[0].free_ids().contains(&id));
 }
 
 use super::super::{id, instr, span};

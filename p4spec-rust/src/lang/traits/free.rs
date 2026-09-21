@@ -1,71 +1,139 @@
-//! Free identifiers shared across language stages
+//! Free identifiers and dimension-aware variables shared across language stages
 //!
-//! A type implements either `free` or `free_into`; each defaults to the other.
-//! Blanket impls cover strings, spanned nodes, boxes, options, and slices.
+//! `FreeIds` collects names, while `FreeVars` retains type and iteration metadata.
 
 use std::rc::Rc;
 
-use crate::lang::common::{ds::set::IdSet, source::NotePhrase};
+use crate::lang::{
+    common::{ds::set::IdSet, source::NotePhrase},
+    il::ast::Var,
+    traits::eq::SyntaxEq,
+};
 
 // == Free identifiers
 
 /// Collects free term identifiers from syntax.
-pub trait Free {
-    /// Returns the free term identifiers contained in `self`
-    fn free(&self) -> IdSet {
-        let mut free = IdSet::new();
-        self.free_into(&mut free);
-        free
+pub trait FreeIds {
+    /// Returns the free term identifiers contained in `self`.
+    fn free_ids(&self) -> IdSet {
+        let mut ids_free = IdSet::new();
+        self.free_ids_into(&mut ids_free);
+        ids_free
     }
 
-    /// Adds the free term identifiers contained in `self` to `free`
-    fn free_into(&self, free: &mut IdSet) {
-        free.append(self.free());
+    /// Adds the free term identifiers contained in `self` to `ids_free`.
+    fn free_ids_into(&self, ids_free: &mut IdSet) {
+        ids_free.append(self.free_ids());
     }
 }
 
 // - Text
 
-impl Free for String {
-    fn free(&self) -> IdSet {
+impl FreeIds for String {
+    fn free_ids(&self) -> IdSet {
         IdSet::new()
     }
 }
 
 // - Source annotations
 
-impl<T: Free, N, S> Free for NotePhrase<T, N, S> {
-    fn free_into(&self, free: &mut IdSet) {
-        self.node.free_into(free);
+impl<T: FreeIds, N, S> FreeIds for NotePhrase<T, N, S> {
+    fn free_ids_into(&self, ids_free: &mut IdSet) {
+        self.node.free_ids_into(ids_free);
     }
 }
 
 // - Containers
 
-impl<T: Free + ?Sized> Free for Box<T> {
-    fn free_into(&self, free: &mut IdSet) {
-        self.as_ref().free_into(free);
+impl<T: FreeIds + ?Sized> FreeIds for Box<T> {
+    fn free_ids_into(&self, ids_free: &mut IdSet) {
+        self.as_ref().free_ids_into(ids_free);
     }
 }
 
-impl<T: Free + ?Sized> Free for Rc<T> {
-    fn free_into(&self, free: &mut IdSet) {
-        self.as_ref().free_into(free);
+impl<T: FreeIds + ?Sized> FreeIds for Rc<T> {
+    fn free_ids_into(&self, ids_free: &mut IdSet) {
+        self.as_ref().free_ids_into(ids_free);
     }
 }
 
-impl<T: Free> Free for Option<T> {
-    fn free_into(&self, free: &mut IdSet) {
+impl<T: FreeIds> FreeIds for Option<T> {
+    fn free_ids_into(&self, ids_free: &mut IdSet) {
         if let Some(value) = self {
-            value.free_into(free);
+            value.free_ids_into(ids_free);
         }
     }
 }
 
-impl<T: Free> Free for [T] {
-    fn free_into(&self, free: &mut IdSet) {
+impl<T: FreeIds> FreeIds for [T] {
+    fn free_ids_into(&self, ids_free: &mut IdSet) {
         for item in self {
-            item.free_into(free);
+            item.free_ids_into(ids_free);
+        }
+    }
+}
+
+// == Free variables
+
+/// Collects dimension-aware free variables from syntax.
+pub trait FreeVars {
+    /// Returns the free variables contained in `self`.
+    fn free_vars(&self) -> Vec<Var>;
+
+    /// Adds the free variables contained in `self` to `vars_free`.
+    fn free_vars_into(&self, vars_free: &mut Vec<Var>) {
+        for var in self.free_vars() {
+            if !vars_free.iter().any(|var_free| var_free.syntax_eq(&var)) {
+                vars_free.push(var);
+            }
+        }
+    }
+}
+
+// - Containers
+
+impl<T: FreeVars + ?Sized> FreeVars for Box<T> {
+    fn free_vars(&self) -> Vec<Var> {
+        self.as_ref().free_vars()
+    }
+
+    fn free_vars_into(&self, vars_free: &mut Vec<Var>) {
+        self.as_ref().free_vars_into(vars_free);
+    }
+}
+
+impl<T: FreeVars + ?Sized> FreeVars for Rc<T> {
+    fn free_vars(&self) -> Vec<Var> {
+        self.as_ref().free_vars()
+    }
+
+    fn free_vars_into(&self, vars_free: &mut Vec<Var>) {
+        self.as_ref().free_vars_into(vars_free);
+    }
+}
+
+impl<T: FreeVars> FreeVars for Option<T> {
+    fn free_vars(&self) -> Vec<Var> {
+        self.as_ref().map(FreeVars::free_vars).unwrap_or_default()
+    }
+
+    fn free_vars_into(&self, vars_free: &mut Vec<Var>) {
+        if let Some(value) = self {
+            value.free_vars_into(vars_free);
+        }
+    }
+}
+
+impl<T: FreeVars> FreeVars for [T] {
+    fn free_vars(&self) -> Vec<Var> {
+        let mut vars_free = Vec::new();
+        self.free_vars_into(&mut vars_free);
+        vars_free
+    }
+
+    fn free_vars_into(&self, vars_free: &mut Vec<Var>) {
+        for item in self {
+            item.free_vars_into(vars_free);
         }
     }
 }

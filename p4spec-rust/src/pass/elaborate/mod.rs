@@ -14,8 +14,8 @@
 mod attempt;
 mod context;
 mod dimension;
-mod elab;
 mod error;
+mod transform;
 
 pub use error::*;
 
@@ -25,5 +25,5 @@ use crate::lang::{el, il};
 
 /// Validates and converts an EL specification to IL.
 pub fn convert(spec_el: el::ast::Spec) -> Result<il::ast::Spec, ElabError> {
-    elab::elaborate(spec_el)
+    transform::elab_spec(spec_el)
 }

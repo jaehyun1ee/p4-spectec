@@ -177,10 +177,10 @@ pub enum Guard {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Fallthrough {
-    FallGroup(Id),
-    FallNext,
-    FallElse,
-    FallFail,
+    Group(Id),
+    Next,
+    Else,
+    Fail,
 }
 
 pub type InstrNode<Tier> = NotePhrase<InstrKind<Tier>, Option<Fallthrough>>;
@@ -271,59 +271,59 @@ pub type RelSignature = sl::ast::RelSignature;
 // Group-body tier
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum InstrGroup {
-    Result(ResultGroupInstr),
-    Return(ReturnGroupInstr),
-    Rule(RuleGroupInstr),
-    Backtrack(BacktrackGroupInstr),
+pub enum GroupInstr {
+    Result(ResultInstr),
+    Return(ReturnInstr),
+    Rule(RuleInstr),
+    Backtrack(BacktrackInstr),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ResultGroupInstr {
+pub struct ResultInstr {
     pub rel_signature: RelSignature,
     pub exps_output: Vec<Exp>,
 }
 #[derive(Clone, Debug, PartialEq)]
-pub struct ReturnGroupInstr {
+pub struct ReturnInstr {
     pub exp: Exp,
 }
 #[derive(Clone, Debug, PartialEq)]
-pub struct RuleGroupInstr {
+pub struct RuleInstr {
     pub id: Id,
     pub not_exp: NotExp,
     pub input_hint: crate::lang::hints::input::InputHint,
     pub iter_instrs: Vec<InstrIter>,
 }
 #[derive(Clone, Debug, PartialEq)]
-pub struct BacktrackGroupInstr {
-    pub blocks: Vec<BlockGroup>,
+pub struct BacktrackInstr {
+    pub blocks: Vec<GroupBlock>,
 }
 
-pub type BlockGroup = Block<InstrGroup>;
+pub type GroupBlock = Block<GroupInstr>;
 
 // Dispatch tier
 
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
-pub enum InstrDispatch {
-    Group(GroupDispatchInstr),
-    Route(RouteDispatchInstr),
+pub enum DispatchInstr {
+    Group(RuleGroupInstr),
+    Route(RouteInstr),
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct GroupDispatchInstr {
+pub struct RuleGroupInstr {
     pub id_rel: Id,
     pub id_group: Id,
     pub rel_signature: RelSignature,
     pub exps_input: Vec<Exp>,
-    pub block: BlockGroup,
+    pub block: GroupBlock,
 }
 #[derive(Clone, Debug, PartialEq)]
-pub struct RouteDispatchInstr {
-    pub blocks: Vec<BlockDispatch>,
+pub struct RouteInstr {
+    pub blocks: Vec<DispatchBlock>,
 }
 
-pub type BlockDispatch = Block<InstrDispatch>;
+pub type DispatchBlock = Block<DispatchInstr>;
 
 // Type definitions
 
@@ -377,8 +377,8 @@ pub struct DefinedRel {
     pub id: Id,
     pub rel_signature: RelSignature,
     pub exps_input: Vec<Exp>,
-    pub block: BlockDispatch,
-    pub block_else_opt: Option<BlockDispatch>,
+    pub block: DispatchBlock,
+    pub block_else_opt: Option<DispatchBlock>,
 }
 
 // Meta-functions
@@ -415,7 +415,7 @@ pub struct BuiltinFunc {
 pub struct TableRow {
     pub exps_input: Vec<Exp>,
     pub exp: Exp,
-    pub block: BlockGroup,
+    pub block: GroupBlock,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -432,8 +432,8 @@ pub struct DefinedFunc {
     pub tparams: Vec<TParam>,
     pub params: Vec<Param>,
     pub typ: Typ,
-    pub block: BlockGroup,
-    pub block_else_opt: Option<BlockGroup>,
+    pub block: GroupBlock,
+    pub block_else_opt: Option<GroupBlock>,
 }
 
 // Definitions
