@@ -1,4 +1,4 @@
-//! Binding lowering from IL to AL:
+//! Binding lowering from IL to AL
 //!
 //! 1. Collect all binding occurrences of variables in an IL construct
 //!    - Check that all binding occurrences reside in invertible constructs
@@ -244,6 +244,7 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
 
 /// Rejects partial premises in an otherwise branch.
 fn check_prems_in_else(span: &Span, prems: &[al::ast::Prem]) -> Result<(), AlgoError> {
+    /// Whether a premise may fail: any check, or a let or debug that calls.
     fn is_impure_prem(prem: &al::ast::Prem) -> bool {
         match &prem.node {
             al::ast::PremKind::Rule(_)

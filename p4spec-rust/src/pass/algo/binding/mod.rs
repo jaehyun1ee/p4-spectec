@@ -1,6 +1,6 @@
 //! Binding analysis for algorithmic conversion
 //!
-//! `analyze` drives the pass over definitions;
+//! `transform` drives the pass over definitions;
 //! `collect` finds binding occurrences,
 //! `multiple` and `partial` rewrite repeated and partially bound patterns,
 //! `antiunify` merges rule inputs into one template,
