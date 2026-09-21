@@ -7,9 +7,12 @@
 use super::{doc::*, link, width as measure};
 use crate::backend::latex::error::{Error, Result};
 
+/// Chooses how soft breaks render within one layout group.
 #[derive(Clone, Copy)]
 enum Mode {
+    /// Keeps soft breaks as their empty or space spelling.
     Flat,
+    /// Starts an indented continuation at each soft break.
     Broken,
 }
 

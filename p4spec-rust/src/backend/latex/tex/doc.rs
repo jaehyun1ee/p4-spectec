@@ -11,89 +11,151 @@ use num_bigint::BigInt;
 /// Selects a font and its escaping context.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Style {
+    /// Italic math text, `\mathit{...}`.
     #[allow(dead_code)]
     Mathit,
+    /// Upright math text, `\mathrm{...}`.
     Mathrm,
+    /// Sans-serif math text, `\mathsf{...}`.
     Mathsf,
+    /// Blackboard-bold math text, `\mathbb{...}`.
     Mathbb,
+    /// Monospace math text, `\mathtt{...}`.
     Mathtt,
+    /// Text-mode content, `\text{...}`, with math-only glyphs split out.
     Text,
+    /// Monospace text, `\texttt{...}`, with math-only glyphs split out.
     Texttt,
 }
 
 /// Selects a balanced delimiter pair.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Delimiter {
+    /// Parentheses, `\left(...\right)`.
     Paren,
+    /// Square brackets, `\left[...\right]`.
     Bracket,
+    /// Braces, `\left\{...\right\}`.
     Brace,
+    /// Angle brackets, `\left\langle...\right\rangle`.
     Angle,
+    /// Vertical bars, `\left|...\right|`.
     Bar,
 }
 
 /// Aligns one grid column.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Alignment {
+    /// Left-aligns the column.
     Left,
+    /// Centers the column.
     Center,
+    /// Right-aligns the column.
     Right,
 }
 
 /// Specifies the flat representation of a break opportunity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Soft {
+    /// Emits nothing in flat mode and starts a new line in broken mode.
     #[allow(dead_code)]
     SoftCut,
+    /// Emits one space in flat mode and starts a new line in broken mode.
     SoftSpace,
 }
 
 /// Names a fixed mathematical atom.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Symbol {
+    /// Equality, `=`.
     Equal,
+    /// Inequality, `\ne`.
     NotEqual,
+    /// Less-than relation, `<`.
     Less,
+    /// Greater-than relation, `>`.
     Greater,
+    /// Less-than-or-equal relation, `\le`.
     LessEqual,
+    /// Greater-than-or-equal relation, `\ge`.
     GreaterEqual,
+    /// Addition or positive sign, `+`.
     Plus,
+    /// Subtraction or negative sign, `-`.
     Minus,
+    /// Optional iteration marker, `?`.
     Question,
+    /// List iteration marker, `\ast`.
     Ast,
+    /// Division slash, `/`.
     Slash,
+    /// Comma separator, `,`.
     Comma,
+    /// Semicolon separator, `;`.
     Semicolon,
+    /// Colon separator, `:`.
     Colon,
+    /// List construction, `::`.
     DoubleColon,
+    /// Concatenation, `+\!\!+`.
     Cat,
+    /// Grammar production, `::=`.
     Production,
+    /// Grammar alternative separator, `|`.
     VerticalBar,
+    /// Single dot, `.`.
     Dot,
+    /// Two literal dots, `..`.
     Dot2,
+    /// Ellipsis, `\ldots`.
     Ellipsis,
+    /// Empty sequence, `\epsilon`.
     Epsilon,
+    /// Membership, `\in`.
     In,
+    /// Logical negation, `\neg`.
     Neg,
+    /// Conjunction, `\land`.
     Land,
+    /// Disjunction, `\lor`.
     Lor,
+    /// Implication arrow, `\Rightarrow`.
     Rightarrow,
+    /// Equivalence arrow, `\Leftrightarrow`.
     Leftrightarrow,
+    /// Multiplication dot, `\cdot`.
     Cdot,
+    /// Numeric remainder, `\bmod`.
     Bmod,
+    /// Right-facing turnstile, `\vdash`.
     Turnstile,
+    /// Left-facing turnstile, `\dashv`.
     Tilesturn,
+    /// Single arrow, `\to`.
     To,
+    /// Long double arrow, `\Longrightarrow`.
     Longrightarrow,
+    /// Hooked arrow, `\hookrightarrow`.
     Hookrightarrow,
+    /// Table mapping arrow, `\mapsto`.
     Mapsto,
+    /// Similarity relation, `\sim`.
     Sim,
+    /// Set difference, `\setminus`.
     Setminus,
+    /// Empty set, `\varnothing`.
     EmptySet,
+    /// Literal opening parenthesis, without automatic sizing.
     LeftParen,
+    /// Literal closing parenthesis, without automatic sizing.
     RightParen,
+    /// Literal opening square bracket, without automatic sizing.
     LeftBracket,
+    /// Literal closing square bracket, without automatic sizing.
     RightBracket,
+    /// Literal opening brace, without automatic sizing.
     LeftBrace,
+    /// Literal closing brace, without automatic sizing.
     RightBrace,
 }
 
@@ -104,52 +166,90 @@ pub(crate) struct Target(pub(super) String);
 /// Retains mathematical and layout intent until interpretation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Doc {
+    /// No content and no width.
     Empty,
+    /// Text escaped in the selected font and math or text context.
     Styled(Style, String),
+    /// A boxed, shaded rule label containing small monospace text.
     Badge(String),
+    /// A decimal integer in math mode.
     Decimal(BigInt),
+    /// A hexadecimal integer with a `0x` prefix inside `\mathtt{...}`.
     Hexadecimal(BigInt),
+    /// A mathematical atom with a predefined TeX spelling.
     Fixed(Symbol),
+    /// A literal space, measured as one column.
     Space,
+    /// A thin math space, `\,`, measured as one column.
     ThinSpace,
+    /// A wide math space, `\quad`, measured as two columns.
     Quad,
+    /// Documents concatenated without implicit spacing.
     Concat(Vec<Doc>),
+    /// An explicit TeX group, `{...}`, retained even when empty.
     Group(Box<Doc>),
+    /// Content classified as a binary operator, `\mathbin{...}`.
     Mathbin(Box<Doc>),
+    /// Content classified as a relation, `\mathrel{...}`.
     Mathrel(Box<Doc>),
+    /// Content forced to display-style math, `{\displaystyle ...}`.
     Displaystyle(Box<Doc>),
+    /// A delimiter pair sized to its enclosed document.
     Delimited(Delimiter, Box<Doc>),
+    /// A base and subscript, in that order: `{base}_{sub}`.
     Subscript(Box<Doc>, Box<Doc>),
+    /// A base and superscript, in that order: `{base}^{sup}`.
     Superscript(Box<Doc>, Box<Doc>),
+    /// A base, subscript, and superscript: `{base}_{sub}^{sup}`.
     #[allow(dead_code)]
     Subsup(Box<Doc>, Box<Doc>, Box<Doc>),
+    /// A numerator and denominator: `\frac{num}{den}`.
     Fraction(Box<Doc>, Box<Doc>),
+    /// A local anchor and its visible document: `\href{#target}{doc}`.
     Link(Target, Box<Doc>),
+    /// A break opportunity whose flat spelling is selected by `Soft`.
     SoftBreak(Soft),
+    /// Content whose soft breaks are selected together by available width.
+    /// Nested layout groups choose their own mode; no TeX braces are added.
     LayoutGroup(Box<Doc>),
+    /// Additional continuation indentation and its document, in that order.
+    /// The first line keeps its current column.
     Nest(usize, Box<Doc>),
+    /// Continuation indentation, separator, and greedily packed documents.
+    /// A line break replaces the separator; `fill` removes empty items.
     Fill(usize, Box<Doc>, Vec<Doc>),
+    /// Equation rows in `aligned`, with shared column widths.
     Aligned(Vec<Vec<Doc>>),
+    /// Explicit column alignments and cell, spanning, or gap rows.
     Grid(Vec<Alignment>, Vec<Row>),
+    /// Rows in `aligned`, each following an empty alignment cell.
     #[allow(dead_code)]
     Stacked(Vec<Doc>),
+    /// Left-aligned rows, also used for resolved line breaks.
     LeftStack(Vec<Doc>),
+    /// Premises with numeric labels; continuation rows have no label.
     Numbered(Vec<Doc>),
+    /// Centered blocks with ordinary or enlarged vertical separation.
     Gathered(Vec<Block>),
 }
 
 /// Supplies cells, a spanning document, or a vertical grid gap.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Row {
+    /// One document per declared grid column.
     Cells(Vec<Doc>),
+    /// Content spanning the grid, laid out with the full line-width budget.
     Spanning(Doc),
+    /// Extra vertical space after a content row; never first or consecutive.
     Gap,
 }
 
 /// Supplies a gathered line or a vertical gap.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Block {
+    /// One centered document in a gathered environment.
     Line(Doc),
+    /// Extra space between lines; `gathered` trims and coalesces gaps.
     Gap,
 }
 
