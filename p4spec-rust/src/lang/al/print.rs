@@ -1,4 +1,9 @@
 //! Text rendering for algorithmic-language data
+//!
+//! Prints AL in a readable outline:
+//! each rule group shows its match (signature, inputs, shared premises)
+//! and then its paths, with inputs and outputs filled into the notation
+//! and `%` standing for the positions a side does not mention.
 
 use std::fmt::{self, Write};
 
@@ -72,6 +77,7 @@ impl<I: Print, V: Print> Print for [Prem<I, V>] {
     }
 }
 
+/// Prints each premise on its own `--` line at the given indent.
 fn write_prems_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
     level: usize,
@@ -86,6 +92,7 @@ fn write_prems_with<I: Print, V: Print>(
 
 // - Rules
 
+/// Prints the rule groups separated by blank lines.
 fn write_rulegroups<I: Print, V: Print>(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
@@ -101,6 +108,7 @@ fn write_rulegroups<I: Print, V: Print>(
     Ok(())
 }
 
+/// Prints one group as `rulegroup id`, its `match`, then its `paths`.
 fn write_rulegroup<I: Print, V: Print>(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
@@ -115,6 +123,7 @@ fn write_rulegroup<I: Print, V: Print>(
     write_rulepaths(output, not_typ, input_hint, &rule_group.node.rule_paths)
 }
 
+/// Prints the otherwise group under an `elsegroup` heading, if present.
 fn write_elsegroup_opt<I: Print, V: Print>(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
@@ -128,6 +137,7 @@ fn write_elsegroup_opt<I: Print, V: Print>(
     Ok(())
 }
 
+/// Prints the otherwise group like a rule group with a single path.
 fn write_elsegroup<I: Print, V: Print>(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
@@ -142,6 +152,7 @@ fn write_elsegroup<I: Print, V: Print>(
     write_rulepaths(output, not_typ, input_hint, std::slice::from_ref(&else_group.node.rule_path))
 }
 
+/// Prints the signature, the input patterns, and the shared premises.
 fn write_rulematch<I: Print, V: Print>(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
@@ -156,6 +167,7 @@ fn write_rulematch<I: Print, V: Print>(
     write_prems_with(output, 2, &rule_match.prems)
 }
 
+/// Prints the paths separated by blank lines.
 fn write_rulepaths<I: Print, V: Print>(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
@@ -171,6 +183,7 @@ fn write_rulepaths<I: Print, V: Print>(
     Ok(())
 }
 
+/// Prints one path as `rulepath id`, its premises, and its outputs.
 fn write_rulepath<I: Print, V: Print>(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
@@ -185,6 +198,7 @@ fn write_rulepath<I: Print, V: Print>(
     write_ruleoutput(output, not_typ, input_hint, &rule_path.exps_output)
 }
 
+/// Fills the input expressions into the notation at the hint's positions.
 fn write_ruleinput<I: Print, V: Print>(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
@@ -194,6 +208,7 @@ fn write_ruleinput<I: Print, V: Print>(
     let input_indices = input_hint.indices();
     assert_eq!(input_indices.len(), exps_input.len());
     let (_, typs) = not_typ.node.split();
+    // Each notation position takes its input, or nothing
     let exps = (0..typs.len())
         .map(|index| {
             input_indices
@@ -205,6 +220,7 @@ fn write_ruleinput<I: Print, V: Print>(
     write_notation(output, not_typ, exps)
 }
 
+/// Fills the output expressions into the notation at the non-input positions.
 fn write_ruleoutput<I: Print, V: Print>(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
@@ -213,10 +229,12 @@ fn write_ruleoutput<I: Print, V: Print>(
 ) -> fmt::Result {
     let input_indices = input_hint.indices();
     let (_, typs) = not_typ.node.split();
+    // Outputs are the positions the hint leaves
     let outputs = (0..typs.len())
         .filter(|index| !input_indices.contains(index))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
+    // A relation without outputs only holds
     if exps_output.is_empty() {
         output.write_str("-- the relation holds")
     } else {
@@ -430,10 +448,12 @@ impl<I: Print, V: Print> Print for Spec<I, V> {
 
 // == Helpers
 
+/// Two spaces per level.
 fn indent(level: usize) -> String {
     "  ".repeat(level)
 }
 
+/// Prints the notation with the given arguments, `%` where one is absent.
 fn write_notation<I: Print, V: Print>(
     output: &mut Printer<'_>,
     not_typ: &NotTyp,
