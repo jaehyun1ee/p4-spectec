@@ -74,7 +74,7 @@ impl LiftedCall {
 // - Expression
 
 /// Lifts the leftmost eligible call from an expression.
-fn lift_exp(
+fn lift_from_exp(
     ids_used: &mut IdSet,
     ids_iter_local: &IdSet,
     exp_target_sl: &mut sl::Exp,
@@ -87,7 +87,7 @@ fn lift_exp(
 }
 
 /// Lifts the leftmost call nested below an expression root.
-fn lift_nested_exp(
+fn lift_from_nested_exp(
     ids_used: &mut IdSet,
     ids_iter_local: &IdSet,
     exp_target_sl: &mut sl::Exp,
@@ -116,7 +116,9 @@ fn lift_exp_kind(
         | il_ast::ExpKind::Sub(exp_inner_sl, _, _)
         | il_ast::ExpKind::Match(exp_inner_sl, _)
         | il_ast::ExpKind::Len(exp_inner_sl)
-        | il_ast::ExpKind::Dot(exp_inner_sl, _) => lift_exp(ids_used, ids_iter_local, exp_inner_sl),
+        | il_ast::ExpKind::Dot(exp_inner_sl, _) => {
+            lift_from_exp(ids_used, ids_iter_local, exp_inner_sl)
+        }
         il_ast::ExpKind::Bin(_, _, exp_l_sl, exp_r_sl)
         | il_ast::ExpKind::Cmp(_, _, exp_l_sl, exp_r_sl)
         | il_ast::ExpKind::Cons(exp_l_sl, exp_r_sl)
@@ -130,7 +132,7 @@ fn lift_exp_kind(
         }
         il_ast::ExpKind::Case(not_exp_sl) => lift_case_exp(ids_used, ids_iter_local, not_exp_sl),
         il_ast::ExpKind::Str(fields_sl) => lift_struct_exp(ids_used, ids_iter_local, fields_sl),
-        il_ast::ExpKind::Opt(Some(exp_sl)) => lift_exp(ids_used, ids_iter_local, exp_sl),
+        il_ast::ExpKind::Opt(Some(exp_sl)) => lift_from_exp(ids_used, ids_iter_local, exp_sl),
         il_ast::ExpKind::Opt(None) => None,
         il_ast::ExpKind::Slice(exp_base_sl, exp_idx_sl, exp_len_sl) => {
             lift_slice_exp(ids_used, ids_iter_local, exp_base_sl, exp_idx_sl, exp_len_sl)
@@ -202,12 +204,12 @@ fn lift_binary_exp(
     exp_r_sl: &mut sl::Exp,
 ) -> Option<LiftedCall> {
     // Search the left operand first
-    if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_l_sl) {
+    if let Some(call_lifted) = lift_from_exp(ids_used, ids_iter_local, exp_l_sl) {
         return Some(call_lifted);
     }
 
     // Search the right operand second
-    lift_exp(ids_used, ids_iter_local, exp_r_sl)
+    lift_from_exp(ids_used, ids_iter_local, exp_r_sl)
 }
 
 // - Case expression
@@ -233,7 +235,7 @@ fn lift_struct_exp(
 ) -> Option<LiftedCall> {
     // Search field values in source order
     for (_, exp_sl) in fields_sl {
-        if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_sl) {
+        if let Some(call_lifted) = lift_from_exp(ids_used, ids_iter_local, exp_sl) {
             return Some(call_lifted);
         }
     }
@@ -250,17 +252,17 @@ fn lift_slice_exp(
     exp_len_sl: &mut sl::Exp,
 ) -> Option<LiftedCall> {
     // Search the base before slice operands
-    if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_base_sl) {
+    if let Some(call_lifted) = lift_from_exp(ids_used, ids_iter_local, exp_base_sl) {
         return Some(call_lifted);
     }
 
     // Search the index before the length
-    if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_idx_sl) {
+    if let Some(call_lifted) = lift_from_exp(ids_used, ids_iter_local, exp_idx_sl) {
         return Some(call_lifted);
     }
 
     // Search the length last
-    lift_exp(ids_used, ids_iter_local, exp_len_sl)
+    lift_from_exp(ids_used, ids_iter_local, exp_len_sl)
 }
 
 // - Update expression
@@ -273,7 +275,7 @@ fn lift_update_exp(
     exp_field_sl: &mut sl::Exp,
 ) -> Option<LiftedCall> {
     // Search the base before the update path and field
-    if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_base_sl) {
+    if let Some(call_lifted) = lift_from_exp(ids_used, ids_iter_local, exp_base_sl) {
         return Some(call_lifted);
     }
 
@@ -283,7 +285,7 @@ fn lift_update_exp(
     }
 
     // Search the replacement field last
-    lift_exp(ids_used, ids_iter_local, exp_field_sl)
+    lift_from_exp(ids_used, ids_iter_local, exp_field_sl)
 }
 
 // - Call expression
@@ -298,7 +300,7 @@ fn lift_call_exp(
         let il_ast::ArgKind::Exp(exp_sl) = &mut arg_sl.node else {
             continue;
         };
-        if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_sl) {
+        if let Some(call_lifted) = lift_from_exp(ids_used, ids_iter_local, exp_sl) {
             return Some(call_lifted);
         }
     }
@@ -314,7 +316,7 @@ fn lift_iter_exp(
     exp_inner_sl: &mut sl::Exp,
     iter_exp_sl: &mut sl::ExpIter,
 ) -> Option<LiftedCall> {
-    let call_lifted = lift_exp(ids_used, ids_iter_local, exp_inner_sl)?;
+    let call_lifted = lift_from_exp(ids_used, ids_iter_local, exp_inner_sl)?;
     Some(lift_call_through_iter(exp_inner_sl, iter_exp_sl, call_lifted))
 }
 
@@ -324,7 +326,7 @@ fn lift_nested_iter_exp(
     exp_inner_sl: &mut sl::Exp,
     iter_exp_sl: &mut sl::ExpIter,
 ) -> Option<LiftedCall> {
-    let call_lifted = lift_nested_exp(ids_used, ids_iter_local, exp_inner_sl)?;
+    let call_lifted = lift_from_nested_exp(ids_used, ids_iter_local, exp_inner_sl)?;
     Some(lift_call_through_iter(exp_inner_sl, iter_exp_sl, call_lifted))
 }
 
@@ -405,7 +407,7 @@ fn lift_exps(
 ) -> Option<LiftedCall> {
     // Search expressions in source order
     for exp_sl in exps_sl {
-        if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_sl) {
+        if let Some(call_lifted) = lift_from_exp(ids_used, ids_iter_local, exp_sl) {
             return Some(call_lifted);
         }
     }
@@ -420,7 +422,7 @@ fn lift_nested_exps(
 ) -> Option<LiftedCall> {
     // Search expressions in source order
     for exp_sl in exps_sl {
-        if let Some(call_lifted) = lift_nested_exp(ids_used, ids_iter_local, exp_sl) {
+        if let Some(call_lifted) = lift_from_nested_exp(ids_used, ids_iter_local, exp_sl) {
             return Some(call_lifted);
         }
     }
@@ -440,7 +442,7 @@ fn lift_path(
             if let Some(call_lifted) = lift_path(ids_used, ids_iter_local, path_inner_sl) {
                 return Some(call_lifted);
             }
-            lift_exp(ids_used, ids_iter_local, exp_idx_sl)
+            lift_from_exp(ids_used, ids_iter_local, exp_idx_sl)
         }
         il_ast::PathKind::Slice(path_inner_sl, exp_idx_sl, exp_len_sl) => {
             lift_slice_path(ids_used, ids_iter_local, path_inner_sl, exp_idx_sl, exp_len_sl)
@@ -464,12 +466,12 @@ fn lift_slice_path(
     }
 
     // Search the index before the length
-    if let Some(call_lifted) = lift_exp(ids_used, ids_iter_local, exp_idx_sl) {
+    if let Some(call_lifted) = lift_from_exp(ids_used, ids_iter_local, exp_idx_sl) {
         return Some(call_lifted);
     }
 
     // Search the length last
-    lift_exp(ids_used, ids_iter_local, exp_len_sl)
+    lift_from_exp(ids_used, ids_iter_local, exp_len_sl)
 }
 
 // == Instructions
@@ -482,7 +484,7 @@ fn lift_instr_call(
 ) -> Result<Option<LiftedCall>, ProseError> {
     let span = instr_sl.span.clone();
     Ok(match &mut instr_sl.node {
-        sl::InstrKind::Let(instr_sl) => lift_nested_exp(
+        sl::InstrKind::Let(instr_sl) => lift_from_nested_exp(
             ids_used,
             &ids_bound_by_instr_iters(&instr_sl.iter_instrs),
             &mut instr_sl.exp_r,
@@ -493,7 +495,7 @@ fn lift_instr_call(
             lift_nested_exps(ids_used, &IdSet::new(), &mut instr_sl.exps)
         }
         sl::InstrKind::Return(instr_sl) => {
-            lift_nested_exp(ids_used, &IdSet::new(), &mut instr_sl.exp)
+            lift_from_nested_exp(ids_used, &IdSet::new(), &mut instr_sl.exp)
         }
         sl::InstrKind::If(_)
         | sl::InstrKind::Case(_)
