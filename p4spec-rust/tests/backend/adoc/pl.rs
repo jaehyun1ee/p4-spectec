@@ -1,0 +1,337 @@
+use p4spec_rust::{
+    backend::adoc::pl::{document::Subject, render_def, render_def_with_anchor, render_spec},
+    lang::{
+        common::{
+            notation::{atom::Atom, mixfix::Mixfix},
+            prim::{
+                bool::UnOp as BoolUnOp,
+                num::{BinOp as NumBinOp, Natural, Number},
+            },
+            source::Span,
+        },
+        data::typ,
+        hints::{
+            alter::{AlterationHint, Hole},
+            input::InputHint,
+        },
+        pl::{annot::Hints, ast as pl},
+    },
+};
+
+fn id(name: &str) -> pl::Id {
+    p4spec_rust::phrase! { node: name.to_owned(), span: Span::default() }
+}
+
+fn exp_bool(value: bool) -> pl::Exp {
+    p4spec_rust::annotated_note_phrase! {
+        node: pl::ExpKind::Bool(value),
+        note: pl::TypKind::Bool,
+        span: Span::default(),
+    }
+}
+
+fn exp_id(name: &str) -> pl::Exp {
+    p4spec_rust::annotated_note_phrase! {
+        node: pl::ExpKind::Id(id(name)),
+        note: pl::TypKind::Bool,
+        span: Span::default(),
+    }
+}
+
+fn exp_nat(value: u64) -> pl::Exp {
+    p4spec_rust::annotated_note_phrase! {
+        node: pl::ExpKind::Num(Number::Nat(Natural::from(value))),
+        note: pl::TypKind::Num(p4spec_rust::lang::common::prim::num::Typ::Nat),
+        span: Span::default(),
+    }
+}
+
+fn prose_hint(text_l: &str, hole: usize, text_r: &str) -> AlterationHint {
+    AlterationHint::Seq(
+        (!text_l.is_empty())
+            .then(|| AlterationHint::Text(text_l.to_owned()))
+            .into_iter()
+            .chain(std::iter::once(AlterationHint::Hole(Hole::Num(hole))))
+            .chain((!text_r.is_empty()).then(|| AlterationHint::Text(text_r.to_owned())))
+            .collect(),
+    )
+}
+
+fn return_exp_instr(
+    exp: pl::Exp,
+    fallthrough: Option<pl::Fallthrough>,
+) -> pl::Instr<pl::GroupInstr> {
+    p4spec_rust::annotated_note_phrase! {
+        node: pl::InstrKind::Tier(pl::TierInstr {
+            tier: pl::GroupInstr::Return(pl::ReturnInstr { exp }),
+        }),
+        note: fallthrough,
+        span: Span::default(),
+    }
+}
+
+fn return_instr(value: bool) -> pl::Instr<pl::GroupInstr> {
+    return_exp_instr(exp_bool(value), Some(pl::Fallthrough::Fail))
+}
+
+fn defined_func_with(name: &str, params: Vec<pl::Param>, block: pl::GroupBlock) -> pl::Def {
+    p4spec_rust::annotated! {
+        node: p4spec_rust::phrase! {
+            node: pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(pl::DefinedFunc {
+                id: id(name),
+                tparams: Vec::new(),
+                params,
+                typ: typ::make::bool(),
+                block,
+                block_else_opt: None,
+            })),
+            span: Span::default(),
+        },
+        hints: Default::default(),
+    }
+}
+
+fn defined_func(name: &str, block: pl::GroupBlock) -> pl::Def {
+    defined_func_with(name, Vec::new(), block)
+}
+
+fn backtrack_instr(blocks: Vec<pl::GroupBlock>) -> pl::Instr<pl::GroupInstr> {
+    p4spec_rust::annotated_note_phrase! {
+        node: pl::InstrKind::Tier(pl::TierInstr {
+            tier: pl::GroupInstr::Backtrack(pl::BacktrackInstr { blocks }),
+        }),
+        note: None,
+        span: Span::default(),
+    }
+}
+
+#[test]
+fn test_defined_function_renders_prose_body() {
+    let def = defined_func("enabled", vec![return_instr(true)]);
+
+    assert_eq!(render_def(&def), Some("xref:enabled[$enabled]\n\n return ``true``.".to_owned()),);
+}
+
+#[test]
+fn test_function_hints_substitute_parameters_and_negative_calls() {
+    let param = p4spec_rust::phrase! {
+        node: pl::ParamKind::Exp(typ::make::bool(), Box::new(exp_id("flag"))),
+        span: Span::default(),
+    };
+    let mut exp_call = p4spec_rust::annotated_note_phrase! {
+        node: pl::ExpKind::Call(
+            id("enabled"),
+            Vec::new(),
+            vec![p4spec_rust::phrase! {
+                node: pl::ArgKind::Exp(Box::new(exp_id("flag"))),
+                span: Span::default(),
+            }],
+        ),
+        note: pl::TypKind::Bool,
+        span: Span::default(),
+    };
+    exp_call.hints.prose_false = Some(prose_hint("", 0, "is disabled"));
+    let exp_not = p4spec_rust::annotated_note_phrase! {
+        node: pl::ExpKind::Un(pl::UnOp::Bool(BoolUnOp::Not), pl::OpTyp::Bool, Box::new(exp_call)),
+        note: pl::TypKind::Bool,
+        span: Span::default(),
+    };
+    let mut def = defined_func_with(
+        "check",
+        vec![param],
+        vec![return_exp_instr(exp_not, Some(pl::Fallthrough::Fail))],
+    );
+    def.hints.prose_in = Some(prose_hint("checking whether", 0, ""));
+
+    assert_eq!(
+        render_def(&def).unwrap(),
+        concat!(
+            "xref:check[Checking whether ``flag``]",
+            "\n\n",
+            ". Return xref:enabled[``flag`` is disabled].",
+            "+++<sub class=\"bk-mark\">[FAIL]</sub>+++",
+        ),
+    );
+}
+
+#[test]
+fn test_relation_math_title_preserves_input_and_output_positions() {
+    let atom_colon = p4spec_rust::phrase! { node: Atom::Colon, span: Span::default() };
+    let signature = pl::RelSignature {
+        not_typ: p4spec_rust::phrase! {
+            node: Mixfix::Seq(vec![
+                Mixfix::Arg(typ::make::bool()),
+                Mixfix::Atom(atom_colon),
+                Mixfix::Arg(typ::make::bool()),
+            ]),
+            span: Span::default(),
+        },
+        input_hint: InputHint::new(vec![p4spec_rust::phrase! { node: 0, span: Span::default() }]),
+    };
+    let def = p4spec_rust::annotated! {
+        node: p4spec_rust::phrase! {
+            node: pl::DefKind::Rel(pl::RelDef::Extern(pl::ExternRel {
+                id: id("Check"),
+                rel_signature: signature,
+                exps_input: vec![exp_id("input")],
+            })),
+            span: Span::default(),
+        },
+        hints: Hints::default(),
+    };
+
+    assert_eq!(render_def(&def).unwrap(), "xref:Check[Check: ``input`` ``+:+`` ``%``]");
+}
+
+#[test]
+fn test_destruct_field_names_render_in_source_order() {
+    let destruct = p4spec_rust::annotated_note_phrase! {
+        node: pl::InstrKind::Destruct(pl::DestructInstr {
+            bindings: vec![
+                (Some("key".to_owned()), exp_id("k")),
+                (Some("value".to_owned()), exp_id("v")),
+                (None, exp_id("ignored")),
+            ],
+            exp: exp_id("entry"),
+        }),
+        note: Some(pl::Fallthrough::Fail),
+        span: Span::default(),
+    };
+    let def = defined_func("fields", vec![destruct, return_instr(true)]);
+
+    assert!(render_def(&def).unwrap().contains(
+        ". Let ``k`` and ``v`` be the key and the value of ``entry``.+++<sub class=\"bk-mark\">[FAIL]</sub>+++"
+    ));
+}
+
+#[test]
+fn test_nested_backtracking_uses_local_arm_labels_and_fresh_block_counters() {
+    let nested = backtrack_instr(vec![
+        vec![return_exp_instr(exp_bool(false), Some(pl::Fallthrough::Next))],
+        vec![return_instr(true)],
+    ]);
+    let outer = backtrack_instr(vec![
+        vec![nested, return_exp_instr(exp_bool(false), Some(pl::Fallthrough::Next))],
+        vec![return_instr(true)],
+    ]);
+    let def = defined_func("choice", vec![outer]);
+    let rendered = render_def(&def).unwrap();
+
+    assert!(rendered.contains("id=\"bk-choice-1-arm-1\""));
+    assert!(rendered.contains("id=\"bk-choice-2-arm-1\""));
+    assert!(rendered.contains("href=\"#bk-choice-2-arm-2\">→ b</a>"), "{rendered}",);
+    assert!(rendered.contains("href=\"#bk-choice-1-arm-2\">→ 2</a>"), "{rendered}",);
+}
+
+#[test]
+fn test_custom_function_anchor_is_used_by_fragment_api() {
+    let def = defined_func("enabled", vec![return_instr(true)]);
+    let anchor = |subject: &Subject| match subject {
+        Subject::Function(id) => Some(format!("function-{id}")),
+        Subject::Relation(id) => Some(format!("relation-{id}")),
+    };
+
+    assert!(
+        render_def_with_anchor(&def, &anchor)
+            .unwrap()
+            .starts_with("xref:function-enabled[$enabled]")
+    );
+}
+
+#[test]
+fn test_full_render_is_deterministic_and_fragments_reset_counters() {
+    let def = defined_func(
+        "choice",
+        vec![backtrack_instr(vec![vec![return_instr(false)], vec![return_instr(true)]])],
+    );
+    let spec = vec![def.clone(), def];
+    let rendered_a = render_spec(&spec);
+    let rendered_b = render_spec(&spec);
+
+    assert_eq!(rendered_a, rendered_b);
+    assert!(rendered_a.contains("id=\"bk-choice-1-arm-1\""));
+    assert!(rendered_a.contains("id=\"bk-choice-2-arm-1\""));
+}
+
+#[test]
+fn test_numeric_addition_uses_the_adoc_plus_attribute() {
+    let exp_add = p4spec_rust::annotated_note_phrase! {
+        node: pl::ExpKind::Bin(
+            pl::BinOp::Num(NumBinOp::Add),
+            pl::OpTyp::Nat,
+            Box::new(exp_nat(1)),
+            Box::new(exp_nat(2)),
+        ),
+        note: pl::TypKind::Num(p4spec_rust::lang::common::prim::num::Typ::Nat),
+        span: Span::default(),
+    };
+    let def = defined_func("add", vec![return_exp_instr(exp_add, None)]);
+
+    assert!(render_def(&def).unwrap().contains("``1`` ``{plus}`` ``2``"));
+}
+
+#[test]
+fn test_otherwise_anchor_follows_the_ordered_list_marker_space() {
+    let mut def = defined_func("fallback", vec![return_exp_instr(exp_id("value"), None)]);
+    let pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(func)) = &mut def.node.node else {
+        panic!("fixture is a defined function");
+    };
+    func.block_else_opt = Some(vec![return_instr(false)]);
+
+    assert!(
+        render_def(&def)
+            .unwrap()
+            .contains("\n\n. +++<span id=\"fallback-else\"></span>+++Otherwise:")
+    );
+}
+
+#[test]
+fn test_relation_dispatch_allocates_block_anchor_before_group_bodies() {
+    let signature = pl::RelSignature {
+        not_typ: p4spec_rust::phrase! {
+            node: Mixfix::Arg(typ::make::bool()),
+            span: Span::default(),
+        },
+        input_hint: InputHint::new(vec![p4spec_rust::phrase! { node: 0, span: Span::default() }]),
+    };
+    let group = p4spec_rust::annotated_note_phrase! {
+        node: pl::InstrKind::Tier(pl::TierInstr {
+            tier: pl::DispatchInstr::Group(pl::RuleGroupInstr {
+                id_rel: id("Rel"),
+                id_group: id("main"),
+                rel_signature: signature.clone(),
+                exps_input: vec![exp_id("input")],
+                block: vec![backtrack_instr(vec![
+                    vec![return_instr(false)],
+                    vec![return_instr(true)],
+                ])],
+            }),
+        }),
+        note: None,
+        span: Span::default(),
+    };
+    let route = p4spec_rust::annotated_note_phrase! {
+        node: pl::InstrKind::Tier(pl::TierInstr {
+            tier: pl::DispatchInstr::Route(pl::RouteInstr { blocks: vec![vec![group]] }),
+        }),
+        note: None,
+        span: Span::default(),
+    };
+    let def = p4spec_rust::annotated! {
+        node: p4spec_rust::phrase! {
+            node: pl::DefKind::Rel(pl::RelDef::Defined(pl::DefinedRel {
+                id: id("Rel"),
+                rel_signature: signature,
+                exps_input: vec![exp_id("input")],
+                block: vec![route],
+                block_else_opt: None,
+            })),
+            span: Span::default(),
+        },
+        hints: Hints::default(),
+    };
+    let rendered = render_def(&def).unwrap();
+
+    assert!(rendered.contains("id=\"bk-Rel-2-arm-1\""), "{rendered}");
+    assert!(rendered.contains("id=\"bk-Rel-1-arm-1\""), "{rendered}");
+}
