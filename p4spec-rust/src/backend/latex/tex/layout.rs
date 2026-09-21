@@ -72,7 +72,7 @@ fn column_after_lines(column: usize, lines: &[Doc]) -> usize {
 /// Finds the same-mode prefix width and whether a soft break ends it.
 fn width_before_break(doc: &Doc) -> (usize, bool) {
     match doc {
-        Doc::Concat(docs) => width_before_break_in_docs(docs),
+        Doc::Concat(docs) => width_before_break_in_docs(docs.iter()),
         Doc::Group(doc)
         | Doc::Mathbin(doc)
         | Doc::Mathrel(doc)
@@ -80,16 +80,13 @@ fn width_before_break(doc: &Doc) -> (usize, bool) {
         | Doc::Link(_, doc)
         | Doc::Nest(_, doc) => width_before_break(doc),
         Doc::SoftBreak(_) => (0, true),
-        Doc::Fill(_, separator, docs) => {
-            let doc = concat_intersperse((**separator).clone(), docs.clone());
-            width_before_break(&doc)
-        }
+        Doc::Fill(_, separator, docs) => width_before_break_in_docs(interspersed(separator, docs)),
         _ => (measure::flat(doc), false),
     }
 }
 
 /// Counts only the prefix before the first same-mode soft break.
-fn width_before_break_in_docs(docs: &[Doc]) -> (usize, bool) {
+fn width_before_break_in_docs<'a>(docs: impl IntoIterator<Item = &'a Doc>) -> (usize, bool) {
     let mut width = 0;
     // Nested layout groups choose their own mode and remain atomic here
     for doc in docs {
@@ -107,7 +104,7 @@ fn width_suffix_of_docs(mode: Mode, width_suffix: usize, docs: &[Doc]) -> usize 
     match mode {
         Mode::Flat => width_suffix + docs.iter().map(measure::flat).sum::<usize>(),
         Mode::Broken => {
-            let (width, has_break) = width_before_break_in_docs(docs);
+            let (width, has_break) = width_before_break_in_docs(docs.iter());
             width + if has_break { 0 } else { width_suffix }
         }
     }
@@ -202,7 +199,7 @@ fn resolve_doc(
         }
         Doc::Link(target, doc) => {
             let doc = resolve_doc(width, column, column_next, width_suffix, doc);
-            link::normalize_after_layout(target, &doc)
+            link::normalize_after_layout(target, doc)
         }
         Doc::SoftBreak(Soft::SoftCut) => Doc::Empty,
         Doc::SoftBreak(Soft::SoftSpace) => Doc::Space,
@@ -215,7 +212,9 @@ fn resolve_doc(
         Doc::Fill(indent, separator, docs) => {
             resolve_fill(width, column, column_next + indent, width_suffix, separator, docs)
         }
-        Doc::Aligned(rows) => Doc::Aligned(resolve_rows(width, None, rows)),
+        Doc::Aligned(rows) => {
+            Doc::Aligned(resolve_rows(width, None, rows.iter().map(Vec::as_slice)))
+        }
         Doc::Grid(alignments, rows) => resolve_grid(width, alignments, rows),
         Doc::Stacked(docs) => Doc::Stacked(
             docs.iter()
@@ -352,21 +351,22 @@ fn resolve_cells(
 }
 
 /// Stabilizes shared widths and retains the narrowest candidate on a cycle.
-fn resolve_rows(
+fn resolve_rows<'a>(
     width: usize,
     alignments: Option<&[Alignment]>,
-    rows: &[Vec<Doc>],
+    rows: impl Iterator<Item = &'a [Doc]> + Clone,
 ) -> Vec<Vec<Doc>> {
-    let mut column_widths = measure::flat_column_widths(rows);
+    let mut column_widths = measure::flat_column_widths(rows.clone());
     let mut seen = vec![column_widths.clone()];
     let mut best: Option<(Vec<usize>, Vec<Vec<Doc>>)> = None;
     // Always resolve the original rows at the current candidate widths
     loop {
         let rows_resolved: Vec<_> = rows
-            .iter()
+            .clone()
             .map(|docs| resolve_cells(width, &column_widths, alignments, docs))
             .collect();
-        let column_widths_resolved = measure::flat_column_widths(&rows_resolved);
+        let column_widths_resolved =
+            measure::flat_column_widths(rows_resolved.iter().map(Vec::as_slice));
         if best.as_ref().is_none_or(|(widths_best, _)| {
             measure::flat_columns(&column_widths_resolved) < measure::flat_columns(widths_best)
         }) {
@@ -386,14 +386,11 @@ fn resolve_rows(
 
 /// Replaces cell rows in order and independently resolves spanning rows.
 fn resolve_grid(width: usize, alignments: &[Alignment], rows: &[Row]) -> Doc {
-    let rows_cell: Vec<_> = rows
-        .iter()
-        .filter_map(|row| match row {
-            Row::Cells(docs) => Some(docs.clone()),
-            _ => None,
-        })
-        .collect();
-    let rows_cell = resolve_rows(width, Some(alignments), &rows_cell);
+    let rows_cell = rows.iter().filter_map(|row| match row {
+        Row::Cells(docs) => Some(docs.as_slice()),
+        _ => None,
+    });
+    let rows_cell = resolve_rows(width, Some(alignments), rows_cell);
     let mut rows_cell = rows_cell.into_iter();
     // The same cell-row filter determines both production and consumption
     let rows = rows
@@ -516,7 +513,7 @@ fn resolve_in_mode(
         }
         Doc::Link(target, doc) => {
             resolve_in_mode(mode, width, column, column_next, width_suffix, doc)
-                .iter()
+                .into_iter()
                 .map(|doc| link::link_unowned_doc(target, doc))
                 .collect()
         }

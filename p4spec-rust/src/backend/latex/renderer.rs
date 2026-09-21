@@ -140,7 +140,7 @@ fn tex_of_link(anchor: Option<&str>, doc: Doc) -> Result<Doc> {
         None => Ok(doc),
         Some(anchor) => {
             let target = link::target_of_string(anchor)?;
-            Ok(link::link_unowned_doc(&target, &doc))
+            Ok(link::link_unowned_doc(&target, doc))
         }
     }
 }
@@ -205,8 +205,7 @@ fn tex_of_infix_typ(typ_l: &Typ, atom: &Atom, typ_r: &Typ) -> Doc {
     // Subscripted arrows consume one type from a sequence or the whole operand
     let (tex_sub, tex_r) = match typ_r {
         // A sequence tail remains to the right of the arrow
-        Typ::Notation(not_typ) if matches!(not_typ.node, NotTypKind::Seq(_)) => {
-            let NotTypKind::Seq(typs) = &not_typ.node else { unreachable!() };
+        Typ::Notation(NotTyp { node: NotTypKind::Seq(typs), .. }) => {
             let Some((typ_sub, typs)) = typs.split_first() else {
                 return doc::concat_spaced(vec![tex_l, tex_op]);
             };

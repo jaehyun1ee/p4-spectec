@@ -143,12 +143,14 @@ fn render_doc(output: &mut dyn Write, doc: &Doc) -> fmt::Result {
         }
         Doc::LayoutGroup(doc) | Doc::Nest(_, doc) => render_doc(output, doc),
         Doc::Fill(_, separator, docs) => {
-            let doc = concat_intersperse((**separator).clone(), docs.clone());
-            render_doc(output, &doc)
+            for doc in interspersed(separator, docs) {
+                render_doc(output, doc)?;
+            }
+            Ok(())
         }
         Doc::Aligned(rows) => {
             output.write_str("\\begin{aligned}\n")?;
-            render_array_rows(output, rows)?;
+            render_array_rows(output, rows.iter().map(Vec::as_slice))?;
             output.write_str("\n\\end{aligned}")
         }
         Doc::Grid(alignments, rows) => render_grid(output, alignments, rows),
@@ -164,8 +166,7 @@ fn render_doc(output: &mut dyn Write, doc: &Doc) -> fmt::Result {
             output.write_str("\n\\end{aligned}")
         }
         Doc::LeftStack(docs) => {
-            let rows: Vec<_> = docs.iter().map(|doc| vec![doc.clone()]).collect();
-            render_array(output, &[Alignment::Left], &rows)
+            render_array(output, &[Alignment::Left], docs.iter().map(std::slice::from_ref))
         }
         Doc::Numbered(docs) => render_numbered(output, docs),
         Doc::Gathered(blocks) => render_gathered(output, blocks),
@@ -245,9 +246,12 @@ fn render_cells(output: &mut dyn Write, docs: &[Doc]) -> fmt::Result {
 }
 
 /// Writes rows without a trailing line break.
-fn render_array_rows(output: &mut dyn Write, rows: &[Vec<Doc>]) -> fmt::Result {
+fn render_array_rows<'a>(
+    output: &mut dyn Write,
+    rows: impl IntoIterator<Item = &'a [Doc]>,
+) -> fmt::Result {
     // Array and aligned environments share the same row separators
-    for (idx, docs) in rows.iter().enumerate() {
+    for (idx, docs) in rows.into_iter().enumerate() {
         if idx != 0 {
             output.write_str(" \\\\\n")?;
         }
@@ -270,10 +274,10 @@ fn render_alignments(output: &mut dyn Write, alignments: &[Alignment]) -> fmt::R
 }
 
 /// Encloses aligned rows in a TeX array environment.
-fn render_array(
+fn render_array<'a>(
     output: &mut dyn Write,
     alignments: &[Alignment],
-    rows: &[Vec<Doc>],
+    rows: impl IntoIterator<Item = &'a [Doc]>,
 ) -> fmt::Result {
     // Declare columns before serializing their content
     output.write_str(r"\begin{array}{")?;
@@ -304,14 +308,14 @@ fn render_grid_spanning_row(
     if docs_column_head.is_empty() {
         render_doc(output, doc)?;
     } else {
-        let rows: Vec<_> = docs_column_head
-            .iter()
-            .map(|doc| vec![doc.clone()])
-            .collect();
         output.write_str(r"\mathrlap{\displaystyle ")?;
         render_doc(output, doc)?;
         output.write_str(r"}\smash{\hphantom{")?;
-        render_array(output, &[Alignment::Right], &rows)?;
+        render_array(
+            output,
+            &[Alignment::Right],
+            docs_column_head.iter().map(std::slice::from_ref),
+        )?;
         output.write_str("}}")?;
     }
     render_grid_empty_cells(output, alignments.len())
@@ -350,7 +354,7 @@ fn render_grid_rows(
 fn render_grid_array(
     output: &mut dyn Write,
     alignments: &[Alignment],
-    rows_cell: &[Vec<Doc>],
+    rows_cell: &[&[Doc]],
     rows: &[Row],
 ) -> fmt::Result {
     let docs_column_head: Vec<_> = rows_cell
@@ -370,7 +374,7 @@ fn render_grid(output: &mut dyn Write, alignments: &[Alignment], rows: &[Row]) -
     let rows_cell: Vec<_> = rows
         .iter()
         .filter_map(|row| match row {
-            Row::Cells(docs) => Some(docs.clone()),
+            Row::Cells(docs) => Some(docs.as_slice()),
             _ => None,
         })
         .collect();
@@ -392,11 +396,11 @@ fn render_grid(output: &mut dyn Write, alignments: &[Alignment], rows: &[Row]) -
     output.write_str(r"\mathrlap{\displaystyle ")?;
     render_grid_array(output, alignments, &rows_cell, rows)?;
     output.write_str("}\\smash{\\hphantom{\\begin{array}{l}\n")?;
-    let rows_cell: Vec<_> = rows_cell
+    let rows_cell: Vec<Vec<_>> = rows_cell
         .iter()
         .map(|docs| docs.iter().map(link::strip_links).collect())
         .collect();
-    render_array(output, alignments, &rows_cell)?;
+    render_array(output, alignments, rows_cell.iter().map(Vec::as_slice))?;
     for doc in docs_spanning {
         output.write_str(" \\\\\n")?;
         let doc = link::strip_links(doc);

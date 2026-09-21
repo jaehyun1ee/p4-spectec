@@ -171,6 +171,21 @@ pub(crate) fn is_empty(doc: &Doc) -> bool {
 
 // == Normalizing composition
 
+/// Borrows nonempty documents with a separator between adjacent documents.
+pub(super) fn interspersed<'a>(
+    separator: &'a Doc,
+    docs: &'a [Doc],
+) -> impl Iterator<Item = &'a Doc> {
+    // Filter emptiness before inserting borrowed separators
+    docs.iter()
+        .filter(|doc| !is_empty(doc))
+        .enumerate()
+        .flat_map(move |(idx, doc)| {
+            let separator = (idx != 0).then_some(separator);
+            separator.into_iter().chain(std::iter::once(doc))
+        })
+}
+
 /// Flattens concatenation and removes empty atomic documents.
 pub(crate) fn concat(docs: Vec<Doc>) -> Doc {
     // Expand nested sequences in their original order

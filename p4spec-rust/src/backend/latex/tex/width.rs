@@ -41,19 +41,13 @@ pub(crate) fn flat(doc: &Doc) -> usize {
         Doc::Fraction(doc_num, doc_den) => FRACTION_MARGIN + flat(doc_num).max(flat(doc_den)),
         Doc::SoftBreak(Soft::SoftCut) => 0,
         Doc::SoftBreak(Soft::SoftSpace) => 1,
-        Doc::Fill(_, separator, docs) => {
-            let doc = concat_intersperse((**separator).clone(), docs.clone());
-            flat(&doc)
-        }
-        Doc::Aligned(rows) => flat_columns(&flat_column_widths(rows)),
+        Doc::Fill(_, separator, docs) => interspersed(separator, docs).map(flat).sum(),
+        Doc::Aligned(rows) => flat_columns(&flat_column_widths(rows.iter().map(Vec::as_slice))),
         Doc::Grid(_, rows) => {
-            let rows_cell: Vec<_> = rows
-                .iter()
-                .filter_map(|row| match row {
-                    Row::Cells(docs) => Some(docs.clone()),
-                    _ => None,
-                })
-                .collect();
+            let rows_cell = rows.iter().filter_map(|row| match row {
+                Row::Cells(docs) => Some(docs.as_slice()),
+                _ => None,
+            });
             let width_spanning = rows
                 .iter()
                 .filter_map(|row| match row {
@@ -62,7 +56,7 @@ pub(crate) fn flat(doc: &Doc) -> usize {
                 })
                 .max()
                 .unwrap_or(0);
-            flat_columns(&flat_column_widths(&rows_cell)).max(width_spanning)
+            flat_columns(&flat_column_widths(rows_cell)).max(width_spanning)
         }
         Doc::Stacked(docs) | Doc::LeftStack(docs) => docs.iter().map(flat).max().unwrap_or(0),
         Doc::Numbered(docs) => {
@@ -141,7 +135,7 @@ pub(super) fn flat_columns(widths: &[usize]) -> usize {
 }
 
 /// Finds the maximum width of each existing column across ragged rows.
-pub(super) fn flat_column_widths(rows: &[Vec<Doc>]) -> Vec<usize> {
+pub(super) fn flat_column_widths<'a>(rows: impl IntoIterator<Item = &'a [Doc]>) -> Vec<usize> {
     let mut widths = Vec::new();
     // Merge each row without discarding columns absent from a shorter row
     for docs in rows {

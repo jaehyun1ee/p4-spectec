@@ -100,72 +100,72 @@ fn has_boundary_doc(doc: &Doc) -> bool {
 // == Fallback insertion
 
 /// Links unowned regions while retaining explicit targets and fill separators.
-pub(crate) fn link_unowned_doc(target: &Target, doc: &Doc) -> Doc {
+pub(crate) fn link_unowned_doc(target: &Target, doc: Doc) -> Doc {
     // Give a boundary-free region one enclosing link
-    if !has_boundary_doc(doc) {
-        return doc::link(target.clone(), doc.clone());
+    if !has_boundary_doc(&doc) {
+        return doc::link(target.clone(), doc);
     }
     match doc {
         Doc::Concat(docs) => link_unowned_concat(target, docs),
         Doc::Link(target_existing, doc_linked) => {
             // Flatten nested ownership only when an inner explicit link exists
-            if has_link_doc(doc_linked) {
-                link_unowned_doc(target_existing, doc_linked)
+            if has_link_doc(&doc_linked) {
+                link_unowned_doc(&target_existing, *doc_linked)
             } else {
-                doc.clone()
+                Doc::Link(target_existing, doc_linked)
             }
         }
-        Doc::Group(doc) => Doc::Group(Box::new(link_unowned_doc(target, doc))),
-        Doc::Mathbin(doc) => Doc::Mathbin(Box::new(link_unowned_doc(target, doc))),
-        Doc::Mathrel(doc) => Doc::Mathrel(Box::new(link_unowned_doc(target, doc))),
-        Doc::Displaystyle(doc) => Doc::Displaystyle(Box::new(link_unowned_doc(target, doc))),
-        Doc::LayoutGroup(doc) => Doc::LayoutGroup(Box::new(link_unowned_doc(target, doc))),
+        Doc::Group(doc) => Doc::Group(Box::new(link_unowned_doc(target, *doc))),
+        Doc::Mathbin(doc) => Doc::Mathbin(Box::new(link_unowned_doc(target, *doc))),
+        Doc::Mathrel(doc) => Doc::Mathrel(Box::new(link_unowned_doc(target, *doc))),
+        Doc::Displaystyle(doc) => Doc::Displaystyle(Box::new(link_unowned_doc(target, *doc))),
+        Doc::LayoutGroup(doc) => Doc::LayoutGroup(Box::new(link_unowned_doc(target, *doc))),
         Doc::Delimited(delimiter, doc) => {
-            Doc::Delimited(*delimiter, Box::new(link_unowned_doc(target, doc)))
+            Doc::Delimited(delimiter, Box::new(link_unowned_doc(target, *doc)))
         }
-        Doc::Nest(indent, doc) => Doc::Nest(*indent, Box::new(link_unowned_doc(target, doc))),
+        Doc::Nest(indent, doc) => Doc::Nest(indent, Box::new(link_unowned_doc(target, *doc))),
         Doc::Subscript(doc_l, doc_r) => Doc::Subscript(
-            Box::new(link_unowned_doc(target, doc_l)),
-            Box::new(link_unowned_doc(target, doc_r)),
+            Box::new(link_unowned_doc(target, *doc_l)),
+            Box::new(link_unowned_doc(target, *doc_r)),
         ),
         Doc::Superscript(doc_l, doc_r) => Doc::Superscript(
-            Box::new(link_unowned_doc(target, doc_l)),
-            Box::new(link_unowned_doc(target, doc_r)),
+            Box::new(link_unowned_doc(target, *doc_l)),
+            Box::new(link_unowned_doc(target, *doc_r)),
         ),
         Doc::Fraction(doc_l, doc_r) => Doc::Fraction(
-            Box::new(link_unowned_doc(target, doc_l)),
-            Box::new(link_unowned_doc(target, doc_r)),
+            Box::new(link_unowned_doc(target, *doc_l)),
+            Box::new(link_unowned_doc(target, *doc_r)),
         ),
         Doc::Subsup(doc_base, doc_sub, doc_sup) => Doc::Subsup(
-            Box::new(link_unowned_doc(target, doc_base)),
-            Box::new(link_unowned_doc(target, doc_sub)),
-            Box::new(link_unowned_doc(target, doc_sup)),
+            Box::new(link_unowned_doc(target, *doc_base)),
+            Box::new(link_unowned_doc(target, *doc_sub)),
+            Box::new(link_unowned_doc(target, *doc_sup)),
         ),
         Doc::Fill(indent, separator, docs) => Doc::Fill(
-            *indent,
-            separator.clone(),
-            docs.iter()
+            indent,
+            separator,
+            docs.into_iter()
                 .map(|doc| link_unowned_doc(target, doc))
                 .collect(),
         ),
         Doc::Aligned(rows) => Doc::Aligned(
-            rows.iter()
+            rows.into_iter()
                 .map(|docs| {
-                    docs.iter()
+                    docs.into_iter()
                         .map(|doc| link_unowned_doc(target, doc))
                         .collect()
                 })
                 .collect(),
         ),
         Doc::Grid(alignments, rows) => Doc::Grid(
-            alignments.clone(),
-            rows.iter()
+            alignments,
+            rows.into_iter()
                 .map(|row| link_unowned_row(target, row))
                 .collect(),
         ),
         Doc::Gathered(blocks) => Doc::Gathered(
             blocks
-                .iter()
+                .into_iter()
                 .map(|block| match block {
                     Block::Line(doc) => Block::Line(link_unowned_doc(target, doc)),
                     Block::Gap => Block::Gap,
@@ -173,38 +173,38 @@ pub(crate) fn link_unowned_doc(target: &Target, doc: &Doc) -> Doc {
                 .collect(),
         ),
         Doc::Stacked(docs) => Doc::Stacked(
-            docs.iter()
+            docs.into_iter()
                 .map(|doc| link_unowned_doc(target, doc))
                 .collect(),
         ),
         Doc::LeftStack(docs) => Doc::LeftStack(
-            docs.iter()
+            docs.into_iter()
                 .map(|doc| link_unowned_doc(target, doc))
                 .collect(),
         ),
         Doc::Numbered(docs) => Doc::Numbered(
-            docs.iter()
+            docs.into_iter()
                 .map(|doc| link_unowned_doc(target, doc))
                 .collect(),
         ),
-        _ => doc::link(target.clone(), doc.clone()),
+        _ => doc::link(target.clone(), doc),
     }
 }
 
 /// Coalesces adjacent boundary-free children into one fallback region.
-fn link_unowned_concat(target: &Target, docs: &[Doc]) -> Doc {
+fn link_unowned_concat(target: &Target, docs: Vec<Doc>) -> Doc {
     let mut docs_unowned = Vec::new();
     let mut docs_linked = Vec::new();
     // Flush pending content before each explicitly owned boundary
     for doc in docs {
-        if has_boundary_doc(doc) {
+        if has_boundary_doc(&doc) {
             if !docs_unowned.is_empty() {
                 let doc = concat(std::mem::take(&mut docs_unowned));
                 docs_linked.push(doc::link(target.clone(), doc));
             }
             docs_linked.push(link_unowned_doc(target, doc));
         } else {
-            docs_unowned.push(doc.clone());
+            docs_unowned.push(doc);
         }
     }
     // Preserve the final unowned suffix
@@ -216,10 +216,10 @@ fn link_unowned_concat(target: &Target, docs: &[Doc]) -> Doc {
 }
 
 /// Assigns fallback ownership independently to each visible grid cell.
-fn link_unowned_row(target: &Target, row: &Row) -> Row {
+fn link_unowned_row(target: &Target, row: Row) -> Row {
     match row {
         Row::Cells(docs) => Row::Cells(
-            docs.iter()
+            docs.into_iter()
                 .map(|doc| link_unowned_doc(target, doc))
                 .collect(),
         ),
@@ -231,16 +231,16 @@ fn link_unowned_row(target: &Target, row: &Row) -> Row {
 // == Layout normalization
 
 /// Distributes an enclosing target across concrete lines and grid cells.
-pub(super) fn normalize_after_layout(target: &Target, doc: &Doc) -> Doc {
+pub(super) fn normalize_after_layout(target: &Target, doc: Doc) -> Doc {
     match doc {
         Doc::LeftStack(docs) => Doc::LeftStack(
-            docs.iter()
+            docs.into_iter()
                 .map(|doc| link_unowned_doc(target, doc))
                 .collect(),
         ),
         Doc::Grid(alignments, rows) => Doc::Grid(
-            alignments.clone(),
-            rows.iter()
+            alignments,
+            rows.into_iter()
                 .map(|row| link_unowned_row(target, row))
                 .collect(),
         ),
