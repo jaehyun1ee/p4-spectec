@@ -1,3 +1,12 @@
+//! Extern dispatch shared by the architectures
+//!
+//! The specification calls externs through a few fixed relation
+//! and function names;
+//! `Impl` is what an architecture provides for them,
+//! and the blanket `Extern` impl routes each name to it.
+//! Compile-time known calls (`static_assert`) are handled here
+//! for all architectures.
+
 use super::core;
 use crate::{
     lang::{data::value::Value, il::ast::Typ},
@@ -6,7 +15,9 @@ use crate::{
 
 // == Architecture extern operations
 
+/// Architecture-specific extern behavior.
 pub(crate) trait Impl: Extern {
+    /// Creates the initial state of an extern object instance.
     fn eval_extern_init<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
@@ -16,6 +27,7 @@ pub(crate) trait Impl: Extern {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
 
+    /// Evaluates a compile-time known extern function call; shared by default.
     fn eval_extern_func_lctk_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
@@ -28,6 +40,7 @@ pub(crate) trait Impl: Extern {
         eval_func_lctk(ctx, values)
     }
 
+    /// Evaluates an extern function call.
     fn eval_extern_func_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
@@ -37,6 +50,7 @@ pub(crate) trait Impl: Extern {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
 
+    /// Evaluates a method call on an extern object.
     fn eval_extern_method_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
@@ -46,6 +60,7 @@ pub(crate) trait Impl: Extern {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
 
+    /// Creates the architecture's initial state.
     fn init_arch_state<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
@@ -68,6 +83,7 @@ impl<Ext: Impl> Extern for Ext {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
+        // The three extern relations the specification defines
         let values = match name {
             "ExternFunctionCall_eval_lctk" => self.eval_extern_func_lctk_call(ctx, values)?,
             "ExternFunctionCall_eval" => self.eval_extern_func_call(ctx, values)?,
@@ -78,6 +94,7 @@ impl<Ext: Impl> Extern for Ext {
                 );
             }
         };
+        // Extern state lives in the values, so calls report no hidden effect
         Ok((values, false))
     }
 
@@ -92,6 +109,7 @@ impl<Ext: Impl> Extern for Ext {
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
+        // The two extern functions the specification defines
         let value = match name {
             "init_objectState" => self.eval_extern_init(ctx, values)?,
             "init_archState" => self.init_arch_state(ctx)?,
@@ -109,6 +127,7 @@ impl<Ext: Impl> Extern for Ext {
 
 // == Compile-time extern calls
 
+/// Evaluates `static_assert`, the only compile-time known extern function.
 pub(crate) fn eval_func_lctk<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     values: &[Value],
@@ -118,6 +137,7 @@ where
     Ext: Extern,
     Interp: Interpreter<Iface, Ext>,
 {
+    // Arguments: context, function name, parameter names
     let [value_ctx, value_name, value_names_param] = values else {
         return Err(ExternError::Failure(
             "unexpected number of arguments to local compile-time known extern function call"
@@ -136,6 +156,7 @@ where
                 .map_err(|error| Interp::Error::from(ExternError::Failure(error.to_string())))
         })
         .collect::<Result<Vec<_>, _>>()?;
+    // Both overloads of `static_assert`; nothing else is known
     let has_message = match (name_func, names_param.as_slice()) {
         ("static_assert", ["check", "message"]) => true,
         ("static_assert", ["check"]) => false,

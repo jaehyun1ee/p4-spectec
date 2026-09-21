@@ -1,4 +1,11 @@
 //! Selects an architecture and assembles the native simulator
+//!
+//! `build` picks `ebpf`, `psa`, or `v1model` by name,
+//! builds a host runner over the AL or SL specification
+//! with that architecture as its extern,
+//! and boxes it as a `Simulator` that runs STF tests.
+//! `core` and `spec` are the helpers the architectures share;
+//! `runner`, `table`, `hash`, `io`, and `state` drive one test.
 
 use self::{arch::Architecture, ebpf::Ebpf, io::Tx, psa::Psa, runner::Error, v1model::V1Model};
 use crate::{
@@ -24,16 +31,20 @@ pub mod v1model;
 
 // == Build errors
 
+/// Why a simulator could not be built.
 #[derive(Debug, thiserror::Error)]
 pub enum BuildError {
+    /// No architecture of that name.
     #[error("architecture {0} is not supported")]
     UnsupportedArchitecture(String),
+    /// The host runner could not load the specification.
     #[error(transparent)]
     Runner(#[from] host::BuildError),
 }
 
 // == Simulator
 
+/// Object-safe view of a runner, so `Simulator` can hold any architecture.
 trait SimulatorRunner {
     fn run_stf_test(
         &mut self,
@@ -60,11 +71,14 @@ where
     }
 }
 
+/// A built runner ready to execute STF tests.
 pub struct Simulator {
+    /// The runner, erased over its interpreter and architecture types.
     runner: Box<dyn SimulatorRunner>,
 }
 
 impl Simulator {
+    /// Boxes a runner.
     fn new<Interp, Arch>(runner: Runner<Interp, BuiltinInterface, Arch>) -> Self
     where
         Interp: Interpreter<BuiltinInterface, Arch, Error = InterpError> + 'static,
@@ -73,6 +87,7 @@ impl Simulator {
         Self { runner: Box::new(runner) }
     }
 
+    /// Runs one STF test, calling `on_match` for each matched output packet.
     pub fn run_stf_test(
         &mut self,
         includes: &[PathBuf],
@@ -87,12 +102,14 @@ impl Simulator {
 
 // == Construction
 
+/// Builds a simulator for the named architecture.
 pub fn build(
     spec: host::Spec,
     arch: &str,
     config: host::Config,
     encoding: Encoding,
 ) -> Result<Simulator, BuildError> {
+    // Each architecture is its own extern implementation
     match arch {
         "ebpf" => build_for_arch(spec, config, Ebpf::new(encoding)),
         "psa" => build_for_arch(spec, config, Psa::new(encoding)),
@@ -101,6 +118,7 @@ pub fn build(
     }
 }
 
+/// Builds the AL or SL runner, whichever the specification is.
 fn build_for_arch<Arch: Architecture + 'static>(
     spec: host::Spec,
     config: host::Config,
