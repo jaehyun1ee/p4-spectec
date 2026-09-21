@@ -1,3 +1,11 @@
+//! Typed wrappers around the specification's relations and functions
+//!
+//! `rel` and `func` call specification definitions by name with arena values;
+//! `pgm` runs a program's initialization relation;
+//! `args` pairs extern arguments with their names;
+//! `pack` and `unpack` convert P4 values
+//! between Rust and the specification's cases.
+
 // == Calls
 
 pub mod args;
