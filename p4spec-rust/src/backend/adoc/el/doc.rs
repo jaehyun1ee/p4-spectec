@@ -138,10 +138,6 @@ fn fits(mut width_remaining: isize, mut commands: Vec<Command<'_>>) -> bool {
             }
             Doc::Group(doc) => {
                 // Lookahead retains the enclosing mode until a line ends
-                let mode = match mode {
-                    Mode::Flat => Mode::Flat,
-                    Mode::Broken => Mode::Broken,
-                };
                 commands.push(Command { indent, mode, doc });
             }
         }
