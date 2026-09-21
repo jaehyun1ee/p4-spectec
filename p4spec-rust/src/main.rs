@@ -6,7 +6,7 @@ use p4spec_rust::{
     frontend::parse::parse_files,
     interface::p4::parse::parse_file,
     lang::{al, data::value::external::Encoding, il, sl, traits::print::Print},
-    pass::{algo, elaborate, structure},
+    pass::{algo, elaborate, prosify, structure},
     runner::{self, BuiltinInterface, Interpreter, Runner},
     sim_plugin::{self, dummy::Dummy},
 };
@@ -99,6 +99,9 @@ struct InterpreterArgs {
     /// Execute the structured representation
     #[arg(long)]
     sl: bool,
+    /// Execute the prose representation
+    #[arg(long)]
+    pl: bool,
 }
 
 fn interp_spec(
@@ -108,10 +111,15 @@ fn interp_spec(
     let spec_al = algo(paths)?;
     if interpreter.al {
         Ok(runner::Spec::Al(spec_al))
-    } else {
+    } else if interpreter.sl {
         let without_rule_groups = true;
         structure::convert(spec_al, without_rule_groups)
             .map(runner::Spec::Sl)
+            .map_err(command_error)
+    } else {
+        let spec_sl = structure::convert(spec_al, false).map_err(command_error)?;
+        prosify::convert(spec_sl)
+            .map(runner::Spec::Pl)
             .map_err(command_error)
     }
 }
@@ -159,6 +167,13 @@ fn run_command(mut args: RunArgs) -> ExitCode {
         }
         runner::Spec::Sl(spec) => {
             let runner = match runner::build_sl(spec, config, Dummy) {
+                Ok(runner) => runner,
+                Err(error) => return command_error(error),
+            };
+            run_program(runner, &args)
+        }
+        runner::Spec::Pl(spec) => {
+            let runner = match runner::build_pl(spec, config, Dummy) {
                 Ok(runner) => runner,
                 Err(error) => return command_error(error),
             };

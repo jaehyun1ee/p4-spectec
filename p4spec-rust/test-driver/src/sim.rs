@@ -5,7 +5,7 @@ use p4spec_rust::sim_plugin::io::Tx;
 use p4spec_rust::{
     frontend::parse::parse_files,
     lang::{al, data::value::external::Encoding},
-    pass::{algo, elaborate, structure},
+    pass::{algo, elaborate, prosify, structure},
     runner::{Config, Spec},
     sim_plugin,
 };
@@ -214,6 +214,16 @@ pub fn run_sl(det: bool) -> Result<()> {
     run_with(det, |spec_al| {
         structure::convert(spec_al.clone(), true)
             .map(Spec::Sl)
+            .map_err(|error| Error::Invalid(error.to_string()))
+    })
+}
+
+pub fn run_pl(det: bool) -> Result<()> {
+    run_with(det, |spec_al| {
+        let spec_sl = structure::convert(spec_al.clone(), false)
+            .map_err(|error| Error::Invalid(error.to_string()))?;
+        prosify::convert(spec_sl)
+            .map(Spec::Pl)
             .map_err(|error| Error::Invalid(error.to_string()))
     })
 }

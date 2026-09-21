@@ -127,5 +127,6 @@ fn build_for_arch<Arch: Architecture + 'static>(
     match spec {
         host::Spec::Al(spec) => Ok(Simulator::new(host::build_al(spec, config, arch)?)),
         host::Spec::Sl(spec) => Ok(Simulator::new(host::build_sl(spec, config, arch)?)),
+        host::Spec::Pl(spec) => Ok(Simulator::new(host::build_pl(spec, config, arch)?)),
     }
 }
