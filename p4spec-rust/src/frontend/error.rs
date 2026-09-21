@@ -1,4 +1,7 @@
 //! Typed failures produced while reading and parsing SpecTec source
+//!
+//! Lexical and syntax failures carry the span they were found at;
+//! I/O and encoding failures carry the file they concern.
 
 use std::{io, str::Utf8Error};
 
@@ -6,7 +9,7 @@ use thiserror::Error;
 
 use crate::lang::common::source::Phrase;
 
-/// A lexical failure category produced before parsing begins
+/// A lexical failure category produced before parsing begins.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum LexErrorKind {
     #[error("unclosed text literal")]
@@ -31,10 +34,10 @@ pub enum LexErrorKind {
     MisplacedUnicodeCharacter,
 }
 
-/// A lexical failure paired with the offending source span
+/// A lexical failure paired with the offending source span.
 pub type LexError = Phrase<LexErrorKind>;
 
-/// A syntax failure category independent of the parser implementation
+/// A syntax failure category independent of the parser implementation.
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
 pub enum SyntaxErrorKind {
     #[error("invalid token")]
@@ -59,21 +62,25 @@ pub enum SyntaxErrorKind {
     EmptySyntaxDeclaration,
 }
 
-/// A syntax failure paired with the source span reported by the parser
+/// A syntax failure paired with the source span reported by the parser.
 pub type SyntaxError = Phrase<SyntaxErrorKind>;
 
-/// A UTF-8 decoding failure produced before parsing begins
+/// A UTF-8 decoding failure produced before parsing begins.
 pub type InvalidUtf8Error = Utf8Error;
 
-/// A failure from any stage of the SpecTec source frontend
+/// A failure from any stage of the SpecTec source frontend.
 #[derive(Debug, Error)]
 pub enum FrontendError {
+    /// The lexer rejected the source.
     #[error(transparent)]
     Lexical(#[from] LexError),
+    /// The parser rejected the token stream.
     #[error(transparent)]
     Syntax(#[from] SyntaxError),
+    /// A file could not be read.
     #[error("i/o error at {}: {}", .0.span, .0.node)]
     Io(#[source] Phrase<io::Error>),
+    /// A file is not UTF-8; the span points at the first bad byte.
     #[error("source is not valid UTF-8 at {}: {}", .0.span, .0.node)]
     InvalidUtf8(#[source] Phrase<InvalidUtf8Error>),
 }

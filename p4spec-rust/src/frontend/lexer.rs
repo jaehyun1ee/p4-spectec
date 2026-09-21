@@ -1,28 +1,32 @@
 //! Lazy source-level tokenization for SpecTec
 //!
-//! `Iterator::next` requests one lexeme from `Lexer::scan_token`, the main
-//! lexer state. It dispatches on the current byte and transitions to
-//! `scan_after_newline`, `scan_after_two_newlines`, `scan_comment`, or
-//! `scan_text` when those inputs need their own state. Each state advances the
-//! UTF-8 byte cursor and attaches the traversed [`Span`] to its resulting
-//! [`Token`].
+//! `Iterator::next` requests one lexeme from `Lexer::scan_token`,
+//! the main lexer state.
+//! It dispatches on the current byte and transitions to `scan_after_newline`,
+//! `scan_after_two_newlines`, `scan_comment`, or `scan_text`
+//! when those inputs need their own state.
+//! Each state advances the UTF-8 byte cursor
+//! and attaches the traversed [`Span`] to its resulting [`Token`].
 //!
-//! Branches with a shared prefix implement maximal munch locally: comments
-//! precede punctuation, comma-newline precedes comma, and specialized tag,
-//! dot-identifier, and numbered-hole rules precede their shorter fallbacks.
+//! Branches with a shared prefix implement maximal munch locally:
+//! comments precede punctuation, comma-newline precedes comma,
+//! and specialized tag, dot-identifier, and numbered-hole rules
+//! precede their shorter fallbacks.
 //! `scan_fixed` likewise checks longer punctuation before its prefixes.
-//! `scan_identifier` recognizes keywords and asks the parser-owned classifier
-//! whether an uppercase name is a variable, while `scan_text` delegates escapes
-//! to `scan_escape`.
+//! `scan_identifier` recognizes keywords
+//! and asks the parser-owned classifier
+//! whether an uppercase name is a variable,
+//! while `scan_text` delegates escapes to `scan_escape`.
 //!
-//! The downstream `tokens::parser_tokens` adapter inserts implicit `Sequence`
-//! tokens, distinguishes postfix iteration from arithmetic multiplication, and
-//! interns source positions for LALRPOP.
+//! The downstream `tokens::parser_tokens` adapter
+//! inserts implicit `Sequence` tokens,
+//! distinguishes postfix iteration from arithmetic multiplication,
+//! and interns source positions for LALRPOP.
 //!
-//! Source and decoded text literals are UTF-8 strings. Hex byte escapes may
-//! combine into a valid UTF-8 sequence; byte-only results are rejected with
-//! [`LexErrorKind::InvalidTextEncoding`] so tokens fit the language model's
-//! `String` text representation.
+//! Source and decoded text literals are UTF-8 strings.
+//! Hex byte escapes may combine into a valid UTF-8 sequence;
+//! byte-only results are rejected with [`LexErrorKind::InvalidTextEncoding`]
+//! so tokens fit the language model's `String` text representation.
 //!
 //! # Examples
 //!
@@ -52,7 +56,7 @@ use crate::lang::{
 
 use super::error::{LexError, LexErrorKind};
 
-/// A token consumed by the SpecTec grammar
+/// A token consumed by the SpecTec grammar.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Token {
     TagUpperId(String),
@@ -68,7 +72,7 @@ pub enum Token {
     NewlineBar,
     Newline2,
     Newline3,
-    /// Parser-only marker for juxtaposed grammar atoms
+    /// Parser-only marker for juxtaposed grammar atoms.
     Sequence,
     Subtype,
     Turnstile,
@@ -116,7 +120,7 @@ pub enum Token {
     Minus,
     Dash,
     Star,
-    /// Parser-only spelling of `*` when it closes an iterated expression
+    /// Parser-only spelling of `*` when it closes an iterated expression.
     IterStar,
     Slash,
     Backslash,
@@ -162,24 +166,33 @@ pub enum Token {
     Eof,
 }
 
-/// A byte cursor into a UTF-8 source string
+/// A byte cursor into a UTF-8 source string.
 #[derive(Clone, Copy)]
 struct Cursor {
+    /// Byte offset into the source.
     offset: usize,
+    /// One-based line of the offset.
     line: usize,
+    /// Byte offset where the current line begins, for columns.
     line_start: usize,
 }
 
 /// A lazy SpecTec token stream
 ///
-/// The classifier relabels uppercase identifiers that are variables in the
-/// parser's current scope. Input is valid UTF-8 by construction; file entry
-/// points must report decoding failures before constructing a lexer.
+/// The classifier relabels uppercase identifiers
+/// that are variables in the parser's current scope.
+/// Input is valid UTF-8 by construction;
+/// file entry points must report decoding failures before constructing a lexer.
 pub struct Lexer<'input, Classify> {
+    /// File name for positions.
     file: Rc<str>,
+    /// The whole source text.
     source: &'input str,
+    /// Where the next lexeme starts.
     cursor: Cursor,
+    /// Set after `Eof` or an error; the stream then ends.
     finished: bool,
+    /// Whether an uppercase identifier is a variable in the parser's scope.
     classify_uppercase: Classify,
 }
 
@@ -189,7 +202,7 @@ impl<'input, Classify> Lexer<'input, Classify>
 where
     Classify: FnMut(&str) -> bool,
 {
-    /// Tokenizes `source` using the parser's uppercase-variable classifier
+    /// Tokenizes `source` using the parser's uppercase-variable classifier.
     pub fn new(
         file: impl Into<Rc<str>>,
         source: &'input str,
@@ -211,44 +224,53 @@ where
 {
     // - Cursor movement
 
+    /// Moves the cursor to an offset on the current line.
     fn advance_to(&mut self, offset: usize) {
         self.cursor.offset = offset;
     }
 
+    /// Moves the cursor forward on the current line.
     fn advance_add(&mut self, length: usize) {
         self.cursor.offset += length;
     }
 
+    /// Consumes a newline, starting a new line.
     fn advance_newline(&mut self) {
         self.cursor.offset += 1;
         self.cursor.line += 1;
         self.cursor.line_start = self.cursor.offset;
     }
 
+    /// Moves to the newline ending the current line, or to the end.
     fn advance_to_line_end(&mut self) {
         self.cursor.offset = self.find_line_end(self.cursor.offset);
     }
 
     // - Cursor inspection
 
+    /// The byte under the cursor.
     fn cursor_current(&self) -> Option<u8> {
         self.cursor_offset(self.cursor.offset)
     }
 
+    /// The byte at an offset.
     fn cursor_offset(&self, offset: usize) -> Option<u8> {
         self.source.as_bytes().get(offset).copied()
     }
 
+    /// Whether the source at the cursor begins with `prefix`.
     fn cursor_starts_with(&self, prefix: &str) -> bool {
         self.source[self.cursor.offset..].starts_with(prefix)
     }
 
+    /// Whether the cursor is at the end.
     fn cursor_is_eof(&self) -> bool {
         self.cursor.offset == self.source.len()
     }
 
     // - Finders for token boundaries
 
+    /// The offset after the spaces and tabs at the cursor.
     fn find_indentation_end(&self) -> usize {
         let mut end = self.cursor.offset;
         while matches!(self.cursor_offset(end), Some(b' ' | b'\t')) {
@@ -257,6 +279,7 @@ where
         end
     }
 
+    /// The offset of the next newline from `start`, or the end.
     fn find_line_end(&self, start: usize) -> usize {
         self.source.as_bytes()[start..]
             .iter()
@@ -264,6 +287,7 @@ where
             .map_or(self.source.len(), |relative| start + relative)
     }
 
+    /// The offset after the identifier bytes from `start`.
     fn find_identifier_end(&self, start: usize) -> usize {
         let mut end = start;
         while self
@@ -275,11 +299,13 @@ where
         end
     }
 
+    /// The offset after digits from `start`, allowing single `_` separators.
     fn find_separated_digits_end(&self, start: usize, is_valid: fn(u8) -> bool) -> usize {
         let mut end = start + 1;
         while self.cursor_offset(end).is_some_and(is_valid) {
             end += 1;
         }
+        // An underscore counts only when a digit follows
         while self.cursor_offset(end) == Some(b'_')
             && self.cursor_offset(end + 1).is_some_and(is_valid)
         {
@@ -293,14 +319,17 @@ where
 
     // - Source locations and results
 
+    /// The source position of a cursor.
     fn position(&self, cursor: Cursor) -> Position {
         Position::new(self.file.clone(), cursor.line, cursor.offset - cursor.line_start)
     }
 
+    /// The span from a start cursor to the current one.
     fn span(&self, cursor_start: Cursor) -> Span {
         Span::new(self.position(cursor_start), self.position(self.cursor))
     }
 
+    /// A token spanning from `start` to the cursor.
     fn lexeme(&self, token: Token, start: Cursor) -> Phrase<Token> {
         crate::phrase! {
             node: token,
@@ -310,18 +339,22 @@ where
 
     // - Helpers
 
+    /// Whether a byte can begin an identifier.
     fn is_identifier_start(byte: u8) -> bool {
         byte.is_ascii_alphabetic() || byte == b'_'
     }
 
+    /// Whether a byte is a decimal digit.
     fn is_digit(byte: u8) -> bool {
         byte.is_ascii_digit()
     }
 
+    /// Whether a byte is a hexadecimal digit; letters must be uppercase.
     fn is_hex_digit(byte: u8) -> bool {
         byte.is_ascii_digit() || matches!(byte, b'A'..=b'F')
     }
 
+    /// Drops the `_` separators of a digit sequence.
     fn strip_underscores(digits: &str) -> String {
         digits
             .chars()
@@ -331,6 +364,7 @@ where
 
     // - Token state
 
+    /// Scans the next lexeme, skipping whitespace and comments.
     fn scan_token(&mut self) -> Result<Phrase<Token>, LexError> {
         loop {
             let start = self.cursor;
@@ -340,22 +374,26 @@ where
 
             let byte = self.cursor_current().expect("cursor is within source");
             match byte {
+                // Block comment: skip it, nesting allowed
                 b'(' if self.cursor_starts_with("(;") => {
                     self.advance_add(2);
                     self.scan_comment(start)?;
                     continue;
                 }
+                // Line comment: skip it, but the newline after it is layout
                 b';' if self.cursor_starts_with(";;") => {
                     if let Some(lexeme) = self.scan_line_comment(start)? {
                         return Ok(lexeme);
                     }
                     continue;
                 }
+                // Escaped newline: line continuation
                 b'\\' if self.cursor_starts_with("\\\n") => {
                     self.advance_add(1);
                     self.advance_newline();
                     continue;
                 }
+                // A newline may be layout: bar, double, or triple newline
                 b'\n' => {
                     self.advance_newline();
                     if let Some(lexeme) = self.scan_after_newline()? {
@@ -363,27 +401,34 @@ where
                     }
                     continue;
                 }
+                // Other whitespace is skipped
                 b' ' | b'\t' | b'\r' => {
                     self.advance_add(1);
                     continue;
                 }
+                // Text literal
                 b'"' => return self.scan_text(start),
+                // Quoted operator
                 b'\'' => return self.scan_operator(start),
+                // A comma ending a line is its own token
                 b',' => {
                     if let Some(lexeme) = self.scan_comma_newline(start) {
                         return Ok(lexeme);
                     }
                 }
+                // `_Name` is a tag atom
                 b'_' => {
                     if let Some(lexeme) = self.scan_tag(start) {
                         return Ok(lexeme);
                     }
                 }
+                // `.name` is a field access
                 b'.' => {
                     if let Some(lexeme) = self.scan_dot_identifier(start) {
                         return Ok(lexeme);
                     }
                 }
+                // `%N` is a numbered hole
                 b'%' => {
                     if let Some(lexeme) = self.scan_numbered_hole(start)? {
                         return Ok(lexeme);
@@ -392,6 +437,7 @@ where
                 _ => {}
             }
 
+            // Then numbers, identifiers, punctuation, in that order
             if Self::is_digit(byte) {
                 return Ok(self.scan_number(start).expect("digit starts a number"));
             }
@@ -404,17 +450,20 @@ where
                 return Ok(lexeme);
             }
 
+            // Nothing matched
             return Err(self.unrecognized_character(start));
         }
     }
 
     // - Newline states
 
+    /// After one newline: a `| ` bar, a second newline, or nothing.
     fn scan_after_newline(&mut self) -> Result<Option<Phrase<Token>>, LexError> {
         if let Some(lexeme) = self.scan_newline_bar() {
             return Ok(Some(lexeme));
         }
 
+        // A blank line means at least two newlines
         let end = self.find_indentation_end();
         if self.cursor_offset(end) == Some(b'\n') {
             self.advance_to(end);
@@ -425,6 +474,8 @@ where
         Ok(None)
     }
 
+    /// After a blank line: a bar, a third newline, or `Newline2`;
+    /// comment lines do not count.
     fn scan_after_two_newlines(&mut self) -> Result<Phrase<Token>, LexError> {
         loop {
             if let Some(lexeme) = self.scan_newline_bar() {
@@ -433,12 +484,14 @@ where
 
             let start = self.cursor;
             let indent_end = self.find_indentation_end();
+            // A second blank line is `Newline3`
             if self.cursor_offset(indent_end) == Some(b'\n') {
                 self.advance_to(indent_end);
                 self.advance_newline();
                 return Ok(self.lexeme(Token::Newline3, start));
             }
 
+            // A comment line is skipped without counting as a newline
             if self.source[indent_end..].starts_with(";;") {
                 let line_end = self.find_line_end(indent_end);
                 if self.cursor_offset(line_end) == Some(b'\n') {
@@ -450,16 +503,20 @@ where
                 return Ok(self.lexeme(Token::Eof, start));
             }
 
+            // Blank lines before the end are just the end
             if indent_end == self.source.len() {
                 self.advance_to(indent_end);
                 return Ok(self.lexeme(Token::Eof, start));
             }
 
+            // Otherwise the blank line separates definitions
             return Ok(self.lexeme(Token::Newline2, self.cursor));
         }
     }
 
+    /// A `| ` at the start of a line, the rule-case separator.
     fn scan_newline_bar(&mut self) -> Option<Phrase<Token>> {
+        // A bar must start the line and be followed by whitespace
         let start = self.cursor;
         let indent_end = self.find_indentation_end();
         if self.cursor_offset(indent_end) != Some(b'|')
@@ -474,18 +531,21 @@ where
 
     // - Comment state
 
+    /// Skips a `(; ;)` block comment, which nests.
     fn scan_comment(&mut self, start: Cursor) -> Result<(), LexError> {
         let mut depth = 1usize;
         while depth > 0 {
             if self.cursor_is_eof() {
                 return Err(self.error(LexErrorKind::UnclosedComment, start));
             }
+            // Nested comments open and close by depth
             if self.cursor_starts_with("(;") {
                 depth += 1;
                 self.advance_add(2);
             } else if self.cursor_starts_with(";)") {
                 depth -= 1;
                 self.advance_add(2);
+            // Newlines keep the line count; other characters are skipped whole
             } else if self.cursor_current() == Some(b'\n') {
                 self.advance_newline();
             } else {
@@ -501,6 +561,7 @@ where
 
     // - Token-state layout rules
 
+    /// Skips a `;;` comment and handles the newline after it as layout.
     fn scan_line_comment(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, LexError> {
         self.advance_to_line_end();
         if self.cursor_is_eof() {
@@ -511,11 +572,13 @@ where
         self.scan_after_newline()
     }
 
+    /// A comma followed only by whitespace or a comment until the newline.
     fn scan_comma_newline(&mut self, start: Cursor) -> Option<Phrase<Token>> {
         if self.cursor_current() != Some(b',') {
             return None;
         }
 
+        // Only whitespace and a comment may follow the comma
         let mut end = self.cursor.offset + 1;
         while matches!(self.cursor_offset(end), Some(b' ' | b'\t')) {
             end += 1;
@@ -523,6 +586,7 @@ where
         if self.source[end..].starts_with(";;") {
             end = self.find_line_end(end);
         }
+        // The newline is consumed with the comma
         if self.cursor_offset(end) != Some(b'\n') {
             return None;
         }
@@ -534,7 +598,9 @@ where
 
     // - Token-state identifier rules
 
+    /// `_Name`, unless a `(` or `<` follows, which makes it a call.
     fn scan_tag(&mut self, start: Cursor) -> Option<Phrase<Token>> {
+        // An underscore followed by an uppercase letter
         if self.cursor_current() != Some(b'_')
             || !self
                 .cursor_offset(self.cursor.offset + 1)?
@@ -545,6 +611,7 @@ where
 
         let id_start = self.cursor.offset + 1;
         let end = self.find_identifier_end(id_start);
+        // `_Name(` and `_Name<` are calls on an identifier, not tags
         if matches!(self.cursor_offset(end), Some(b'(' | b'<')) {
             return None;
         }
@@ -553,7 +620,9 @@ where
         Some(self.lexeme(Token::TagUpperId(id), start))
     }
 
+    /// `.name`, but not the `...` ellipsis.
     fn scan_dot_identifier(&mut self, start: Cursor) -> Option<Phrase<Token>> {
+        // A dot followed by an identifier start
         if self.cursor_current() != Some(b'.')
             || !Self::is_identifier_start(self.cursor_offset(self.cursor.offset + 1)?)
         {
@@ -562,6 +631,7 @@ where
 
         let id_start = self.cursor.offset + 1;
         let end = self.find_identifier_end(id_start);
+        // But `...` is the ellipsis token
         if end - start.offset <= 3 && self.source[start.offset..].starts_with("...") {
             return None;
         }
@@ -571,6 +641,7 @@ where
         Some(self.lexeme(Token::DotId(id), start))
     }
 
+    /// The keyword token for an identifier spelling, if it is one.
     fn keyword(id: &str) -> Option<Token> {
         Some(match id {
             "bool" => Token::Bool,
@@ -597,6 +668,7 @@ where
         })
     }
 
+    /// An identifier, keyword, or `hint(`, fused with a following `(` or `<`.
     fn scan_identifier(&mut self, start: Cursor) -> Option<Phrase<Token>> {
         let first = self.cursor_current()?;
         if !Self::is_identifier_start(first) {
@@ -607,13 +679,16 @@ where
         let end = self.find_identifier_end(self.cursor.offset);
         let id = self.source[self.cursor.offset..end].to_owned();
         let suffix = self.cursor_offset(end);
+        // `hint(` is one token so hints cannot be confused with calls
         if id == "hint" && suffix == Some(b'(') {
             self.advance_to(end + 1);
             return Some(self.lexeme(Token::HintLeftParen, start));
         }
 
+        // An uppercase name bound as a variable lexes as a lowercase one
         let uppercase_variable = is_uppercase && (self.classify_uppercase)(&id);
         let token = match suffix {
+            // Fused call and type-application forms keep the case distinction
             Some(b'(') => {
                 self.advance_to(end + 1);
                 if is_uppercase && !uppercase_variable {
@@ -630,6 +705,7 @@ where
                     Token::LowerIdLeftAngle(id)
                 }
             }
+            // Bare: keyword first, then by case
             _ => {
                 self.advance_to(end);
                 if let Some(keyword) = Self::keyword(&id) {
@@ -647,7 +723,9 @@ where
 
     // - Token-state numbered holes
 
+    /// `%N` with a decimal index; too large an index is an error.
     fn scan_numbered_hole(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, LexError> {
+        // A percent followed by a digit
         if self.cursor_current() != Some(b'%')
             || !Self::is_digit(
                 self.cursor_offset(self.cursor.offset + 1)
@@ -657,6 +735,7 @@ where
             return Ok(None);
         }
 
+        // The index must fit a `usize`
         let end = self.find_separated_digits_end(self.cursor.offset + 1, Self::is_digit);
         let digits = Self::strip_underscores(&self.source[self.cursor.offset + 1..end]);
         self.advance_to(end);
@@ -668,16 +747,19 @@ where
 
     // - Token-state Numbers
 
+    /// Parses cleaned digits in the radix.
     fn parse_natural(digits: &str, radix: u32) -> Natural {
         let int = BigInt::parse_bytes(digits.as_bytes(), radix).expect("nonempty digit sequence");
         Natural::try_from(int).expect("digit sequence is non-negative")
     }
 
+    /// A decimal or `0x` hexadecimal natural literal.
     fn scan_number(&mut self, start: Cursor) -> Option<Phrase<Token>> {
         if !Self::is_digit(self.cursor_current()?) {
             return None;
         }
 
+        // Hexadecimal only when a hex digit follows the prefix
         if self.cursor_starts_with("0x")
             && self
                 .cursor_offset(self.cursor.offset + 2)
@@ -690,6 +772,7 @@ where
             return Some(self.lexeme(Token::HexLiteral(nat), start));
         }
 
+        // Otherwise decimal
         let end = self.find_separated_digits_end(self.cursor.offset, Self::is_digit);
         let digits = Self::strip_underscores(&self.source[self.cursor.offset..end]);
         let nat = Self::parse_natural(&digits, 10);
@@ -699,7 +782,9 @@ where
 
     // - Token-state fixed rules
 
+    /// Fixed punctuation, longest spellings first.
     fn scan_fixed(&mut self, start: Cursor) -> Option<Phrase<Token>> {
+        // Three-byte spellings, then two, then one
         let (length, token) = if self.cursor_starts_with("->_") {
             (3, Token::ArrowSub)
         } else if self.cursor_starts_with("=>_") {
@@ -777,6 +862,7 @@ where
         } else if self.cursor_starts_with("!%") {
             (2, Token::EmptyHole)
         } else {
+            // Single bytes last
             let token = match self.cursor_current()? {
                 b'.' => Token::Dot,
                 b',' => Token::Comma,
@@ -814,7 +900,9 @@ where
 
     // - Token-state operator rule
 
+    /// A `'...'` quoted operator; it must close on the same line.
     fn scan_operator(&mut self, start: Cursor) -> Result<Phrase<Token>, LexError> {
+        // Everything up to the closing quote is the operator
         let content_start = self.cursor.offset + 1;
         let mut end = content_start;
         while let Some(byte) = self.cursor_offset(end) {
@@ -823,6 +911,7 @@ where
                 self.advance_to(end + 1);
                 return Ok(self.lexeme(Token::Operator(op), start));
             }
+            // No closing quote on this line: a malformed token
             if byte == b'\n' {
                 break;
             }
@@ -835,6 +924,7 @@ where
 
     // - Text state
 
+    /// A `"..."` text literal, decoding escapes into UTF-8 bytes.
     fn scan_text(&mut self, start: Cursor) -> Result<Phrase<Token>, LexError> {
         self.advance_add(1);
         let mut bytes = Vec::new();
@@ -843,25 +933,31 @@ where
                 return Err(self.error(LexErrorKind::UnclosedTextLiteral, start));
             };
             match byte {
+                // Closing quote: the bytes must form valid UTF-8
                 b'"' => {
                     self.advance_add(1);
                     let text = String::from_utf8(bytes)
                         .map_err(|_| self.error(LexErrorKind::InvalidTextEncoding, start))?;
                     return Ok(self.lexeme(Token::TextLiteral(text), start));
                 }
+                // A literal cannot span lines
                 b'\n' => {
                     self.advance_add(1);
                     return Err(self.error(LexErrorKind::UnclosedTextLiteral, start));
                 }
+                // Control characters must be escaped
                 0x00..=0x1f | 0x7f => {
                     self.advance_add(1);
                     return Err(self.error(LexErrorKind::IllegalControlCharacter, start));
                 }
+                // Escape sequence
                 b'\\' => self.scan_escape(start, &mut bytes)?,
+                // Printable ASCII
                 0x20..=0x7e => {
                     bytes.push(byte);
                     self.advance_add(1);
                 }
+                // Non-ASCII: copy the whole UTF-8 character
                 _ => {
                     let character = self.source[self.cursor.offset..]
                         .chars()
@@ -875,13 +971,16 @@ where
         }
     }
 
+    /// One escape: a `\n` byte, a `\XX` hex byte, or a `\u{...}` code point.
     fn scan_escape(&mut self, start: Cursor, bytes: &mut Vec<u8>) -> Result<(), LexError> {
         let escape_start = self.cursor.offset;
+        // A trailing backslash is a malformed literal
         let Some(escape) = self.cursor_offset(escape_start + 1) else {
             self.cursor = Cursor { offset: start.offset + 1, ..start };
             return Err(self.error(LexErrorKind::MalformedToken, start));
         };
 
+        // Single-character escapes
         let simple = match escape {
             b'n' => Some(b'\n'),
             b'r' => Some(b'\r'),
@@ -897,6 +996,7 @@ where
             return Ok(());
         }
 
+        // `\XX` is a raw byte; UTF-8 validity is checked at the closing quote
         if Self::is_hex_digit(escape)
             && self
                 .cursor_offset(escape_start + 2)
@@ -908,6 +1008,7 @@ where
             return Ok(());
         }
 
+        // `\u{...}` encodes a code point
         if escape == b'u' && self.cursor_offset(escape_start + 2) == Some(b'{') {
             let digits_start = escape_start + 3;
             if self
@@ -929,6 +1030,7 @@ where
             }
         }
 
+        // Anything else: report the escape's own span
         let invalid_end = escape_start
             + 1
             + self.source[escape_start + 1..]
@@ -943,8 +1045,10 @@ where
 
     // - Errors
 
+    /// Classifies a byte no rule accepted and steps over it.
     fn unrecognized_character(&mut self, start: Cursor) -> LexError {
         let byte = self.cursor_current().expect("not at end of input");
+        // Control, other ASCII, or non-ASCII
         let kind = if byte <= 0x1f || byte == 0x7f {
             self.advance_add(1);
             LexErrorKind::MisplacedControlCharacter
@@ -962,6 +1066,7 @@ where
         self.error(kind, start)
     }
 
+    /// An error spanning from `start` to the cursor.
     fn error(&self, kind: LexErrorKind, start: Cursor) -> LexError {
         crate::phrase! {
             node: kind,
@@ -984,6 +1089,7 @@ where
         }
 
         let result = self.scan_token();
+        // The stream ends after `Eof` or the first error
         if match &result {
             Ok(lexeme) => lexeme.node == Token::Eof,
             Err(_) => true,
