@@ -62,6 +62,17 @@ impl Case {
         {
             return Err(self.failure(format!("unexpected report: {report:?}")));
         }
+        // Parser failures have one responsible label, or no reference region
+        if self.suite == Suite::Parse
+            && (report.labels.len() != usize::from(self.primary.is_some())
+                || report
+                    .labels
+                    .iter()
+                    .any(|label| label.style != LabelStyle::Primary || label.message.is_empty())
+                || !report.traces.is_empty())
+        {
+            return Err(self.failure("unexpected parser label roles or trace"));
+        }
         // Compare byte coordinates, not the renderer's display columns
         if let Some(loc) = &self.primary {
             let Some(label) = report

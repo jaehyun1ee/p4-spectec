@@ -27,21 +27,32 @@ fn report(span: Span) -> Report {
 }
 
 #[test]
-fn parser_pilot_reaches_cli_with_its_code_and_escape_span() {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("test-driver/fixtures/diagnostic/parse/parse-illegal-escape.watsup");
-    for command in ["elab", "algo", "struct"] {
-        let output = std::process::Command::new(env!("CARGO_BIN_EXE_p4spec-rust"))
-            .arg(command)
-            .arg(&path)
-            .output()
-            .unwrap();
-        assert_eq!(output.status.code(), Some(1));
-        assert!(output.stdout.is_empty());
-        let text = String::from_utf8(output.stderr).unwrap();
-        assert!(text.contains("error[parse/text-escape-invalid]"), "{text}");
-        assert!(text.contains("parse-illegal-escape.watsup:3:5"), "{text}");
-        assert!(text.contains("^^"), "{text}");
-        assert!(!text.contains('\u{1b}'), "{text}");
+fn parser_failures_reach_cli_with_their_codes_and_spans() {
+    let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("test-driver/fixtures/diagnostic/parse");
+    let cases = [
+        ("parse-illegal-escape.watsup", "parse/text-escape-invalid", "3:5", "^^"),
+        (
+            "parse-relation-body-must-be-notation.watsup",
+            "parse/relation-signature-invalid",
+            "3:13",
+            "^^^",
+        ),
+    ];
+    for (file, code, loc, underline) in cases {
+        for command in ["elab", "algo", "struct"] {
+            let output = std::process::Command::new(env!("CARGO_BIN_EXE_p4spec-rust"))
+                .arg(command)
+                .arg(fixtures.join(file))
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(1));
+            assert!(output.stdout.is_empty());
+            let text = String::from_utf8(output.stderr).unwrap();
+            assert!(text.contains(&format!("error[{code}]")), "{text}");
+            assert!(text.contains(&format!("{file}:{loc}")), "{text}");
+            assert!(text.contains(underline), "{text}");
+            assert!(!text.contains('\u{1b}'), "{text}");
+        }
     }
 }

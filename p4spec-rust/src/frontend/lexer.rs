@@ -25,7 +25,7 @@
 //!
 //! Source and decoded text literals are UTF-8 strings.
 //! Hex byte escapes may combine into a valid UTF-8 sequence;
-//! byte-only results are rejected with [`LexErrorKind::InvalidTextEncoding`]
+//! byte-only results are rejected with `parse/text-encoding-invalid`
 //! so tokens fit the language model's `String` text representation.
 //!
 //! # Examples
@@ -54,7 +54,8 @@ use crate::lang::{
     common::source::{Phrase, Position, Span},
 };
 
-use super::error::{LexError, LexErrorKind};
+use super::error;
+use crate::diagnostic::Report;
 
 /// A token consumed by the SpecTec grammar.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -192,6 +193,8 @@ pub struct Lexer<'input, Classify> {
     cursor: Cursor,
     /// Set after `Eof` or an error; the stream then ends.
     finished: bool,
+    /// Whether scanning stopped inside an unfinished block comment.
+    in_block_comment: bool,
     /// Whether an uppercase identifier is a variable in the parser's scope.
     classify_uppercase: Classify,
 }
@@ -213,6 +216,7 @@ where
             source,
             cursor: Cursor { offset: 0, line: 1, line_start: 0 },
             finished: false,
+            in_block_comment: false,
             classify_uppercase,
         }
     }
@@ -222,6 +226,11 @@ impl<Classify> Lexer<'_, Classify>
 where
     Classify: FnMut(&str) -> bool,
 {
+    /// Reports whether tokenization stopped inside a block comment.
+    pub(crate) fn in_block_comment(&self) -> bool {
+        self.in_block_comment
+    }
+
     // - Cursor movement
 
     /// Moves the cursor to an offset on the current line.
@@ -365,7 +374,7 @@ where
     // - Token state
 
     /// Scans the next lexeme, skipping whitespace and comments.
-    fn scan_token(&mut self) -> Result<Phrase<Token>, LexError> {
+    fn scan_token(&mut self) -> Result<Phrase<Token>, Box<Report>> {
         loop {
             let start = self.cursor;
             if self.cursor_is_eof() {
@@ -377,7 +386,7 @@ where
                 // Block comment: skip it, nesting allowed
                 b'(' if self.cursor_starts_with("(;") => {
                     self.advance_add(2);
-                    self.scan_comment(start)?;
+                    self.scan_comment()?;
                     continue;
                 }
                 // Line comment: skip it, but the newline after it is layout
@@ -458,7 +467,7 @@ where
     // - Newline states
 
     /// After one newline: a `| ` bar, a second newline, or nothing.
-    fn scan_after_newline(&mut self) -> Result<Option<Phrase<Token>>, LexError> {
+    fn scan_after_newline(&mut self) -> Result<Option<Phrase<Token>>, Box<Report>> {
         if let Some(lexeme) = self.scan_newline_bar() {
             return Ok(Some(lexeme));
         }
@@ -476,7 +485,7 @@ where
 
     /// After a blank line: a bar, a third newline, or `Newline2`;
     /// comment lines do not count.
-    fn scan_after_two_newlines(&mut self) -> Result<Phrase<Token>, LexError> {
+    fn scan_after_two_newlines(&mut self) -> Result<Phrase<Token>, Box<Report>> {
         loop {
             if let Some(lexeme) = self.scan_newline_bar() {
                 return Ok(lexeme);
@@ -532,11 +541,12 @@ where
     // - Comment state
 
     /// Skips a `(; ;)` block comment, which nests.
-    fn scan_comment(&mut self, start: Cursor) -> Result<(), LexError> {
+    fn scan_comment(&mut self) -> Result<(), Box<Report>> {
+        self.in_block_comment = true;
         let mut depth = 1usize;
         while depth > 0 {
             if self.cursor_is_eof() {
-                return Err(self.error(LexErrorKind::UnclosedComment, start));
+                return Err(error::block_comment_incomplete(self.span(self.cursor)));
             }
             // Nested comments open and close by depth
             if self.cursor_starts_with("(;") {
@@ -556,13 +566,14 @@ where
                 self.advance_add(character.len_utf8());
             }
         }
+        self.in_block_comment = false;
         Ok(())
     }
 
     // - Token-state layout rules
 
     /// Skips a `;;` comment and handles the newline after it as layout.
-    fn scan_line_comment(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, LexError> {
+    fn scan_line_comment(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, Box<Report>> {
         self.advance_to_line_end();
         if self.cursor_is_eof() {
             return Ok(Some(self.lexeme(Token::Eof, start)));
@@ -724,7 +735,7 @@ where
     // - Token-state numbered holes
 
     /// `%N` with a decimal index; too large an index is an error.
-    fn scan_numbered_hole(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, LexError> {
+    fn scan_numbered_hole(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, Box<Report>> {
         // A percent followed by a digit
         if self.cursor_current() != Some(b'%')
             || !Self::is_digit(
@@ -741,7 +752,7 @@ where
         self.advance_to(end);
         let num = digits
             .parse::<usize>()
-            .map_err(|_| self.error(LexErrorKind::HoleNumberOutOfRange, start))?;
+            .map_err(|_| error::hole_index_out_of_bounds(self.span(start)))?;
         Ok(Some(self.lexeme(Token::NumberedHole(num), start)))
     }
 
@@ -901,7 +912,7 @@ where
     // - Token-state operator rule
 
     /// A `'...'` quoted operator; it must close on the same line.
-    fn scan_operator(&mut self, start: Cursor) -> Result<Phrase<Token>, LexError> {
+    fn scan_operator(&mut self, start: Cursor) -> Result<Phrase<Token>, Box<Report>> {
         // Everything up to the closing quote is the operator
         let content_start = self.cursor.offset + 1;
         let mut end = content_start;
@@ -919,36 +930,34 @@ where
         }
 
         self.advance_add(1);
-        Err(self.error(LexErrorKind::MalformedToken, start))
+        Err(error::character_invalid(self.span(start)))
     }
 
     // - Text state
 
     /// A `"..."` text literal, decoding escapes into UTF-8 bytes.
-    fn scan_text(&mut self, start: Cursor) -> Result<Phrase<Token>, LexError> {
+    fn scan_text(&mut self, start: Cursor) -> Result<Phrase<Token>, Box<Report>> {
         self.advance_add(1);
         let mut bytes = Vec::new();
         loop {
             let Some(byte) = self.cursor_current() else {
-                return Err(self.error(LexErrorKind::UnclosedTextLiteral, start));
+                return Err(error::text_literal_incomplete(self.span(self.cursor)));
             };
             match byte {
                 // Closing quote: the bytes must form valid UTF-8
                 b'"' => {
                     self.advance_add(1);
                     let text = String::from_utf8(bytes)
-                        .map_err(|_| self.error(LexErrorKind::InvalidTextEncoding, start))?;
+                        .map_err(|_| error::text_encoding_invalid(self.span(start)))?;
                     return Ok(self.lexeme(Token::TextLiteral(text), start));
                 }
                 // A literal cannot span lines
                 b'\n' => {
-                    self.advance_add(1);
-                    return Err(self.error(LexErrorKind::UnclosedTextLiteral, start));
+                    return Err(error::text_literal_incomplete(self.span(self.cursor)));
                 }
                 // Control characters must be escaped
                 0x00..=0x1f | 0x7f => {
-                    self.advance_add(1);
-                    return Err(self.error(LexErrorKind::IllegalControlCharacter, start));
+                    return Err(error::text_character_invalid(self.span(self.cursor)));
                 }
                 // Escape sequence
                 b'\\' => self.scan_escape(start, &mut bytes)?,
@@ -972,12 +981,12 @@ where
     }
 
     /// One escape: a `\n` byte, a `\XX` hex byte, or a `\u{...}` code point.
-    fn scan_escape(&mut self, start: Cursor, bytes: &mut Vec<u8>) -> Result<(), LexError> {
+    fn scan_escape(&mut self, start: Cursor, bytes: &mut Vec<u8>) -> Result<(), Box<Report>> {
         let escape_start = self.cursor.offset;
         // A trailing backslash is a malformed literal
         let Some(escape) = self.cursor_offset(escape_start + 1) else {
             self.cursor = Cursor { offset: start.offset + 1, ..start };
-            return Err(self.error(LexErrorKind::MalformedToken, start));
+            return Err(error::character_invalid(self.span(start)));
         };
 
         // Single-character escapes
@@ -1022,7 +1031,11 @@ where
                     let character = u32::from_str_radix(&digits, 16)
                         .ok()
                         .and_then(char::from_u32)
-                        .ok_or_else(|| self.error(LexErrorKind::InvalidUnicodeEscape, start))?;
+                        .ok_or_else(|| {
+                            error::text_escape_codepoint_invalid(
+                                self.span(Cursor { offset: escape_start, ..start }),
+                            )
+                        })?;
                     let mut bytes_char = [0; 4];
                     bytes.extend_from_slice(character.encode_utf8(&mut bytes_char).as_bytes());
                     return Ok(());
@@ -1038,40 +1051,28 @@ where
                 .next()
                 .expect("escape byte exists")
                 .len_utf8();
-        let position = self.cursor;
-        self.advance_to(invalid_end);
-        Err(self.error(LexErrorKind::IllegalEscape, position))
+        let pos = self.cursor;
+        if escape == b'\n' {
+            // A rejected escape still advances source positions across the newline
+            self.advance_add(1);
+            self.advance_newline();
+        } else {
+            self.advance_to(invalid_end);
+        }
+        Err(error::text_escape_invalid(self.span(pos)))
     }
 
     // - Errors
 
     /// Classifies a byte no rule accepted and steps over it.
-    fn unrecognized_character(&mut self, start: Cursor) -> LexError {
-        let byte = self.cursor_current().expect("not at end of input");
-        // Control, other ASCII, or non-ASCII
-        let kind = if byte <= 0x1f || byte == 0x7f {
-            self.advance_add(1);
-            LexErrorKind::MisplacedControlCharacter
-        } else if byte.is_ascii() {
-            self.advance_add(1);
-            LexErrorKind::MalformedToken
-        } else {
-            let character = self.source[self.cursor.offset..]
-                .chars()
-                .next()
-                .expect("non-ASCII byte begins a source character");
-            self.advance_add(character.len_utf8());
-            LexErrorKind::MisplacedUnicodeCharacter
-        };
-        self.error(kind, start)
-    }
-
-    /// An error spanning from `start` to the cursor.
-    fn error(&self, kind: LexErrorKind, start: Cursor) -> LexError {
-        crate::phrase! {
-            node: kind,
-            span: self.span(start),
-        }
+    fn unrecognized_character(&mut self, start: Cursor) -> Box<Report> {
+        // The UTF-8 source and cursor movement guarantee a scalar boundary
+        let character = self.source[self.cursor.offset..]
+            .chars()
+            .next()
+            .expect("unrecognized character exists");
+        self.advance_add(character.len_utf8());
+        error::character_invalid(self.span(start))
     }
 }
 
@@ -1079,7 +1080,7 @@ impl<Classify> Iterator for Lexer<'_, Classify>
 where
     Classify: FnMut(&str) -> bool,
 {
-    type Item = Result<Phrase<Token>, LexError>;
+    type Item = Result<Phrase<Token>, Box<Report>>;
 
     // - Iteration
 

@@ -1,10 +1,7 @@
 use std::cell::Cell;
 
 use p4spec_rust::{
-    frontend::{
-        error::LexErrorKind,
-        lexer::{Lexer, Token},
-    },
+    frontend::lexer::{Lexer, Token},
     lang::{common::prim::num::Natural, common::source::Position},
 };
 
@@ -167,9 +164,9 @@ fn test_byte_escapes_reject_non_utf8_text() {
         .expect("lexer result")
         .expect_err("byte-only text");
 
-    assert_eq!(error.node, LexErrorKind::InvalidTextEncoding);
-    assert_eq!(error.span.left, Position::new("unicode-policy.watsup", 1, 0));
-    assert_eq!(error.span.right, Position::new("unicode-policy.watsup", 1, source.len()));
+    assert_eq!(error.code.as_deref().unwrap(), "parse/text-encoding-invalid");
+    assert_eq!(error.labels[0].span.left, Position::new("unicode-policy.watsup", 1, 0));
+    assert_eq!(error.labels[0].span.right, Position::new("unicode-policy.watsup", 1, source.len()));
 }
 
 #[test]
@@ -179,9 +176,9 @@ fn test_unicode_escapes_reject_surrogates() {
         .expect("lexer result")
         .expect_err("surrogate escape");
 
-    assert_eq!(error.node, LexErrorKind::InvalidUnicodeEscape);
-    assert_eq!(error.span.left, Position::new("unicode-policy.watsup", 1, 0));
-    assert_eq!(error.span.right, Position::new("unicode-policy.watsup", 1, 9));
+    assert_eq!(error.code.as_deref().unwrap(), "parse/text-escape-codepoint-invalid");
+    assert_eq!(error.labels[0].span.left, Position::new("unicode-policy.watsup", 1, 1));
+    assert_eq!(error.labels[0].span.right, Position::new("unicode-policy.watsup", 1, 9));
 }
 
 #[test]
@@ -276,18 +273,18 @@ fn test_uppercase_identifier_classification_is_lazy_and_contextual() {
 }
 
 #[test]
-fn test_lexical_failures_report_typed_kinds_and_precise_spans() {
+fn test_lexical_failures_report_codes_and_precise_spans() {
     let fixtures = [
-        ("\"unterminated", LexErrorKind::UnclosedTextLiteral, 0, 13),
-        ("\"abc\\", LexErrorKind::MalformedToken, 0, 1),
-        ("\"bad\\q\"", LexErrorKind::IllegalEscape, 4, 6),
-        ("\"bad\u{7}\"", LexErrorKind::IllegalControlCharacter, 0, 5),
-        ("\"unterminated\nnext", LexErrorKind::UnclosedTextLiteral, 0, 14),
-        ("(; unclosed", LexErrorKind::UnclosedComment, 0, 11),
-        ("@", LexErrorKind::MalformedToken, 0, 1),
-        ("é", LexErrorKind::MisplacedUnicodeCharacter, 0, 2),
-        ("\u{7}", LexErrorKind::MisplacedControlCharacter, 0, 1),
-        ("%999999999999999999999999", LexErrorKind::HoleNumberOutOfRange, 0, 25),
+        ("\"unterminated", "parse/text-literal-incomplete", 13, 13),
+        ("\"abc\\", "parse/character-invalid", 0, 1),
+        ("\"bad\\q\"", "parse/text-escape-invalid", 4, 6),
+        ("\"bad\u{7}\"", "parse/text-character-invalid", 4, 4),
+        ("\"unterminated\nnext", "parse/text-literal-incomplete", 13, 13),
+        ("(; unclosed", "parse/block-comment-incomplete", 11, 11),
+        ("@", "parse/character-invalid", 0, 1),
+        ("é", "parse/character-invalid", 0, 2),
+        ("\u{7}", "parse/character-invalid", 0, 1),
+        ("%999999999999999999999999", "parse/hole-index-out-of-bounds", 0, 25),
     ];
 
     for (source, kind, left_column, right_column) in fixtures {
@@ -296,12 +293,33 @@ fn test_lexical_failures_report_typed_kinds_and_precise_spans() {
             .expect("lexer result")
             .expect_err("invalid source");
 
-        assert_eq!(error.node, kind, "source: {source:?}");
-        assert_eq!(error.span.left, Position::new("error.watsup", 1, left_column));
+        assert_eq!(error.code.as_deref().unwrap(), kind, "source: {source:?}");
+        assert_eq!(error.labels[0].span.left, Position::new("error.watsup", 1, left_column));
         assert_eq!(
-            error.span.right,
+            error.labels[0].span.right,
             Position::new("error.watsup", 1, right_column),
             "source: {source:?}"
         );
     }
+}
+
+#[test]
+fn test_escaped_newline_reports_a_renderable_multiline_span() {
+    use p4spec_rust::diagnostic::{RenderConfig, Renderer};
+
+    let source = "\"abc\\\n";
+    let report = Lexer::new("escape.watsup", source, |_| false)
+        .next()
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(report.code.as_deref(), Some("parse/text-escape-invalid"));
+    assert_eq!(report.labels[0].span.left, Position::new("escape.watsup", 1, 4));
+    assert_eq!(report.labels[0].span.right, Position::new("escape.watsup", 2, 0));
+
+    let mut renderer = Renderer::new(RenderConfig::default());
+    renderer.insert_source("escape.watsup", source);
+    let text = renderer
+        .render_plain(&report)
+        .expect("valid byte endpoints");
+    assert!(text.contains("invalid escape"));
 }

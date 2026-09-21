@@ -15,7 +15,7 @@ use std::{
 
 use lalrpop_util::ParseError;
 
-use crate::diagnostic::{Label, LabelStyle, Report, Severity};
+use crate::diagnostic::Report;
 
 use crate::lang::{
     common::{
@@ -27,14 +27,14 @@ use crate::lang::{
 
 use super::{
     ctx::{Bindings, Context, Location},
-    error::{FrontendError, LexErrorKind, SyntaxErrorKind},
+    error,
     lexer::{Lexer, Token},
     parser,
     tokens::parser_tokens,
 };
 
 /// Parses the notation shape syntax used by runtime case constructors.
-pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
+pub fn parse_mixop(source: &str) -> Result<Mixop, Box<Report>> {
     /// Replaces every type in a notation type with an argument hole.
     fn from_typ(typ: &ast::Typ) -> Mixop {
         match typ {
@@ -71,89 +71,87 @@ pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
     let lexer = Lexer::new(Rc::from(""), source, |id| ctx.find_id(id));
     let tokens = parser_tokens(&ctx, lexer);
     let result = parser::CheckTypParser::new().parse(&ctx, tokens);
-    let typ = result.map_err(|error| parse_error(&ctx, error))?;
+    let typ = result.map_err(|error_parse| match error_parse {
+        ParseError::User { error } => error,
+        _ => error::mixfix_operator_invalid(source),
+    })?;
     let mixop = from_typ(&typ);
     Ok(mixop)
 }
 
 /// Lexes and parses one source text into definitions.
-fn parse_source(name: Rc<str>, source: &str, ctx: &Context) -> Result<Spec, FrontendError> {
+fn parse_source_with_context(
+    name: Rc<str>,
+    source: &str,
+    ctx: &Context,
+) -> Result<Spec, Box<Report>> {
     let lexer = Lexer::new(name, source, |id| ctx.find_id(id));
     let tokens = parser_tokens(ctx, lexer);
     let result = parser::SpecParser::new().parse(ctx, tokens);
     result.map_err(|error| parse_error(ctx, error))
 }
 
-/// Maps a LALRPOP error to a syntax error with a resolved span.
-fn parse_error(ctx: &Context, error: ParseError<Location, Token, FrontendError>) -> FrontendError {
-    let (kind, loc_l, loc_r) = match error {
-        // Point errors span one location
-        ParseError::InvalidToken { location: loc } => (SyntaxErrorKind::InvalidToken, loc, loc),
+/// Maps LALRPOP control failures to reports at the responsible token.
+fn parse_error(
+    ctx: &Context,
+    error_parse: ParseError<Location, Token, Box<Report>>,
+) -> Box<Report> {
+    match error_parse {
+        ParseError::InvalidToken { location: loc } => error::token_invalid(ctx.span(loc, loc)),
         ParseError::UnrecognizedEof { location: loc, .. } => {
-            (SyntaxErrorKind::UnexpectedEndOfInput, loc, loc)
+            error::input_incomplete(ctx.span(loc, loc))
         }
-        // Token errors span the token
-        ParseError::UnrecognizedToken { token: (loc_l, _, loc_r), .. } => {
-            (SyntaxErrorKind::UnexpectedToken, loc_l, loc_r)
+        ParseError::UnrecognizedToken { token: (loc_l, Token::Eof, loc_r), .. } => {
+            error::input_incomplete(ctx.span(loc_l, loc_r))
         }
-        ParseError::ExtraToken { token: (loc_l, _, loc_r) } => {
-            (SyntaxErrorKind::ExtraToken, loc_l, loc_r)
+        ParseError::UnrecognizedToken { token: (loc_l, _, loc_r), .. }
+        | ParseError::ExtraToken { token: (loc_l, _, loc_r) } => {
+            error::token_invalid(ctx.span(loc_l, loc_r))
         }
-        // Forward located failures through the temporary frontend bridge
-        ParseError::User { error } => return diagnostic_error(error),
-    };
-    crate::phrase! {
-        node: kind,
-        span: ctx.span(loc_l, loc_r),
-    }
-    .into()
-}
-
-/// Adapts the first lexical diagnostic until D02 migrates the lexer family.
-fn diagnostic_error(error: FrontendError) -> FrontendError {
-    const TEXT_ESCAPE_INVALID: &str = "parse/text-escape-invalid";
-    match error {
-        // Preserve the lexer's precise escape span
-        FrontendError::Lexical(error) if error.node == LexErrorKind::IllegalEscape => {
-            FrontendError::Diagnostic(Box::new(Report {
-                severity: Severity::Error,
-                code: Some(TEXT_ESCAPE_INVALID.to_owned()),
-                message: "escape is not allowed in a text literal".to_owned(),
-                labels: vec![Label {
-                    style: LabelStyle::Primary,
-                    span: error.span,
-                    message: "invalid escape".to_owned(),
-                }],
-                notes: Vec::new(),
-                source: "parse",
-                traces: Vec::new(),
-            }))
-        }
-        // Other frontend families retain their current typed errors
-        error => error,
+        ParseError::User { error } => error,
     }
 }
 
-/// Reads a file, checks its encoding, and parses it with the given context.
-fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, FrontendError> {
+/// Parses a UTF-8 source string with fresh variable bindings.
+pub fn parse_source(name: Rc<str>, source: &str) -> Result<Spec, Box<Report>> {
+    parse_source_with_context(name, source, &Context::default())
+}
+
+/// Validates source bytes and parses them with fresh variable bindings.
+pub fn parse_bytes(name: Rc<str>, bytes: &[u8]) -> Result<Spec, Box<Report>> {
+    parse_bytes_with_context(name, bytes, &Context::default())
+}
+
+/// Validates encoding before constructing the UTF-8 lexer.
+fn parse_bytes_with_context(
+    name: Rc<str>,
+    bytes: &[u8],
+    ctx: &Context,
+) -> Result<Spec, Box<Report>> {
+    let source = str::from_utf8(bytes).map_err(|error_utf8| {
+        let span = invalid_utf8_span(Rc::clone(&name), bytes, &error_utf8);
+        // Utf8Error guarantees that the prefix before valid_up_to is valid
+        let prefix = str::from_utf8(&bytes[..error_utf8.valid_up_to()])
+            .expect("UTF-8 decoder validated the prefix");
+        // The existing lexer identifies whether the prefix ends inside a block comment
+        let mut lexer = Lexer::new(Rc::clone(&name), prefix, |_| false);
+        while lexer.next().is_some_and(|token| token.is_ok()) {}
+        if lexer.in_block_comment() {
+            error::comment_encoding_invalid(span)
+        } else {
+            error::source_encoding_invalid(span)
+        }
+    })?;
+    parse_source_with_context(name, source, ctx)
+}
+
+/// Reads a file and parses its bytes with shared variable bindings.
+fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, Box<Report>> {
     let name = Rc::<str>::from(path.to_string_lossy().into_owned());
-    let position = Position::new(Rc::clone(&name), 0, 0);
-    let file_span = Span::new(position.clone(), position);
-    // I/O errors point at the file
-    let bytes = fs::read(path).map_err(|source| {
-        FrontendError::Io(crate::phrase! {
-            node: source,
-            span: file_span,
-        })
-    })?;
-    // Encoding errors point at the first bad byte
-    let source = str::from_utf8(&bytes).map_err(|source| {
-        FrontendError::InvalidUtf8(crate::phrase! {
-            node: source,
-            span: invalid_utf8_span(Rc::clone(&name), &bytes, &source),
-        })
-    })?;
-    parse_source(name, source, ctx)
+    let pos = Position::new(Rc::clone(&name), 0, 0);
+    let span = Span::new(pos.clone(), pos);
+    let bytes = fs::read(path).map_err(|error_io| error::file_read_failed(span, &error_io))?;
+    parse_bytes_with_context(name, &bytes, ctx)
 }
 
 /// Locates a UTF-8 error by counting newlines in the valid prefix.
@@ -179,7 +177,7 @@ fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Spa
 /// Parses files and directories in order,
 /// recursively expanding `.watsup` files in directories
 /// while excluding nested `include` directories.
-pub fn parse_files<I, P>(paths: I) -> Result<Spec, FrontendError>
+pub fn parse_files<I, P>(paths: I) -> Result<Spec, Box<Report>>
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
@@ -202,16 +200,15 @@ where
 }
 
 /// Adds a file, or the `.watsup` files under a directory, in name order.
-fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), FrontendError> {
-    let name = path.to_string_lossy().into_owned();
-    let position = Position::new(name, 0, 0);
-    let span = Span::new(position.clone(), position);
-    let metadata = fs::metadata(path).map_err(|source| {
-        FrontendError::Io(crate::phrase! {
-            node: source,
-            span: span.clone(),
-        })
-    })?;
+fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), Box<Report>> {
+    // Resolve path failures before parsing any collected files
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error_io) => {
+            let pos = Position::new(path.to_string_lossy().into_owned(), 0, 0);
+            return Err(error::file_read_failed(Span::new(pos.clone(), pos), &error_io));
+        }
+    };
     // A file is taken as given, whatever its extension
     if !metadata.is_dir() {
         files.push(path.to_owned());
@@ -219,33 +216,17 @@ fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), FrontendErro
     }
 
     let mut entries = fs::read_dir(path)
-        .map_err(|source| {
-            FrontendError::Io(crate::phrase! {
-                node: source,
-                span: span.clone(),
-            })
-        })?
+        .map_err(|error_io| error::input_path_read_failed(path, &error_io))?
         .collect::<Result<Vec<_>, io::Error>>()
-        .map_err(|source| {
-            FrontendError::Io(crate::phrase! {
-                node: source,
-                span: span,
-            })
-        })?;
+        .map_err(|error_io| error::input_path_read_failed(path, &error_io))?;
     // Directory order is not stable, so sort by name
     entries.sort_by_key(fs::DirEntry::file_name);
 
     for entry in entries {
         let entry_path = entry.path();
         let entry_name = entry_path.to_string_lossy().into_owned();
-        let position = Position::new(entry_name.clone(), 0, 0);
-        let span = Span::new(position.clone(), position);
-        let entry_metadata = fs::metadata(&entry_path).map_err(|source| {
-            FrontendError::Io(crate::phrase! {
-                node: source,
-                span: span,
-            })
-        })?;
+        let entry_metadata = fs::metadata(&entry_path)
+            .map_err(|error_io| error::input_path_read_failed(&entry_path, &error_io))?;
         // Recurse, except into `include` directories
         if entry_metadata.is_dir() {
             if entry.file_name() != "include" {

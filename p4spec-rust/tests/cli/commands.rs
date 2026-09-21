@@ -65,7 +65,7 @@ fn test_struct_command_prints_control_flow_without_rule_groups() {
 #[test]
 fn test_struct_command_reports_pipeline_errors_on_stderr() {
     for (path, message) in [
-        ("frontend/negative/malformed-token.watsup", "malformed token"),
+        ("frontend/negative/malformed-token.watsup", "error[parse/character-invalid]"),
         ("elaboration/operator_not_defined.watsup", "operator is not defined"),
         ("algorithmic/impure_else_premises.watsup", "otherwise branch contains an impure premise"),
     ] {
@@ -107,7 +107,7 @@ fn test_elab_command_reports_frontend_errors_on_stderr() {
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
-            .contains("malformed token")
+            .contains("error[parse/character-invalid]")
     );
 }
 
@@ -375,7 +375,7 @@ fn test_run_al_reports_spec_load_failure() {
         .unwrap();
     assert_eq!(output.status.code(), Some(1));
     assert!(output.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("malformed token"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("error[parse/character-invalid]"));
 }
 
 #[test]

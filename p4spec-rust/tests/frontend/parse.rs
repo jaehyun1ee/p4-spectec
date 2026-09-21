@@ -6,10 +6,7 @@ use std::{
 };
 
 use p4spec_rust::{
-    frontend::{
-        error::{FrontendError, SyntaxErrorKind},
-        parse::{parse_files, parse_mixop},
-    },
+    frontend::parse::{parse_files, parse_mixop},
     lang::{
         common::{
             notation::mixfix::Mixfix,
@@ -165,28 +162,56 @@ fn test_parse_file_reports_invalid_utf8_at_the_invalid_byte() {
     fs::write(&path, b"var x : nat\n\xff").expect("write invalid UTF-8 file");
 
     let error = parse_files([&path]).expect_err("reject invalid UTF-8");
-    let FrontendError::InvalidUtf8(error) = error else { panic!("expected invalid UTF-8 error") };
+    assert_eq!(error.code.as_deref(), Some("parse/source-encoding-invalid"));
 
-    assert_eq!(error.span.left, Position::new(path.to_string_lossy(), 2, 0));
-    assert_eq!(error.span.right, Position::new(path.to_string_lossy(), 2, 1));
+    assert_eq!(error.labels[0].span.left, Position::new(path.to_string_lossy(), 2, 0));
+    assert_eq!(error.labels[0].span.right, Position::new(path.to_string_lossy(), 2, 1));
 }
 
 #[test]
 fn test_parse_file_reports_io_and_syntax_failures_with_file_spans() {
     let directory = TempDirectory::new();
     let missing = directory.path("missing.watsup");
-    let FrontendError::Io(error) = parse_files([&missing]).expect_err("report missing file") else {
-        panic!("expected I/O error")
-    };
-    assert_eq!(error.span.left, Position::new(missing.to_string_lossy(), 0, 0));
+    let error = parse_files([&missing]).expect_err("report missing file");
+    assert_eq!(error.code.as_deref(), Some("parse/file-read-failed"));
+    assert_eq!(error.labels[0].span.left, Position::new(missing.to_string_lossy(), 0, 0));
 
     let invalid = directory.path("syntax.watsup");
     fs::write(&invalid, "def").expect("write invalid SpecTec file");
-    let FrontendError::Syntax(error) = parse_files([&invalid]).expect_err("report syntax error")
-    else {
-        panic!("expected syntax error")
-    };
-    assert_eq!(error.node, SyntaxErrorKind::UnexpectedToken);
-    assert_eq!(error.span.left, Position::new(invalid.to_string_lossy(), 1, 3));
-    assert_eq!(error.span.right, Position::new(invalid.to_string_lossy(), 1, 3));
+    let error = parse_files([&invalid]).expect_err("report syntax error");
+    assert_eq!(error.code.as_deref(), Some("parse/input-incomplete"));
+    assert_eq!(error.labels[0].span.left, Position::new(invalid.to_string_lossy(), 1, 3));
+    assert_eq!(error.labels[0].span.right, Position::new(invalid.to_string_lossy(), 1, 3));
+}
+
+#[test]
+fn test_parse_bytes_distinguishes_nested_comments_from_comment_text() {
+    use p4spec_rust::frontend::parse::parse_bytes;
+    use std::rc::Rc;
+
+    let cases: &[(&[u8], &str, usize, usize)] = &[
+        (b"(; outer (; inner ;)\n\xff", "parse/comment-encoding-invalid", 2, 0),
+        (b"(; closed ;)\xff", "parse/source-encoding-invalid", 1, 12),
+        (b";; (; line comment\n\xff", "parse/source-encoding-invalid", 2, 0),
+        (b"\"(;\"\xff", "parse/source-encoding-invalid", 1, 4),
+        (b"(; \xc3\xa9\n\xff", "parse/comment-encoding-invalid", 2, 0),
+    ];
+    for (bytes, code, line, column) in cases {
+        let report = parse_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
+        assert_eq!(report.code.as_deref(), Some(*code));
+        assert_eq!(report.labels[0].span.left, Position::new("bytes.watsup", *line, *column));
+        assert_eq!(report.labels[0].span.right, Position::new("bytes.watsup", *line, column + 1));
+    }
+}
+
+#[test]
+fn test_missing_path_fails_before_parsing_collected_files() {
+    let directory = TempDirectory::new();
+    let invalid = directory.path("invalid.watsup");
+    let missing = directory.path("missing.watsup");
+    fs::write(&invalid, "}").unwrap();
+
+    let report = parse_files([&invalid, &missing]).unwrap_err();
+    assert_eq!(report.code.as_deref(), Some("parse/file-read-failed"));
+    assert_eq!(report.labels[0].span.left, Position::new(missing.to_string_lossy(), 0, 0));
 }

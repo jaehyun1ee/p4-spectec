@@ -3,8 +3,8 @@ use std::{path::PathBuf, process::ExitCode};
 use clap::{Args, Parser, Subcommand};
 
 use p4spec_rust::{
-    diagnostic::{RenderConfig, Renderer},
-    frontend::{error::FrontendError, parse::parse_files},
+    diagnostic::{RenderConfig, Renderer, Report},
+    frontend::parse::parse_files,
     interface::p4::parse::parse_file,
     lang::{al, data::value::external::Encoding, il, sl, traits::print::Print},
     pass::{algo, elaborate, structure},
@@ -84,21 +84,13 @@ fn struct_command(args: StructArgs) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// Renders migrated frontend diagnostics without flattening their payloads.
-fn frontend_error(error: FrontendError) -> ExitCode {
-    // The frontend carrier is removed when D02 completes the family
-    match error {
-        // Keep the original summary available when rendering fails
-        FrontendError::Diagnostic(report) => {
-            let mut renderer = Renderer::new(RenderConfig::default());
-            if let Err(error) = renderer.emit_stderr(&report) {
-                eprintln!("{report}\ndiagnostic rendering failed: {error}");
-            }
-            ExitCode::FAILURE
-        }
-        // Preserve output for frontend families not yet migrated
-        error => command_error(error),
+/// Renders frontend reports while preserving their structured payloads.
+fn frontend_error(report: Box<Report>) -> ExitCode {
+    let mut renderer = Renderer::new(RenderConfig::default());
+    if let Err(error) = renderer.emit_stderr(&report) {
+        eprintln!("{report}\ndiagnostic rendering failed: {error}");
     }
+    ExitCode::FAILURE
 }
 
 /// Preserves legacy boundary output until D10 completes diagnostic transport.
