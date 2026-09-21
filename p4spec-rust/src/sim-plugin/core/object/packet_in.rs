@@ -94,10 +94,7 @@ impl PacketIn {
     /// Reads a fixed-size header into `hdr` and advances the packet cursor
     ///
     /// `T` must be a fixed-size header type.
-    /// Extraction may trigger `PacketTooShort` or `StackOutOfBounds`:
-    /// ```text
-    /// void extract<T>(out T hdr);
-    /// ```
+    /// Extraction may trigger `PacketTooShort` or `StackOutOfBounds`.
     pub fn extract<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
@@ -160,12 +157,7 @@ impl PacketIn {
         Ok((pkt, value_ctx, value_arch, value_call_result))
     }
 
-    /// Extracts a header with a variable-size field
-    ///
-    /// ```text
-    /// void extract<T>(out T variableSizeHeader,
-    ///                 in bit<32> variableFieldSizeInBits);
-    /// ```
+    /// Extracts a header with a variable-size field.
     pub fn extract_varsize<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
@@ -309,11 +301,7 @@ impl PacketIn {
         Ok((pkt, value_ctx, value_arch, value_call_result))
     }
 
-    /// Reads a value without advancing the packet cursor
-    ///
-    /// ```text
-    /// T lookahead<T>();
-    /// ```
+    /// Reads a value without advancing the packet cursor.
     pub fn lookahead<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
@@ -376,11 +364,7 @@ impl PacketIn {
         Ok((self.clone(), value_ctx, value_arch, value_call_result))
     }
 
-    /// Advances the packet cursor by the requested number of bits
-    ///
-    /// ```text
-    /// void advance(in bit<32> sizeInBits);
-    /// ```
+    /// Advances the packet cursor by the requested number of bits.
     pub fn advance<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
@@ -438,11 +422,7 @@ impl PacketIn {
         Ok((pkt, value_ctx, value_arch, value_call_result))
     }
 
-    /// Returns the total packet length in bytes
-    ///
-    /// ```text
-    /// bit<32> length();
-    /// ```
+    /// Returns the total packet length in bytes.
     pub fn length<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,

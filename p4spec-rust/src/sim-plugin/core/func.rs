@@ -20,18 +20,9 @@ use super::super::spec::{func, unpack};
 /// Evaluates a boolean expression at compilation time
 /// and stops compilation with the supplied message when it is false.
 ///
-/// The boolean result can initialize a global constant, for example:
-/// ```text
-/// const bool _check = static_assert(
-///     V1MODEL_VERSION > 20180000,
-///     "Expected a v1 model version >= 20180000");
-/// ```
+/// The boolean result can initialize a global constant.
 ///
-/// The overload without a message uses the default failure message:
-/// ```text
-/// extern bool static_assert(bool check, string message);
-/// extern bool static_assert(bool check);
-/// ```
+/// The overload without a message uses the default failure message.
 pub fn static_assert<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: &Value,
@@ -65,10 +56,7 @@ where
 /// Checks a predicate in the parser, leaving execution unchanged when true.
 ///
 /// A false predicate sets the parser error to `toSignal` and transitions to
-/// the `reject` state:
-/// ```text
-/// extern void verify(in bool check, in error toSignal);
-/// ```
+/// the `reject` state.
 pub fn verify<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,

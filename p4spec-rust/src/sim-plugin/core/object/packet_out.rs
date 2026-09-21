@@ -25,11 +25,7 @@ pub struct PacketOut {
 }
 
 impl PacketOut {
-    /// Appends the header's bits to the output packet
-    ///
-    /// ```text
-    /// void emit<T>(in T hdr);
-    /// ```
+    /// Appends the header's bits to the output packet.
     pub fn emit<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
