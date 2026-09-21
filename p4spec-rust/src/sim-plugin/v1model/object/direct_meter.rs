@@ -32,10 +32,7 @@ pub enum DirectMeter {
 impl DirectMeter {
     /// Creates a direct meter of the requested `MeterType`.
     ///
-    /// The object is attached to a table by its `meters` property:
-    /// ```text
-    /// direct_meter(MeterType type);
-    /// ```
+    /// The object is attached to a table by its `meters` property.
     pub fn init(
         arena: &ValueArena,
         _value_targs: Value,
@@ -57,10 +54,7 @@ impl DirectMeter {
 
     /// Writes the meter color to `result`, always green (0).
     ///
-    /// `T` must be `bit<W>` with `W >= 2`; 0 is green, 1 yellow, 2 red:
-    /// ```text
-    /// void read(out T result);
-    /// ```
+    /// `T` must be `bit<W>` with `W >= 2`; 0 is green, 1 yellow, 2 red.
     pub fn read<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,

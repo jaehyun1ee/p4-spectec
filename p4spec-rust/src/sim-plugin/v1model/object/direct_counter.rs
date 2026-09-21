@@ -35,10 +35,7 @@ pub enum DirectCounter {
 impl DirectCounter {
     /// Creates a zeroed direct counter of the requested `CounterType`.
     ///
-    /// The object is attached to a table by its `counters` property:
-    /// ```text
-    /// direct_counter(CounterType type);
-    /// ```
+    /// The object is attached to a table by its `counters` property.
     pub fn init(
         arena: &ValueArena,
         _value_targs: Value,
@@ -64,10 +61,7 @@ impl DirectCounter {
     /// Adds one packet, the packet's bytes, or both to the counter.
     ///
     /// `v1model.p4` counts on every table match;
-    /// here only an explicit call counts:
-    /// ```text
-    /// void count();
-    /// ```
+    /// here only an explicit call counts.
     pub fn count<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,

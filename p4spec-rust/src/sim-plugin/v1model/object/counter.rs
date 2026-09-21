@@ -35,10 +35,7 @@ pub enum Counter {
 impl Counter {
     /// Creates `size` zeroed counters of the requested `CounterType`.
     ///
-    /// Counters are updated by the program and read by the control plane:
-    /// ```text
-    /// counter(bit<32> size, CounterType type);
-    /// ```
+    /// Counters are updated by the program and read by the control plane.
     pub fn init(
         arena: &ValueArena,
         _value_targs: Value,
@@ -65,10 +62,7 @@ impl Counter {
 
     /// Adds one packet, the packet's bytes, or both to the counter at `index`.
     ///
-    /// `index >= size` updates nothing:
-    /// ```text
-    /// void count(in bit<32> index);
-    /// ```
+    /// `index >= size` updates nothing.
     pub fn count<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,

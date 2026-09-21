@@ -27,10 +27,7 @@ use num_traits::Zero;
 /// Sends `data` to the control plane; a no-op here.
 ///
 /// Only supported in the ingress control;
-/// the BMv2 implementation ignores `receiver` as well:
-/// ```text
-/// extern void digest<T>(in bit<32> receiver, in T data);
-/// ```
+/// the BMv2 implementation ignores `receiver` as well.
 pub fn digest<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
@@ -63,10 +60,7 @@ where
 /// Marks the packet for dropping at the end of ingress or egress.
 ///
 /// Sets `standard_metadata.egress_spec` to the drop port and clears
-/// `standard_metadata.mcast_grp`; later code may still change either:
-/// ```text
-/// extern void mark_to_drop(inout standard_metadata_t standard_metadata);
-/// ```
+/// `standard_metadata.mcast_grp`; later code may still change either.
 pub fn mark_to_drop<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
@@ -118,11 +112,7 @@ where
 /// Hashes `data` with `algo` into `result`, in `[base, base + max - 1]`.
 ///
 /// `max == 0` always yields `base`; `O`, `T`, and `M` are `bit<W>` types
-/// and `D` a tuple of bit-fields or varbits:
-/// ```text
-/// extern void hash<O, T, D, M>(out O result, in HashAlgorithm algo,
-///                              in T base, in D data, in M max);
-/// ```
+/// and `D` a tuple of bit-fields or varbits.
 pub fn hash<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
@@ -281,11 +271,7 @@ where
 /// A mismatch sets `standard_metadata.checksum_error` to 1 before ingress;
 /// `T` is a tuple of `bit<W>`, `int<W>`, or `varbit<W>` fields
 /// and `O` a `bit<X>` type; `algo` must be a compile-time constant.
-/// Only supported in the VerifyChecksum control:
-/// ```text
-/// extern void verify_checksum<T, O>(in bool condition, in T data,
-///                                   in O checksum, HashAlgorithm algo);
-/// ```
+/// Only supported in the VerifyChecksum control.
 pub fn verify_checksum<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
@@ -301,11 +287,7 @@ where
 
 /// `verify_checksum` over `data` plus the packet's unparsed payload.
 ///
-/// Only supported in the VerifyChecksum control:
-/// ```text
-/// extern void verify_checksum_with_payload<T, O>(
-///     in bool condition, in T data, in O checksum, HashAlgorithm algo);
-/// ```
+/// Only supported in the VerifyChecksum control.
 pub fn verify_checksum_with_payload<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
@@ -381,11 +363,7 @@ where
 ///
 /// A false `condition` leaves `checksum` unchanged;
 /// the type constraints are those of `verify_checksum`.
-/// Only supported in the ComputeChecksum control:
-/// ```text
-/// extern void update_checksum<T, O>(in bool condition, in T data,
-///                                   inout O checksum, HashAlgorithm algo);
-/// ```
+/// Only supported in the ComputeChecksum control.
 pub fn update_checksum<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
@@ -401,11 +379,7 @@ where
 
 /// `update_checksum` over `data` plus the packet's unparsed payload.
 ///
-/// Only supported in the ComputeChecksum control:
-/// ```text
-/// extern void update_checksum_with_payload<T, O>(
-///     in bool condition, in T data, inout O checksum, HashAlgorithm algo);
-/// ```
+/// Only supported in the ComputeChecksum control.
 pub fn update_checksum_with_payload<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
@@ -424,21 +398,7 @@ where
 ///
 /// Only `standard_metadata.instance_type` and the `@field_list(index)`
 /// metadata fields survive; the last call in an ingress pass wins.
-/// For example, with
-/// ```text
-/// struct UM {
-///    @field_list(1)
-///    bit<32> x;
-///    @field_list(1, 2)
-///    bit<32> y;
-///    bit<32> z;
-/// }
-/// ```
-/// index 1 preserves `x` and `y`, index 2 only `y`.
-/// Only supported in the ingress control:
-/// ```text
-/// extern void resubmit_preserving_field_list(bit<8> index);
-/// ```
+/// Only supported in the ingress control.
 pub fn resubmit_preserving_field_list<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_ctx: Value,
@@ -478,10 +438,7 @@ where
 /// Recirculated packets are told apart by `standard_metadata.instance_type`;
 /// the `@field_list(index)` metadata fields are preserved
 /// and the last call in an egress pass wins.
-/// Only supported in the egress control:
-/// ```text
-/// extern void recirculate_preserving_field_list(bit<8> index);
-/// ```
+/// Only supported in the egress control.
 pub fn recirculate_preserving_field_list<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_ctx: Value,
@@ -522,11 +479,7 @@ where
 /// The control plane must configure the session, else no clone is made.
 /// `type` is `I2E` in ingress and `E2E` in egress;
 /// the `@field_list(index)` metadata fields are preserved
-/// and the last call in a pass wins:
-/// ```text
-/// extern void clone_preserving_field_list(in CloneType type,
-///                                         in bit<32> session, bit<8> index);
-/// ```
+/// and the last call in a pass wins.
 pub fn clone_preserving_field_list<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_ctx: Value,
@@ -563,10 +516,6 @@ where
 }
 
 /// Prints `msg` to standard output.
-///
-/// ```text
-/// extern void log_msg(string msg);
-/// ```
 pub fn log_msg<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
@@ -634,10 +583,6 @@ pub fn format_braces(arena: &ValueArena, fmt: &str, args: &[Value]) -> Result<St
 }
 
 /// Prints `msg` with each `{}` replaced by the next element of `data`.
-///
-/// ```text
-/// extern void log_msg<T>(string msg, in T data);
-/// ```
 pub fn log_msg_format<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,

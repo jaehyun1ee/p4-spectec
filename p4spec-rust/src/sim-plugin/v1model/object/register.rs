@@ -35,10 +35,7 @@ impl Register {
     /// Creates `size` elements of type `T`, each at `T`'s default value.
     ///
     /// For example, `register<bit<32>>(512) my_reg;`
-    /// allocates 512 values of type `bit<32>`:
-    /// ```text
-    /// register(bit<32> size);
-    /// ```
+    /// allocates 512 values of type `bit<32>`.
     pub fn init<Interp, Iface, Ext>(
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_targs: Value,
@@ -72,10 +69,7 @@ impl Register {
     /// Writes the element at `index` to `result`.
     ///
     /// Only `bit<W>` element types are supported by `v1model.p4`;
-    /// an out-of-range index yields the element type's default:
-    /// ```text
-    /// void read(out T result, in bit<32> index);
-    /// ```
+    /// an out-of-range index yields the element type's default.
     pub fn read<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
@@ -117,10 +111,7 @@ impl Register {
     /// Stores `value` at `index`.
     ///
     /// An out-of-range index changes nothing;
-    /// atomicity of a read-modify-write is the program's concern via `@atomic`:
-    /// ```text
-    /// void write(in bit<32> index, in T value);
-    /// ```
+    /// atomicity of a read-modify-write is the program's concern via `@atomic`.
     pub fn write<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
