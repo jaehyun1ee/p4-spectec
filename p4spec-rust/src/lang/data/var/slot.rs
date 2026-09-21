@@ -1,3 +1,8 @@
+//! Prepared references pairing identifiers and variables with a frame slot
+//!
+//! Preparation resolves every name of a callable to a `SlotIdx` in its frame;
+//! the slot is execution detail, so equality and syntax comparison ignore it.
+
 use std::fmt;
 
 use super::Var;
@@ -9,13 +14,16 @@ use crate::lang::{
     },
 };
 
+/// Position of a binding in a frame.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SlotIdx(pub(crate) usize);
 
-/// Prepared identifier occurrence, always addressing the empty iterator path
+/// Prepared identifier occurrence, always addressing the empty iterator path.
 #[derive(Clone, Debug)]
 pub struct IdSlot {
+    /// The name as written.
     pub id: Id,
+    /// Its frame slot.
     pub slot: SlotIdx,
 }
 
@@ -37,9 +45,12 @@ impl Print for IdSlot {
     }
 }
 
+/// Prepared variable occurrence, addressing its iteration path.
 #[derive(Clone, Debug)]
 pub struct VarSlot {
+    /// Its frame slot.
     pub slot: SlotIdx,
+    /// The variable as written.
     pub var: Var,
 }
 
@@ -55,6 +66,7 @@ impl SyntaxEq for VarSlot {
     }
 
     fn slice_syntax_eq(vars_l: &[Self], vars_r: &[Self]) -> bool {
+        // Sort both by name and iterations, then compare pairwise
         let mut vars_l = vars_l.iter().collect::<Vec<_>>();
         let mut vars_r = vars_r.iter().collect::<Vec<_>>();
         let cmp_var = |var_l: &&Self, var_r: &&Self| {

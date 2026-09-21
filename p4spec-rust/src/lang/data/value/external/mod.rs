@@ -1,5 +1,10 @@
-//! Relative mode saves slot 7 as the number 7; independent mode saves its contents
-//! The caller supplies the matching arena, lifetime, and encoding for relative data
+//! Value encoding to and from JSON, arena-relative or arena-independent
+//!
+//! Relative mode saves slot 7 as the number 7;
+//! independent mode saves its contents.
+//! The caller supplies the matching arena, lifetime, and encoding
+//! for relative data.
+//! Independent payloads are trees (`indep`) that any arena can intern.
 
 use ::serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_state::{DeserializeState, SerializeState};
@@ -12,11 +17,14 @@ use crate::util::json::json;
 
 // = Configuration
 
-/// Relative payloads belong to one live arena; independent payloads carry contents
+/// Relative payloads belong to one live arena;
+/// independent payloads carry contents.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Encoding {
+    /// Handles as indices; readable only with the same arena.
     #[default]
     ArenaRelative,
+    /// Full contents; readable anywhere.
     ArenaIndependent,
 }
 
@@ -41,12 +49,16 @@ impl std::fmt::Display for Encoding {
     }
 }
 
+/// What an encoder needs: nothing for relative, the arena for independent.
 pub enum EncodeContext<'arena> {
+    /// Write handles as indices.
     ArenaRelative,
+    /// Resolve handles through this arena.
     ArenaIndependent(&'arena ValueArena),
 }
 
 impl<'arena> EncodeContext<'arena> {
+    /// The context for an encoding.
     pub fn new(arena: &'arena ValueArena, encoding: Encoding) -> Self {
         match encoding {
             Encoding::ArenaRelative => Self::ArenaRelative,
@@ -55,12 +67,16 @@ impl<'arena> EncodeContext<'arena> {
     }
 }
 
+/// What a decoder needs: nothing for relative, a mutable arena for independent.
 pub enum DecodeContext<'arena> {
+    /// Read handles as indices.
     ArenaRelative,
+    /// Intern contents into this arena.
     ArenaIndependent(&'arena mut ValueArena),
 }
 
 impl<'arena> DecodeContext<'arena> {
+    /// The context for an encoding.
     pub fn new(arena: &'arena mut ValueArena, encoding: Encoding) -> Self {
         match encoding {
             Encoding::ArenaRelative => Self::ArenaRelative,
@@ -73,7 +89,7 @@ impl<'arena> DecodeContext<'arena> {
 
 // - Entry points
 
-/// Keeps the arena-independent JSON and annotation contract
+/// Keeps the arena-independent JSON and annotation contract.
 pub fn encode<T>(arena: &ValueArena, data: &T) -> Result<json, serde_json::Error>
 where
     T: for<'arena> SerializeState<EncodeContext<'arena>> + ?Sized,
@@ -81,6 +97,7 @@ where
     encode_with(arena, Encoding::ArenaIndependent, data)
 }
 
+/// Encodes with the chosen encoding.
 pub fn encode_with<T>(
     arena: &ValueArena,
     encoding: Encoding,
@@ -91,9 +108,10 @@ where
 {
     let ctx = EncodeContext::new(arena, encoding);
     match encoding {
+        // Relative payloads are shallow; a stack-growing serializer suffices
         Encoding::ArenaRelative => data
             .serialize_state(serde_stacker::Serializer::new(serde_json::value::Serializer), &ctx),
-        // Tree conversion, serde, and destruction all traverse recursive contents
+        // Conversion, serde, and destruction all recurse through the contents
         Encoding::ArenaIndependent => stacker::grow(32 * 1024 * 1024, || {
             data.serialize_state(serde_json::value::Serializer, &ctx)
         }),
@@ -109,6 +127,7 @@ impl SerializeState<EncodeContext<'_>> for Interned<ValueKind> {
         ctx: &EncodeContext<'_>,
     ) -> Result<S::Ok, S::Error> {
         match ctx {
+            // Relative: the index; independent: the body as a tree
             EncodeContext::ArenaRelative => self.index().serialize(serializer),
             EncodeContext::ArenaIndependent(arena) => {
                 indep::ValueKind::from_arena(arena, arena.values.get(*self)).serialize(serializer)
@@ -147,6 +166,7 @@ impl SerializeState<EncodeContext<'_>> for Interned<Span> {
 
 // - Entry points
 
+/// Decodes with the chosen encoding, interning into `arena` when independent.
 pub fn decode_with<'de, T>(
     arena: &'de mut ValueArena,
     encoding: Encoding,
@@ -157,9 +177,11 @@ where
 {
     let mut ctx = DecodeContext::new(arena, encoding);
     match encoding {
+        // Relative payloads are shallow; a stack-growing deserializer suffices
         Encoding::ArenaRelative => {
             T::deserialize_state(&mut ctx, serde_stacker::Deserializer::new(json))
         }
+        // Independent trees recurse deeply; grow the stack up front
         Encoding::ArenaIndependent => {
             stacker::grow(32 * 1024 * 1024, || T::deserialize_state(&mut ctx, json))
         }
@@ -174,6 +196,7 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<ValueKind> {
         deserializer: D,
     ) -> Result<Self, D::Error> {
         match ctx {
+            // Relative: trust the index; independent: intern the tree
             DecodeContext::ArenaRelative => u32::deserialize(deserializer).map(Self::from_index),
             DecodeContext::ArenaIndependent(arena) => {
                 let kind = indep::ValueKind::deserialize(deserializer)?

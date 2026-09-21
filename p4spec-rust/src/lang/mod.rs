@@ -1,4 +1,8 @@
 //! Language representations and shared utilities
+//!
+//! One module per stage (`el`, `il`, `al`, `sl`, `pl`),
+//! each with its model and the `eq`, `free`, and `print` traversals;
+//! `common`, `data`, `hints`, and `traits` hold what the stages share.
 
 pub mod al;
 pub mod common;

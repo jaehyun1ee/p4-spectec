@@ -1,3 +1,9 @@
+//! Variables as an identifier under an iteration path, with its type
+//!
+//! `x*?` is the variable `x` under iterations `[*, ?]`;
+//! its type is the element type, not the iterated one.
+//! Variable lists compare as sets, since binders are unordered.
+
 use std::fmt;
 
 use super::super::typ::Typ;
@@ -10,10 +16,14 @@ use crate::lang::{
     },
 };
 
+/// A variable reference.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Var {
+    /// The bound name.
     pub id: Id,
+    /// The element type, below the iterations.
     pub typ: Typ,
+    /// Iterations from innermost to outermost.
     pub iters: Vec<Iter>,
 }
 
@@ -33,6 +43,7 @@ impl SyntaxEq for Var {
     }
 
     fn slice_syntax_eq(vars_l: &[Self], vars_r: &[Self]) -> bool {
+        // Sort both by name and iterations, then compare pairwise
         let mut vars_l = vars_l.iter().collect::<Vec<_>>();
         let mut vars_r = vars_r.iter().collect::<Vec<_>>();
         let cmp_var = |var_l: &&Self, var_r: &&Self| {

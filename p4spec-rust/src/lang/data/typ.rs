@@ -1,4 +1,8 @@
-//! Types shared by the intermediate language representations
+//! Types shared by the internal language and its successors
+//!
+//! `TypKind` is the type language after elaboration:
+//! primitives, named types with arguments, tuples, iterations, and functions.
+//! `make` builds types with default spans; `SyntaxCmp` orders them by shape.
 
 use serde::{Deserialize, Serialize};
 
@@ -16,8 +20,10 @@ use crate::phrase;
 
 // == Types
 
+/// A type with its span.
 pub type Typ = Phrase<TypKind>;
 
+/// The forms of a type.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum TypKind {
     /// `bool`
@@ -32,10 +38,11 @@ pub enum TypKind {
     Tuple(Vec<Typ>),
     /// `typ iter`
     Iter(Box<Typ>, Iter),
-    /// `<` list(tparam, `,`) `>` `(` list(typ, `,`) `)` `:` typ
+    /// `<` list(tparam, `,`) `>` `(` list(typ, `,`) `)` `:` typ.
     Func(FuncTyp),
 }
 
+/// The type of a function: type parameters, parameter types, result type.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct FuncTyp {
     pub tparams: Vec<TId>,
@@ -45,6 +52,7 @@ pub struct FuncTyp {
 
 // == Comparison
 
+/// Variant order for comparing types of different shapes.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum TypTag {
     Bool,
@@ -57,6 +65,7 @@ enum TypTag {
 }
 
 impl TypKind {
+    /// The variant of this type.
     fn tag(&self) -> TypTag {
         match self {
             Self::Bool => TypTag::Bool,
@@ -85,6 +94,7 @@ impl SyntaxCmp for TypKind {
                 .syntax_cmp(typ_r)
                 .then_with(|| iter_l.syntax_cmp(iter_r)),
             (Self::Func(func_typ_l), Self::Func(func_typ_r)) => func_typ_l.syntax_cmp(func_typ_r),
+            // Different shapes order by variant
             _ => self.tag().cmp(&other.tag()),
         }
     }
@@ -102,10 +112,11 @@ impl SyntaxCmp for FuncTyp {
 
 // == Smart constructors
 
+/// Constructors for types with default spans.
 pub mod make {
     use super::*;
 
-    /// Wraps a type in each iterator from innermost to outermost
+    /// Wraps a type in each iterator from innermost to outermost.
     pub fn iterate(mut typ: Typ, iters: &[Iter]) -> Typ {
         for iter in iters {
             let span = typ.span.clone();
@@ -116,57 +127,68 @@ pub mod make {
         typ
     }
 
+    /// `bool`.
     pub fn bool() -> Typ {
         let typ_kind = TypKind::Bool;
         phrase!(node: typ_kind, span: Span::default())
     }
 
+    /// `nat`.
     pub fn nat() -> Typ {
         let num_typ = num::Typ::Nat;
         num(num_typ)
     }
 
+    /// `int`.
     pub fn int() -> Typ {
         let num_typ = num::Typ::Int;
         num(num_typ)
     }
 
+    /// A numeric type.
     pub fn num(num_typ: num::Typ) -> Typ {
         let typ_kind = TypKind::Num(num_typ);
         phrase!(node: typ_kind, span: Span::default())
     }
 
+    /// `text`.
     pub fn text() -> Typ {
         let typ_kind = TypKind::Text;
         phrase!(node: typ_kind, span: Span::default())
     }
 
+    /// A named type with arguments.
     pub fn var(id: Id, targs: Vec<Typ>) -> Typ {
         let typ_kind = TypKind::Var(id, targs);
         phrase!(node: typ_kind, span: Span::default())
     }
 
+    /// A tuple type.
     pub fn tuple(typs: Vec<Typ>) -> Typ {
         let typ_kind = TypKind::Tuple(typs);
         phrase!(node: typ_kind, span: Span::default())
     }
 
+    /// One iteration over a type.
     pub fn iter(typ: Typ, iter: Iter) -> Typ {
         let typ_inner = Box::new(typ);
         let typ_kind = TypKind::Iter(typ_inner, iter);
         phrase!(node: typ_kind, span: Span::default())
     }
 
+    /// `typ?`.
     pub fn opt(typ: Typ) -> Typ {
         let iter = Iter::Opt;
         self::iter(typ, iter)
     }
 
+    /// `typ*`.
     pub fn list(typ: Typ) -> Typ {
         let iter = Iter::List;
         self::iter(typ, iter)
     }
 
+    /// A function type.
     pub fn func(tparams: Vec<TId>, typs_params: Vec<Typ>, typ_ret: Typ) -> Typ {
         let typ_ret = Box::new(typ_ret);
         let func_typ = FuncTyp { tparams, typs_params, typ_ret };

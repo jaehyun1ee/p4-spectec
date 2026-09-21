@@ -1,3 +1,10 @@
+//! Atoms, the literal pieces of mixfix notation
+//!
+//! Keywords and tags are identifiers, operators are quoted text,
+//! and the rest are the fixed symbols of the specification language.
+//! Tags must be upper identifiers and operators must be printable on one line;
+//! the constructors enforce that.
+
 use serde::{Deserialize, Serialize};
 
 use std::{error::Error, fmt};
@@ -13,6 +20,7 @@ use crate::lang::{
 
 // == Types
 
+/// A literal piece of notation.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Atom {
     /// Concrete object word such as `INT`
@@ -77,9 +85,12 @@ pub enum Atom {
 
 // == Errors
 
+/// A rejected atom constructor argument.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AtomError {
+    /// A tag that is not an upper identifier.
     InvalidTag(String),
+    /// An operator containing a quote or newline.
     InvalidOperator(String),
 }
 
@@ -163,7 +174,9 @@ impl Atom {
 
     // - Tag
 
+    /// Whether the identifier starts uppercase and continues alphanumerically.
     fn is_upid(id: &str) -> bool {
+        // The empty string is not an identifier
         let Some((c_first, s_rest)) = id.as_bytes().split_first() else {
             return false;
         };
@@ -174,7 +187,7 @@ impl Atom {
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'\''))
     }
 
-    /// Constructs a tag atom when the identifier is a valid upper identifier
+    /// Constructs a tag atom when the identifier is a valid upper identifier.
     pub fn tag(id: impl Into<String>) -> Result<Self, AtomError> {
         let id = id.into();
         if Self::is_upid(&id) { Ok(Self::Tag(id)) } else { Err(AtomError::InvalidTag(id)) }
@@ -182,7 +195,7 @@ impl Atom {
 
     // - Operator
 
-    /// Constructs an operator atom when it can be represented in source syntax
+    /// Constructs an operator atom when it can be represented in source syntax.
     pub fn operator(op: impl Into<String>) -> Result<Self, AtomError> {
         let op = op.into();
         if op.contains(['\'', '\n']) {

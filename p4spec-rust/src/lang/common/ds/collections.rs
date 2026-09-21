@@ -1,9 +1,14 @@
 //! Syntax-key wrappers shared by language collections
+//!
+//! `ByKey` gives a key the `Eq`/`Ord` of its `SyntaxCmp`,
+//! so two identifiers with different spans collide in a map or set.
+//! Identifier keys also borrow as their bare `String`, for lookups by name.
 
 use std::{borrow::Borrow, cmp::Ordering};
 
 use crate::lang::{common::Id, traits::cmp::SyntaxCmp};
 
+/// A collection key compared by syntax.
 #[repr(transparent)]
 #[derive(Clone, Debug)]
 pub(crate) struct ByKey<K: ?Sized>(pub(crate) K);

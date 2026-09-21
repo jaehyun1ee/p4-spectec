@@ -1,4 +1,9 @@
 //! Shared value types, arena storage, constructors, and projections
+//!
+//! A `Value` is a handle into a `ValueArena`;
+//! `make` allocates values of each kind with their type,
+//! `get` projects a kind back out or fails with `ValueError`.
+//! Primitive types are allocated once per thread and shared.
 
 use std::rc::Rc;
 
@@ -21,11 +26,13 @@ use crate::util::json::json;
 
 // = Smart constructors
 
+/// Constructors that allocate a value in an arena.
 pub mod make {
     use super::*;
 
     // - General
 
+    /// Allocates a value of the given kind, type, and span.
     pub fn new(
         arena: &mut ValueArena,
         kind: ValueKind,
@@ -37,6 +44,7 @@ pub mod make {
 
     // - Primitives
 
+    /// A boolean.
     pub fn bool(arena: &mut ValueArena, value: bool, span: Span) -> Result<Value, ValueError> {
         thread_local! {
             static TYP: Rc<TypKind> = Rc::new(TypKind::Bool);
@@ -44,6 +52,7 @@ pub mod make {
         TYP.with(|typ| new(arena, ValueKind::Bool(value), typ.clone(), span))
     }
 
+    /// A number, typed by its kind.
     pub fn num(arena: &mut ValueArena, value: Number, span: Span) -> Result<Value, ValueError> {
         thread_local! {
             static TYP_NAT: Rc<TypKind> = Rc::new(TypKind::Num(num::Typ::Nat));
@@ -56,6 +65,7 @@ pub mod make {
         new(arena, ValueKind::Num(value), typ, span)
     }
 
+    /// A natural number.
     pub fn nat(
         arena: &mut ValueArena,
         value: num::Natural,
@@ -64,6 +74,7 @@ pub mod make {
         num(arena, Number::Nat(value), span)
     }
 
+    /// An integer.
     pub fn int(
         arena: &mut ValueArena,
         value: num_bigint::BigInt,
@@ -72,6 +83,7 @@ pub mod make {
         num(arena, Number::Int(value), span)
     }
 
+    /// A text.
     pub fn text(arena: &mut ValueArena, value: String, span: Span) -> Result<Value, ValueError> {
         thread_local! {
             static TYP: Rc<TypKind> = Rc::new(TypKind::Text);
@@ -81,6 +93,7 @@ pub mod make {
 
     // - Structures
 
+    /// A struct with the given fields.
     pub fn structure(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
@@ -92,6 +105,7 @@ pub mod make {
 
     // - Cases
 
+    /// A variant case from a filled notation.
     pub fn case(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
@@ -101,6 +115,7 @@ pub mod make {
         new(arena, ValueKind::Case(value_case), typ, span)
     }
 
+    /// A variant case from a mixop text, its arguments, and its type name.
     macro_rules! case_shaped {
         (
             arena: $arena:expr,
@@ -132,6 +147,7 @@ pub mod make {
 
     // - Sequences
 
+    /// A tuple.
     pub fn tuple(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
@@ -141,6 +157,7 @@ pub mod make {
         new(arena, ValueKind::Tuple(values), typ, span)
     }
 
+    /// An option.
     pub fn opt(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
@@ -150,6 +167,7 @@ pub mod make {
         new(arena, ValueKind::Opt(value), typ, span)
     }
 
+    /// A list.
     pub fn list(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
@@ -161,6 +179,7 @@ pub mod make {
 
     // - Functions
 
+    /// A function value, typed by its signature.
     pub fn func(
         arena: &mut ValueArena,
         id: Id,
@@ -175,6 +194,7 @@ pub mod make {
 
     // - Externals
 
+    /// A host-owned value carried as JSON.
     pub fn external(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
@@ -187,17 +207,20 @@ pub mod make {
 
 // = Projections
 
+/// Projections that read a kind out of a value or fail.
 pub mod get {
     use super::*;
 
     // - Errors
 
+    /// The error for a value of the wrong kind.
     fn unexpected(arena: &ValueArena, value: &Value, expected: ValueTag) -> ValueError {
         ValueError::UnexpectedKind { expected, actual: arena.kind(value).tag() }
     }
 
     // - Primitives
 
+    /// The boolean in a value.
     pub fn bool(arena: &ValueArena, value: &Value) -> Result<bool, ValueError> {
         match arena.kind(value) {
             ValueKind::Bool(value) => Ok(*value),
@@ -205,6 +228,7 @@ pub mod get {
         }
     }
 
+    /// The number in a value.
     pub fn num<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a Number, ValueError> {
         match arena.kind(value) {
             ValueKind::Num(value) => Ok(value),
@@ -212,6 +236,7 @@ pub mod get {
         }
     }
 
+    /// The text in a value.
     pub fn text<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a str, ValueError> {
         match arena.kind(value) {
             ValueKind::Text(value) => Ok(value),
@@ -221,6 +246,7 @@ pub mod get {
 
     // - Structures
 
+    /// The fields of a struct value.
     pub fn structure<'a>(
         arena: &'a ValueArena,
         value: &Value,
@@ -233,6 +259,7 @@ pub mod get {
 
     // - Cases
 
+    /// The filled notation of a case value.
     pub fn case<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a ValueCase, ValueError> {
         match arena.kind(value) {
             ValueKind::Case(value_case) => Ok(value_case),
@@ -240,6 +267,7 @@ pub mod get {
         }
     }
 
+    /// Matches a case value against mixop texts, binding its arguments per arm.
     macro_rules! matches {
         (
             @arms $value_case:ident;
@@ -283,6 +311,7 @@ pub mod get {
 
     // - Sequences
 
+    /// The components of a tuple value.
     pub fn tuple<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a [Value], ValueError> {
         match arena.kind(value) {
             ValueKind::Tuple(values) => Ok(values),
@@ -290,6 +319,7 @@ pub mod get {
         }
     }
 
+    /// The content of an option value.
     pub fn opt(arena: &ValueArena, value: &Value) -> Result<Option<Value>, ValueError> {
         match arena.kind(value) {
             ValueKind::Opt(value) => Ok(*value),
@@ -297,6 +327,7 @@ pub mod get {
         }
     }
 
+    /// The elements of a list value.
     pub fn list<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a [Value], ValueError> {
         match arena.kind(value) {
             ValueKind::List(values) => Ok(values),
@@ -306,6 +337,7 @@ pub mod get {
 
     // - Externals
 
+    /// The JSON of a host-owned value.
     pub fn external<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a Rc<json>, ValueError> {
         match arena.kind(value) {
             ValueKind::Extern(json) => Ok(json),
@@ -315,6 +347,7 @@ pub mod get {
 
     // - Indexing
 
+    /// The element at `index`, or an out-of-bounds error.
     pub fn nth(values: &[Value], index: usize) -> Result<&Value, ValueError> {
         values
             .get(index)
@@ -323,6 +356,7 @@ pub mod get {
 
     // - Arity
 
+    /// Exactly one value.
     pub fn one(values: &[Value]) -> Result<&Value, ValueError> {
         match values {
             [value] => Ok(value),
@@ -330,6 +364,7 @@ pub mod get {
         }
     }
 
+    /// Exactly two values.
     pub fn two(values: &[Value]) -> Result<(&Value, &Value), ValueError> {
         match values {
             [value_a, value_b] => Ok((value_a, value_b)),
@@ -337,6 +372,7 @@ pub mod get {
         }
     }
 
+    /// Exactly three values.
     #[allow(clippy::type_complexity)]
     pub fn three(values: &[Value]) -> Result<(&Value, &Value, &Value), ValueError> {
         match values {
@@ -345,6 +381,7 @@ pub mod get {
         }
     }
 
+    /// Exactly four values.
     #[allow(clippy::type_complexity)]
     pub fn four(values: &[Value]) -> Result<(&Value, &Value, &Value, &Value), ValueError> {
         match values {

@@ -1,4 +1,7 @@
 //! Free identifiers shared across language stages
+//!
+//! A type implements either `free` or `free_into`; each defaults to the other.
+//! Blanket impls cover strings, spanned nodes, boxes, options, and slices.
 
 use std::rc::Rc;
 
@@ -6,7 +9,7 @@ use crate::lang::common::{ds::set::IdSet, source::NotePhrase};
 
 // == Free identifiers
 
-/// Collects free term identifiers from syntax
+/// Collects free term identifiers from syntax.
 pub trait Free {
     /// Returns the free term identifiers contained in `self`
     fn free(&self) -> IdSet {

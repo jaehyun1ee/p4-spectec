@@ -1,3 +1,9 @@
+//! Typed interner handles
+//!
+//! A handle is an index into one interner's storage;
+//! the phantom type keeps handles of different item types apart
+//! without depending on any trait of the item type.
+
 use std::{
     fmt,
     hash::{Hash, Hasher},
@@ -6,10 +12,12 @@ use std::{
 
 // = Typed handles
 
-/// A compact handle valid only in the interner that issued it
+/// A compact handle valid only in the interner that issued it.
 #[repr(transparent)]
 pub struct Interned<T> {
+    /// Position in the interner's storage.
     pub(super) index: u32,
+    /// The item type, without borrowing or owning one.
     pub(super) marker: PhantomData<fn() -> T>,
 }
 
@@ -51,10 +59,12 @@ impl<T> Hash for Interned<T> {
 }
 
 impl<T> Interned<T> {
+    /// The raw index, for arena-relative encoding.
     pub(crate) fn index(self) -> u32 {
         self.index
     }
 
+    /// A handle from a raw index; the caller vouches for its interner.
     pub(crate) fn from_index(index: u32) -> Self {
         Self { index, marker: PhantomData }
     }

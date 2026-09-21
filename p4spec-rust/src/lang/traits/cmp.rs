@@ -1,4 +1,8 @@
 //! Syntax comparison shared across language stages
+//!
+//! `SyntaxCmp` refines `SyntaxEq` to a total order,
+//! so syntax can key ordered maps and sets.
+//! Blanket impls cover slices, strings, spanned nodes, and `Rc`.
 
 use std::{cmp::Ordering, rc::Rc};
 
@@ -6,12 +10,12 @@ use crate::lang::common::source::NotePhrase;
 
 use super::eq::SyntaxEq;
 
-/// Compares syntax lexicographically while ignoring source and analysis metadata
+/// Compares syntax lexicographically, ignoring source and analysis metadata.
 pub trait SyntaxCmp<Rhs: ?Sized = Self>: SyntaxEq<Rhs> {
-    /// Compares two nodes by their syntax
+    /// Compares two nodes by their syntax.
     fn syntax_cmp(&self, other: &Rhs) -> Ordering;
 
-    /// Compares slices of nodes lexicographically
+    /// Compares slices of nodes lexicographically.
     fn slice_syntax_cmp(items_l: &[Self], items_r: &[Rhs]) -> Ordering
     where
         Self: Sized,
