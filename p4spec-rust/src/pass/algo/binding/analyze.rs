@@ -46,7 +46,7 @@ use crate::{
         common::{notation::mixop::Mixop, source::Span},
         hints::input::{self, InputHint},
         il::ast,
-        traits::free::FreeIds,
+        traits::{free::FreeIds, has_call::HasCall},
         xl,
     },
     phrase,
@@ -219,7 +219,19 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
 // - Helpers
 
 fn check_prems_in_else(span: &Span, prems: &[al::ast::Prem]) -> Result<(), AlgoError> {
-    if prems.iter().all(|prem| !al::partial::is_partial_prem(prem)) {
+    fn is_impure_prem(prem: &al::ast::Prem) -> bool {
+        match &prem.node {
+            al::ast::PremKind::Rule(_)
+            | al::ast::PremKind::If(_)
+            | al::ast::PremKind::IfHold(_)
+            | al::ast::PremKind::IfNotHold(_) => true,
+            al::ast::PremKind::Let(prem) => prem.exp_r.has_call(),
+            al::ast::PremKind::Iter(prem) => is_impure_prem(&prem.prem),
+            al::ast::PremKind::Debug(prem) => prem.exp.has_call(),
+        }
+    }
+
+    if prems.iter().all(|prem| !is_impure_prem(prem)) {
         Ok(())
     } else {
         Err(AlgoError::new(AlgoErrorKind::ImpureElsePremises, span.clone()))
