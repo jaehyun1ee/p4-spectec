@@ -1,4 +1,9 @@
 //! Match-action table interface
+//!
+//! STF names a table qualified, `MyIngress.t`, or bare, `t`;
+//! `find_table` tries the qualified object first.
+//! Adding an entry goes through the specification's `tableObject_add_entry`,
+//! retrying with the table's own key names when the STF key names do not match.
 
 use crate::{
     lang::{
@@ -15,10 +20,12 @@ use super::spec::func;
 
 // == Table names
 
+/// Splits a dotted name into its last segment and, if dotted, its full path.
 fn table_name(
     arena: &mut ValueArena,
     value_name: Value,
 ) -> Result<(Value, Option<Value>), ExternError> {
+    // The last segment is the bare name
     let name = get::text(arena, &value_name)?.to_owned();
     let names: Vec<_> = name.split('.').collect();
     let value_unqualified = make::text(
@@ -29,6 +36,7 @@ fn table_name(
             .to_string(),
         Span::default(),
     )?;
+    // A bare name has no qualified form
     let value_qualified = if names.len() == 1 {
         None
     } else {
@@ -47,6 +55,7 @@ fn table_name(
 
 // == Table lookup and update
 
+/// Finds a table object by qualified name, falling back to the bare name.
 pub fn find_table<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_arch: Value,
@@ -67,6 +76,7 @@ where
         .ok_or_else(|| ExternError::Failure("table not found".to_owned()).into())
 }
 
+/// Stores a table object back under the name it was found by.
 pub fn update_table<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_arch: Value,
@@ -89,6 +99,7 @@ where
 
 // == Table entries
 
+/// Adds an entry to a table and writes the table back into the architecture.
 pub fn add_entry<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
@@ -116,10 +127,11 @@ where
     )? {
         Some(value_table) => value_table,
         None => {
-            // Replace keyset names with table key names, assuming fields are in order
+            // Rejected: retry with the table's own key names, in order
             let keys = func::key_interface_of_table_object(ctx, value_table)?;
             let mut values_name = Vec::new();
             for (value_name, value_match_kind, _) in keys {
+                // Selector keys take no STF value
                 if get::text(ctx.arena(), &value_match_kind).map_err(ExternError::from)?
                     != "selector"
                 {
@@ -137,6 +149,7 @@ where
                 .map(|values| get::nth(values, 1).copied())
                 .collect::<Result<Vec<_>, ValueError>>()
                 .map_err(ExternError::from)?;
+            // Key count must then agree
             if values_name.len() != values_key.len() {
                 return Err(ExternError::Value(ValueError::ExpectedCount {
                     expected: values_name.len(),
@@ -168,6 +181,7 @@ where
                 Span::default(),
             )
             .map_err(ExternError::from)?;
+            // A second rejection is final
             func::table_object_add_entry(
                 ctx,
                 value_ctx,
@@ -183,6 +197,7 @@ where
     update_table(ctx, value_arch, value_name, value_table)
 }
 
+/// Sets a table's default action and writes the table back.
 pub fn add_default_action<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     value_ctx: Value,
