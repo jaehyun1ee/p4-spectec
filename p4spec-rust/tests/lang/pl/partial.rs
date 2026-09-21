@@ -1,6 +1,9 @@
 use p4spec_rust::{
     lang::common::source::{Position, Span},
-    lang::{common::notation::mixfix::Mixfix, hints::input::InputHint, il, pl},
+    lang::{
+        common::notation::mixfix::Mixfix, hints::input::InputHint, il, pl,
+        traits::has_call::HasCall,
+    },
 };
 
 fn span(name: &str) -> Span {
@@ -67,7 +70,9 @@ fn test_expression_and_path_classification_finds_recursive_calls() {
     ))]));
 
     assert!(pl::partial::is_partial_exp(&exp_nested));
+    assert!(exp_nested.has_call());
     assert!(!pl::partial::is_partial_exp(&variable("plain")));
+    assert!(!variable("plain").has_call());
 }
 
 #[test]

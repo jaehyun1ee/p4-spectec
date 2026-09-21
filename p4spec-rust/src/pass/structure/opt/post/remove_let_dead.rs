@@ -15,42 +15,9 @@
 use crate::lang::{
     common::{ds::set::IdSet, source::Span},
     hints::input,
-    il::ast::ExpKind,
-    traits::free::Free,
+    traits::{free::Free, has_call::HasCall},
 };
 use crate::pass::structure::{StructureError, StructureErrorKind, ol::ast::*};
-
-// == Removable expressions
-
-/// `x + 1` is removable; `f() + 1` is not because it contains a call
-fn removable_let(exp_r: &Exp) -> bool {
-    match &exp_r.node {
-        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Var(_) => true,
-        ExpKind::Un(_, _, exp)
-        | ExpKind::UpCast(_, exp)
-        | ExpKind::DownCast(_, exp)
-        | ExpKind::Sub(exp, _, _)
-        | ExpKind::Match(exp, _)
-        | ExpKind::Len(exp)
-        | ExpKind::Dot(exp, _)
-        | ExpKind::Iter(exp, _) => removable_let(exp),
-        ExpKind::Bin(_, _, exp_l, exp_r)
-        | ExpKind::Cmp(_, _, exp_l, exp_r)
-        | ExpKind::Cons(exp_l, exp_r)
-        | ExpKind::Cat(exp_l, exp_r)
-        | ExpKind::Mem(exp_l, exp_r)
-        | ExpKind::Idx(exp_l, exp_r)
-        | ExpKind::Upd(exp_l, _, exp_r) => removable_let(exp_l) && removable_let(exp_r),
-        ExpKind::Tuple(exps) | ExpKind::List(exps) => exps.iter().all(removable_let),
-        ExpKind::Case(not_exp) => not_exp.args().into_iter().all(removable_let),
-        ExpKind::Str(exp_fields) => exp_fields.iter().all(|(_, exp)| removable_let(exp)),
-        ExpKind::Opt(exp) => exp.as_deref().is_none_or(removable_let),
-        ExpKind::Slice(exp_base, exp_idx, exp_len) => {
-            removable_let(exp_base) && removable_let(exp_idx) && removable_let(exp_len)
-        }
-        ExpKind::Call(_, _, _) => false,
-    }
-}
 
 // == Downstream uses
 
@@ -298,7 +265,7 @@ fn upstream_let_instr(instr_ol: LetInstr, span: Span) -> Result<Block, Structure
     let LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
     // Inspect uses before deleting inner Lets: `let x = 1 { let y = (x,) {} }`
     // becomes `let x = 1 {}`; the outer Let is not revisited in this pass
-    if removable_let(&exp_r) {
+    if !exp_r.has_call() {
         let ids_defined = exp_l.free();
         let ids_used = downstream_block(&ids_defined, &block)?;
         if ids_used.is_empty() {
