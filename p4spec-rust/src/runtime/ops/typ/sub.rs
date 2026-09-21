@@ -1,4 +1,4 @@
-//! Runtime subtyping for intermediate-language types
+//! Runtime subtyping for internal-language types
 //!
 //! Subtyping expands aliases, tries equivalence, then structural rules:
 //! numbers by `num::sub`, variants by case inclusion, tuples componentwise,

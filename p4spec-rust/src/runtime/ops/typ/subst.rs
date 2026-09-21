@@ -1,4 +1,4 @@
-//! Runtime substitution for intermediate-language type variables
+//! Runtime substitution for internal-language type variables
 //!
 //! Function-type binders are freshened before applying the outer substitution,
 //! so a substituted type cannot capture a bound type parameter.

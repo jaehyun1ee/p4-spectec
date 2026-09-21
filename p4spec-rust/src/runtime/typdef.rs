@@ -1,4 +1,4 @@
-//! Runtime representation of intermediate-language type definitions
+//! Runtime representation of internal-language type definitions
 //!
 //! A `TypeDef` is what a type name resolves to in a type environment:
 //! a type parameter, an extern type,

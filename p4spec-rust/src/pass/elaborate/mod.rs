@@ -1,4 +1,4 @@
-//! Surface-language validation and conversion to the intermediate language
+//! Surface-language validation and conversion to the internal language
 //!
 //! `convert` elaborates an EL specification into a typed IL specification.
 //!

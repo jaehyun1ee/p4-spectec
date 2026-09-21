@@ -1,4 +1,4 @@
-//! Runtime expansion of intermediate-language type aliases
+//! Runtime expansion of internal-language type aliases
 //!
 //! Only plain aliases expand;
 //! struct and variant definitions are types of their own.
