@@ -4,7 +4,7 @@
 //! `pass` elaborates it to IL, converts to AL, and structures into SL;
 //! `interp` and `runner` execute AL or SL against a P4 program,
 //! with `interface` builtins and `sim_plugin` architectures;
-//! `lang`, `runtime`, `wire`, `stf`, and `util` are the shared data and codecs.
+//! `lang`, `runtime`, `stf`, and `util` are the shared data and codecs.
 
 pub mod frontend;
 pub mod interface;
@@ -17,4 +17,3 @@ pub mod runtime;
 pub mod sim_plugin;
 pub mod stf;
 pub mod util;
-pub mod wire;

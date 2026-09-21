@@ -4,7 +4,7 @@
 
 CARGO := cargo
 
-.PHONY: test test-frontend test-p4parse-unit test-elab-unit test-algo-unit test-structure-unit test-prose-unit test-lang test-wire \
+.PHONY: test test-frontend test-p4parse-unit test-elab-unit test-algo-unit test-structure-unit test-prose-unit test-lang \
         test-runtime test-run-al-unit test-run-sl-unit
 
 # Fast unit tests (no OCaml toolchain required)
@@ -40,9 +40,6 @@ test-prose-unit:
 
 test-lang:
 	$(CARGO) test --test lang
-
-test-wire:
-	$(CARGO) test --test wire
 
 test-runtime:
 	$(CARGO) test --test runtime
