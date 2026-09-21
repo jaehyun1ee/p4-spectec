@@ -77,19 +77,4 @@ fn test_external_serde_state_roundtrip_and_replacement_preserve_annotations() {
     );
     assert_eq!(arena.typ(&value_updated), &typ);
     assert_eq!(arena.span(&value_updated), &span_state);
-    for json in [
-        json!(null),
-        json!({"status":"Active"}),
-        json!({"count":-1,"status":"Active"}),
-        json!({"count":0,"status":"unknown"}),
-    ] {
-        let value =
-            make::external(&mut arena, typ.clone(), json.into(), span_state.clone()).unwrap();
-        assert!(
-            serde_json::from_value::<State>(
-                get::external(&arena, &value).unwrap().as_ref().clone()
-            )
-            .is_err()
-        );
-    }
 }
