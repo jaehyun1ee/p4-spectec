@@ -3,7 +3,7 @@
 //! Shallow binders are variables,
 //! upcasts of variables or cases,
 //! and cases whose arguments are variables under any number of iterations.
-//! Table rows require shallow binders (`analyze::analyze_table_row`).
+//! Table rows require shallow binders (`transform::lower_table_row`).
 
 use crate::lang::il::ast;
 

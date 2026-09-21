@@ -76,6 +76,7 @@ pub fn init(exp: &Exp) -> Option<AlterationHint> {
 
 /// Validates every hole against an item count.
 pub fn validate(hint: &AlterationHint, item_count: usize) -> Result<(), AlterationError> {
+    /// Walks the template, advancing the cursor at `%` and checking `%N`.
     fn validate_at(
         hint: &AlterationHint,
         item_count: usize,
@@ -89,14 +90,17 @@ pub fn validate(hint: &AlterationHint, item_count: usize) -> Result<(), Alterati
                 .iter()
                 .try_fold(cursor, |cursor, hint| validate_at(hint, item_count, cursor)),
             AlterationHint::Brack(_, hint, _) => validate_at(hint, item_count, cursor),
+            // `%` takes the item at the cursor
             AlterationHint::Hole(Hole::Next) if cursor < item_count => Ok(cursor + 1),
             AlterationHint::Hole(Hole::Next) => {
                 Err(AlterationError::IndexOutOfBounds { index: cursor, item_count })
             }
+            // `%N` leaves the cursor alone
             AlterationHint::Hole(Hole::Num(idx)) if *idx < item_count => Ok(cursor),
             AlterationHint::Hole(Hole::Num(idx)) => {
                 Err(AlterationError::IndexOutOfBounds { index: *idx, item_count })
             }
+            // The right piece continues the left's cursor
             AlterationHint::Fuse(hint_l, hint_r) => {
                 validate_at(hint_r, item_count, validate_at(hint_l, item_count, cursor)?)
             }
@@ -108,8 +112,9 @@ pub fn validate(hint: &AlterationHint, item_count: usize) -> Result<(), Alterati
 
 // == Index realignment
 
-/// Renumbers output holes after relation input positions
+/// Renumbers output holes after relation input positions.
 pub fn realign(hint: &AlterationHint, hint_input: &InputHint) -> AlterationHint {
+    /// Gathers every `%N` index in the template.
     fn collect(hint: &AlterationHint, indices_output: &mut Vec<usize>) {
         match hint {
             AlterationHint::Seq(hints) => {
@@ -127,6 +132,7 @@ pub fn realign(hint: &AlterationHint, hint_input: &InputHint) -> AlterationHint 
         }
     }
 
+    /// Rewrites every `%N` by the pairs.
     fn apply(hint: &AlterationHint, idx_pairs: &[(usize, usize)]) -> AlterationHint {
         match hint {
             AlterationHint::Seq(hints) => {
@@ -156,6 +162,7 @@ pub fn realign(hint: &AlterationHint, hint_input: &InputHint) -> AlterationHint 
 
     let mut indices_output = Vec::new();
     collect(hint, &mut indices_output);
+    // Output holes are renumbered by their order among the output positions
     let mut indices_all = hint_input.indices().to_vec();
     indices_all.extend(&indices_output);
     indices_all.sort_unstable();

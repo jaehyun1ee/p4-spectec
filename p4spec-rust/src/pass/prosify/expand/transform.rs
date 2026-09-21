@@ -3,6 +3,10 @@
 //! `expand_spec` descends from definitions to instructions. Each instruction
 //! first expands its nested blocks, then delegates direct call lifting to
 //! `lift::lift_instr` until the generated let instructions are stable.
+//!
+//! For example, the rule application `R($f($g(x)))` becomes
+//! `let a = $g(x); let b = $f(a); R(b)`: one let per call, innermost first,
+//! naming each intermediate result before it is used.
 
 use crate::lang::{common::ds::set::IdSet, sl::ast as sl, traits::free::FreeIds};
 
@@ -23,6 +27,7 @@ fn expand_instr(ids_used: &mut IdSet, instr_sl: sl::Instr) -> Result<sl::Instr, 
     expand_instr(ids_used, instr_sl)
 }
 
+/// Expands the blocks nested in one instruction kind.
 fn expand_instr_kind(
     ids_used: &mut IdSet,
     instr_kind_sl: sl::InstrKind,
@@ -52,6 +57,7 @@ fn expand_instr_kind(
 
 // - Let instruction
 
+/// Expands the body of a let.
 fn expand_let_instr(
     ids_used: &mut IdSet,
     mut instr_sl: sl::LetInstr,
@@ -62,6 +68,7 @@ fn expand_let_instr(
 
 // - Rule instruction
 
+/// Expands the body of a rule call.
 fn expand_rule_instr(
     ids_used: &mut IdSet,
     mut instr_sl: sl::RuleInstr,
@@ -72,6 +79,7 @@ fn expand_rule_instr(
 
 // - If instruction
 
+/// Expands the then-block.
 fn expand_if_instr(
     ids_used: &mut IdSet,
     mut instr_sl: sl::IfInstr,
@@ -82,6 +90,7 @@ fn expand_if_instr(
 
 // - Hold instruction
 
+/// Expands the branches of a hold.
 fn expand_hold_instr(
     ids_used: &mut IdSet,
     mut instr_sl: sl::HoldInstr,
@@ -90,6 +99,7 @@ fn expand_hold_instr(
     Ok(instr_sl)
 }
 
+/// Expands whichever branches a hold has.
 fn expand_hold_case(
     ids_used: &mut IdSet,
     hold_case_sl: sl::HoldCase,
@@ -110,6 +120,7 @@ fn expand_hold_case(
 
 // - Case instruction
 
+/// Expands every arm's block.
 fn expand_case_instr(
     ids_used: &mut IdSet,
     mut instr_sl: sl::CaseInstr,
@@ -122,6 +133,7 @@ fn expand_case_instr(
 
 // - Group instruction
 
+/// Expands a rule group's body.
 fn expand_group_instr(
     ids_used: &mut IdSet,
     mut instr_sl: sl::GroupInstr,
@@ -132,6 +144,7 @@ fn expand_group_instr(
 
 // - Debug instruction
 
+/// Expands the instruction a debug wraps.
 fn expand_debug_instr(
     ids_used: &mut IdSet,
     mut instr_sl: sl::DebugInstr,
@@ -142,6 +155,7 @@ fn expand_debug_instr(
 
 // - Block
 
+/// Expands each instruction of a block in order.
 fn expand_block(ids_used: &mut IdSet, block_sl: sl::Block) -> Result<sl::Block, ProseError> {
     block_sl
         .into_iter()
@@ -151,6 +165,7 @@ fn expand_block(ids_used: &mut IdSet, block_sl: sl::Block) -> Result<sl::Block, 
 
 // == Relation definitions
 
+/// Expands a relation; extern relations have no blocks.
 fn expand_rel_def(def_rel_sl: sl::RelDef) -> Result<sl::RelDef, ProseError> {
     Ok(match def_rel_sl {
         sl::RelDef::Extern(def_rel_sl) => sl::RelDef::Extern(def_rel_sl),
@@ -183,6 +198,7 @@ fn expand_defined_rel_def(mut def_rel_sl: sl::DefinedRel) -> Result<sl::DefinedR
 
 // == Meta-function definitions
 
+/// Expands a function; extern and builtin functions have no blocks.
 fn expand_func_def(def_func_sl: sl::MetaFuncDef) -> Result<sl::MetaFuncDef, ProseError> {
     Ok(match def_func_sl {
         sl::MetaFuncDef::Extern(def_func_sl) => sl::MetaFuncDef::Extern(def_func_sl),
@@ -198,6 +214,7 @@ fn expand_func_def(def_func_sl: sl::MetaFuncDef) -> Result<sl::MetaFuncDef, Pros
 
 // - Table function definition
 
+/// Expands every row of a table function.
 fn expand_table_func_def(mut def_func_sl: sl::TableFunc) -> Result<sl::TableFunc, ProseError> {
     def_func_sl.table_rows = def_func_sl
         .table_rows
@@ -207,6 +224,7 @@ fn expand_table_func_def(mut def_func_sl: sl::TableFunc) -> Result<sl::TableFunc
     Ok(def_func_sl)
 }
 
+/// Expands a row's block, with the row's own names reserved.
 fn expand_table_row(mut row_sl: sl::TableRow) -> Result<sl::TableRow, ProseError> {
     let mut ids_used = row_sl
         .exps_input
@@ -244,11 +262,13 @@ fn expand_defined_func_def(
 
 // == Definitions
 
+/// Expands one definition, keeping its span.
 fn expand_def(def_sl: sl::Def) -> Result<sl::Def, ProseError> {
     let def_kind_sl = expand_def_kind(def_sl.node)?;
     Ok(crate::phrase! { node: def_kind_sl, span: def_sl.span })
 }
 
+/// Expands relations and functions; types and variables have no blocks.
 fn expand_def_kind(def_kind_sl: sl::DefKind) -> Result<sl::DefKind, ProseError> {
     Ok(match def_kind_sl {
         sl::DefKind::Typ(def_typ_sl) => sl::DefKind::Typ(def_typ_sl),

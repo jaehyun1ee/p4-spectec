@@ -3,6 +3,12 @@
 //! `lift_instr` repeatedly removes the leftmost eligible call from one
 //! instruction. Expression and path dispatchers preserve the iteration state
 //! needed to rebuild the surrounding let instructions.
+//!
+//! For example, `let z = $f($g(x))` becomes
+//! `let y = $g(x) { let z = $f(y) }`: the nested call is bound first,
+//! and the outer call keeps its place.
+//! A call lifted out of an iteration keeps that dimension, so `$f(x)` under
+//! `(...)*` binds a fresh `y*` and is read back as `y` inside the iteration.
 
 use crate::lang::{
     common::{
@@ -22,8 +28,11 @@ use super::super::{ProseError, ProseErrorKind};
 /// Tracks call nesting along one expression path.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CallNesting {
+    /// Nothing entered yet.
     None,
+    /// The root call itself, which stays in place.
     Outer,
+    /// Below the root, where a call is lifted.
     Nested,
 }
 
@@ -31,11 +40,14 @@ impl CallNesting {
     /// Updates the nesting state at an expression boundary.
     fn enter_exp(self, exp_kind_sl: &sl::ExpKind) -> Self {
         match exp_kind_sl {
+            // A root call is outer, any other call nested
             il_ast::ExpKind::Call(_, _, _) => match self {
                 Self::None => Self::Outer,
                 Self::Outer | Self::Nested => Self::Nested,
             },
+            // Iterations are transparent
             il_ast::ExpKind::Iter(_, _) => self,
+            // Any operator makes its children nested
             _ => Self::Nested,
         }
     }
@@ -43,10 +55,15 @@ impl CallNesting {
 
 /// Describes one call removed from an expression and its replacement binding.
 struct LiftedCall {
+    /// The fresh variable standing where the call was.
     exp_new_sl: sl::Exp,
+    /// The call removed from the expression.
     exp_call_sl: sl::Exp,
+    /// Variables the call reads, with the iterations crossed so far.
     vars_call_sl: Vec<sl::Var>,
+    /// The fresh variable, with the iterations crossed so far.
     var_new_sl: sl::Var,
+    /// Iterations crossed while lifting, innermost first.
     iter_exps_enclosing_sl: Vec<sl::ExpIter>,
 }
 
@@ -88,6 +105,7 @@ impl LiftedCall {
                 var_remaining_sl.iters.push(iter);
             }
         }
+        // A call using no iteration variable is unaffected by this iteration
         if vars_call_matched_sl.is_empty() {
             return self;
         }
@@ -193,6 +211,7 @@ fn lift_from_exp(
     lift_from_exp_kind(ids_used, nesting, &mut exp_target_sl.node)
 }
 
+/// Dispatches the search over an expression's children in source order.
 fn lift_from_exp_kind(
     ids_used: &mut IdSet,
     nesting: CallNesting,
@@ -261,6 +280,7 @@ fn try_lift_call(ids_used: &mut IdSet, exp_target_sl: &mut sl::Exp) -> Option<Li
     let il_ast::ExpKind::Call(_, _, args_sl) = &exp_target_sl.node else {
         return None;
     };
+    // Nullary calls read like constants and stay
     if args_sl.is_empty() {
         return None;
     }
@@ -292,6 +312,7 @@ fn try_lift_call(ids_used: &mut IdSet, exp_target_sl: &mut sl::Exp) -> Option<Li
 
 // - Binary expression
 
+/// Searches the left operand, then the right.
 fn lift_from_binary_exp(
     ids_used: &mut IdSet,
     nesting: CallNesting,
@@ -309,6 +330,7 @@ fn lift_from_binary_exp(
 
 // - Case expression
 
+/// Searches the notation's arguments, then writes them back.
 fn lift_from_case_exp(
     ids_used: &mut IdSet,
     nesting: CallNesting,
@@ -323,6 +345,7 @@ fn lift_from_case_exp(
 
 // - Struct expression
 
+/// Searches the field values in source order.
 fn lift_from_struct_exp(
     ids_used: &mut IdSet,
     nesting: CallNesting,
@@ -339,6 +362,7 @@ fn lift_from_struct_exp(
 
 // - Slice expression
 
+/// Searches base, index, then length.
 fn lift_from_slice_exp(
     ids_used: &mut IdSet,
     nesting: CallNesting,
@@ -362,6 +386,7 @@ fn lift_from_slice_exp(
 
 // - Update expression
 
+/// Searches base, path, then replacement field.
 fn lift_from_update_exp(
     ids_used: &mut IdSet,
     nesting: CallNesting,
@@ -385,6 +410,7 @@ fn lift_from_update_exp(
 
 // - Call expression
 
+/// Searches the expression arguments; function arguments hold no calls.
 fn lift_from_call_exp(
     ids_used: &mut IdSet,
     nesting: CallNesting,
@@ -422,6 +448,7 @@ fn lift_from_iter_exp(
 
 // == Paths
 
+/// Lifts the leftmost nested call from a path.
 fn lift_from_path(
     ids_used: &mut IdSet,
     nesting: CallNesting,
@@ -429,6 +456,7 @@ fn lift_from_path(
 ) -> Option<LiftedCall> {
     match &mut path_sl.node {
         il_ast::PathKind::Root => None,
+        // The inner path first, then the index
         il_ast::PathKind::Idx(path_inner_sl, exp_idx_sl) => {
             if let Some(call_lifted) = lift_from_path(ids_used, nesting, path_inner_sl) {
                 return Some(call_lifted);
@@ -442,6 +470,7 @@ fn lift_from_path(
     }
 }
 
+/// Searches the inner path, then index, then length.
 fn lift_from_slice_path(
     ids_used: &mut IdSet,
     nesting: CallNesting,
@@ -467,6 +496,7 @@ fn lift_from_slice_path(
 
 // - Instruction
 
+/// Finds the next call an instruction owns directly, if any.
 fn lift_from_instr(
     ids_used: &mut IdSet,
     instr_sl: &mut sl::Instr,
@@ -476,12 +506,14 @@ fn lift_from_instr(
         sl::InstrKind::Let(instr_sl) => lift_from_let_instr(ids_used, instr_sl),
         sl::InstrKind::Rule(instr_sl) => lift_from_rule_instr(ids_used, instr_sl, &span)?,
         sl::InstrKind::Hold(instr_sl) => lift_from_hold_instr(ids_used, instr_sl),
+        // Results and returns own their expressions at the root
         sl::InstrKind::Result(instr_sl) => {
             lift_from_exps(ids_used, CallNesting::None, &mut instr_sl.exps)
         }
         sl::InstrKind::Return(instr_sl) => {
             lift_from_exp(ids_used, CallNesting::None, &mut instr_sl.exp)
         }
+        // Conditions, cases, groups, and debugs keep their calls
         sl::InstrKind::If(_)
         | sl::InstrKind::Case(_)
         | sl::InstrKind::Group(_)
@@ -495,6 +527,7 @@ fn lift_from_instr(
 fn lift_from_let_instr(ids_used: &mut IdSet, instr_sl: &mut sl::LetInstr) -> Option<LiftedCall> {
     let mut call_lifted = lift_from_exp(ids_used, CallNesting::None, &mut instr_sl.exp_r)?;
     let mut vars_remaining_sl = instr_sl.exp_r.free_vars();
+    // Carry the call out through each instruction iteration
     for iter_instr_sl in &mut instr_sl.iter_instrs {
         call_lifted = call_lifted.lift_out_of_iter(
             &mut vars_remaining_sl,
@@ -530,6 +563,7 @@ fn lift_from_rule_instr(
     };
     let mut vars_remaining_sl = exps_input_sl.as_slice().free_vars();
     let mut call_lifted = call_lifted;
+    // Carry the call out through each instruction iteration
     for iter_instr_sl in &mut instr_sl.iter_instrs {
         call_lifted = call_lifted.lift_out_of_iter(
             &mut vars_remaining_sl,

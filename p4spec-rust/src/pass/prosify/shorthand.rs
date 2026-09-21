@@ -1,4 +1,11 @@
 //! Recognize compact prose instructions after annotation
+//!
+//! Three shapes fold into one instruction each:
+//! a case arm or condition that renames its scrutinee
+//! (`CheckLetSub`, `CheckLetMatch`, and the `CheckLet*` guards),
+//! a let over a case notation with a `prose_fields` hint (`Destruct`),
+//! and a let followed by an `is Some` check that binds the content
+//! (`OptionGet`).
 
 use std::collections::VecDeque;
 
@@ -6,6 +13,7 @@ use crate::lang::{il::ast::OptPattern, pl::ast as pl};
 
 // == Expression aliases
 
+/// Whether two expressions are the same variable, through iterations.
 fn is_eq_exp_var(exp_a: &pl::Exp, exp_b: &pl::Exp) -> bool {
     match (&exp_a.node.node, &exp_b.node.node) {
         (pl::ExpKind::Id(id_a), pl::ExpKind::Id(id_b)) => id_a.node == id_b.node,
@@ -14,6 +22,7 @@ fn is_eq_exp_var(exp_a: &pl::Exp, exp_b: &pl::Exp) -> bool {
     }
 }
 
+/// Whether `exp_r` is the scrutinee itself or a downcast of it.
 fn is_scrutinee_alias(exp_scrut: &pl::Exp, exp_r: &pl::Exp) -> bool {
     match &exp_r.node.node {
         pl::ExpKind::DownCast(_, exp_inner) => is_eq_exp_var(exp_scrut, exp_inner),
@@ -21,6 +30,7 @@ fn is_scrutinee_alias(exp_scrut: &pl::Exp, exp_r: &pl::Exp) -> bool {
     }
 }
 
+/// Removes a leading `let x = scrutinee` from `block` and returns `x`.
 fn take_leading_rename<Tier>(exp_scrut: &pl::Exp, block: &mut pl::Block<Tier>) -> Option<pl::Exp> {
     let is_leading_rename = matches!(
         block.first(),
@@ -30,6 +40,7 @@ fn take_leading_rename<Tier>(exp_scrut: &pl::Exp, block: &mut pl::Block<Tier>) -
                 if iter_instrs.is_empty() && is_scrutinee_alias(exp_scrut, exp_r)
         )
     );
+    // Only a first instruction that renames the scrutinee qualifies
     if !is_leading_rename {
         return None;
     }
@@ -42,17 +53,20 @@ fn take_leading_rename<Tier>(exp_scrut: &pl::Exp, block: &mut pl::Block<Tier>) -
 
 // == Case guards
 
+/// Folds a renaming let at the head of a subtype or match arm into its guard.
 fn shorten_case_guards<Tier>(instr: &mut pl::Instr<Tier>) {
     let pl::InstrKind::Case(pl::CaseInstr { exp, cases, .. }) = &mut instr.node.node else {
         return;
     };
     for case in cases {
         let guard = match &case.guard {
+            // Subtype guard: `let x = scrut, scrut has type t`
             pl::Guard::Sub(typ, subcheck) => {
                 take_leading_rename(exp, &mut case.block).map(|exp_target| {
                     pl::Guard::CheckLetSub(typ.clone(), subcheck.clone(), exp_target)
                 })
             }
+            // Match guard: `let x = scrut, scrut matches p`
             pl::Guard::Match(pattern) => take_leading_rename(exp, &mut case.block)
                 .map(|exp_target| pl::Guard::CheckLetMatch(pattern.clone(), exp_target)),
             _ => None,
@@ -65,13 +79,17 @@ fn shorten_case_guards<Tier>(instr: &mut pl::Instr<Tier>) {
 
 // == Checked bindings
 
+/// Folds `if scrut has type t { let x = scrut; .. }`, its match twin,
+/// or a single-arm case with such a guard, into a checked let.
 fn shorten_check_let<Tier>(instr: &mut pl::Instr<Tier>) {
+    /// The check a checked let performs.
     enum Check {
         Sub(pl::Typ, Box<pl::Subcheck>, pl::Exp),
         Match(pl::Pattern, pl::Exp),
     }
 
     let check = match &instr.node.node {
+        // An un-iterated condition that is a subtype or match test
         pl::InstrKind::If(pl::IfInstr { exp, iter_exps, .. }) if iter_exps.is_empty() => {
             match &exp.node.node {
                 pl::ExpKind::Sub(exp_scrut, typ, subcheck) => {
@@ -83,6 +101,7 @@ fn shorten_check_let<Tier>(instr: &mut pl::Instr<Tier>) {
                 _ => None,
             }
         }
+        // A single-arm case with a subtype or match guard
         pl::InstrKind::Case(pl::CaseInstr { exp, cases, .. }) if cases.len() == 1 => {
             let case = &cases[0];
             match &case.guard {
@@ -105,6 +124,7 @@ fn shorten_check_let<Tier>(instr: &mut pl::Instr<Tier>) {
     let exp_scrut = match &check {
         Check::Sub(_, _, exp_scrut) | Check::Match(_, exp_scrut) => exp_scrut,
     };
+    // The block must start by renaming the scrutinee
     let Some(exp_l) = take_leading_rename(exp_scrut, block) else { return };
     let block = std::mem::take(block);
     instr.node.node = match check {
@@ -119,6 +139,7 @@ fn shorten_check_let<Tier>(instr: &mut pl::Instr<Tier>) {
 
 // == Destructuring
 
+/// Whether a bound expression is shown; `_`-prefixed names are hidden.
 fn visible(exp: &pl::Exp) -> bool {
     match &exp.node.node {
         pl::ExpKind::Id(id) => !id.node.starts_with('_'),
@@ -127,6 +148,7 @@ fn visible(exp: &pl::Exp) -> bool {
     }
 }
 
+/// Folds `let C(x, y) = e` with a `prose_fields` hint into a destructuring.
 fn shorten_destruct<Tier>(instr: &mut pl::Instr<Tier>) {
     let Some(field_names) = instr.hints.prose_fields.as_ref().map(|hint| hint.fields()) else {
         return;
@@ -141,6 +163,7 @@ fn shorten_destruct<Tier>(instr: &mut pl::Instr<Tier>) {
         return;
     };
     let exps = not_exp.args();
+    // Field names must match the arity and something must be visible
     if exps.len() != field_names.len() || exps.iter().all(|exp| !visible(exp)) {
         return;
     }
@@ -152,6 +175,7 @@ fn shorten_destruct<Tier>(instr: &mut pl::Instr<Tier>) {
     instr.node.node = pl::InstrKind::Destruct(pl::DestructInstr { bindings, exp: exp_r.clone() });
 }
 
+/// Applies the single-instruction shorthands in order.
 fn shorten_instr_shorthands<Tier>(mut instr: pl::Instr<Tier>) -> pl::Instr<Tier> {
     shorten_case_guards(&mut instr);
     shorten_check_let(&mut instr);
@@ -161,12 +185,16 @@ fn shorten_instr_shorthands<Tier>(mut instr: pl::Instr<Tier>) -> pl::Instr<Tier>
 
 // == Option extraction
 
+/// Folds `let t = e` followed by `if t is Some { let ?(x) = t; .. }`
+/// into `let x = !e` with the block.
 fn shorten_option_get<Tier>(
     instrs_pending: &mut VecDeque<pl::Instr<Tier>>,
 ) -> Option<pl::Instr<Tier>> {
+    // Needs the let and the following if
     if instrs_pending.len() < 2 {
         return None;
     }
+    // An un-iterated let followed by an un-iterated `is Some` test
     let is_option_get =
         match (&instrs_pending.front()?.node.node, &instrs_pending.get(1)?.node.node) {
             (
@@ -196,6 +224,7 @@ fn shorten_option_get<Tier>(
                 let pl::ExpKind::Opt(Some(exp_target)) = &exp_l.node.node else {
                     return None;
                 };
+                // The temporary must be what is tested and unwrapped
                 if !iter_instrs.is_empty()
                     || !is_eq_exp_var(exp_tmp, exp_scrut)
                     || !is_eq_exp_var(exp_tmp, exp_r)
@@ -210,6 +239,7 @@ fn shorten_option_get<Tier>(
     if !is_option_get {
         return None;
     }
+    // Consume both instructions and rebuild them as one
     let instr_source = instrs_pending.pop_front()?;
     let instr_if = instrs_pending.pop_front()?;
     let pl::InstrKind::Let(pl::LetInstr { exp_r: exp_value, .. }) = instr_source.node.node else {
@@ -237,10 +267,12 @@ fn shorten_option_get<Tier>(
     })
 }
 
+/// Folds pairs across a block, then each instruction on its own.
 fn shorten_block_shorthands<Tier>(block: pl::Block<Tier>) -> pl::Block<Tier> {
     let mut instrs_pending = VecDeque::from(block);
     let mut block_output = Vec::new();
     while !instrs_pending.is_empty() {
+        // A pair fold consumes two instructions
         if let Some(instr) = shorten_option_get(&mut instrs_pending) {
             block_output.push(instr);
         } else {
@@ -259,11 +291,13 @@ fn shorten_block_shorthands<Tier>(block: pl::Block<Tier>) -> pl::Block<Tier> {
 
 // - Dispatch instruction
 
+/// Shortens a dispatch-tier instruction.
 fn shorten_dispatch_instr(mut instr: pl::Instr<pl::DispatchInstr>) -> pl::Instr<pl::DispatchInstr> {
     instr.node.node = shorten_dispatch_instr_kind(instr.node.node);
     instr
 }
 
+/// Recurses into the blocks of a dispatch-tier instruction.
 fn shorten_dispatch_instr_kind(
     instr_kind: pl::InstrKind<pl::DispatchInstr>,
 ) -> pl::InstrKind<pl::DispatchInstr> {
@@ -298,12 +332,14 @@ fn shorten_dispatch_instr_kind(
             let tier = shorten_dispatch_tier(instr_tier.tier);
             pl::InstrKind::Tier(pl::TierInstr { tier })
         }
+        // Leaves have no blocks
         kind @ (pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_)) => {
             kind
         }
     }
 }
 
+/// Shortens a dispatch block, pairs first.
 fn shorten_dispatch_block(block: pl::DispatchBlock) -> pl::DispatchBlock {
     shorten_block_shorthands(block)
         .into_iter()
@@ -313,6 +349,7 @@ fn shorten_dispatch_block(block: pl::DispatchBlock) -> pl::DispatchBlock {
 
 // - Holding condition
 
+/// Recurses into a hold's branches.
 fn shorten_dispatch_hold_case(
     hold_case: pl::HoldCase<pl::DispatchInstr>,
 ) -> pl::HoldCase<pl::DispatchInstr> {
@@ -335,6 +372,7 @@ fn shorten_dispatch_hold_case(
 
 // - Tier instruction
 
+/// Recurses into a rule group's body or a route's arms.
 fn shorten_dispatch_tier(instr_dispatch: pl::DispatchInstr) -> pl::DispatchInstr {
     match instr_dispatch {
         pl::DispatchInstr::Group(mut instr_group) => {
@@ -354,11 +392,13 @@ fn shorten_dispatch_tier(instr_dispatch: pl::DispatchInstr) -> pl::DispatchInstr
 
 // - Group instruction
 
+/// Shortens a group-tier instruction.
 fn shorten_group_instr(mut instr: pl::Instr<pl::GroupInstr>) -> pl::Instr<pl::GroupInstr> {
     instr.node.node = shorten_group_instr_kind(instr.node.node);
     instr
 }
 
+/// Recurses into the blocks of a group-tier instruction.
 fn shorten_group_instr_kind(
     instr_kind: pl::InstrKind<pl::GroupInstr>,
 ) -> pl::InstrKind<pl::GroupInstr> {
@@ -393,12 +433,14 @@ fn shorten_group_instr_kind(
             let tier = shorten_group_tier(instr_tier.tier);
             pl::InstrKind::Tier(pl::TierInstr { tier })
         }
+        // Leaves have no blocks
         kind @ (pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_)) => {
             kind
         }
     }
 }
 
+/// Shortens a group block, pairs first.
 fn shorten_group_block(block: pl::GroupBlock) -> pl::GroupBlock {
     shorten_block_shorthands(block)
         .into_iter()
@@ -408,6 +450,7 @@ fn shorten_group_block(block: pl::GroupBlock) -> pl::GroupBlock {
 
 // - Holding condition
 
+/// Recurses into a hold's branches.
 fn shorten_group_hold_case(
     hold_case: pl::HoldCase<pl::GroupInstr>,
 ) -> pl::HoldCase<pl::GroupInstr> {
@@ -430,6 +473,7 @@ fn shorten_group_hold_case(
 
 // - Tier instruction
 
+/// Recurses into a backtrack's arms; other group instructions have no blocks.
 fn shorten_group_tier(instr_group: pl::GroupInstr) -> pl::GroupInstr {
     match instr_group {
         pl::GroupInstr::Backtrack(mut instr_backtrack) => {
@@ -448,6 +492,7 @@ fn shorten_group_tier(instr_group: pl::GroupInstr) -> pl::GroupInstr {
 
 // == Relation definitions
 
+/// Shortens a defined relation's blocks.
 fn shorten_rel_def(def_rel: pl::RelDef) -> pl::RelDef {
     match def_rel {
         pl::RelDef::Defined(mut def_rel) => {
@@ -461,6 +506,7 @@ fn shorten_rel_def(def_rel: pl::RelDef) -> pl::RelDef {
 
 // == Meta-function definitions
 
+/// Shortens table rows and defined function blocks.
 fn shorten_func_def(def_func: pl::MetaFuncDef) -> pl::MetaFuncDef {
     match def_func {
         pl::MetaFuncDef::Table(mut def_func) => {
@@ -480,11 +526,13 @@ fn shorten_func_def(def_func: pl::MetaFuncDef) -> pl::MetaFuncDef {
 
 // == Definitions
 
+/// Shortens one definition.
 fn shorten_def(mut def: pl::Def) -> pl::Def {
     def.node.node = shorten_def_kind(def.node.node);
     def
 }
 
+/// Shortens relations and functions; types and variables have no blocks.
 fn shorten_def_kind(def_kind: pl::DefKind) -> pl::DefKind {
     match def_kind {
         pl::DefKind::Rel(def_rel) => {
@@ -501,6 +549,7 @@ fn shorten_def_kind(def_kind: pl::DefKind) -> pl::DefKind {
 
 // == Entry point
 
+/// Applies the shorthands to every definition.
 pub(super) fn shorten_spec(spec: pl::Spec) -> pl::Spec {
     spec.into_iter().map(shorten_def).collect()
 }

@@ -2,7 +2,7 @@
 //!
 //! `convert` runs two passes over an IL specification.
 //!
-//! Binding analysis (`binding::analyze::analyze_spec`)
+//! Binding lowering (`binding::transform::lower_spec`)
 //! decides which variables each premise binds
 //! and rewrites binder patterns into explicit let and match premises.
 //!
