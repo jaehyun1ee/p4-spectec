@@ -1,6 +1,8 @@
 //! Syntax equality for algorithmic-language data
 //!
-//! Reuses IL equality for aliases and compares AL-specific structure
+//! Reuses IL equality for the aliased items
+//! and compares the AL-specific premises, matches, paths, and clauses
+//! structurally, ignoring source regions.
 
 use crate::lang::traits::eq::SyntaxEq;
 

@@ -1,4 +1,7 @@
 //! Free identifiers in structured-language data
+//!
+//! Only expressions contribute identifiers;
+//! instructions collect from their expressions and blocks.
 
 use crate::lang::{common::ds::set::IdSet, traits::free::Free};
 

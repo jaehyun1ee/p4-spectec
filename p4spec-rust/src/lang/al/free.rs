@@ -1,4 +1,8 @@
 //! Free identifiers in algorithmic-language data
+//!
+//! Only expressions contribute identifiers;
+//! matches, paths, clauses, and rows collect from their expressions
+//! and premises.
 
 use crate::lang::{common::ds::set::IdSet, traits::free::Free};
 

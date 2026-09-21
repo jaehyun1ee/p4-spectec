@@ -1,4 +1,9 @@
 //! Algorithmic language model
+//!
+//! Everything below the premises is re-exported from IL;
+//! AL adds `let` premises, rule matches and paths, and clause and table forms
+//! whose arguments are patterns.
+//! The `I` and `V` parameters let the interpreter instantiate names with slots.
 
 use crate::lang::{common::source::Phrase, el, hints::input::InputHint, il};
 
@@ -98,8 +103,10 @@ pub type TargKind = il::ast::TargKind;
 
 // Premises
 
+/// A premise with its span.
 pub type Prem<I = Id, V = Var> = Phrase<PremKind<I, V>>;
 
+/// The relation `id` derives `not_exp`; the hint marks the input arguments.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RulePrem<I = Id, V = Var> {
     pub id: Id,
@@ -107,40 +114,47 @@ pub struct RulePrem<I = Id, V = Var> {
     pub input_hint: InputHint,
 }
 
+/// A boolean side condition.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfPrem<I = Id, V = Var> {
     pub exp: Exp<I, V>,
 }
 
+/// The relation applies to `not_exp`, without binding its outputs.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfHoldPrem<I = Id, V = Var> {
     pub id: Id,
     pub not_exp: NotExp<I, V>,
 }
 
+/// The relation does not apply to `not_exp`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfNotHoldPrem<I = Id, V = Var> {
     pub id: Id,
     pub not_exp: NotExp<I, V>,
 }
 
+/// Binds the pattern `exp_l` to the value of `exp_r`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LetPrem<I = Id, V = Var> {
     pub exp_l: Exp<I, V>,
     pub exp_r: Exp<I, V>,
 }
 
+/// A premise repeated under an iteration.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IterPrem<I = Id, V = Var> {
     pub prem: Box<Prem<I, V>>,
     pub prem_iter: PremIter<V>,
 }
 
+/// Prints the expression when evaluated.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DebugPrem<I = Id, V = Var> {
     pub exp: Exp<I, V>,
 }
 
+/// The forms of a premise.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum PremKind<I = Id, V = Var> {
@@ -160,17 +174,23 @@ pub enum PremKind<I = Id, V = Var> {
     Debug(DebugPrem<I, V>),
 }
 
+/// An iteration over a premise, as in IL.
 pub type PremIter<V = Var> = il::ast::PremIter<V>;
 
 // Rules
 
+/// The part of a rule group shared by its paths: inputs and common premises.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuleMatch<I = Id, V = Var> {
+    /// The notation arguments as written, for printing.
     pub exps_signature: Vec<Exp<I, V>>,
+    /// Patterns the inputs are matched against.
     pub exps_input: Vec<Exp<I, V>>,
+    /// Premises every path must pass first.
     pub prems: Vec<Prem<I, V>>,
 }
 
+/// One way a rule group can conclude: its own premises and outputs.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RulePath<I = Id, V = Var> {
     pub id: Id,
@@ -178,7 +198,9 @@ pub struct RulePath<I = Id, V = Var> {
     pub exps_output: Vec<Exp<I, V>>,
 }
 
+/// A rule group with its span.
 pub type RuleGroup<I = Id, V = Var> = Phrase<RuleGroupKind<I, V>>;
+/// The rules sharing one name, as a match and its paths.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuleGroupKind<I = Id, V = Var> {
     pub id: Id,
@@ -186,7 +208,9 @@ pub struct RuleGroupKind<I = Id, V = Var> {
     pub rule_paths: Vec<RulePath<I, V>>,
 }
 
+/// An otherwise group with its span.
 pub type ElseGroup<I = Id, V = Var> = Phrase<ElseGroupKind<I, V>>;
+/// The otherwise rule of a relation: a match with a single path.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElseGroupKind<I = Id, V = Var> {
     pub id: Id,
@@ -196,8 +220,10 @@ pub struct ElseGroupKind<I = Id, V = Var> {
 
 // Clauses
 
+/// A function clause with its span.
 pub type Clause<I = Id, V = Var> = Phrase<ClauseKind<I, V>>;
 
+/// One clause: argument patterns, body, and premises.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClauseKind<I = Id, V = Var> {
     pub args: Vec<Arg<I, V>>,
@@ -205,12 +231,16 @@ pub struct ClauseKind<I = Id, V = Var> {
     pub prems: Vec<Prem<I, V>>,
 }
 
+/// The otherwise clause of a function.
 pub type ElseClause<I = Id, V = Var> = Clause<I, V>;
+/// The form of an otherwise clause.
 pub type ElseClauseKind<I = Id, V = Var> = ClauseKind<I, V>;
 
 // Table rows
 
+/// A table row with its span.
 pub type TableRow<I = Id, V = Var> = Phrase<TableRowKind<I, V>>;
+/// One row: its signature as written, argument patterns, body, and premises.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TableRowKind<I = Id, V = Var> {
     pub exps_signature: Vec<Exp<I, V>>,
@@ -221,10 +251,12 @@ pub struct TableRowKind<I = Id, V = Var> {
 
 // Hints
 
+/// A `hint(id exp)` annotation, unchanged from EL.
 pub type Hint = el::ast::Hint;
 
 // Type definitions
 
+/// A type definition: extern or defined.
 #[derive(Clone, Debug, PartialEq)]
 pub enum TypDef {
     /// `extern syntax id hint*`
@@ -233,12 +265,14 @@ pub enum TypDef {
     Defined(Box<DefinedTyp>),
 }
 
+/// A type defined outside the specification.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternTyp {
     pub id: Id,
     pub hints: Vec<Hint>,
 }
 
+/// A type with parameters and a body.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DefinedTyp {
     pub id: Id,
@@ -249,6 +283,7 @@ pub struct DefinedTyp {
 
 // Meta-variables
 
+/// A meta-variable naming a type.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VarDef {
     pub id: Id,
@@ -258,6 +293,7 @@ pub struct VarDef {
 
 // Relations
 
+/// A relation definition: extern or defined.
 #[derive(Clone, Debug, PartialEq)]
 pub enum RelDef<I = Id, V = Var> {
     /// `extern relation id : not_typ hint(input %int*) hint*`
@@ -266,6 +302,7 @@ pub enum RelDef<I = Id, V = Var> {
     Defined(Box<DefinedRel<I, V>>),
 }
 
+/// A relation provided by the host.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternRel {
     pub id: Id,
@@ -274,6 +311,7 @@ pub struct ExternRel {
     pub hints: Vec<Hint>,
 }
 
+/// A relation with its rule groups and optional otherwise group.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DefinedRel<I = Id, V = Var> {
     pub id: Id,
@@ -286,6 +324,7 @@ pub struct DefinedRel<I = Id, V = Var> {
 
 // Meta-functions
 
+/// A function definition: extern, builtin, table, or defined.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MetaFuncDef<I = Id, V = Var> {
     /// `extern dec id <` list(tparam, `,`) `> list(param, `,`) : typ hint*`
@@ -298,6 +337,7 @@ pub enum MetaFuncDef<I = Id, V = Var> {
     Defined(Box<DefinedFunc<I, V>>),
 }
 
+/// A function provided by the host.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternFunc {
     pub id: Id,
@@ -307,6 +347,7 @@ pub struct ExternFunc {
     pub hints: Vec<Hint>,
 }
 
+/// A function provided by the interpreter.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BuiltinFunc {
     pub id: Id,
@@ -316,6 +357,7 @@ pub struct BuiltinFunc {
     pub hints: Vec<Hint>,
 }
 
+/// A function defined by table rows.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TableFunc<I = Id, V = Var> {
     pub id: Id,
@@ -325,6 +367,7 @@ pub struct TableFunc<I = Id, V = Var> {
     pub hints: Vec<Hint>,
 }
 
+/// A function with clauses and an optional otherwise clause.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DefinedFunc<I = Id, V = Var> {
     pub id: Id,
@@ -338,17 +381,23 @@ pub struct DefinedFunc<I = Id, V = Var> {
 
 // Definitions
 
+/// A top-level definition with its span.
 pub type Def<I = Id, V = Var> = Phrase<DefKind<I, V>>;
 
+/// The forms of a definition.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DefKind<I = Id, V = Var> {
+    /// A type definition.
     Typ(TypDef),
     /// `var id : typ hint*`
     Var(VarDef),
+    /// A relation definition.
     Rel(RelDef<I, V>),
+    /// A function definition.
     MetaFunc(MetaFuncDef<I, V>),
 }
 
 // Spec
 
+/// A whole specification: its definitions in source order.
 pub type Spec<I = Id, V = Var> = Vec<Def<I, V>>;
