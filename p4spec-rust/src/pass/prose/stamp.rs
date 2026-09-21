@@ -374,6 +374,6 @@ fn stamp_defined_func_def(mut def_func: pl::DefinedFunc) -> pl::DefinedFunc {
 
 // == Entry point
 
-pub(super) fn spec(spec: pl::Spec) -> pl::Spec {
+pub(super) fn stamp_spec(spec: pl::Spec) -> pl::Spec {
     spec.into_iter().map(stamp_def).collect()
 }

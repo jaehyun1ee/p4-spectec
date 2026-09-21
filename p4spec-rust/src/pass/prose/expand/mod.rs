@@ -207,6 +207,6 @@ fn expand_def(mut def_sl: sl::Def) -> Result<sl::Def, ProseError> {
 
 // == Entry point
 
-pub(super) fn spec(spec_sl: sl::Spec) -> Result<sl::Spec, ProseError> {
+pub(super) fn expand_spec(spec_sl: sl::Spec) -> Result<sl::Spec, ProseError> {
     spec_sl.into_iter().map(expand_def).collect()
 }

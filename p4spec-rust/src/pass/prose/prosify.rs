@@ -1677,13 +1677,13 @@ fn prosify_def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError
 
 pub(super) fn prosify(spec_sl: sl::Spec) -> Result<pl::Spec, ProseError> {
     let mut ctx = Context::load(&spec_sl)?;
-    let spec_sl = super::expand::spec(spec_sl)?;
+    let spec_sl = super::expand::expand_spec(spec_sl)?;
     let mut spec_pl = Vec::with_capacity(spec_sl.len());
     for def_sl in spec_sl {
         let def_pl = prosify_def(&mut ctx, def_sl)?;
         spec_pl.push(def_pl);
     }
-    let spec_pl = super::shorthand::spec(spec_pl);
-    let spec_pl = super::stamp::spec(spec_pl);
+    let spec_pl = super::shorthand::shorten_spec(spec_pl);
+    let spec_pl = super::stamp::stamp_spec(spec_pl);
     Ok(spec_pl)
 }

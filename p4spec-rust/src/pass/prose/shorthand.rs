@@ -511,6 +511,6 @@ fn shorten_func_def(def_func: pl::MetaFuncDef) -> pl::MetaFuncDef {
 
 // == Entry point
 
-pub(super) fn spec(spec: pl::Spec) -> pl::Spec {
+pub(super) fn shorten_spec(spec: pl::Spec) -> pl::Spec {
     spec.into_iter().map(shorten_def).collect()
 }
