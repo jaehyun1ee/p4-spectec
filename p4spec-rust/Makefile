@@ -38,7 +38,7 @@ test-structure-unit:
 test-prose-unit:
 	$(CARGO) test --locked --test lang hints::
 	$(CARGO) test --locked --test lang pl::
-	$(CARGO) test --locked --test pass prose::
+	$(CARGO) test --locked --test pass prosify::
 
 test-lang:
 	$(CARGO) test --test lang

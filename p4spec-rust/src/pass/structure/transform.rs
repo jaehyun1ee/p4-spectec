@@ -796,7 +796,7 @@ fn struct_def_kind(
 
 // - Entry point
 
-pub(super) fn r#struct(
+pub(super) fn struct_spec(
     spec_al: al::Spec,
     without_rule_groups: bool,
 ) -> Result<sl::Spec, StructureError> {

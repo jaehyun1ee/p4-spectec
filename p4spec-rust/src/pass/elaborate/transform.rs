@@ -2591,7 +2591,7 @@ fn populate_defs(mut ctx: Context, defs_il: il::Spec) -> Result<il::Spec, ElabEr
 
 // - Entry point
 
-pub(super) fn elaborate(spec_el: el::Spec) -> Result<il::Spec, ElabError> {
+pub(super) fn elab_spec(spec_el: el::Spec) -> Result<il::Spec, ElabError> {
     let mut ctx = Context::new();
     let mut defs_il = Vec::new();
     for def_el in spec_el {

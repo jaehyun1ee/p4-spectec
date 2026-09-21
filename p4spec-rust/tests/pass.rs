@@ -2,8 +2,8 @@
 mod algo;
 #[path = "pass/elaborate.rs"]
 mod elaborate;
-#[path = "pass/prose.rs"]
-mod prose;
+#[path = "pass/prosify.rs"]
+mod prosify;
 #[path = "support/spec.rs"]
 mod spec_fixture;
 

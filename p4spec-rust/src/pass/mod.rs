@@ -2,5 +2,5 @@
 
 pub mod algo;
 pub mod elaborate;
-pub mod prose;
+pub mod prosify;
 pub mod structure;

@@ -1675,7 +1675,7 @@ fn prosify_def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError
 
 // == Entry point
 
-pub(super) fn prosify(spec_sl: sl::Spec) -> Result<pl::Spec, ProseError> {
+pub(super) fn prosify_spec(spec_sl: sl::Spec) -> Result<pl::Spec, ProseError> {
     let mut ctx = Context::load(&spec_sl)?;
     let spec_sl = super::expand::expand_spec(spec_sl)?;
     let mut spec_pl = Vec::with_capacity(spec_sl.len());

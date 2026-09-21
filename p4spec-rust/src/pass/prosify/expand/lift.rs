@@ -646,11 +646,11 @@ pub(super) fn lift_instr(
     while let Some(call_lifted) = lift_instr_call(ids_used, &mut instr_sl)? {
         calls_lifted.push(call_lifted);
     }
-    let was_lifted = !calls_lifted.is_empty();
+    let lifted = !calls_lifted.is_empty();
 
     // Preserve left-to-right evaluation in the nesting order of let bindings
     for call_lifted in calls_lifted.into_iter().rev() {
         instr_sl = call_lifted.wrap_instr(instr_sl);
     }
-    Ok((instr_sl, was_lifted))
+    Ok((instr_sl, lifted))
 }

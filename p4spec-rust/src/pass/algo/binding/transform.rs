@@ -1,4 +1,4 @@
-//! Binding analysis from IL to AL:
+//! Binding lowering from IL to AL:
 //!
 //! 1. Collect all binding occurrences of variables in an IL construct
 //!    - Check that all binding occurrences reside in invertible constructs
@@ -240,34 +240,34 @@ fn check_prems_in_else(span: &Span, prems: &[al::ast::Prem]) -> Result<(), AlgoE
 
 // - Premise dispatch
 
-fn analyze_prem(
+fn lower_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
     prem_il: &ast::Prem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     match &prem_il.node {
         ast::PremKind::Rule(rule_prem_il) => {
-            analyze_rule_prem(ctx, iter_ctx, &prem_il.span, rule_prem_il)
+            lower_rule_prem(ctx, iter_ctx, &prem_il.span, rule_prem_il)
         }
-        ast::PremKind::If(if_prem_il) => analyze_if_prem(ctx, iter_ctx, &prem_il.span, if_prem_il),
+        ast::PremKind::If(if_prem_il) => lower_if_prem(ctx, iter_ctx, &prem_il.span, if_prem_il),
         ast::PremKind::IfHold(if_prem_il) => {
-            analyze_if_hold_prem(ctx, iter_ctx, &prem_il.span, if_prem_il)
+            lower_if_hold_prem(ctx, iter_ctx, &prem_il.span, if_prem_il)
         }
         ast::PremKind::IfNotHold(if_prem_il) => {
-            analyze_if_not_hold_prem(ctx, iter_ctx, &prem_il.span, if_prem_il)
+            lower_if_not_hold_prem(ctx, iter_ctx, &prem_il.span, if_prem_il)
         }
         ast::PremKind::Iter(iter_prem_il) => {
-            analyze_iter_prem(ctx, iter_ctx, &prem_il.span, iter_prem_il)
+            lower_iter_prem(ctx, iter_ctx, &prem_il.span, iter_prem_il)
         }
         ast::PremKind::Debug(debug_prem_il) => {
-            analyze_debug_prem(ctx, iter_ctx, &prem_il.span, debug_prem_il)
+            lower_debug_prem(ctx, iter_ctx, &prem_il.span, debug_prem_il)
         }
     }
 }
 
 // - Rule premises
 
-fn analyze_rule_prem(
+fn lower_rule_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
     span: &Span,
@@ -313,7 +313,7 @@ fn analyze_rule_prem(
 
 // - Conditional premises
 
-fn analyze_if_eq_prem(
+fn lower_if_eq_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
     span: &Span,
@@ -333,8 +333,8 @@ fn analyze_if_eq_prem(
             };
             Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
         }
-        (false, true) => analyze_let_prem(ctx, span, iter_ctx, exp_l_il, &benv_l, exp_r_il),
-        (true, false) => analyze_let_prem(ctx, span, iter_ctx, exp_r_il, &benv_r, exp_l_il),
+        (false, true) => lower_let_prem(ctx, span, iter_ctx, exp_l_il, &benv_l, exp_r_il),
+        (true, false) => lower_let_prem(ctx, span, iter_ctx, exp_r_il, &benv_r, exp_l_il),
         (false, false) => Err(AlgoError::new(
             AlgoErrorKind::BindingOnBothEqualitySides,
             if_prem_il.exp.span.clone(),
@@ -342,7 +342,7 @@ fn analyze_if_eq_prem(
     }
 }
 
-fn analyze_if_prem(
+fn lower_if_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
     span: &Span,
@@ -351,7 +351,7 @@ fn analyze_if_prem(
     if let ast::ExpKind::Cmp(ast::CmpOp::Bool(xl::bool::CmpOp::Eq), _, exp_l_il, exp_r_il) =
         &if_prem_il.exp.node
     {
-        analyze_if_eq_prem(ctx, iter_ctx, span, if_prem_il, exp_l_il, exp_r_il)
+        lower_if_eq_prem(ctx, iter_ctx, span, if_prem_il, exp_l_il, exp_r_il)
     } else {
         analyze_exp_as_bound(ctx, &if_prem_il.exp)?;
         let prem_al = phrase! {
@@ -366,7 +366,7 @@ fn analyze_if_prem(
 
 // - Holding premises
 
-fn analyze_if_hold_prem(
+fn lower_if_hold_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
     span: &Span,
@@ -387,7 +387,7 @@ fn analyze_if_hold_prem(
 
 // - Non-holding premises
 
-fn analyze_if_not_hold_prem(
+fn lower_if_not_hold_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
     span: &Span,
@@ -408,7 +408,7 @@ fn analyze_if_not_hold_prem(
 
 // - Let premises
 
-fn analyze_let_prem(
+fn lower_let_prem(
     ctx: &mut Context,
     span: &Span,
     iter_ctx: ICtx,
@@ -454,7 +454,7 @@ fn analyze_let_prem(
 
 // - Iteration premises
 
-fn analyze_iter_prem(
+fn lower_iter_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
     span: &Span,
@@ -469,12 +469,12 @@ fn analyze_iter_prem(
         vars_bind: vec![],
     }];
     iterations.extend(iter_ctx.as_slice().iter().cloned());
-    analyze_prem(ctx, ICtx::from_iterations(iterations), &iter_prem_il.prem)
+    lower_prem(ctx, ICtx::from_iterations(iterations), &iter_prem_il.prem)
 }
 
 // - Debug premises
 
-fn analyze_debug_prem(
+fn lower_debug_prem(
     ctx: &mut Context,
     iter_ctx: ICtx,
     span: &Span,
@@ -492,13 +492,13 @@ fn analyze_debug_prem(
 
 // - Premise lists
 
-fn analyze_prems(
+fn lower_prems(
     ctx: &mut Context,
     prems_il: Vec<ast::Prem>,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
     let mut prems_al = Vec::new();
     for prem_il in &prems_il {
-        let (venv, prem_al, prem_sideconditions_al) = analyze_prem(ctx, ICtx::new(), prem_il)?;
+        let (venv, prem_al, prem_sideconditions_al) = lower_prem(ctx, ICtx::new(), prem_il)?;
         ctx.add_bounds(&venv);
         prems_al.push(prem_al);
         prems_al.extend(prem_sideconditions_al);
@@ -506,10 +506,10 @@ fn analyze_prems(
     Ok(prems_al)
 }
 
-// == Rule binding analysis
+// == Rule lowering
 
 #[allow(clippy::type_complexity)]
-fn analyze_rule_match(
+fn lower_rule_match(
     ctx: &mut Context,
     exps_input_by_rule_il: Vec<Vec<ast::Exp>>,
 ) -> Result<(al::ast::RuleMatch, Vec<Vec<ast::Prem>>), AlgoError> {
@@ -528,7 +528,7 @@ fn analyze_rule_match(
     Ok((rule_match_al, prems_unified_by_rule_il))
 }
 
-fn analyze_rule_path(
+fn lower_rule_path(
     ctx: &mut Context,
     id: ast::Id,
     prems_unified_al: Vec<al::ast::Prem>,
@@ -536,7 +536,7 @@ fn analyze_rule_path(
     exps_output_il: Vec<ast::Exp>,
     is_else: bool,
 ) -> Result<al::ast::RulePath, AlgoError> {
-    let prems_al = analyze_prems(ctx, prems_il)?;
+    let prems_al = lower_prems(ctx, prems_il)?;
     let mut prems_all_al = prems_unified_al;
     prems_all_al.extend(prems_al);
     if is_else {
@@ -546,7 +546,7 @@ fn analyze_rule_path(
     Ok(al::ast::RulePath { id, prems: prems_all_al, exps_output: exps_output_il })
 }
 
-fn analyze_rule_group(
+fn lower_rule_group(
     ctx: &mut Context,
     inputs: &InputHint,
     rule_group_il: ast::RuleGroup,
@@ -573,7 +573,7 @@ fn analyze_rule_group(
     }
 
     let (rule_match_al, prems_unified_by_rule_il) =
-        analyze_rule_match(&mut ctx, exps_input_by_rule_il)?;
+        lower_rule_match(&mut ctx, exps_input_by_rule_il)?;
     let mut rule_paths_al = Vec::with_capacity(prems_by_rule_il.len());
     for (((id, prems_unified_il), prems_il), exps_output_il) in ids
         .into_iter()
@@ -582,8 +582,8 @@ fn analyze_rule_group(
         .zip(exps_output_by_rule_il)
     {
         let mut ctx_local = ctx.clone();
-        let prems_unified_al = analyze_prems(&mut ctx_local, prems_unified_il)?;
-        rule_paths_al.push(analyze_rule_path(
+        let prems_unified_al = lower_prems(&mut ctx_local, prems_unified_il)?;
+        rule_paths_al.push(lower_rule_path(
             &mut ctx_local,
             id,
             prems_unified_al,
@@ -601,7 +601,7 @@ fn analyze_rule_group(
     Ok(rule_group_al)
 }
 
-fn analyze_else_group(
+fn lower_else_group(
     ctx: &mut Context,
     inputs: &InputHint,
     else_group_il: ast::ElseGroup,
@@ -612,7 +612,7 @@ fn analyze_else_group(
         node: (id_group, vec![rule_il]),
         span: span.clone(),
     };
-    let rule_group_al = analyze_rule_group(ctx, inputs, rule_group_il, true)?;
+    let rule_group_al = lower_rule_group(ctx, inputs, rule_group_il, true)?;
     let rule_path_al = rule_group_al
         .node
         .rule_paths
@@ -630,7 +630,7 @@ fn analyze_else_group(
 
 // == Clause binding analysis
 
-fn analyze_clause(
+fn lower_clause(
     ctx: &mut Context,
     clause_il: ast::Clause,
     is_else: bool,
@@ -641,7 +641,7 @@ fn analyze_clause(
     let ast::ClauseKind { args: args_il, exp: exp_il, prems: prems_il } = clause_il.node;
     let (venv, args_al, prem_sideconditions_al) = analyze_args_as_bind(&mut ctx, &args_il)?;
     ctx.add_bounds(&venv);
-    let prems_al = analyze_prems(&mut ctx, prems_il)?;
+    let prems_al = lower_prems(&mut ctx, prems_il)?;
     analyze_exp_as_bound(&ctx, &exp_il)?;
     let mut prems_all_al = prem_sideconditions_al;
     prems_all_al.extend(prems_al);
@@ -748,7 +748,7 @@ fn check_valid_table_rows(
     Ok(())
 }
 
-fn analyze_table_row(
+fn lower_table_row(
     ctx: &mut Context,
     row_il: ast::TableRow,
 ) -> Result<al::ast::TableRow, AlgoError> {
@@ -779,7 +779,7 @@ fn analyze_table_row(
     Ok(row_al)
 }
 
-fn analyze_table_rows(
+fn lower_table_rows(
     ctx: &mut Context,
     span: &Span,
     params_il: &[ast::Param],
@@ -787,7 +787,7 @@ fn analyze_table_rows(
 ) -> Result<Vec<al::ast::TableRow>, AlgoError> {
     let mut rows_al = Vec::with_capacity(rows_il.len());
     for row_il in rows_il {
-        rows_al.push(analyze_table_row(ctx, row_il)?);
+        rows_al.push(lower_table_row(ctx, row_il)?);
     }
     let mut typs_match_il = Vec::with_capacity(params_il.len());
     for param_il in params_il {
@@ -805,23 +805,23 @@ fn analyze_table_rows(
 
 // - Type definitions
 
-fn analyze_typ_def(typ_def_il: ast::TypDef) -> al::ast::TypDef {
+fn lower_typ_def(typ_def_il: ast::TypDef) -> al::ast::TypDef {
     match typ_def_il {
         ast::TypDef::Extern(extern_typ_il) => {
-            al::ast::TypDef::Extern(analyze_extern_typ(extern_typ_il))
+            al::ast::TypDef::Extern(lower_extern_typ(extern_typ_il))
         }
         ast::TypDef::Defined(defined_typ_il) => {
-            let defined_typ_al = analyze_defined_typ(*defined_typ_il);
+            let defined_typ_al = lower_defined_typ(*defined_typ_il);
             al::ast::TypDef::Defined(Box::new(defined_typ_al))
         }
     }
 }
 
-fn analyze_extern_typ(extern_typ_il: ast::ExternTyp) -> al::ast::ExternTyp {
+fn lower_extern_typ(extern_typ_il: ast::ExternTyp) -> al::ast::ExternTyp {
     al::ast::ExternTyp { id: extern_typ_il.id, hints: extern_typ_il.hints }
 }
 
-fn analyze_defined_typ(defined_typ_il: ast::DefinedTyp) -> al::ast::DefinedTyp {
+fn lower_defined_typ(defined_typ_il: ast::DefinedTyp) -> al::ast::DefinedTyp {
     al::ast::DefinedTyp {
         id: defined_typ_il.id,
         tparams: defined_typ_il.tparams,
@@ -832,29 +832,26 @@ fn analyze_defined_typ(defined_typ_il: ast::DefinedTyp) -> al::ast::DefinedTyp {
 
 // - Meta-variables
 
-fn analyze_var_def(var_def_il: ast::VarDef) -> al::ast::VarDef {
+fn lower_var_def(var_def_il: ast::VarDef) -> al::ast::VarDef {
     al::ast::VarDef { id: var_def_il.id, typ: var_def_il.typ, hints: var_def_il.hints }
 }
 
 // - Relations
 
-fn analyze_rel_def(
-    ctx: &mut Context,
-    rel_def_il: ast::RelDef,
-) -> Result<al::ast::RelDef, AlgoError> {
+fn lower_rel_def(ctx: &mut Context, rel_def_il: ast::RelDef) -> Result<al::ast::RelDef, AlgoError> {
     match rel_def_il {
         ast::RelDef::Extern(extern_rel_il) => {
-            let extern_rel_al = analyze_extern_rel(*extern_rel_il);
+            let extern_rel_al = lower_extern_rel(*extern_rel_il);
             Ok(al::ast::RelDef::Extern(Box::new(extern_rel_al)))
         }
         ast::RelDef::Defined(defined_rel_il) => {
-            let defined_rel_al = analyze_defined_rel(ctx, *defined_rel_il)?;
+            let defined_rel_al = lower_defined_rel(ctx, *defined_rel_il)?;
             Ok(al::ast::RelDef::Defined(Box::new(defined_rel_al)))
         }
     }
 }
 
-fn analyze_extern_rel(extern_rel_il: ast::ExternRel) -> al::ast::ExternRel {
+fn lower_extern_rel(extern_rel_il: ast::ExternRel) -> al::ast::ExternRel {
     al::ast::ExternRel {
         id: extern_rel_il.id,
         not_typ: extern_rel_il.not_typ,
@@ -863,7 +860,7 @@ fn analyze_extern_rel(extern_rel_il: ast::ExternRel) -> al::ast::ExternRel {
     }
 }
 
-fn analyze_defined_rel(
+fn lower_defined_rel(
     ctx: &mut Context,
     defined_rel_il: ast::DefinedRel,
 ) -> Result<al::ast::DefinedRel, AlgoError> {
@@ -872,12 +869,12 @@ fn analyze_defined_rel(
     let mut rule_groups_al = Vec::with_capacity(rule_groups.len());
     for rule_group_il in rule_groups {
         let span = rule_group_il.span.clone();
-        let mut rule_group_al = analyze_rule_group(ctx, &input_hint, rule_group_il, false)?;
+        let mut rule_group_al = lower_rule_group(ctx, &input_hint, rule_group_il, false)?;
         rule_group_al.span = span;
         rule_groups_al.push(rule_group_al);
     }
     let else_group_al = else_group
-        .map(|else_group_il| analyze_else_group(ctx, &input_hint, else_group_il))
+        .map(|else_group_il| lower_else_group(ctx, &input_hint, else_group_il))
         .transpose()?;
     Ok(al::ast::DefinedRel {
         id,
@@ -891,29 +888,29 @@ fn analyze_defined_rel(
 
 // - Meta-functions
 
-fn analyze_meta_func_def(
+fn lower_meta_func_def(
     ctx: &mut Context,
     meta_func_def_il: ast::MetaFuncDef,
     span: &Span,
 ) -> Result<al::ast::MetaFuncDef, AlgoError> {
     match meta_func_def_il {
         ast::MetaFuncDef::Extern(extern_func_il) => {
-            Ok(al::ast::MetaFuncDef::Extern(analyze_extern_func(extern_func_il)))
+            Ok(al::ast::MetaFuncDef::Extern(lower_extern_func(extern_func_il)))
         }
         ast::MetaFuncDef::Builtin(builtin_func_il) => {
-            Ok(al::ast::MetaFuncDef::Builtin(analyze_builtin_func(builtin_func_il)))
+            Ok(al::ast::MetaFuncDef::Builtin(lower_builtin_func(builtin_func_il)))
         }
         ast::MetaFuncDef::Table(table_func_il) => {
-            Ok(al::ast::MetaFuncDef::Table(analyze_table_func(ctx, table_func_il, span)?))
+            Ok(al::ast::MetaFuncDef::Table(lower_table_func(ctx, table_func_il, span)?))
         }
         ast::MetaFuncDef::Defined(defined_func_il) => {
-            let defined_func_al = analyze_defined_func(ctx, *defined_func_il)?;
+            let defined_func_al = lower_defined_func(ctx, *defined_func_il)?;
             Ok(al::ast::MetaFuncDef::Defined(Box::new(defined_func_al)))
         }
     }
 }
 
-fn analyze_extern_func(extern_func_il: ast::ExternFunc) -> al::ast::ExternFunc {
+fn lower_extern_func(extern_func_il: ast::ExternFunc) -> al::ast::ExternFunc {
     al::ast::ExternFunc {
         id: extern_func_il.id,
         tparams: extern_func_il.tparams,
@@ -923,7 +920,7 @@ fn analyze_extern_func(extern_func_il: ast::ExternFunc) -> al::ast::ExternFunc {
     }
 }
 
-fn analyze_builtin_func(builtin_func_il: ast::BuiltinFunc) -> al::ast::BuiltinFunc {
+fn lower_builtin_func(builtin_func_il: ast::BuiltinFunc) -> al::ast::BuiltinFunc {
     al::ast::BuiltinFunc {
         id: builtin_func_il.id,
         tparams: builtin_func_il.tparams,
@@ -933,12 +930,12 @@ fn analyze_builtin_func(builtin_func_il: ast::BuiltinFunc) -> al::ast::BuiltinFu
     }
 }
 
-fn analyze_table_func(
+fn lower_table_func(
     ctx: &mut Context,
     table_func_il: ast::TableFunc,
     span: &Span,
 ) -> Result<al::ast::TableFunc, AlgoError> {
-    let table_rows_al = analyze_table_rows(ctx, span, &table_func_il.params, table_func_il.rows)?;
+    let table_rows_al = lower_table_rows(ctx, span, &table_func_il.params, table_func_il.rows)?;
     Ok(al::ast::TableFunc {
         id: table_func_il.id,
         params: table_func_il.params,
@@ -948,17 +945,17 @@ fn analyze_table_func(
     })
 }
 
-fn analyze_defined_func(
+fn lower_defined_func(
     ctx: &mut Context,
     defined_func_il: ast::DefinedFunc,
 ) -> Result<al::ast::DefinedFunc, AlgoError> {
     let mut clauses_al = Vec::with_capacity(defined_func_il.clauses.len());
     for clause_il in defined_func_il.clauses {
-        clauses_al.push(analyze_clause(ctx, clause_il, false)?);
+        clauses_al.push(lower_clause(ctx, clause_il, false)?);
     }
     let else_clause_al = defined_func_il
         .else_clause
-        .map(|clause_il| analyze_clause(ctx, clause_il, true))
+        .map(|clause_il| lower_clause(ctx, clause_il, true))
         .transpose()?;
     Ok(al::ast::DefinedFunc {
         id: defined_func_il.id,
@@ -973,23 +970,23 @@ fn analyze_defined_func(
 
 // - Definitions
 
-fn analyze_def(ctx: &mut Context, def_il: ast::Def) -> Result<al::ast::Def, AlgoError> {
+fn lower_def(ctx: &mut Context, def_il: ast::Def) -> Result<al::ast::Def, AlgoError> {
     let span = def_il.span;
     let def_kind_al = match def_il.node {
         ast::DefKind::Typ(typ_def_il) => {
-            let typ_def_al = analyze_typ_def(typ_def_il);
+            let typ_def_al = lower_typ_def(typ_def_il);
             al::ast::DefKind::Typ(typ_def_al)
         }
         ast::DefKind::Var(var_def_il) => {
-            let var_def_al = analyze_var_def(var_def_il);
+            let var_def_al = lower_var_def(var_def_il);
             al::ast::DefKind::Var(var_def_al)
         }
         ast::DefKind::Rel(rel_def_il) => {
-            let rel_def_al = analyze_rel_def(ctx, rel_def_il)?;
+            let rel_def_al = lower_rel_def(ctx, rel_def_il)?;
             al::ast::DefKind::Rel(rel_def_al)
         }
         ast::DefKind::MetaFunc(meta_func_def_il) => {
-            let meta_func_def_al = analyze_meta_func_def(ctx, meta_func_def_il, &span)?;
+            let meta_func_def_al = lower_meta_func_def(ctx, meta_func_def_il, &span)?;
             al::ast::DefKind::MetaFunc(meta_func_def_al)
         }
     };
@@ -999,13 +996,13 @@ fn analyze_def(ctx: &mut Context, def_il: ast::Def) -> Result<al::ast::Def, Algo
 
 // - Specification
 
-/// Binding analysis of an IL specification
-pub(in crate::pass::algo) fn analyze_spec(spec_il: ast::Spec) -> Result<al::ast::Spec, AlgoError> {
+/// Lowers an IL specification to AL while normalizing its bindings.
+pub(in crate::pass::algo) fn lower_spec(spec_il: ast::Spec) -> Result<al::ast::Spec, AlgoError> {
     let mut ctx = Context::new();
     ctx.load(&spec_il);
     let mut defs_al = Vec::with_capacity(spec_il.len());
     for def_il in spec_il {
-        defs_al.push(analyze_def(&mut ctx, def_il)?);
+        defs_al.push(lower_def(&mut ctx, def_il)?);
     }
     Ok(defs_al)
 }

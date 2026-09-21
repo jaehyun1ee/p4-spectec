@@ -15,8 +15,8 @@ fn expand_instr(ids_used: &mut IdSet, instr_sl: sl::Instr) -> Result<sl::Instr, 
     // Expand existing child blocks before introducing let instructions
     let instr_kind_sl = expand_instr_kind(ids_used, instr_sl.node)?;
     let instr_sl = crate::phrase! { node: instr_kind_sl, span: instr_sl.span };
-    let (instr_sl, was_lifted) = lift::lift_instr(ids_used, instr_sl)?;
-    if !was_lifted {
+    let (instr_sl, lifted) = lift::lift_instr(ids_used, instr_sl)?;
+    if !lifted {
         return Ok(instr_sl);
     }
     // Process nested calls exposed inside the generated let instructions

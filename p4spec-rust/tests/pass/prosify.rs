@@ -11,7 +11,7 @@ use p4spec_rust::{
         pl::ast as pl,
         sl::ast as sl,
     },
-    pass::prose::{self, ProseErrorKind},
+    pass::prosify::{self, ProseErrorKind},
 };
 
 fn span(name: &str, column: usize) -> Span {
@@ -169,7 +169,7 @@ fn group_instr(name: &str, column: usize) -> sl::Instr {
 }
 
 fn converted_func(block: sl::Block) -> pl::DefinedFunc {
-    let mut spec_pl = prose::convert(vec![defined_func(block)]).unwrap();
+    let mut spec_pl = prosify::convert(vec![defined_func(block)]).unwrap();
     let def_pl = spec_pl.pop().unwrap();
     match def_pl.node.node {
         pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(def_func_pl)) => def_func_pl,
@@ -257,7 +257,7 @@ fn test_group_in_group_body_reports_the_instruction_span() {
         span: span_group.clone(),
     };
 
-    let error = prose::convert(vec![defined_func(vec![instr_group])]).unwrap_err();
+    let error = prosify::convert(vec![defined_func(vec![instr_group])]).unwrap_err();
     assert_eq!(error.kind, ProseErrorKind::InvalidGroupTier);
     assert_eq!(error.span, span_group);
 }
@@ -275,7 +275,7 @@ fn test_call_uses_hints_loaded_from_the_original_spec() {
         }),
         span: span_call,
     }]);
-    let spec_pl = prose::convert(vec![
+    let spec_pl = prosify::convert(vec![
         extern_func("g", vec![prose_in_hint(el::ast::Hole::Next, span("hint", 0))]),
         def_func,
     ])
@@ -305,7 +305,7 @@ fn test_invalid_call_hint_reports_the_call_span() {
         }),
         span: span_call.clone(),
     }]);
-    let error = prose::convert(vec![
+    let error = prosify::convert(vec![
         extern_func("g", vec![prose_in_hint(el::ast::Hole::Num(1), span("hint", 0))]),
         def_func,
     ])
@@ -562,7 +562,7 @@ fn test_failure_stamp_tracks_next_arm_then_final_failure() {
 
 #[test]
 fn test_nonempty_else_changes_final_failure_destination() {
-    let mut spec_pl = prose::convert(vec![defined_func_with_else(
+    let mut spec_pl = prosify::convert(vec![defined_func_with_else(
         vec![return_call("main", 1)],
         Some(vec![return_instr(false, span("else", 0))]),
     )])
@@ -573,7 +573,7 @@ fn test_nonempty_else_changes_final_failure_destination() {
     };
     assert_eq!(def_func_pl.block[0].node.note, Some(pl::Fallthrough::Else));
 
-    let mut spec_pl = prose::convert(vec![defined_func_with_else(
+    let mut spec_pl = prosify::convert(vec![defined_func_with_else(
         vec![return_call("main", 1)],
         Some(Vec::new()),
     )])
@@ -597,7 +597,7 @@ fn test_fresh_names_are_scoped_independently_across_else_blocks() {
             span: span_outer,
         }
     };
-    let mut spec_pl = prose::convert(vec![defined_func_with_else(
+    let mut spec_pl = prosify::convert(vec![defined_func_with_else(
         vec![return_nested_call("main", 1)],
         Some(vec![return_nested_call("fallback", 2)]),
     )])
@@ -634,7 +634,7 @@ fn test_context_rejects_duplicate_metavariables_at_the_new_binding() {
         }),
         span: span_metavar.clone(),
     };
-    let error = prose::convert(vec![def_var]).unwrap_err();
+    let error = prosify::convert(vec![def_var]).unwrap_err();
     assert_eq!(error.kind, ProseErrorKind::DuplicateMetavariable);
     assert_eq!(error.span, span_metavar);
 }
@@ -666,7 +666,7 @@ fn test_zero_argument_nested_call_stays_in_the_original_expression() {
 #[test]
 fn test_return_at_dispatch_level_reports_its_own_span() {
     let span_return = span("invalid-dispatch", 6);
-    let error = prose::convert(vec![defined_rel(vec![return_instr(true, span_return.clone())])])
+    let error = prosify::convert(vec![defined_rel(vec![return_instr(true, span_return.clone())])])
         .unwrap_err();
     assert_eq!(error.kind, ProseErrorKind::InvalidDispatchTier);
     assert_eq!(error.span, span_return);
@@ -674,9 +674,11 @@ fn test_return_at_dispatch_level_reports_its_own_span() {
 
 #[test]
 fn test_relation_routes_stamp_each_group_toward_the_next_dispatch_arm() {
-    let mut spec_pl =
-        prose::convert(vec![defined_rel(vec![group_instr("first", 1), group_instr("second", 2)])])
-            .unwrap();
+    let mut spec_pl = prosify::convert(vec![defined_rel(vec![
+        group_instr("first", 1),
+        group_instr("second", 2),
+    ])])
+    .unwrap();
     let def_pl = spec_pl.pop().unwrap();
     let pl::DefKind::Rel(pl::RelDef::Defined(def_rel_pl)) = def_pl.node.node else {
         panic!("expected defined relation");
@@ -707,7 +709,7 @@ fn test_relation_routes_stamp_each_group_toward_the_next_dispatch_arm() {
 
 #[test]
 fn test_rule_input_call_is_lifted_inside_rulegroup() {
-    let mut spec_pl = prose::convert(vec![defined_rel(vec![group_instr("group", 1)])]).unwrap();
+    let mut spec_pl = prosify::convert(vec![defined_rel(vec![group_instr("group", 1)])]).unwrap();
     let def_pl = spec_pl.pop().unwrap();
     let pl::DefKind::Rel(pl::RelDef::Defined(def_rel_pl)) = def_pl.node.node else {
         panic!("expected defined relation");
@@ -808,7 +810,7 @@ fn test_table_row_keeps_group_alternatives_separate() {
         })),
         span: span("table", 0),
     };
-    let mut spec_pl = prose::convert(vec![def_table]).unwrap();
+    let mut spec_pl = prosify::convert(vec![def_table]).unwrap();
     let def_pl = spec_pl.pop().unwrap();
     let pl::DefKind::MetaFunc(pl::MetaFuncDef::Table(def_table_pl)) = def_pl.node.node else {
         panic!("expected table function");

@@ -3,9 +3,9 @@
 mod context;
 mod error;
 mod expand;
-mod prosify;
 mod shorthand;
 mod stamp;
+mod transform;
 
 pub use error::{ProseError, ProseErrorKind};
 
@@ -15,5 +15,5 @@ use crate::lang::{pl::ast as pl, sl::ast as sl};
 
 /// Converts a rule-group-preserving SL specification to PL
 pub fn convert(spec_sl: sl::Spec) -> Result<pl::Spec, ProseError> {
-    prosify::prosify(spec_sl)
+    transform::prosify_spec(spec_sl)
 }
