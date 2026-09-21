@@ -23,7 +23,7 @@ fn validate_hint_alter(
             .into_iter()
             .flatten()
     {
-        alter::validate_count(hint, num_items)
+        alter::validate(hint, num_items)
             .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
     }
     Ok(())
@@ -48,11 +48,11 @@ fn validate_hint_split(
     num_outputs: usize,
 ) -> Result<(), ProseError> {
     if let Some(hint) = &hints.prose_in {
-        alter::validate_count(hint, num_inputs)
+        alter::validate(hint, num_inputs)
             .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
     }
     if let Some(hint) = &hints.prose_out {
-        alter::validate_count(hint, num_outputs)
+        alter::validate(hint, num_outputs)
             .map_err(|error| ProseError::new(ProseErrorKind::Alteration(error), span.clone()))?;
     }
     Ok(())

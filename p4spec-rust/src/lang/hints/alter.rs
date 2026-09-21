@@ -56,34 +56,36 @@ pub fn init(exp: &Exp) -> Option<AlterationHint> {
 
 // == Validation
 
-/// Validates every hole against an item count
-pub fn validate_count(hint: &AlterationHint, item_count: usize) -> Result<(), AlterationError> {
-    validate_at(hint, item_count, 0).map(|_| ())
-}
-
-fn validate_at(
-    hint: &AlterationHint,
-    item_count: usize,
-    cursor: usize,
-) -> Result<usize, AlterationError> {
-    match hint {
-        AlterationHint::Text(_) | AlterationHint::Atom(_) | AlterationHint::Other(_) => Ok(cursor),
-        AlterationHint::Seq(hints) => hints
-            .iter()
-            .try_fold(cursor, |cursor, hint| validate_at(hint, item_count, cursor)),
-        AlterationHint::Brack(_, hint, _) => validate_at(hint, item_count, cursor),
-        AlterationHint::Hole(Hole::Next) if cursor < item_count => Ok(cursor + 1),
-        AlterationHint::Hole(Hole::Next) => {
-            Err(AlterationError::IndexOutOfBounds { index: cursor, item_count })
-        }
-        AlterationHint::Hole(Hole::Num(idx)) if *idx < item_count => Ok(cursor),
-        AlterationHint::Hole(Hole::Num(idx)) => {
-            Err(AlterationError::IndexOutOfBounds { index: *idx, item_count })
-        }
-        AlterationHint::Fuse(hint_l, hint_r) => {
-            validate_at(hint_r, item_count, validate_at(hint_l, item_count, cursor)?)
+/// Validates every hole against an item count.
+pub fn validate(hint: &AlterationHint, item_count: usize) -> Result<(), AlterationError> {
+    fn validate_at(
+        hint: &AlterationHint,
+        item_count: usize,
+        cursor: usize,
+    ) -> Result<usize, AlterationError> {
+        match hint {
+            AlterationHint::Text(_) | AlterationHint::Atom(_) | AlterationHint::Other(_) => {
+                Ok(cursor)
+            }
+            AlterationHint::Seq(hints) => hints
+                .iter()
+                .try_fold(cursor, |cursor, hint| validate_at(hint, item_count, cursor)),
+            AlterationHint::Brack(_, hint, _) => validate_at(hint, item_count, cursor),
+            AlterationHint::Hole(Hole::Next) if cursor < item_count => Ok(cursor + 1),
+            AlterationHint::Hole(Hole::Next) => {
+                Err(AlterationError::IndexOutOfBounds { index: cursor, item_count })
+            }
+            AlterationHint::Hole(Hole::Num(idx)) if *idx < item_count => Ok(cursor),
+            AlterationHint::Hole(Hole::Num(idx)) => {
+                Err(AlterationError::IndexOutOfBounds { index: *idx, item_count })
+            }
+            AlterationHint::Fuse(hint_l, hint_r) => {
+                validate_at(hint_r, item_count, validate_at(hint_l, item_count, cursor)?)
+            }
         }
     }
+
+    validate_at(hint, item_count, 0).map(|_| ())
 }
 
 // == Index realignment

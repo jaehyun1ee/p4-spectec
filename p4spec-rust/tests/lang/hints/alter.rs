@@ -14,13 +14,13 @@ fn test_alter_validates_sequential_and_numbered_holes() {
         ),
     ]);
 
-    assert_eq!(alter_impl::validate_count(&hint, 3), Ok(()));
+    assert_eq!(alter_impl::validate(&hint, 3), Ok(()));
     assert_eq!(
-        alter_impl::validate_count(&hint, 1),
+        alter_impl::validate(&hint, 1),
         Err(AlterationError::IndexOutOfBounds { index: 2, item_count: 1 })
     );
     assert_eq!(
-        alter_impl::validate_count(
+        alter_impl::validate(
             &AlterationHint::Seq(vec![
                 AlterationHint::Hole(AlterHole::Next),
                 AlterationHint::Hole(AlterHole::Next),
