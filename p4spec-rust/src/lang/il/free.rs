@@ -169,10 +169,7 @@ impl FreeVars for Exp {
                 }
                 vars_free
             }
-            ExpKind::Opt(exp_opt) => exp_opt
-                .as_deref()
-                .map(FreeVars::free_vars)
-                .unwrap_or_default(),
+            ExpKind::Opt(exp_opt) => exp_opt.free_vars(),
             ExpKind::Slice(exp_base, exp_idx, exp_len) => {
                 let mut vars_free = exp_base.free_vars();
                 exp_idx.free_vars_into(&mut vars_free);
@@ -293,16 +290,6 @@ impl FreeVars for Arg {
             ArgKind::Exp(exp) => exp.free_vars(),
             ArgKind::Def(_) => Vec::new(),
         }
-    }
-}
-
-impl FreeVars for [Arg] {
-    fn free_vars(&self) -> Vec<Var> {
-        let mut vars_free = Vec::new();
-        for arg in self {
-            arg.free_vars_into(&mut vars_free);
-        }
-        vars_free
     }
 }
 
