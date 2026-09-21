@@ -1,4 +1,13 @@
 //! Direct SL-to-PL conversion with fused continuation linearization
+//!
+//! Each SL instruction becomes a PL block:
+//! a let or rule call is followed by the instructions of its body,
+//! so nested continuations flatten into one sequence;
+//! a block of several instructions becomes a route or backtrack
+//! with one arm each.
+//! Relation bodies convert at the dispatch tier, group bodies at the group
+//! tier, and each node receives the `prose*` hints of the definition it
+//! refers to, validated against the number of items they describe.
 
 use crate::lang::{
     al,
@@ -13,6 +22,7 @@ use super::{Context, ProseError, ProseErrorKind};
 
 // == Hint validation
 
+/// Checks every alteration hint against the number of items it describes.
 fn validate_hint_alter(
     span: &Span,
     hints: &annot::Hints,
@@ -29,6 +39,7 @@ fn validate_hint_alter(
     Ok(())
 }
 
+/// Checks the field hint against the number of fields.
 fn validate_hint_fields(
     span: &Span,
     hints: &annot::Hints,
@@ -41,6 +52,7 @@ fn validate_hint_fields(
     Ok(())
 }
 
+/// Checks the input and output hints against their own item counts.
 fn validate_hint_split(
     span: &Span,
     hints: &annot::Hints,
@@ -62,6 +74,7 @@ fn validate_hint_split(
 
 // - Expression
 
+/// Converts an expression; only cases and calls pick up hints.
 fn prosify_exp(ctx: &Context, exp_sl: &sl::Exp) -> Result<pl::Exp, ProseError> {
     match &exp_sl.node {
         il::ExpKind::Bool(value) => Ok(crate::annotated_note_phrase! {
@@ -131,6 +144,7 @@ fn prosify_exp(ctx: &Context, exp_sl: &sl::Exp) -> Result<pl::Exp, ProseError> {
 
 // - Unary expression
 
+/// Converts a unary expression.
 fn prosify_un_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -149,6 +163,7 @@ fn prosify_un_exp(
 
 // - Binary expression
 
+/// Converts a binary expression.
 fn prosify_bin_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -169,6 +184,7 @@ fn prosify_bin_exp(
 
 // - Comparison expression
 
+/// Converts a comparison.
 fn prosify_cmp_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -189,6 +205,7 @@ fn prosify_cmp_exp(
 
 // - Upcast expression
 
+/// Converts an upcast.
 fn prosify_upcast_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -206,6 +223,7 @@ fn prosify_upcast_exp(
 
 // - Downcast expression
 
+/// Converts a downcast.
 fn prosify_downcast_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -223,6 +241,7 @@ fn prosify_downcast_exp(
 
 // - Subtype expression
 
+/// Converts a subtype test.
 fn prosify_sub_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -242,6 +261,7 @@ fn prosify_sub_exp(
 
 // - Match expression
 
+/// Converts a pattern match test.
 fn prosify_match_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -259,6 +279,7 @@ fn prosify_match_exp(
 
 // - Tuple expression
 
+/// Converts a tuple.
 fn prosify_tuple_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -275,12 +296,14 @@ fn prosify_tuple_exp(
 
 // - Case expression
 
+/// Converts a case notation with its variant's `prose`/`prose_fields` hints.
 fn prosify_case_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
     not_exp_sl: &sl::NotExp,
 ) -> Result<pl::Exp, ProseError> {
     let not_exp_pl = prosify_not_exp(ctx, not_exp_sl)?;
+    // The variant is looked up by the expression's type and its mixfix operator
     let hints = match exp_sl.note.as_ref() {
         il::TypKind::Var(id_typ, _) => ctx
             .hints_case(id_typ, &not_exp_sl.to_mixop())
@@ -293,6 +316,7 @@ fn prosify_case_exp(
         _ => annot::Hints::default(),
     };
     let num_args = not_exp_sl.args().len();
+    // Holes and field names count the notation's arguments
     validate_hint_alter(&exp_sl.span, &hints, num_args)?;
     validate_hint_fields(&exp_sl.span, &hints, num_args)?;
     let exp_kind_pl = pl::ExpKind::Case(Box::new(not_exp_pl));
@@ -306,6 +330,7 @@ fn prosify_case_exp(
 
 // - Struct expression
 
+/// Converts a struct literal.
 fn prosify_struct_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -326,6 +351,7 @@ fn prosify_struct_exp(
 
 // - Optional expression
 
+/// Converts an optional.
 fn prosify_option_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -348,6 +374,7 @@ fn prosify_option_exp(
 
 // - List expression
 
+/// Converts a list.
 fn prosify_list_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -364,6 +391,7 @@ fn prosify_list_exp(
 
 // - Cons expression
 
+/// Converts a cons.
 fn prosify_cons_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -382,6 +410,7 @@ fn prosify_cons_exp(
 
 // - Concatenation expression
 
+/// Converts a concatenation.
 fn prosify_cat_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -400,6 +429,7 @@ fn prosify_cat_exp(
 
 // - Membership expression
 
+/// Converts a membership test.
 fn prosify_mem_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -418,6 +448,7 @@ fn prosify_mem_exp(
 
 // - Length expression
 
+/// Converts a length.
 fn prosify_len_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -434,6 +465,7 @@ fn prosify_len_exp(
 
 // - Dot expression
 
+/// Converts a field access.
 fn prosify_dot_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -451,6 +483,7 @@ fn prosify_dot_exp(
 
 // - Index expression
 
+/// Converts an index.
 fn prosify_idx_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -469,6 +502,7 @@ fn prosify_idx_exp(
 
 // - Slice expression
 
+/// Converts a slice.
 fn prosify_slice_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -490,6 +524,7 @@ fn prosify_slice_exp(
 
 // - Update expression
 
+/// Converts an update of a path within a value.
 fn prosify_update_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -511,6 +546,7 @@ fn prosify_update_exp(
 
 // - Call expression
 
+/// Converts a call with the function's hints, holes counting its arguments.
 fn prosify_call_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -532,6 +568,7 @@ fn prosify_call_exp(
 
 // - Iterated expression
 
+/// Converts an iterated expression.
 fn prosify_iter_exp(
     ctx: &Context,
     exp_sl: &sl::Exp,
@@ -549,6 +586,7 @@ fn prosify_iter_exp(
 
 // - Expression list
 
+/// Converts expressions in order.
 fn prosify_exps(ctx: &Context, exps_sl: &[sl::Exp]) -> Result<Vec<pl::Exp>, ProseError> {
     let mut exps_pl = Vec::with_capacity(exps_sl.len());
     for exp_sl in exps_sl {
@@ -560,6 +598,7 @@ fn prosify_exps(ctx: &Context, exps_sl: &[sl::Exp]) -> Result<Vec<pl::Exp>, Pros
 
 // - Notation expression
 
+/// Converts the arguments of a notation, keeping its shape.
 fn prosify_not_exp(ctx: &Context, not_exp_sl: &sl::NotExp) -> Result<pl::NotExp, ProseError> {
     let not_exp_pl = match not_exp_sl {
         Mixfix::Arg(exp_sl) => {
@@ -590,6 +629,7 @@ fn prosify_not_exp(ctx: &Context, not_exp_sl: &sl::NotExp) -> Result<pl::NotExp,
 
 // == Paths
 
+/// Converts a path.
 fn prosify_path(ctx: &Context, path_sl: &sl::Path) -> Result<pl::Path, ProseError> {
     match &path_sl.node {
         il::PathKind::Root => Ok(crate::note_phrase! {
@@ -609,6 +649,7 @@ fn prosify_path(ctx: &Context, path_sl: &sl::Path) -> Result<pl::Path, ProseErro
     }
 }
 
+/// Converts an index step.
 fn prosify_idx_path(
     ctx: &Context,
     path_sl: &sl::Path,
@@ -624,6 +665,7 @@ fn prosify_idx_path(
     })
 }
 
+/// Converts a slice step.
 fn prosify_slice_path(
     ctx: &Context,
     path_sl: &sl::Path,
@@ -645,6 +687,7 @@ fn prosify_slice_path(
     })
 }
 
+/// Converts a field step.
 fn prosify_dot_path(
     ctx: &Context,
     path_sl: &sl::Path,
@@ -661,6 +704,7 @@ fn prosify_dot_path(
 
 // == Arguments
 
+/// Converts an argument; function arguments are names only.
 fn prosify_arg(ctx: &Context, arg_sl: &sl::Arg) -> Result<pl::Arg, ProseError> {
     match &arg_sl.node {
         il::ArgKind::Exp(exp_sl) => prosify_exp_arg(ctx, arg_sl, exp_sl),
@@ -671,6 +715,7 @@ fn prosify_arg(ctx: &Context, arg_sl: &sl::Arg) -> Result<pl::Arg, ProseError> {
     }
 }
 
+/// Converts an expression argument.
 fn prosify_exp_arg(
     ctx: &Context,
     arg_sl: &sl::Arg,
@@ -683,6 +728,7 @@ fn prosify_exp_arg(
     })
 }
 
+/// Converts arguments in order.
 fn prosify_args(ctx: &Context, args_sl: &[sl::Arg]) -> Result<Vec<pl::Arg>, ProseError> {
     let mut args_pl = Vec::with_capacity(args_sl.len());
     for arg_sl in args_sl {
@@ -694,6 +740,7 @@ fn prosify_args(ctx: &Context, args_sl: &[sl::Arg]) -> Result<Vec<pl::Arg>, Pros
 
 // == Parameters
 
+/// Converts a parameter.
 fn prosify_param(ctx: &Context, param_sl: &sl::Param) -> Result<pl::Param, ProseError> {
     match &param_sl.node {
         sl::ParamKind::Exp(typ, exp_sl) => prosify_exp_param(ctx, param_sl, typ, exp_sl),
@@ -703,6 +750,7 @@ fn prosify_param(ctx: &Context, param_sl: &sl::Param) -> Result<pl::Param, Prose
     }
 }
 
+/// Converts a typed pattern parameter.
 fn prosify_exp_param(
     ctx: &Context,
     param_sl: &sl::Param,
@@ -716,6 +764,7 @@ fn prosify_exp_param(
     })
 }
 
+/// Converts a function parameter with its own parameters.
 fn prosify_def_param(
     ctx: &Context,
     param_sl: &sl::Param,
@@ -731,6 +780,7 @@ fn prosify_def_param(
     })
 }
 
+/// Converts parameters in order.
 fn prosify_params(ctx: &Context, params_sl: &[sl::Param]) -> Result<Vec<pl::Param>, ProseError> {
     let mut params_pl = Vec::with_capacity(params_sl.len());
     for param_sl in params_sl {
@@ -742,6 +792,7 @@ fn prosify_params(ctx: &Context, params_sl: &[sl::Param]) -> Result<Vec<pl::Para
 
 // == Guards
 
+/// Converts a guard; the shorthand guards arise later.
 fn prosify_guard(ctx: &Context, guard_sl: &sl::Guard) -> Result<pl::Guard, ProseError> {
     let guard_pl = match guard_sl {
         sl::Guard::Bool(value) => pl::Guard::Bool(*value),
@@ -763,6 +814,7 @@ fn prosify_guard(ctx: &Context, guard_sl: &sl::Guard) -> Result<pl::Guard, Prose
 
 // - Instruction
 
+/// Converts a dispatch-tier instruction into the block it expands to.
 fn prosify_dispatch_instr(
     ctx: &Context,
     instr_sl: sl::Instr,
@@ -775,6 +827,7 @@ fn prosify_dispatch_instr(
         sl::InstrKind::Let(instr_sl) => prosify_dispatch_let_instr(ctx, instr_sl, span),
         sl::InstrKind::Debug(instr_sl) => prosify_dispatch_debug_instr(ctx, instr_sl, span),
         sl::InstrKind::Group(instr_sl) => prosify_dispatch_rulegroup_instr(ctx, instr_sl, span),
+        // Group-body instructions cannot appear before a group is chosen
         sl::InstrKind::Rule(_) | sl::InstrKind::Result(_) | sl::InstrKind::Return(_) => {
             Err(ProseError::new(ProseErrorKind::InvalidDispatchTier, span))
         }
@@ -783,6 +836,7 @@ fn prosify_dispatch_instr(
 
 // - If instruction
 
+/// Converts a condition and its then-block.
 fn prosify_dispatch_if_instr(
     ctx: &Context,
     instr_sl: sl::IfInstr,
@@ -807,6 +861,7 @@ fn prosify_dispatch_if_instr(
 
 // - Hold instruction
 
+/// Converts a hold with the relation's `prose_true` and `prose_false` hints.
 fn prosify_dispatch_hold_instr(
     ctx: &Context,
     instr_sl: sl::HoldInstr,
@@ -820,6 +875,7 @@ fn prosify_dispatch_hold_instr(
             ..annot::Hints::default()
         })
         .unwrap_or_default();
+    // Holes count the notation's arguments
     validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
     let not_exp_pl = prosify_not_exp(ctx, &instr_sl.not_exp)?;
     let hold_case_pl = prosify_dispatch_hold_case(ctx, instr_sl.hold_case)?;
@@ -839,6 +895,7 @@ fn prosify_dispatch_hold_instr(
     Ok(vec![instr_pl])
 }
 
+/// Converts whichever branches a hold has.
 fn prosify_dispatch_hold_case(
     ctx: &Context,
     hold_case_sl: sl::HoldCase,
@@ -863,6 +920,7 @@ fn prosify_dispatch_hold_case(
 
 // - Case instruction
 
+/// Converts one arm.
 fn prosify_dispatch_case(
     ctx: &Context,
     case_sl: sl::Case,
@@ -872,6 +930,7 @@ fn prosify_dispatch_case(
     Ok(pl::Case { guard: guard_pl, block: block_pl })
 }
 
+/// Converts a case analysis.
 fn prosify_dispatch_case_instr(
     ctx: &Context,
     instr_sl: sl::CaseInstr,
@@ -895,12 +954,14 @@ fn prosify_dispatch_case_instr(
 
 // - Let instruction
 
+/// Converts a let, then appends its body: the continuation flattens.
 fn prosify_dispatch_let_instr(
     ctx: &Context,
     instr_sl: sl::LetInstr,
     span: Span,
 ) -> Result<pl::DispatchBlock, ProseError> {
     let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
+    // A case pattern keeps its variant's field names for destructuring
     let hints = if matches!(exp_l_pl.node.node, pl::ExpKind::Case(_)) {
         annot::Hints {
             prose_fields: exp_l_pl.hints.prose_fields.clone(),
@@ -919,6 +980,7 @@ fn prosify_dispatch_let_instr(
         span: span,
         hints: hints,
     };
+    // The body follows the let in the same block
     let block_pl = prosify_dispatch_block(ctx, instr_sl.block)?;
     let mut instrs_pl = vec![instr_pl];
     instrs_pl.extend(block_pl);
@@ -927,6 +989,7 @@ fn prosify_dispatch_let_instr(
 
 // - Debug instruction
 
+/// Converts a debug, then appends the instruction it wraps.
 fn prosify_dispatch_debug_instr(
     ctx: &Context,
     instr_sl: sl::DebugInstr,
@@ -948,6 +1011,7 @@ fn prosify_dispatch_debug_instr(
 
 // - Group instruction
 
+/// Converts a rule group with the relation's `prose_in` and `prose_true` hints.
 fn prosify_dispatch_rulegroup_instr(
     ctx: &Context,
     instr_sl: sl::GroupInstr,
@@ -961,6 +1025,7 @@ fn prosify_dispatch_rulegroup_instr(
             ..annot::Hints::default()
         })
         .unwrap_or_default();
+    // Inputs must fit the relation's input hint; holes count the inputs
     input::validate(&instr_sl.rel_signature.input_hint, instr_sl.exps.len())
         .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
     validate_hint_alter(&span, &hints, instr_sl.rel_signature.input_hint.indices().len())?;
@@ -987,12 +1052,14 @@ fn prosify_dispatch_rulegroup_instr(
 
 // - Block
 
+/// Converts a block; several instructions become a route with one arm each.
 fn prosify_dispatch_block(
     ctx: &Context,
     block_sl: sl::Block,
 ) -> Result<pl::DispatchBlock, ProseError> {
     match block_sl.len() {
         0 => Ok(Vec::new()),
+        // One instruction expands in place
         1 => {
             let instr_sl = block_sl.into_iter().next().unwrap();
             prosify_dispatch_instr(ctx, instr_sl)
@@ -1008,6 +1075,7 @@ fn prosify_dispatch_block(
                 let block_pl = prosify_dispatch_instr(ctx, instr_sl)?;
                 blocks_pl.push(block_pl);
             }
+            // Alternatives become the arms of a route spanning them all
             let instr_pl = pl::RouteInstr { blocks: blocks_pl };
             let tier_pl = pl::DispatchInstr::Route(instr_pl);
             let instr_pl = pl::TierInstr { tier: tier_pl };
@@ -1026,6 +1094,7 @@ fn prosify_dispatch_block(
 
 // - Instruction
 
+/// Converts a group-tier instruction into the block it expands to.
 fn prosify_group_instr(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::GroupBlock, ProseError> {
     let span = instr_sl.span;
     match instr_sl.node {
@@ -1037,12 +1106,14 @@ fn prosify_group_instr(ctx: &Context, instr_sl: sl::Instr) -> Result<pl::GroupBl
         sl::InstrKind::Rule(instr_sl) => prosify_group_rule_instr(ctx, instr_sl, span),
         sl::InstrKind::Result(instr_sl) => prosify_group_result_instr(ctx, instr_sl, span),
         sl::InstrKind::Return(instr_sl) => prosify_group_return_instr(ctx, instr_sl, span),
+        // A rule group cannot nest inside a group body
         sl::InstrKind::Group(_) => Err(ProseError::new(ProseErrorKind::InvalidGroupTier, span)),
     }
 }
 
 // - If instruction
 
+/// Converts a condition and its then-block.
 fn prosify_group_if_instr(
     ctx: &Context,
     instr_sl: sl::IfInstr,
@@ -1067,6 +1138,7 @@ fn prosify_group_if_instr(
 
 // - Hold instruction
 
+/// Converts a hold with the relation's `prose_true` and `prose_false` hints.
 fn prosify_group_hold_instr(
     ctx: &Context,
     instr_sl: sl::HoldInstr,
@@ -1080,6 +1152,7 @@ fn prosify_group_hold_instr(
             ..annot::Hints::default()
         })
         .unwrap_or_default();
+    // Holes count the notation's arguments
     validate_hint_alter(&span, &hints, instr_sl.not_exp.args().len())?;
     let not_exp_pl = prosify_not_exp(ctx, &instr_sl.not_exp)?;
     let hold_case_pl = prosify_group_hold_case(ctx, instr_sl.hold_case)?;
@@ -1099,6 +1172,7 @@ fn prosify_group_hold_instr(
     Ok(vec![instr_pl])
 }
 
+/// Converts whichever branches a hold has.
 fn prosify_group_hold_case(
     ctx: &Context,
     hold_case_sl: sl::HoldCase,
@@ -1123,6 +1197,7 @@ fn prosify_group_hold_case(
 
 // - Case instruction
 
+/// Converts one arm.
 fn prosify_group_case(
     ctx: &Context,
     case_sl: sl::Case,
@@ -1132,6 +1207,7 @@ fn prosify_group_case(
     Ok(pl::Case { guard: guard_pl, block: block_pl })
 }
 
+/// Converts a case analysis.
 fn prosify_group_case_instr(
     ctx: &Context,
     instr_sl: sl::CaseInstr,
@@ -1155,12 +1231,14 @@ fn prosify_group_case_instr(
 
 // - Let instruction
 
+/// Converts a let, then appends its body: the continuation flattens.
 fn prosify_group_let_instr(
     ctx: &Context,
     instr_sl: sl::LetInstr,
     span: Span,
 ) -> Result<pl::GroupBlock, ProseError> {
     let exp_l_pl = prosify_exp(ctx, &instr_sl.exp_l)?;
+    // A case pattern keeps its variant's field names for destructuring
     let hints = if matches!(exp_l_pl.node.node, pl::ExpKind::Case(_)) {
         annot::Hints {
             prose_fields: exp_l_pl.hints.prose_fields.clone(),
@@ -1179,6 +1257,7 @@ fn prosify_group_let_instr(
         span: span,
         hints: hints,
     };
+    // The body follows the let in the same block
     let block_pl = prosify_group_block(ctx, instr_sl.block)?;
     let mut instrs_pl = vec![instr_pl];
     instrs_pl.extend(block_pl);
@@ -1187,6 +1266,7 @@ fn prosify_group_let_instr(
 
 // - Debug instruction
 
+/// Converts a debug, then appends the instruction it wraps.
 fn prosify_group_debug_instr(
     ctx: &Context,
     instr_sl: sl::DebugInstr,
@@ -1208,6 +1288,7 @@ fn prosify_group_debug_instr(
 
 // - Rule instruction
 
+/// Converts a rule call with the callee's `prose_in` and realigned `prose_out`.
 fn prosify_group_rule_instr(
     ctx: &Context,
     instr_sl: sl::RuleInstr,
@@ -1220,6 +1301,7 @@ fn prosify_group_rule_instr(
             prose_out: hints_rel
                 .prose_out
                 .as_ref()
+                // Output holes are numbered after the inputs are removed
                 .map(|hint| alter::realign(hint, &instr_sl.input_hint)),
             ..annot::Hints::default()
         })
@@ -1227,6 +1309,7 @@ fn prosify_group_rule_instr(
     let num_args = instr_sl.not_exp.args().len();
     input::validate(&instr_sl.input_hint, num_args)
         .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
+    // Input and output hints count their own positions
     let num_inputs = instr_sl.input_hint.indices().len();
     validate_hint_split(&span, &hints, num_inputs, num_args - num_inputs)?;
     let not_exp_pl = prosify_not_exp(ctx, &instr_sl.not_exp)?;
@@ -1245,6 +1328,7 @@ fn prosify_group_rule_instr(
         span: span,
         hints: hints,
     };
+    // The bound outputs are used by the instructions that follow
     let block_pl = prosify_group_block(ctx, instr_sl.block)?;
     let mut instrs_pl = vec![instr_pl];
     instrs_pl.extend(block_pl);
@@ -1253,11 +1337,13 @@ fn prosify_group_rule_instr(
 
 // - Result instruction
 
+/// Converts a result with the relation's realigned `prose_out` hint.
 fn prosify_group_result_instr(
     ctx: &Context,
     instr_sl: sl::ResultInstr,
     span: Span,
 ) -> Result<pl::GroupBlock, ProseError> {
+    // The output template is the enclosing relation's, realigned
     let hints = ctx
         .hints_rel(ctx.namespace())
         .and_then(|hints_rel| hints_rel.prose_out.as_ref())
@@ -1284,6 +1370,7 @@ fn prosify_group_result_instr(
 
 // - Return instruction
 
+/// Converts a return.
 fn prosify_group_return_instr(
     ctx: &Context,
     instr_sl: sl::ReturnInstr,
@@ -1304,9 +1391,11 @@ fn prosify_group_return_instr(
 
 // - Block
 
+/// Converts a block; several instructions become a backtrack with one arm each.
 fn prosify_group_block(ctx: &Context, block_sl: sl::Block) -> Result<pl::GroupBlock, ProseError> {
     match block_sl.len() {
         0 => Ok(Vec::new()),
+        // One instruction expands in place
         1 => {
             let instr_sl = block_sl.into_iter().next().unwrap();
             prosify_group_instr(ctx, instr_sl)
@@ -1322,6 +1411,7 @@ fn prosify_group_block(ctx: &Context, block_sl: sl::Block) -> Result<pl::GroupBl
                 let block_pl = prosify_group_instr(ctx, instr_sl)?;
                 blocks_pl.push(block_pl);
             }
+            // Alternatives become the arms of a backtrack spanning them all
             let instr_pl = pl::BacktrackInstr { blocks: blocks_pl };
             let tier_pl = pl::GroupInstr::Backtrack(instr_pl);
             let instr_pl = pl::TierInstr { tier: tier_pl };
@@ -1338,6 +1428,7 @@ fn prosify_group_block(ctx: &Context, block_sl: sl::Block) -> Result<pl::GroupBl
 
 // == Table rows
 
+/// Converts a table row.
 fn prosify_table_row(ctx: &Context, row_sl: sl::TableRow) -> Result<pl::TableRow, ProseError> {
     let exps_input_pl = prosify_exps(ctx, &row_sl.exps_input)?;
     let exp_pl = prosify_exp(ctx, &row_sl.exp)?;
@@ -1349,6 +1440,7 @@ fn prosify_table_row(ctx: &Context, row_sl: sl::TableRow) -> Result<pl::TableRow
 
 // - Type definition
 
+/// Converts a type definition; types carry no hints.
 fn prosify_typ_def(typdef_sl: sl::TypDef, span: Span) -> Result<pl::Def, ProseError> {
     match typdef_sl {
         sl::TypDef::Extern(def_typ_sl) => prosify_extern_typ_def(def_typ_sl, span),
@@ -1358,6 +1450,7 @@ fn prosify_typ_def(typdef_sl: sl::TypDef, span: Span) -> Result<pl::Def, ProseEr
 
 // - External type definition
 
+/// Converts an extern type.
 fn prosify_extern_typ_def(def_typ_sl: sl::ExternTyp, span: Span) -> Result<pl::Def, ProseError> {
     let def_typ_pl = pl::ExternTyp { id: def_typ_sl.id };
     let def_typ_pl = pl::TypDef::Extern(def_typ_pl);
@@ -1370,6 +1463,7 @@ fn prosify_extern_typ_def(def_typ_sl: sl::ExternTyp, span: Span) -> Result<pl::D
 
 // - Defined type definition
 
+/// Converts a defined type.
 fn prosify_defined_typ_def(def_typ_sl: sl::DefinedTyp, span: Span) -> Result<pl::Def, ProseError> {
     let def_typ_pl = pl::DefinedTyp {
         id: def_typ_sl.id,
@@ -1386,6 +1480,7 @@ fn prosify_defined_typ_def(def_typ_sl: sl::DefinedTyp, span: Span) -> Result<pl:
 
 // == Meta-variable definitions
 
+/// Converts a meta-variable definition.
 fn prosify_var_def(def_var_sl: sl::VarDef, span: Span) -> Result<pl::Def, ProseError> {
     let def_var_pl = pl::VarDef { id: def_var_sl.id, typ: def_var_sl.typ };
     Ok(crate::annotated_note_phrase! {
@@ -1399,6 +1494,7 @@ fn prosify_var_def(def_var_sl: sl::VarDef, span: Span) -> Result<pl::Def, ProseE
 
 // - Relation definition
 
+/// Converts a relation definition.
 fn prosify_rel_def(
     ctx: &mut Context,
     def_rel_sl: sl::RelDef,
@@ -1410,6 +1506,8 @@ fn prosify_rel_def(
     }
 }
 
+/// Collects a relation's hints; with `prose_in`, fresh input and output
+/// expressions are invented from the signature types for the summary line.
 fn build_rel_hints(
     ctx: &Context,
     id_rel: &sl::Id,
@@ -1421,6 +1519,7 @@ fn build_rel_hints(
         .prose_out
         .as_ref()
         .map(|hint| alter::realign(hint, &rel_signature.input_hint));
+    // Fresh expressions only when the relation has an input template
     let (prose_input_exps, prose_output_exps) = if hints_rel.prose_in.is_some() {
         let typs = rel_signature
             .not_typ
@@ -1443,6 +1542,7 @@ fn build_rel_hints(
                 .collect::<Vec<_>>()
         };
         let exps_input_sl = Some(fresh_exps_from_typs(typs_input));
+        // Output expressions only when an output template exists too
         let exps_output_sl = prose_out
             .is_some()
             .then(|| fresh_exps_from_typs(typs_output));
@@ -1464,6 +1564,7 @@ fn build_rel_hints(
 
 // - External relation definition
 
+/// Converts an extern relation with its hints.
 fn prosify_extern_rel_def(
     ctx: &Context,
     def_rel_sl: sl::ExternRel,
@@ -1487,12 +1588,14 @@ fn prosify_extern_rel_def(
 
 // - Defined relation definition
 
+/// Converts a defined relation; its name becomes the namespace for its body.
 fn prosify_defined_rel_def(
     ctx: &mut Context,
     def_rel_sl: sl::DefinedRel,
     span: Span,
 ) -> Result<pl::Def, ProseError> {
     let hints = build_rel_hints(ctx, &def_rel_sl.id, &def_rel_sl.rel_signature)?;
+    // The body looks up its definition's hints by this name
     ctx.set_namespace(def_rel_sl.id.clone());
     let exps_input_pl = prosify_exps(ctx, &def_rel_sl.exps_input)?;
     let block_pl = prosify_dispatch_block(ctx, def_rel_sl.block)?;
@@ -1523,6 +1626,7 @@ fn prosify_defined_rel_def(
 
 // - Meta-function definition
 
+/// Converts a function definition.
 fn prosify_func_def(
     ctx: &mut Context,
     def_func_sl: sl::MetaFuncDef,
@@ -1536,6 +1640,7 @@ fn prosify_func_def(
     }
 }
 
+/// A function's `prose_in`, `prose_true`, and `prose_false` hints.
 fn build_func_hints(ctx: &Context, id_func: &sl::Id) -> annot::Hints {
     ctx.hints_func(id_func)
         .map(|hints_func| annot::Hints {
@@ -1549,6 +1654,7 @@ fn build_func_hints(ctx: &Context, id_func: &sl::Id) -> annot::Hints {
 
 // - External function definition
 
+/// Converts an extern function with its hints.
 fn prosify_extern_func_def(
     ctx: &Context,
     def_func_sl: sl::ExternFunc,
@@ -1573,6 +1679,7 @@ fn prosify_extern_func_def(
 
 // - Builtin function definition
 
+/// Converts a builtin function with its hints.
 fn prosify_builtin_func_def(
     ctx: &Context,
     def_func_sl: sl::BuiltinFunc,
@@ -1597,12 +1704,14 @@ fn prosify_builtin_func_def(
 
 // - Table function definition
 
+/// Converts a table function; its name becomes the namespace for the rows.
 fn prosify_table_func_def(
     ctx: &mut Context,
     def_func_sl: sl::TableFunc,
     span: Span,
 ) -> Result<pl::Def, ProseError> {
     let hints = build_func_hints(ctx, &def_func_sl.id);
+    // The body looks up its definition's hints by this name
     ctx.set_namespace(def_func_sl.id.clone());
     let params_pl = prosify_params(ctx, &def_func_sl.params)?;
     let mut rows_pl = Vec::with_capacity(def_func_sl.table_rows.len());
@@ -1627,12 +1736,14 @@ fn prosify_table_func_def(
 
 // - Defined function definition
 
+/// Converts a defined function; its name becomes the namespace for its body.
 fn prosify_defined_func_def(
     ctx: &mut Context,
     def_func_sl: sl::DefinedFunc,
     span: Span,
 ) -> Result<pl::Def, ProseError> {
     let hints = build_func_hints(ctx, &def_func_sl.id);
+    // The body looks up its definition's hints by this name
     ctx.set_namespace(def_func_sl.id.clone());
     let params_pl = prosify_params(ctx, &def_func_sl.params)?;
     let block_pl = prosify_group_block(ctx, def_func_sl.block)?;
@@ -1664,6 +1775,7 @@ fn prosify_defined_func_def(
 
 // - Definition
 
+/// Converts one definition.
 fn prosify_def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError> {
     match def_sl.node {
         sl::DefKind::Typ(def_typ_sl) => prosify_typ_def(def_typ_sl, def_sl.span),
@@ -1675,6 +1787,7 @@ fn prosify_def(ctx: &mut Context, def_sl: sl::Def) -> Result<pl::Def, ProseError
 
 // == Entry point
 
+/// The whole conversion: load hints, expand calls, convert, shorten, stamp.
 pub(super) fn prosify_spec(spec_sl: sl::Spec) -> Result<pl::Spec, ProseError> {
     let mut ctx = Context::load(&spec_sl)?;
     let spec_sl = super::expand::expand_spec(spec_sl)?;

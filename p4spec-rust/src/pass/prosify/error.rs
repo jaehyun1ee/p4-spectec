@@ -7,7 +7,7 @@ use crate::lang::{
     hints::{alter::AlterationError, fields::FieldError, input::InputError},
 };
 
-/// Stable semantic category of a prose-conversion failure
+/// Stable semantic category of a prose-conversion failure.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum ProseErrorKind {
     #[error("meta-variable was already defined")]
@@ -26,15 +26,18 @@ pub enum ProseErrorKind {
     InvalidGroupTier,
 }
 
-/// A prose-conversion failure paired with its source span
+/// A prose-conversion failure paired with its source span.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 #[error("{kind} at {span}")]
 pub struct ProseError {
+    /// What went wrong.
     pub kind: ProseErrorKind,
+    /// Where in the source.
     pub span: Span,
 }
 
 impl ProseError {
+    /// Pairs a failure kind with the span it occurred at.
     pub(crate) fn new(kind: ProseErrorKind, span: Span) -> Self {
         Self { kind, span }
     }

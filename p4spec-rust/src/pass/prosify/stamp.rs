@@ -1,9 +1,16 @@
 //! Stamp fallible prose instructions with their failure destination
+//!
+//! A `Fallthrough` note says where control goes when an instruction
+//! does not conclude: the next arm of a backtrack, the next rule group,
+//! the otherwise block, or failure.
+//! Only instructions that can fail, those that call or check something,
+//! receive a note.
 
 use std::collections::HashMap;
 
 use crate::lang::{pl::ast as pl, traits::has_call::HasCall};
 
+/// Failure destination by rule-group name.
 type Fallthroughs = HashMap<String, pl::Fallthrough>;
 
 // == Failure classification
@@ -12,6 +19,7 @@ type Fallthroughs = HashMap<String, pl::Fallthrough>;
 fn can_fail_instr(instr: &pl::Instr<pl::GroupInstr>) -> bool {
     match &instr.node.node {
         pl::InstrKind::If(pl::IfInstr { exp, .. }) => exp.has_call(),
+        // Holds and checked lets always may fail
         pl::InstrKind::Hold(..) => true,
         pl::InstrKind::Case(pl::CaseInstr { exp, cases, .. }) => {
             exp.has_call() || cases.iter().any(can_fail_case)
@@ -26,6 +34,7 @@ fn can_fail_instr(instr: &pl::Instr<pl::GroupInstr>) -> bool {
     }
 }
 
+/// Whether a group-tier instruction can fail: a call in its expressions.
 fn can_fail_group_instr(instr: &pl::GroupInstr) -> bool {
     match instr {
         pl::GroupInstr::Rule(pl::RuleInstr { not_exp, .. }) => {
@@ -39,10 +48,12 @@ fn can_fail_group_instr(instr: &pl::GroupInstr) -> bool {
     }
 }
 
+/// Whether an arm's guard can fail.
 fn can_fail_case(case: &pl::Case<pl::GroupInstr>) -> bool {
     can_fail_guard(&case.guard)
 }
 
+/// Whether a guard can fail: only when it evaluates an expression with a call.
 fn can_fail_guard(guard: &pl::Guard) -> bool {
     match guard {
         pl::Guard::Bool(_) | pl::Guard::Sub(..) | pl::Guard::Match(_) | pl::Guard::Mem(_) => false,
@@ -56,10 +67,12 @@ fn can_fail_guard(guard: &pl::Guard) -> bool {
 
 // - Group instruction
 
+/// Notes the instruction if it can fail, then recurses.
 fn stamp_group_instr(
     fallthrough: &pl::Fallthrough,
     mut instr: pl::Instr<pl::GroupInstr>,
 ) -> pl::Instr<pl::GroupInstr> {
+    // Only fallible instructions get a destination
     if can_fail_instr(&instr) {
         instr.node.note = Some(fallthrough.clone());
     }
@@ -67,6 +80,7 @@ fn stamp_group_instr(
     instr
 }
 
+/// Recurses into the blocks of a group-tier instruction.
 fn stamp_group_instr_kind(
     fallthrough: &pl::Fallthrough,
     instr_kind: pl::InstrKind<pl::GroupInstr>,
@@ -102,12 +116,14 @@ fn stamp_group_instr_kind(
             let tier = stamp_group_tier(fallthrough, instr_tier.tier);
             pl::InstrKind::Tier(pl::TierInstr { tier })
         }
+        // Leaves have no blocks
         kind @ (pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_)) => {
             kind
         }
     }
 }
 
+/// Stamps each instruction with the same destination.
 fn stamp_group_block(fallthrough: &pl::Fallthrough, block: pl::GroupBlock) -> pl::GroupBlock {
     block
         .into_iter()
@@ -117,6 +133,7 @@ fn stamp_group_block(fallthrough: &pl::Fallthrough, block: pl::GroupBlock) -> pl
 
 // - Holding condition
 
+/// Recurses into a hold's branches.
 fn stamp_group_hold_case(
     fallthrough: &pl::Fallthrough,
     hold_case: pl::HoldCase<pl::GroupInstr>,
@@ -140,6 +157,7 @@ fn stamp_group_hold_case(
 
 // - Group tier
 
+/// Recurses into a backtrack; the other group instructions have no blocks.
 fn stamp_group_tier(fallthrough: &pl::Fallthrough, instr_group: pl::GroupInstr) -> pl::GroupInstr {
     match instr_group {
         pl::GroupInstr::Backtrack(instr_backtrack) => {
@@ -152,6 +170,7 @@ fn stamp_group_tier(fallthrough: &pl::Fallthrough, instr_group: pl::GroupInstr) 
     }
 }
 
+/// Each arm falls through to the next; the last arm to the outer destination.
 fn stamp_backtrack_instr(
     fallthrough: &pl::Fallthrough,
     mut instr_backtrack: pl::BacktrackInstr,
@@ -159,6 +178,7 @@ fn stamp_backtrack_instr(
     let idx_last = instr_backtrack.blocks.len().saturating_sub(1);
     let mut blocks = Vec::with_capacity(instr_backtrack.blocks.len());
     for (idx, block) in instr_backtrack.blocks.into_iter().enumerate() {
+        // The last arm has no next arm
         let fallthrough_block =
             if idx < idx_last { pl::Fallthrough::Next } else { fallthrough.clone() };
         blocks.push(stamp_group_block(&fallthrough_block, block));
@@ -169,6 +189,7 @@ fn stamp_backtrack_instr(
 
 // - Dispatch instruction
 
+/// Recurses into a dispatch-tier instruction; only group bodies get notes.
 fn stamp_dispatch_instr(
     fallthroughs: &Fallthroughs,
     mut instr: pl::Instr<pl::DispatchInstr>,
@@ -177,6 +198,7 @@ fn stamp_dispatch_instr(
     instr
 }
 
+/// Recurses into the blocks of a dispatch-tier instruction.
 fn stamp_dispatch_instr_kind(
     fallthroughs: &Fallthroughs,
     instr_kind: pl::InstrKind<pl::DispatchInstr>,
@@ -212,12 +234,14 @@ fn stamp_dispatch_instr_kind(
             let tier = stamp_dispatch_tier(fallthroughs, instr_tier.tier);
             pl::InstrKind::Tier(pl::TierInstr { tier })
         }
+        // Leaves have no blocks
         kind @ (pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_)) => {
             kind
         }
     }
 }
 
+/// Stamps each instruction of a dispatch block.
 fn stamp_dispatch_block(
     fallthroughs: &Fallthroughs,
     block: pl::DispatchBlock,
@@ -230,6 +254,7 @@ fn stamp_dispatch_block(
 
 // - Holding condition
 
+/// Recurses into a hold's branches.
 fn stamp_dispatch_hold_case(
     fallthroughs: &Fallthroughs,
     hold_case: pl::HoldCase<pl::DispatchInstr>,
@@ -253,6 +278,7 @@ fn stamp_dispatch_hold_case(
 
 // - Tier instruction
 
+/// Recurses into a route's arms or a rule group's body.
 fn stamp_dispatch_tier(
     fallthroughs: &Fallthroughs,
     instr_dispatch: pl::DispatchInstr,
@@ -269,6 +295,7 @@ fn stamp_dispatch_tier(
     }
 }
 
+/// Stamps every arm of a route.
 fn stamp_route_instr(
     fallthroughs: &Fallthroughs,
     mut instr_route: pl::RouteInstr,
@@ -281,6 +308,7 @@ fn stamp_route_instr(
     instr_route
 }
 
+/// Stamps a group's body with the destination collected for that group.
 fn stamp_rulegroup_instr(
     fallthroughs: &Fallthroughs,
     mut instr_group: pl::RuleGroupInstr,
@@ -294,6 +322,7 @@ fn stamp_rulegroup_instr(
 
 // == Relation definitions
 
+/// Stamps a defined relation.
 fn stamp_rel_def(def_rel: pl::RelDef) -> pl::RelDef {
     match def_rel {
         pl::RelDef::Defined(def_rel) => {
@@ -304,7 +333,9 @@ fn stamp_rel_def(def_rel: pl::RelDef) -> pl::RelDef {
     }
 }
 
+/// Computes each group's destination, then stamps the dispatch block.
 fn stamp_defined_rel_def(mut def_rel: pl::DefinedRel) -> pl::DefinedRel {
+    // A non-empty otherwise block is the final destination, else failure
     let fallthrough_final = if def_rel
         .block_else_opt
         .as_ref()
@@ -352,6 +383,7 @@ fn collect_ids_group<'a>(block: &'a pl::DispatchBlock, ids_group: &mut Vec<&'a p
                     collect_ids_group(block, ids_group);
                 }
             }
+            // A rule group is a destination; everything else only nests
             pl::InstrKind::Tier(pl::TierInstr {
                 tier: pl::DispatchInstr::Group(pl::RuleGroupInstr { id_group, .. }),
             }) => ids_group.push(id_group),
@@ -360,10 +392,15 @@ fn collect_ids_group<'a>(block: &'a pl::DispatchBlock, ids_group: &mut Vec<&'a p
     }
 }
 
+/// Maps each rule group to the group tried after it fails.
+///
+/// Groups are gathered per route arm; an arm falls through to the first group
+/// of the next arm, and the last arm to `fallthrough_final`.
 fn collect_fallthroughs(
     fallthrough_final: pl::Fallthrough,
     block: &pl::DispatchBlock,
 ) -> Fallthroughs {
+    // A block that is one route contributes an arm per route block
     let blocks = match block.as_slice() {
         [instr] => match &instr.node.node {
             pl::InstrKind::Tier(pl::TierInstr { tier: pl::DispatchInstr::Route(instr_route) }) => {
@@ -383,6 +420,7 @@ fn collect_fallthroughs(
             ids_group_by_block.push(ids_group);
         }
     }
+    // Walk arms backwards so each points at the following arm's first group
     for ids_group in ids_group_by_block.into_iter().rev() {
         fallthroughs.extend(
             ids_group
@@ -397,6 +435,7 @@ fn collect_fallthroughs(
 
 // == Meta-function definitions
 
+/// Stamps a defined function; the other kinds have no group blocks.
 fn stamp_func_def(def_func: pl::MetaFuncDef) -> pl::MetaFuncDef {
     match def_func {
         pl::MetaFuncDef::Defined(def_func) => {
@@ -409,7 +448,9 @@ fn stamp_func_def(def_func: pl::MetaFuncDef) -> pl::MetaFuncDef {
     }
 }
 
+/// Stamps the body with the otherwise block or failure as destination.
 fn stamp_defined_func_def(mut def_func: pl::DefinedFunc) -> pl::DefinedFunc {
+    // A non-empty otherwise block is the destination, else failure
     let fallthrough = if def_func
         .block_else_opt
         .as_ref()
@@ -425,11 +466,13 @@ fn stamp_defined_func_def(mut def_func: pl::DefinedFunc) -> pl::DefinedFunc {
 
 // == Definitions
 
+/// Stamps one definition.
 fn stamp_def(mut def: pl::Def) -> pl::Def {
     def.node.node = stamp_def_kind(def.node.node);
     def
 }
 
+/// Stamps relations and functions; types and variables have no blocks.
 fn stamp_def_kind(def_kind: pl::DefKind) -> pl::DefKind {
     match def_kind {
         pl::DefKind::Rel(def_rel) => {
@@ -446,6 +489,7 @@ fn stamp_def_kind(def_kind: pl::DefKind) -> pl::DefKind {
 
 // == Entry point
 
+/// Stamps every definition.
 pub(super) fn stamp_spec(spec: pl::Spec) -> pl::Spec {
     spec.into_iter().map(stamp_def).collect()
 }
