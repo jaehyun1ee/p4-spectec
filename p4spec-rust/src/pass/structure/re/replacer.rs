@@ -15,7 +15,7 @@ use crate::lang::{
     },
     hints::input,
     il::{ast::*, fresh},
-    traits::free::Free,
+    traits::free::FreeIds,
 };
 use crate::{note_phrase, phrase};
 
@@ -78,8 +78,8 @@ impl Replacer {
         let ids_codom = self
             .exps
             .iter()
-            .fold(IdSet::new(), |ids, (_, exp)| ids.union(exp.free()));
-        // Binders those names would capture
+            // Binders those names would capture
+            .fold(IdSet::new(), |ids, (_, exp)| ids.union(exp.free_ids()));
         let ids_collide: IdSet = frees
             .iter()
             .filter(|id| ids_codom.contains(id))
@@ -88,7 +88,7 @@ impl Replacer {
         // Avoid every name in play, then pick fresh ones
         let mut ids_avoid = frees
             .clone()
-            .union(block.free())
+            .union(block.free_ids())
             .union(self.dom())
             .union(ids_codom);
         let mut renamer_fresh = Renamer::empty();
@@ -368,7 +368,7 @@ impl Replacer {
     fn replace_let_instr(&self, instr_ol: ol::LetInstr) -> Result<ol::InstrKind, StructureError> {
         let ol::LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
         // Freshen colliding binders first so inserted names stay free
-        let frees_l = exp_l.free();
+        let frees_l = exp_l.free_ids();
         let replacer = self.filter(|id, _| !frees_l.contains(id));
         let renamer_fresh = replacer.freshen_binders(&frees_l, &block);
         // Then substitute in the source, iterators, and body
@@ -396,7 +396,7 @@ impl Replacer {
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
         // Inputs are uses, outputs are binders
         let exps_input = self.replace_exps(exps_input);
-        let frees_output = exps_output.as_slice().free();
+        let frees_output = exps_output.as_slice().free_ids();
         let replacer = self.filter(|id, _| !frees_output.contains(id));
         // Freshen output binders that would capture an inserted name
         let renamer_fresh = replacer.freshen_binders(&frees_output, &block);

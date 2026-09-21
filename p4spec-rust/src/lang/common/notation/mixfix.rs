@@ -21,7 +21,7 @@ use crate::lang::{
     traits::{
         cmp::SyntaxCmp,
         eq::SyntaxEq,
-        free::Free,
+        free::FreeIds,
         print::{Print, Printer},
     },
 };
@@ -228,17 +228,17 @@ impl<T: Hash> Hash for Mixfix<T> {
 
 // == Free identifiers
 
-impl<T: Free> Free for Mixfix<T> {
-    fn free_into(&self, free: &mut IdSet) {
+impl<T: FreeIds> FreeIds for Mixfix<T> {
+    fn free_ids_into(&self, free: &mut IdSet) {
         match self {
-            Self::Arg(arg) => arg.free_into(free),
+            Self::Arg(arg) => arg.free_ids_into(free),
             Self::Atom(_) => {}
-            Self::Brack(_, mixfix, _) => mixfix.free_into(free),
+            Self::Brack(_, mixfix, _) => mixfix.free_ids_into(free),
             Self::Infix(mixfix_l, _, mixfix_r) => {
-                mixfix_l.free_into(free);
-                mixfix_r.free_into(free);
+                mixfix_l.free_ids_into(free);
+                mixfix_r.free_ids_into(free);
             }
-            Self::Seq(mixfixes) => mixfixes.as_slice().free_into(free),
+            Self::Seq(mixfixes) => mixfixes.as_slice().free_ids_into(free),
         }
     }
 }

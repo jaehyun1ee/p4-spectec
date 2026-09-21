@@ -7,7 +7,7 @@ use p4spec_rust::{
         },
         hints::input::InputHint,
         il::{ast, var},
-        traits::free::Free,
+        traits::free::FreeIds,
     },
 };
 
@@ -264,9 +264,9 @@ fn test_free_expression_variants_follow_the_oracle() {
         ),
     ];
     for (case, exp_case, expected) in cases {
-        assert_eq!(exp_case.free(), expected, "{case}");
+        assert_eq!(exp_case.free_ids(), expected, "{case}");
     }
-    assert_eq!([id_exp("many_a"), id_exp("many_b")].free(), names(&["many_a", "many_b"]));
+    assert_eq!([id_exp("many_a"), id_exp("many_b")].free_ids(), names(&["many_a", "many_b"]));
 }
 
 #[test]
@@ -312,7 +312,7 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
         ),
     ];
     for (case, path, expected) in paths {
-        assert_eq!(path.free(), expected, "path {case}");
+        assert_eq!(path.free_ids(), expected, "path {case}");
     }
     let args = vec![
         ("expression", arg(ast::ArgKind::Exp(Box::new(id_exp("argument")))), names(&["argument"])),
@@ -322,11 +322,11 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
         args.iter()
             .map(|(_, argument, _)| argument.clone())
             .collect::<Vec<_>>()
-            .free(),
+            .free_ids(),
         names(&["argument"])
     );
     for (case, argument, expected) in args {
-        assert_eq!(argument.free(), expected, "argument {case}");
+        assert_eq!(argument.free_ids(), expected, "argument {case}");
     }
     let nested = prem(ast::PremKind::If(ast::IfPrem { exp: id_exp("nested") }));
     let prems = vec![
@@ -379,44 +379,47 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             .iter()
             .map(|(_, prem_case, _)| prem_case.clone())
             .collect::<Vec<_>>()
-            .free(),
+            .free_ids(),
         names(&["debug", "holds", "if", "nested", "not_holds", "rule"])
     );
     for (case, prem_case, expected) in prems {
-        assert_eq!(prem_case.free(), expected, "premise {case}");
+        assert_eq!(prem_case.free_ids(), expected, "premise {case}");
     }
 }
 
 #[test]
 fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
     let rule = rule("head", vec![prem(ast::PremKind::If(ast::IfPrem { exp: id_exp("premise") }))]);
-    assert_eq!(rule.free(), names(&["head", "premise"]));
-    assert_eq!(std::slice::from_ref(&rule).free(), names(&["head", "premise"]));
+    assert_eq!(rule.free_ids(), names(&["head", "premise"]));
+    assert_eq!(std::slice::from_ref(&rule).free_ids(), names(&["head", "premise"]));
     let group = p4spec_rust::phrase! {
         node: ast::RuleGroupKind { id: id("group"), rules: vec![rule.clone()] },
         span: span(),
     };
-    assert_eq!(group.free(), names(&["head", "premise"]));
-    assert_eq!(std::slice::from_ref(&group).free(), names(&["head", "premise"]));
+    assert_eq!(group.free_ids(), names(&["head", "premise"]));
+    assert_eq!(std::slice::from_ref(&group).free_ids(), names(&["head", "premise"]));
     let else_group = p4spec_rust::phrase! {
         node: ast::ElseGroupKind { id: id("else"), rule: rule.clone() },
         span: span(),
     };
-    assert_eq!(else_group.free(), names(&["head", "premise"]));
-    assert_eq!(Option::<ast::ElseGroup>::None.free(), names(&[]));
-    assert_eq!(Some(else_group.clone()).free(), names(&["head", "premise"]));
+    assert_eq!(else_group.free_ids(), names(&["head", "premise"]));
+    assert_eq!(Option::<ast::ElseGroup>::None.free_ids(), names(&[]));
+    assert_eq!(Some(else_group.clone()).free_ids(), names(&["head", "premise"]));
     let clause = clause("argument", "body", "premise");
-    assert_eq!(clause.free(), names(&["argument", "body", "premise"]));
-    assert_eq!(std::slice::from_ref(&clause).free(), names(&["argument", "body", "premise"]));
-    assert_eq!(clause.free(), names(&["argument", "body", "premise"]));
-    assert_eq!(Option::<ast::ElseClause>::None.free(), names(&[]));
-    assert_eq!(Some(clause.clone()).free(), names(&["argument", "body", "premise"]));
-    let row = p4spec_rust::phrase! { node: ast::TableRowKind {
-        args: vec![arg(ast::ArgKind::Exp(Box::new(id_exp("key"))))],
-        exp: id_exp("value"),
-    }, span: span() };
-    assert_eq!(row.free(), names(&["key", "value"]));
-    assert_eq!(std::slice::from_ref(&row).free(), names(&["key", "value"]));
+    assert_eq!(clause.free_ids(), names(&["argument", "body", "premise"]));
+    assert_eq!(std::slice::from_ref(&clause).free_ids(), names(&["argument", "body", "premise"]));
+    assert_eq!(clause.free_ids(), names(&["argument", "body", "premise"]));
+    assert_eq!(Option::<ast::ElseClause>::None.free_ids(), names(&[]));
+    assert_eq!(Some(clause.clone()).free_ids(), names(&["argument", "body", "premise"]));
+    let row = p4spec_rust::phrase! {
+        node: ast::TableRowKind {
+            args: vec![arg(ast::ArgKind::Exp(Box::new(id_exp("key"))))],
+            exp: id_exp("value"),
+        },
+        span: span(),
+    };
+    assert_eq!(row.free_ids(), names(&["key", "value"]));
+    assert_eq!(std::slice::from_ref(&row).free_ids(), names(&["key", "value"]));
     let defs = vec![
         (
             "relation",
@@ -524,7 +527,7 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
         ),
     ];
     for (case, def, expected) in defs {
-        assert_eq!(def.free(), expected, "definition {case}");
+        assert_eq!(def.free_ids(), expected, "definition {case}");
     }
 }
 

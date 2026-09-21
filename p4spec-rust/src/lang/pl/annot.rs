@@ -4,7 +4,7 @@ use crate::lang::{
     common::ds::set::IdSet,
     hints::{alter, fields},
     sl,
-    traits::{eq::SyntaxEq, free::Free},
+    traits::{eq::SyntaxEq, free::FreeIds, has_call::HasCall},
 };
 
 // Hints
@@ -38,9 +38,15 @@ impl<N: SyntaxEq> SyntaxEq for Annotated<N> {
     }
 }
 
-impl<N: Free> Free for Annotated<N> {
-    fn free(&self) -> IdSet {
-        self.node.free()
+impl<N: FreeIds> FreeIds for Annotated<N> {
+    fn free_ids(&self) -> IdSet {
+        self.node.free_ids()
+    }
+}
+
+impl<N: HasCall> HasCall for Annotated<N> {
+    fn has_call(&self) -> bool {
+        self.node.has_call()
     }
 }
 
@@ -51,13 +57,51 @@ impl<N> Annotated<N> {
     }
 }
 
-/// Builds an annotated syntax node with the span of another syntax node
+/// Builds a syntax node paired with prose metadata
 #[macro_export]
 macro_rules! annotated {
+    (node: $node:expr, hints: $hints:expr $(,)?) => {
+        $crate::lang::pl::annot::Annotated { node: $node, hints: $hints }
+    };
     (node: $node:expr, span: $span:expr $(,)?) => {
-        $crate::lang::pl::annot::Annotated::new($crate::phrase! {
+        $crate::annotated! {
+            node: $crate::phrase! {
+                node: $node,
+                span: $span.span.clone(),
+            },
+            hints: $crate::lang::pl::annot::Hints::default(),
+        }
+    };
+}
+
+/// Builds a source-annotated syntax node paired with prose metadata
+#[macro_export]
+macro_rules! annotated_note_phrase {
+    (
+        node: $node:expr,
+        note: $note:expr,
+        span: $span:expr,
+        hints: $hints:expr $(,)?
+    ) => {
+        $crate::annotated! {
+            node: $crate::note_phrase! {
+                node: $node,
+                note: $note,
+                span: $span,
+            },
+            hints: $hints,
+        }
+    };
+    (
+        node: $node:expr,
+        note: $note:expr,
+        span: $span:expr $(,)?
+    ) => {
+        $crate::annotated_note_phrase! {
             node: $node,
-            span: $span.span.clone(),
-        })
+            note: $note,
+            span: $span,
+            hints: $crate::lang::pl::annot::Hints::default(),
+        }
     };
 }

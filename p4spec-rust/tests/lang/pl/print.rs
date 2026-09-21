@@ -59,8 +59,8 @@ fn signature() -> pl::ast::RelSignature {
 }
 
 fn group_instr(
-    kind: pl::ast::InstrKind<pl::ast::InstrGroup>,
-) -> pl::ast::Instr<pl::ast::InstrGroup> {
+    kind: pl::ast::InstrKind<pl::ast::GroupInstr>,
+) -> pl::ast::Instr<pl::ast::GroupInstr> {
     pl::annot::Annotated {
         node: p4spec_rust::note_phrase! { node: kind, note: None, span: span("group-instruction") },
         hints: pl::annot::Hints::default(),
@@ -68,8 +68,8 @@ fn group_instr(
 }
 
 fn dispatch_instr(
-    kind: pl::ast::InstrKind<pl::ast::InstrDispatch>,
-) -> pl::ast::Instr<pl::ast::InstrDispatch> {
+    kind: pl::ast::InstrKind<pl::ast::DispatchInstr>,
+) -> pl::ast::Instr<pl::ast::DispatchInstr> {
     pl::annot::Annotated {
         node: p4spec_rust::note_phrase! { node: kind, note: None, span: span("dispatch-instruction") },
         hints: pl::annot::Hints::default(),
@@ -79,13 +79,13 @@ fn dispatch_instr(
 #[test]
 fn test_group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
     let mut instr_a = group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-        tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr { exp: text("line\n\"\\") }),
+        tier: pl::ast::GroupInstr::Return(pl::ast::ReturnInstr { exp: text("line\n\"\\") }),
     }));
-    instr_a.node.note = Some(pl::ast::Fallthrough::FallNext);
+    instr_a.node.note = Some(pl::ast::Fallthrough::Next);
     instr_a.hints.prose = Some(alter::AlterationHint::Text("first prose".to_owned()));
 
     let mut instr_b = instr_a.clone();
-    instr_b.node.note = Some(pl::ast::Fallthrough::FallFail);
+    instr_b.node.note = Some(pl::ast::Fallthrough::Fail);
     instr_b.node.span = span("other-source");
     instr_b.hints.prose = Some(alter::AlterationHint::Text("other prose".to_owned()));
 
@@ -99,7 +99,7 @@ fn test_shared_control_flow_renders_group_tier_at_nested_level() {
         exp: id_exp("condition"),
         iter_exps: Vec::new(),
         block: vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-            tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr { exp: id_exp("value") }),
+            tier: pl::ast::GroupInstr::Return(pl::ast::ReturnInstr { exp: id_exp("value") }),
         }))],
         dangle: true,
     }));
@@ -112,17 +112,13 @@ fn test_shared_control_flow_renders_group_tier_at_nested_level() {
 #[test]
 fn test_group_and_dispatch_backtracking_preserve_arm_order() {
     let backtrack = group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-        tier: pl::ast::InstrGroup::Backtrack(pl::ast::BacktrackGroupInstr {
+        tier: pl::ast::GroupInstr::Backtrack(pl::ast::BacktrackInstr {
             blocks: vec![
                 vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-                    tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr {
-                        exp: id_exp("a"),
-                    }),
+                    tier: pl::ast::GroupInstr::Return(pl::ast::ReturnInstr { exp: id_exp("a") }),
                 }))],
                 vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-                    tier: pl::ast::InstrGroup::Return(pl::ast::ReturnGroupInstr {
-                        exp: id_exp("b"),
-                    }),
+                    tier: pl::ast::GroupInstr::Return(pl::ast::ReturnInstr { exp: id_exp("b") }),
                 }))],
             ],
         }),
@@ -134,13 +130,13 @@ fn test_group_and_dispatch_backtracking_preserve_arm_order() {
 
     let group = |name: &str| {
         vec![dispatch_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-            tier: pl::ast::InstrDispatch::Group(pl::ast::GroupDispatchInstr {
+            tier: pl::ast::DispatchInstr::Group(pl::ast::RuleGroupInstr {
                 id_rel: id("relation"),
                 id_group: id(name),
                 rel_signature: signature(),
                 exps_input: vec![id_exp(name)],
                 block: vec![group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-                    tier: pl::ast::InstrGroup::Result(pl::ast::ResultGroupInstr {
+                    tier: pl::ast::GroupInstr::Result(pl::ast::ResultInstr {
                         rel_signature: signature(),
                         exps_output: Vec::new(),
                     }),
@@ -149,7 +145,7 @@ fn test_group_and_dispatch_backtracking_preserve_arm_order() {
         }))]
     };
     let route = dispatch_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
-        tier: pl::ast::InstrDispatch::Route(pl::ast::RouteDispatchInstr {
+        tier: pl::ast::DispatchInstr::Route(pl::ast::RouteInstr {
             blocks: vec![group("first"), group("second")],
         }),
     }));

@@ -2,6 +2,7 @@ mod algo;
 mod corpus;
 mod elab;
 mod p4parse;
+mod prose;
 mod run;
 mod sim;
 mod snapshot;
@@ -36,6 +37,8 @@ enum Command {
     Algo,
     /// Compare the structured P4 specification in both rule-group modes
     Structure,
+    /// Compare the rendered prose specification with expected output
+    Prose,
     /// Compare the full P4 corpus with stored file results (cache on, det off)
     RunAl,
     /// Compare native SL outcomes with source-derived results (cache on)
@@ -66,7 +69,9 @@ fn execute(command: Command) -> Result<()> {
             | Command::SimSl { .. }
     ) && std::env::var_os("UPDATE_EXPECT").is_some()
     {
-        return Err(Error::Invalid("UPDATE_EXPECT is supported only for elab and algo".to_owned()));
+        return Err(Error::Invalid(
+            "UPDATE_EXPECT is supported only for elab, algo, and prose".to_owned(),
+        ));
     }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -77,6 +82,7 @@ fn execute(command: Command) -> Result<()> {
         Command::Elab => elab::run(),
         Command::Algo => algo::run(),
         Command::Structure => structure::run(),
+        Command::Prose => prose::run(),
         Command::RunAl => run::run(),
         Command::RunSl { det } => run::run_sl(det),
         Command::SimAl { det } => sim::run(det),

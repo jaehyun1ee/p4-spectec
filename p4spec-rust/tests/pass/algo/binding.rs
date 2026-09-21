@@ -1,5 +1,3 @@
-#[path = "binding/analyze.rs"]
-mod analyze;
 #[path = "binding/antiunify.rs"]
 mod antiunify;
 #[path = "binding/bind.rs"]
@@ -20,3 +18,5 @@ mod partial;
 mod pattern;
 #[path = "binding/shallow.rs"]
 mod shallow;
+#[path = "binding/transform.rs"]
+mod transform;

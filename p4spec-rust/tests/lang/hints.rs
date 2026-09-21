@@ -7,6 +7,7 @@ use p4spec_rust::{
             alter::{
                 self as alter_impl, AlterationError, AlterationHint, Hole as AlterHole, Renderer,
             },
+            fields::{self as fields_impl, FieldError, FieldHint},
             input::{self as input_impl, InputError, InputHint},
         },
         traits::print::Print,
@@ -62,5 +63,7 @@ impl Renderer<&str> for StringRenderer {
 
 #[path = "hints/alter.rs"]
 mod alter;
+#[path = "hints/fields.rs"]
+mod fields;
 #[path = "hints/input.rs"]
 mod input;

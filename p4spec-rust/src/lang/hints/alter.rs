@@ -5,9 +5,10 @@
 //! `alternate` renders one through a `Renderer` for the output format.
 
 use crate::lang::el::ast::{Atom, Exp, ExpKind, Hole as ElHole, Text};
+use crate::lang::hints::input::InputHint;
 use thiserror::Error;
 
-// Alternation hints
+// == Alteration hints
 
 /// A positional hole in an alteration hint.
 #[derive(Clone, Debug, PartialEq)]
@@ -71,7 +72,103 @@ pub fn init(exp: &Exp) -> Option<AlterationHint> {
     })
 }
 
-// Alternation
+// == Validation
+
+/// Validates every hole against an item count.
+pub fn validate(hint: &AlterationHint, item_count: usize) -> Result<(), AlterationError> {
+    fn validate_at(
+        hint: &AlterationHint,
+        item_count: usize,
+        cursor: usize,
+    ) -> Result<usize, AlterationError> {
+        match hint {
+            AlterationHint::Text(_) | AlterationHint::Atom(_) | AlterationHint::Other(_) => {
+                Ok(cursor)
+            }
+            AlterationHint::Seq(hints) => hints
+                .iter()
+                .try_fold(cursor, |cursor, hint| validate_at(hint, item_count, cursor)),
+            AlterationHint::Brack(_, hint, _) => validate_at(hint, item_count, cursor),
+            AlterationHint::Hole(Hole::Next) if cursor < item_count => Ok(cursor + 1),
+            AlterationHint::Hole(Hole::Next) => {
+                Err(AlterationError::IndexOutOfBounds { index: cursor, item_count })
+            }
+            AlterationHint::Hole(Hole::Num(idx)) if *idx < item_count => Ok(cursor),
+            AlterationHint::Hole(Hole::Num(idx)) => {
+                Err(AlterationError::IndexOutOfBounds { index: *idx, item_count })
+            }
+            AlterationHint::Fuse(hint_l, hint_r) => {
+                validate_at(hint_r, item_count, validate_at(hint_l, item_count, cursor)?)
+            }
+        }
+    }
+
+    validate_at(hint, item_count, 0).map(|_| ())
+}
+
+// == Index realignment
+
+/// Renumbers output holes after relation input positions
+pub fn realign(hint: &AlterationHint, hint_input: &InputHint) -> AlterationHint {
+    fn collect(hint: &AlterationHint, indices_output: &mut Vec<usize>) {
+        match hint {
+            AlterationHint::Seq(hints) => {
+                for hint in hints {
+                    collect(hint, indices_output);
+                }
+            }
+            AlterationHint::Brack(_, hint, _) => collect(hint, indices_output),
+            AlterationHint::Hole(Hole::Num(idx)) => indices_output.push(*idx),
+            AlterationHint::Fuse(hint_l, hint_r) => {
+                collect(hint_l, indices_output);
+                collect(hint_r, indices_output);
+            }
+            _ => {}
+        }
+    }
+
+    fn apply(hint: &AlterationHint, idx_pairs: &[(usize, usize)]) -> AlterationHint {
+        match hint {
+            AlterationHint::Seq(hints) => {
+                AlterationHint::Seq(hints.iter().map(|hint| apply(hint, idx_pairs)).collect())
+            }
+            AlterationHint::Brack(atom_l, hint, atom_r) => AlterationHint::Brack(
+                atom_l.clone(),
+                Box::new(apply(hint, idx_pairs)),
+                atom_r.clone(),
+            ),
+            AlterationHint::Hole(Hole::Num(idx)) => {
+                let idx_realigned = idx_pairs
+                    .iter()
+                    .find_map(|(idx_source, idx_realigned)| {
+                        (idx_source == idx).then_some(*idx_realigned)
+                    })
+                    .expect("every numbered hole is collected before realignment");
+                AlterationHint::Hole(Hole::Num(idx_realigned))
+            }
+            AlterationHint::Fuse(hint_l, hint_r) => AlterationHint::Fuse(
+                Box::new(apply(hint_l, idx_pairs)),
+                Box::new(apply(hint_r, idx_pairs)),
+            ),
+            _ => hint.clone(),
+        }
+    }
+
+    let mut indices_output = Vec::new();
+    collect(hint, &mut indices_output);
+    let mut indices_all = hint_input.indices().to_vec();
+    indices_all.extend(&indices_output);
+    indices_all.sort_unstable();
+    let mut idx_pairs = Vec::new();
+    for idx in indices_all {
+        if indices_output.contains(&idx) {
+            idx_pairs.push((idx, idx_pairs.len()));
+        }
+    }
+    apply(hint, &idx_pairs)
+}
+
+// == Rendering
 
 /// Renders alteration pieces into a caller-defined output.
 pub trait Renderer<Item> {

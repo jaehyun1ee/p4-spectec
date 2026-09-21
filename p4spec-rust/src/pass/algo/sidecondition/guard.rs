@@ -14,7 +14,7 @@ use crate::{
         al::{self, ast},
         common::prim,
         common::source::Span,
-        traits::{eq::SyntaxEq, free::Free},
+        traits::{eq::SyntaxEq, free::FreeIds},
     },
     note_phrase, phrase,
 };
@@ -251,7 +251,7 @@ fn filter_prems_insert(
 /// Wraps a premise under an iteration over the variables it uses, if any.
 fn iterate_prem(iter: ast::Iter, vars: &[ast::Var], prem_al: ast::Prem) -> Option<ast::Prem> {
     // Only variables the premise uses are ranged over
-    let frees = prem_al.free();
+    let frees = prem_al.free_ids();
     let vars_bound = vars
         .iter()
         .filter(|var| frees.contains(&var.id))

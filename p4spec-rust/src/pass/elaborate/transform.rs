@@ -25,7 +25,7 @@ use crate::{
         el::ast as el,
         hints::input,
         il::{ast as il, fresh as il_fresh, var as il_var},
-        traits::free::Free,
+        traits::free::FreeIds,
     },
     note_phrase, phrase,
     runtime::{
@@ -2197,7 +2197,7 @@ fn elab_rule(
     // Elaborate under a local context seeded with the rule's free identifiers
     let mut ctx_local = ctx.clone();
     ctx_local.reset_frees();
-    let frees = rule.free();
+    let frees = rule.free_ids();
     ctx_local.add_frees(&frees);
     let not_exp_il = finish(elab_not_exp(&mut ctx_local, not_typ_il, exp))?;
     let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, prems, &id_rule.span))?;
@@ -2277,7 +2277,7 @@ fn elab_clause(
     // Local context with the clause's free identifiers and type parameters
     let mut ctx_local = ctx.clone();
     ctx_local.reset_frees();
-    let frees = def.free();
+    let frees = def.free_ids();
     ctx_local.add_frees(&frees);
     ctx_local.add_tparams(&def.tparams)?;
     let args_il = finish(elab_args(&mut ctx_local, &params_il, &def.args, true, span))?;
@@ -2745,7 +2745,7 @@ fn elab_table_def(ctx: &mut Context, def: &el::TableDef) -> Result<(), ElabError
         let (args_il, exp_body_il) = {
             let mut ctx_local = ctx.clone();
             ctx_local.reset_frees();
-            let frees = row.free();
+            let frees = row.free_ids();
             ctx_local.add_frees(&frees);
             let args_il = finish(elab_args(&mut ctx_local, &params_il, &args, true, &row.span))?;
             let exp_body_il = finish(elab_exp(&mut ctx_local, &typ_il, exp_body))?;
@@ -2865,7 +2865,7 @@ fn populate_defs(mut ctx: Context, defs_il: il::Spec) -> Result<il::Spec, ElabEr
 // - Entry point
 
 /// Elaborates a specification: definitions, population, dimension analysis.
-pub(super) fn elaborate(spec_el: el::Spec) -> Result<il::Spec, ElabError> {
+pub(super) fn elab_spec(spec_el: el::Spec) -> Result<il::Spec, ElabError> {
     let mut ctx = Context::new();
     let mut defs_il = Vec::new();
     // Declarations become IL definitions, bodies are collected in the context

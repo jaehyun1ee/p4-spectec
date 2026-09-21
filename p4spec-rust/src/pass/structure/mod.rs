@@ -31,5 +31,5 @@ mod tests;
 
 /// Converts algorithmic definitions, removing rule groups when requested.
 pub fn convert(spec_al: al::Spec, without_rule_groups: bool) -> Result<sl::Spec, StructureError> {
-    transform::r#struct(spec_al, without_rule_groups)
+    transform::struct_spec(spec_al, without_rule_groups)
 }

@@ -69,5 +69,7 @@ fn hint() -> ast::Hint {
 mod free;
 #[path = "il/fresh.rs"]
 mod fresh;
+#[path = "il/has_call.rs"]
+mod has_call;
 #[path = "il/print.rs"]
 mod print;

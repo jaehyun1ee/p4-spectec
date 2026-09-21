@@ -39,7 +39,7 @@ fn test_free_identifier_sets_preserve_source_spans() {
     let id_lookup = id("x", "lookup");
     let exp: il::ast::Exp = p4spec_rust::note_phrase!(node: p4spec_rust::lang::il::ast::ExpKind::Id(id_stored.clone()), note: il::ast::TypKind::Bool, span: Span::default());
 
-    let ids: IdSet = exp.free();
+    let ids: IdSet = exp.free_ids();
     assert!(ids.contains(&id_lookup));
     assert_eq!(ids.iter().next().unwrap().span, id_stored.span);
 }
@@ -56,7 +56,7 @@ fn test_free_into_extends_one_ordered_set_without_duplicates() {
     };
     let mut ids = IdSet::from([id("seed", "seed")]);
 
-    exp.free_into(&mut ids);
+    exp.free_ids_into(&mut ids);
 
     assert_eq!(ids, IdSet::from([id("seed", "seed"), id("x", "x"), id("y", "y")]));
 }

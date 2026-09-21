@@ -431,15 +431,15 @@ fn write_instr_with<Tier>(
 
 // - Group-body tier
 
-impl Print for Instr<InstrGroup> {
+impl Print for Instr<GroupInstr> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_instr_with(printer, self, write_instr_group_tier_with, false, 0, 0)
+        write_instr_with(printer, self, write_group_instr_with, false, 0, 0)
     }
 }
 
-fn write_instr_group_tier_with(
+fn write_group_instr_with(
     output: &mut Printer<'_>,
-    tier: &InstrGroup,
+    tier: &GroupInstr,
     short: bool,
     level: usize,
     index: usize,
@@ -450,18 +450,18 @@ fn write_instr_group_tier_with(
     }
 
     match tier {
-        InstrGroup::Result(ResultGroupInstr { exps_output, .. }) if exps_output.is_empty() => {
+        GroupInstr::Result(ResultInstr { exps_output, .. }) if exps_output.is_empty() => {
             output.write_str("The relation holds")
         }
-        InstrGroup::Result(ResultGroupInstr { rel_signature, exps_output }) => {
+        GroupInstr::Result(ResultInstr { rel_signature, exps_output }) => {
             output.write_str("Result in: ")?;
             write_reloutput(output, rel_signature, exps_output)
         }
-        InstrGroup::Return(ReturnGroupInstr { exp }) => {
+        GroupInstr::Return(ReturnInstr { exp }) => {
             output.write_str("Return ")?;
             exp.print(output)
         }
-        InstrGroup::Rule(RuleGroupInstr { id, not_exp, iter_instrs, .. }) => {
+        GroupInstr::Rule(RuleInstr { id, not_exp, iter_instrs, .. }) => {
             output.write_char('(')?;
             id.print(output)?;
             output.write_str(": ")?;
@@ -469,7 +469,7 @@ fn write_instr_group_tier_with(
             output.write_char(')')?;
             iter_instrs.as_slice().print(output)
         }
-        InstrGroup::Backtrack(BacktrackGroupInstr { blocks }) => {
+        GroupInstr::Backtrack(BacktrackInstr { blocks }) => {
             write!(output, "Block ({} arms)", blocks.len())?;
             if !short {
                 let indent = "  ".repeat(level);
@@ -479,7 +479,7 @@ fn write_instr_group_tier_with(
                         output.write_str("\n\n")?;
                     }
                     write!(output, "{indent}Arm {}:\n\n", arm_idx + 1)?;
-                    write_block_group_with(output, arm, level + 1, 0)?;
+                    write_group_block_with(output, arm, level + 1, 0)?;
                 }
             }
             Ok(())
@@ -487,32 +487,32 @@ fn write_instr_group_tier_with(
     }
 }
 
-impl Print for BlockGroup {
+impl Print for GroupBlock {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_block_group_with(printer, self, 0, 0)
+        write_group_block_with(printer, self, 0, 0)
     }
 }
 
-fn write_block_group_with(
+fn write_group_block_with(
     output: &mut Printer<'_>,
-    block: &BlockGroup,
+    block: &GroupBlock,
     level: usize,
     index: usize,
 ) -> fmt::Result {
-    write_block_with(output, block, write_instr_group_tier_with, level, index)
+    write_block_with(output, block, write_group_instr_with, level, index)
 }
 
 // - Dispatch tier
 
-impl Print for Instr<InstrDispatch> {
+impl Print for Instr<DispatchInstr> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_instr_with(printer, self, write_instr_dispatch_tier_with, false, 0, 0)
+        write_instr_with(printer, self, write_dispatch_instr_with, false, 0, 0)
     }
 }
 
-fn write_instr_dispatch_tier_with(
+fn write_dispatch_instr_with(
     output: &mut Printer<'_>,
-    tier: &InstrDispatch,
+    tier: &DispatchInstr,
     short: bool,
     level: usize,
     index: usize,
@@ -523,12 +523,8 @@ fn write_instr_dispatch_tier_with(
     }
 
     match tier {
-        InstrDispatch::Group(GroupDispatchInstr {
-            id_group,
-            rel_signature,
-            exps_input,
-            block,
-            ..
+        DispatchInstr::Group(RuleGroupInstr {
+            id_group, rel_signature, exps_input, block, ..
         }) => {
             output.write_str("Group ")?;
             id_group.print(output)?;
@@ -536,11 +532,11 @@ fn write_instr_dispatch_tier_with(
             write_relinput(output, rel_signature, exps_input)?;
             if !short {
                 output.write_str("\n\n")?;
-                write_block_group_with(output, block, level + 1, 0)?;
+                write_group_block_with(output, block, level + 1, 0)?;
             }
             Ok(())
         }
-        InstrDispatch::Route(RouteDispatchInstr { blocks }) => {
+        DispatchInstr::Route(RouteInstr { blocks }) => {
             write!(output, "Block ({} arms)", blocks.len())?;
             if !short {
                 let indent = "  ".repeat(level);
@@ -550,7 +546,7 @@ fn write_instr_dispatch_tier_with(
                         output.write_str("\n\n")?;
                     }
                     write!(output, "{indent}Arm {}:\n\n", arm_idx + 1)?;
-                    write_block_dispatch_with(output, arm, level + 1, 0)?;
+                    write_dispatch_block_with(output, arm, level + 1, 0)?;
                 }
             }
             Ok(())
@@ -558,19 +554,19 @@ fn write_instr_dispatch_tier_with(
     }
 }
 
-impl Print for BlockDispatch {
+impl Print for DispatchBlock {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        write_block_dispatch_with(printer, self, 0, 0)
+        write_dispatch_block_with(printer, self, 0, 0)
     }
 }
 
-fn write_block_dispatch_with(
+fn write_dispatch_block_with(
     output: &mut Printer<'_>,
-    block: &BlockDispatch,
+    block: &DispatchBlock,
     level: usize,
     index: usize,
 ) -> fmt::Result {
-    write_block_with(output, block, write_instr_dispatch_tier_with, level, index)
+    write_block_with(output, block, write_dispatch_instr_with, level, index)
 }
 
 // - Case analysis
@@ -688,7 +684,7 @@ impl Print for TableRow {
         printer.write_str(" -> ")?;
         self.exp.print(printer)?;
         printer.write_str(":\n\n")?;
-        write_block_group_with(printer, &self.block, 2, 0)
+        write_group_block_with(printer, &self.block, 2, 0)
     }
 }
 
@@ -763,7 +759,7 @@ impl Print for DefinedRel {
         write_elseblock_opt_with(
             printer,
             &self.block_else_opt,
-            write_instr_dispatch_tier_with,
+            write_dispatch_instr_with,
             0,
             self.block.len(),
         )
@@ -893,7 +889,7 @@ impl Print for DefinedFunc {
         write_elseblock_opt_with(
             printer,
             &self.block_else_opt,
-            write_instr_group_tier_with,
+            write_group_instr_with,
             0,
             self.block.len(),
         )

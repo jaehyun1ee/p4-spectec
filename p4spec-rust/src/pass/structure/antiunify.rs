@@ -12,7 +12,7 @@ use crate::lang::{
         source::Span,
     },
     il,
-    traits::{eq::SyntaxEq, free::Free},
+    traits::{eq::SyntaxEq, free::FreeIds},
 };
 
 use super::{StructureError, StructureErrorKind};
@@ -536,7 +536,7 @@ pub(super) fn antiunify_clauses(
     let clauses_all = clauses.iter().chain(clause_else.iter()).collect::<Vec<_>>();
     let mut frees = IdSet::new();
     for clause in &clauses_all {
-        clause.free_into(&mut frees);
+        clause.free_ids_into(&mut frees);
     }
     let (uenv, args_template) = antiunify_args_across_clauses(frees, &clauses_all)?;
     let paths = clauses

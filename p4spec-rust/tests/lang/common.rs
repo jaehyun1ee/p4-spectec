@@ -7,7 +7,7 @@ use p4spec_rust::{
             set::IdSet,
         },
     },
-    lang::{il, traits::free::Free},
+    lang::{il, traits::free::FreeIds},
 };
 
 fn id(name: &str, file: &str) -> Id {

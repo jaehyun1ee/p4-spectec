@@ -13,7 +13,7 @@ use crate::lang::{
     common::{ds::set::IdSet, source::Phrase},
     traits::{
         eq::SyntaxEq,
-        free::Free,
+        free::FreeIds,
         print::{Print, Printer},
     },
 };
@@ -161,8 +161,8 @@ impl SyntaxEq for Atom {
     }
 }
 
-impl Free for Atom {
-    fn free(&self) -> IdSet {
+impl FreeIds for Atom {
+    fn free_ids(&self) -> IdSet {
         IdSet::new()
     }
 }
