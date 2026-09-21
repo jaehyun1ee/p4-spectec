@@ -1,3 +1,12 @@
+//! Mixfix forms, literal atoms interleaved with typed argument holes
+//!
+//! `Mixfix<T>` is the notation form with arguments of type `T`:
+//! types for a notation type, expressions for a notation expression,
+//! values for a case value, `()` for the bare shape.
+//! Comparison, hashing, and equality look at atoms and arguments,
+//! never at atom spans;
+//! `eq_shape` compares atoms only.
+
 use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
 
@@ -21,22 +30,23 @@ use super::{super::source::Phrase, atom::Atom};
 
 // == Types
 
-/// An atom paired with its source span
+/// An atom paired with its source span.
 pub type AtomPhrase = Phrase<Atom>;
 
-/// A mixfix expression: literal atoms interleaved with argument holes of type
-/// `T`. For example `_ + _` is infix with two holes and `[ _ ]` brackets one.
+/// A mixfix expression: literal atoms interleaved with argument holes of `T`.
+///
+/// For example `_ + _` is infix with two holes and `[ _ ]` brackets one.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mixfix<T> {
-    /// Argument position
+    /// Argument position.
     Arg(T),
-    /// Literal atom
+    /// Literal atom.
     Atom(AtomPhrase),
-    /// Bracketed expression
+    /// Bracketed expression.
     Brack(AtomPhrase, Box<Self>, AtomPhrase),
-    /// Infix expression
+    /// Infix expression.
     Infix(Box<Self>, AtomPhrase, Box<Self>),
-    /// Sequence of expressions
+    /// Sequence of expressions.
     Seq(Vec<Self>),
 }
 
@@ -45,6 +55,7 @@ pub enum Mixfix<T> {
 impl<T> Mixfix<T> {
     // - Tagging for comparison
 
+    /// Orders the variants for comparison across shapes.
     fn tag(&self) -> u8 {
         match self {
             Self::Arg(_) => 0,
@@ -57,7 +68,8 @@ impl<T> Mixfix<T> {
 
     // - Comparison
 
-    /// Compares structure and atoms lexicographically, using `compare_arg` for arguments
+    /// Compares structure and atoms lexicographically,
+    /// using `compare_arg` for arguments.
     pub fn cmp_by<U>(
         &self,
         mixfix_other: &Mixfix<U>,
@@ -66,6 +78,7 @@ impl<T> Mixfix<T> {
         self.cmp_by_inner(mixfix_other, &mut compare_arg)
     }
 
+    /// Structural comparison, threading the argument comparator.
     fn cmp_by_inner<U>(
         &self,
         mixfix_other: &Mixfix<U>,
@@ -98,11 +111,12 @@ impl<T> Mixfix<T> {
                 }
                 mixfixes_l.len().cmp(&mixfixes_r.len())
             }
+            // Different shapes order by variant
             _ => self.tag().cmp(&mixfix_other.tag()),
         }
     }
 
-    /// Compares structure and atoms, using `eq_arg` for arguments
+    /// Compares structure and atoms, using `eq_arg` for arguments.
     pub fn eq_by<U>(
         &self,
         mixfix_other: &Mixfix<U>,
@@ -111,6 +125,7 @@ impl<T> Mixfix<T> {
         self.eq_by_inner(mixfix_other, &mut eq_arg)
     }
 
+    /// Structural equality, threading the argument predicate.
     fn eq_by_inner<U>(
         &self,
         mixfix_other: &Mixfix<U>,
@@ -142,11 +157,12 @@ impl<T> Mixfix<T> {
                         .zip(mixfixes_r)
                         .all(|(mixfix_l, mixfix_r)| mixfix_l.eq_by_inner(mixfix_r, eq_arg))
             }
+            // Different shapes
             _ => false,
         }
     }
 
-    /// Tests whether two mixfixes have the same atoms and argument positions
+    /// Tests whether two mixfixes have the same atoms and argument positions.
     pub fn eq_shape<U>(&self, mixfix_other: &Mixfix<U>) -> bool {
         self.eq_by(mixfix_other, |_, _| true)
     }
@@ -190,6 +206,7 @@ impl<T: Ord> PartialOrd for Mixfix<T> {
 
 impl<T: Hash> Hash for Mixfix<T> {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
+        // Hash the shape first so different variants rarely collide
         self.tag().hash(hasher);
         match self {
             Self::Arg(arg) => arg.hash(hasher),
@@ -229,11 +246,12 @@ impl<T: Free> Free for Mixfix<T> {
 // == Fold, map, and iter
 
 impl<T> Mixfix<T> {
-    /// Folds arguments from left to right
+    /// Folds arguments from left to right.
     pub fn fold<A>(&self, acc: A, mut fold_arg: impl FnMut(A, &T) -> A) -> A {
         self.fold_inner(acc, &mut fold_arg)
     }
 
+    /// Folds this subtree's arguments left to right.
     fn fold_inner<A>(&self, acc: A, fold_arg: &mut impl FnMut(A, &T) -> A) -> A {
         match self {
             Self::Arg(arg) => fold_arg(acc, arg),
@@ -249,11 +267,12 @@ impl<T> Mixfix<T> {
         }
     }
 
-    /// Maps arguments while preserving mixfix structure and atoms
+    /// Maps arguments while preserving mixfix structure and atoms.
     pub fn map<U>(&self, mut map_arg: impl FnMut(&T) -> U) -> Mixfix<U> {
         self.map_inner(&mut map_arg)
     }
 
+    /// Maps this subtree's arguments, cloning atoms.
     fn map_inner<U>(&self, map_arg: &mut impl FnMut(&T) -> U) -> Mixfix<U> {
         match self {
             Self::Arg(arg) => Mixfix::Arg(map_arg(arg)),
@@ -275,7 +294,7 @@ impl<T> Mixfix<T> {
         }
     }
 
-    /// Visits arguments from left to right
+    /// Visits arguments from left to right.
     pub fn iter(&self, mut visit_arg: impl FnMut(&T)) {
         self.fold((), |(), arg| visit_arg(arg));
     }
@@ -286,20 +305,21 @@ impl<T> Mixfix<T> {
 impl<T> Mixfix<T> {
     // - Arity
 
-    /// Returns the number of argument positions
+    /// Returns the number of argument positions.
     pub fn arity(&self) -> usize {
         self.fold(0, |arity, _| arity + 1)
     }
 
     // - Atoms and args
 
-    /// Collects arguments in left-to-right tree order
+    /// Collects arguments in left-to-right tree order.
     pub fn args(&self) -> Vec<&T> {
         let mut args = Vec::with_capacity(self.arity());
         self.collect_args(&mut args);
         args
     }
 
+    /// Appends this subtree's arguments in tree order.
     fn collect_args<'a>(&'a self, args: &mut Vec<&'a T>) {
         match self {
             Self::Arg(arg) => args.push(arg),
@@ -317,13 +337,14 @@ impl<T> Mixfix<T> {
         }
     }
 
-    /// Collects owned arguments in left-to-right tree order
+    /// Collects owned arguments in left-to-right tree order.
     pub fn into_args(self) -> Vec<T> {
         let mut args = Vec::with_capacity(self.arity());
         self.collect_into_args(&mut args);
         args
     }
 
+    /// Moves this subtree's arguments out in tree order.
     fn collect_into_args(self, args: &mut Vec<T>) {
         match self {
             Self::Arg(arg) => args.push(arg),
@@ -345,7 +366,7 @@ impl<T> Mixfix<T> {
 // == Printing
 
 impl<T> Mixfix<T> {
-    /// Writes atoms and arguments, separating non-empty pieces with spaces
+    /// Writes atoms and arguments, separating non-empty pieces with spaces.
     pub fn print_with(
         &self,
         printer: &mut Printer<'_>,
@@ -355,12 +376,14 @@ impl<T> Mixfix<T> {
         self.print_with_inner(printer, &mut print_arg, &mut is_first)
     }
 
+    /// Prints this subtree, tracking whether a separator is due.
     fn print_with_inner(
         &self,
         printer: &mut Printer<'_>,
         print_arg: &mut impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
         is_first: &mut bool,
     ) -> fmt::Result {
+        // A space before every piece but the first
         let print_sep = |printer: &mut Printer<'_>, is_first: &mut bool| {
             if *is_first {
                 *is_first = false;
@@ -370,6 +393,7 @@ impl<T> Mixfix<T> {
             }
         };
 
+        // Empty keyword atoms print nothing, not even a space
         let print_atom = |atom: &AtomPhrase, printer: &mut Printer<'_>, is_first: &mut bool| {
             if matches!(&atom.node, Atom::Keyword(keyword) if keyword.is_empty()) {
                 Ok(())
@@ -409,7 +433,8 @@ impl<T> Mixfix<T> {
 
 // - Encode
 
-// Recursive mixfix boxes are not separated by phrase nodes
+// Recursive mixfix boxes are not separated by phrase nodes,
+// so grow the stack here rather than relying on `NotePhrase`
 impl<T, State> serde_state::SerializeState<State> for Mixfix<T>
 where
     T: serde_state::SerializeState<State>,

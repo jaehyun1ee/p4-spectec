@@ -1,19 +1,30 @@
+//! Source positions, spans, and the spanned syntax node `NotePhrase`
+//!
+//! Every syntax node is a `NotePhrase { node, note, span }`;
+//! `Phrase<T>` is the common case with no note.
+//! Spans print as `file:line.col-line.col`;
+//! the default span, used for generated syntax, prints only its file.
+//! The `serde_state` impls thread an encoding context through nested nodes.
+
 use serde::{Deserialize, Serialize};
 use serde_derive_state::DeserializeState;
 use std::{fmt, rc::Rc};
 
 // == Positions
 
-/// A source position
+/// A source position.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Position {
+    /// Source file, shared across positions.
     pub file: Rc<str>,
+    /// One-based line.
     pub line: usize,
+    /// Zero-based column; printed one-based.
     pub column: usize,
 }
 
 impl Position {
-    /// Constructs a source position
+    /// Constructs a source position.
     pub fn new(file: impl Into<Rc<str>>, line: usize, column: usize) -> Self {
         Self { file: file.into(), line, column }
     }
@@ -27,10 +38,12 @@ impl fmt::Display for Position {
 
 // == Spans
 
-/// A source span between two positions
+/// A source span between two positions.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Span {
+    /// Start of the span.
     pub left: Position,
+    /// End of the span.
     pub right: Position,
 }
 
@@ -45,17 +58,19 @@ impl Default for Span {
 }
 
 impl Span {
-    /// Constructs a span from its endpoints
+    /// Constructs a span from its endpoints.
     pub fn new(left: Position, right: Position) -> Self {
         Self { left, right }
     }
 
-    /// Covers all supplied spans
+    /// Covers all supplied spans.
     pub fn over(regions: &[Self]) -> Self {
+        // No spans: the default span
         let Some((region_h, regions_t)) = regions.split_first() else {
             return Self::default();
         };
 
+        // Leftmost start to rightmost end
         regions_t
             .iter()
             .fold(region_h.clone(), |region_over, region| {
@@ -69,11 +84,13 @@ impl Span {
 
 impl fmt::Display for Span {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The default span prints only its file
         if self.left.line == 0 && self.left.column == 0 && self.left == self.right {
             return fmt.write_str(&self.left.file);
         }
 
         write!(fmt, "{}:{}", self.left.file, self.left)?;
+        // A one-position span prints no end
         if self.left != self.right {
             write!(fmt, "-{}", self.right)?;
         }
@@ -83,15 +100,18 @@ impl fmt::Display for Span {
 
 // == Phrases
 
-/// A syntax node paired with semantic and source annotations
+/// A syntax node paired with semantic and source annotations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct NotePhrase<T, N = (), S = Span> {
+    /// The syntax itself.
     pub node: T,
+    /// A semantic annotation, such as the type of an expression.
     pub note: N,
+    /// Where the node came from.
     pub span: S,
 }
 
-/// A syntax node paired with its source span
+/// A syntax node paired with its source span.
 pub type Phrase<T> = NotePhrase<T>;
 
 impl<T: fmt::Display, N, S: fmt::Display> fmt::Display for NotePhrase<T, N, S> {
@@ -107,7 +127,7 @@ impl<T: std::error::Error, N: fmt::Debug, S: fmt::Debug + fmt::Display> std::err
 
 // == Constructors
 
-/// Builds a syntax node with an explicit source span
+/// Builds a syntax node with an explicit source span.
 #[macro_export]
 macro_rules! phrase {
     (node: $node:expr, span: $span:expr $(,)?) => {
@@ -115,7 +135,7 @@ macro_rules! phrase {
     };
 }
 
-/// Builds a syntax node with semantic and source annotations
+/// Builds a syntax node with semantic and source annotations.
 #[macro_export]
 macro_rules! note_phrase {
     (node: $node:expr, note: $note:expr, span: $span:expr $(,)?) => {

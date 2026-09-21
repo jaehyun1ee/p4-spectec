@@ -1,49 +1,57 @@
 //! Sets that compare syntax keys without source or analysis metadata
+//!
+//! `PhraseSet` is a persistent ordered set over `ByKey`;
+//! inserting an equivalent key keeps the first one stored.
+//! `IdSet` is the set of identifiers the `Free` traversals collect.
 
 use crate::lang::{common::Id, traits::cmp::SyntaxCmp};
 use imbl::{GenericOrdSet, shared_ptr::RcK};
 
 use super::collections::ByKey;
 
+/// The persistent set, shared through `Rc`.
 type PersistentOrdSet<K> = GenericOrdSet<K, RcK>;
 
 /// An ordered set that compares keys through `SyntaxCmp`
 #[repr(transparent)]
 #[derive(Clone, Debug)]
 pub struct PhraseSet<K: SyntaxCmp> {
+    /// Keys ordered by syntax.
     entries: PersistentOrdSet<ByKey<K>>,
 }
 
 impl<K: SyntaxCmp> PhraseSet<K> {
-    /// Constructs an empty set
+    /// Constructs an empty set.
     pub fn new() -> Self {
         Self { entries: PersistentOrdSet::new() }
     }
 
-    /// Returns whether the set contains no keys
+    /// Returns whether the set contains no keys.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
-    /// Returns the number of keys
+    /// Returns the number of keys.
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
-    /// Inserts a key, ignoring differences outside its collection representation
+    /// Inserts a key; an equivalent stored key is kept instead.
     pub fn insert(&mut self, key: K) -> bool
     where
         K: Clone,
     {
         let key = ByKey(key);
+        // The stored key wins over an equivalent newcomer
         if self.entries.contains(&key) { false } else { self.entries.insert(key).is_none() }
     }
 
-    /// Moves every key from `set_other` into this set
+    /// Moves every key from `set_other` into this set.
     pub fn append(&mut self, set_other: Self)
     where
         K: Clone,
     {
+        // Only keys not already present move over, keeping ours
         let entries_other = set_other.entries.relative_complement(self.entries.clone());
         self.entries = self.entries.clone().union(entries_other);
     }
@@ -78,14 +86,14 @@ impl<K: SyntaxCmp> PhraseSet<K> {
         Self { entries }
     }
 
-    /// Iterates over stored keys in collection order
+    /// Iterates over stored keys in collection order.
     pub fn iter(&self) -> impl Iterator<Item = &K> {
         self.entries.iter().map(|key| &key.0)
     }
 }
 
 impl PhraseSet<Id> {
-    /// Returns whether an equivalent key is present
+    /// Returns whether an equivalent key is present.
     pub fn contains(&self, key: &Id) -> bool {
         self.entries.contains(&key.node)
     }
@@ -132,8 +140,8 @@ impl<K: SyntaxCmp + Clone, const N: usize> From<[K; N]> for PhraseSet<K> {
     }
 }
 
-/// Set of source-annotated identifiers
+/// Set of source-annotated identifiers.
 pub type IdSet = PhraseSet<Id>;
 
-/// Set of source-annotated type identifiers
+/// Set of source-annotated type identifiers.
 pub type TIdSet = IdSet;

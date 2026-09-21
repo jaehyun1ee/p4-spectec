@@ -1,4 +1,7 @@
 //! Iteration operators
+//!
+//! `?` marks an optional element, `*` a list;
+//! iterations stack outward, so `x*?` is an optional list.
 
 use std::{cmp::Ordering, fmt};
 
@@ -12,6 +15,7 @@ use crate::lang::{
     },
 };
 
+/// An iteration marker.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]

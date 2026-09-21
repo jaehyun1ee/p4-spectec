@@ -1,10 +1,14 @@
 //! Identifiers shared by the language representations
+//!
+//! An identifier may carry a suffix after `_` or `'` (`x_1`, `x'`)
+//! that distinguishes occurrences of the same base name;
+//! `strip_suffix` recovers the base.
 
 use crate::lang::traits::print::{Print, Printer};
 
 use crate::lang::common::source::Phrase;
 
-/// Source-annotated identifier
+/// Source-annotated identifier.
 pub type Id = Phrase<String>;
 
 impl Print for Id {
@@ -14,7 +18,7 @@ impl Print for Id {
 }
 
 impl Id {
-    /// Strips identifier suffixes while preserving the source span
+    /// Strips identifier suffixes while preserving the source span.
     pub fn strip_suffix(&self) -> Self {
         crate::phrase! {
             node: strip_suffix(&self.node).to_owned(),
@@ -23,16 +27,21 @@ impl Id {
     }
 }
 
-/// Strips identifier suffixes while preserving all-underscore tails
+/// Strips identifier suffixes while preserving all-underscore tails.
 pub fn strip_suffix(id: &str) -> &str {
+    // The suffix starts at the first underscore or apostrophe
     let underscore = id.find('_');
     let apostrophe = id.find('\'');
     let suffix_index = match (underscore, apostrophe) {
+        // No suffix
         (None, None) => return id,
+        // A tail of only underscores is part of the name
         (Some(index), None) if id[index..].bytes().all(|byte| byte == b'_') => {
             return id;
         }
+        // One marker present
         (Some(index), None) | (None, Some(index)) => index,
+        // Both present: the earlier one starts the suffix
         (Some(index_l), Some(index_r)) => index_l.min(index_r),
     };
     &id[..suffix_index]

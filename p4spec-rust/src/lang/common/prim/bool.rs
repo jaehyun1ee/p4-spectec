@@ -1,9 +1,12 @@
 //! Booleans
+//!
+//! The boolean type and its operators, printed in the specification's spelling.
 
 use std::fmt;
 
 use crate::lang::traits::print::{Print, Printer};
 
+/// The boolean type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Typ {
     Bool,
@@ -11,11 +14,13 @@ pub enum Typ {
 
 // Operations
 
+/// Negation, `~`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum UnOp {
     Not,
 }
 
+/// Connectives: `/\`, `\/`, `=>`, `<=>`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOp {
     And,
@@ -24,6 +29,7 @@ pub enum BinOp {
     Equiv,
 }
 
+/// Equality, `=` and `=/=`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CmpOp {
     Eq,
