@@ -1,4 +1,8 @@
 //! Structured language model
+//!
+//! Types, values, and expressions are re-exported from IL;
+//! SL adds parameters with patterns, guards, and the instruction forms.
+//! The `I` and `V` parameters let the interpreter instantiate names with slots.
 
 use crate::lang::{common::source::Phrase, el, hints::input::InputHint, il};
 
@@ -87,11 +91,15 @@ pub type TParam = il::ast::TParam;
 
 // Parameters
 
+/// A function parameter with its span.
 pub type Param<I = Id, V = Var> = Phrase<ParamKind<I, V>>;
 
+/// A parameter: a typed pattern, or a function with its own signature.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ParamKind<I = Id, V = Var> {
+    /// A value parameter: its type and the pattern it binds.
     Exp(Typ, Box<Exp<I, V>>),
+    /// A function parameter with its signature.
     Def(Id, Vec<TParam>, Vec<Param<I, V>>, Typ),
 }
 
@@ -107,52 +115,76 @@ pub type ArgKind<I = Id, V = Var> = il::ast::ArgKind<I, V>;
 
 // Dangling
 
+/// Whether a branch with no otherwise block may fall through.
 pub type Dangle = bool;
 
 // Holding conditions
 
+/// Which branches a hold instruction has: both, or one that may dangle.
 #[derive(Clone, Debug, PartialEq)]
 pub enum HoldCase<I = Id, V = Var> {
+    /// A block for holds and one for does not hold.
     Both(Block<I, V>, Block<I, V>),
+    /// Only the holds block.
     Hold(Block<I, V>, Dangle),
+    /// Only the does-not-hold block.
     NotHold(Block<I, V>, Dangle),
 }
 
 // Case analysis
 
+/// One arm of a case analysis: a guard and its block.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Case<I = Id, V = Var> {
     pub guard: Guard<I, V>,
     pub block: Block<I, V>,
 }
 
+/// A test on the case scrutinee.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Guard<I = Id, V = Var> {
+    /// The scrutinee is this boolean.
     Bool(bool),
+    /// The scrutinee compares so with the expression.
     Cmp(CmpOp, OpTyp, Exp<I, V>),
+    /// The scrutinee has the type, by the given runtime check.
     Sub(Typ, Box<il::ast::Subcheck>),
+    /// The scrutinee matches the pattern.
     Match(Pattern),
+    /// The scrutinee is an element of the list.
     Mem(Exp<I, V>),
 }
 
 // Instructions
 
+/// An instruction with its span.
 pub type Instr<I = Id, V = Var> = Phrase<InstrKind<I, V>>;
 
+/// The forms of an instruction.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum InstrKind<I = Id, V = Var> {
+    /// Run the block if a condition holds.
     If(IfInstr<I, V>),
+    /// Run a branch by whether a relation applies.
     Hold(HoldInstr<I, V>),
+    /// Run the first arm whose guard accepts.
     Case(CaseInstr<I, V>),
+    /// Run a rule group's block against the inputs.
     Group(GroupInstr<I, V>),
+    /// Bind a pattern, then run the block.
     Let(LetInstr<I, V>),
+    /// Call a relation, bind its outputs, then run the block.
     Rule(RuleInstr<I, V>),
+    /// Conclude the relation with outputs.
     Result(ResultInstr<I, V>),
+    /// Conclude the function with a value.
     Return(ReturnInstr<I, V>),
+    /// Print an expression, then run the wrapped instruction.
     Debug(DebugInstr<I, V>),
 }
 
+/// Run the block when the condition holds under its iterations.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfInstr<I = Id, V = Var> {
     pub exp: Exp<I, V>,
@@ -160,6 +192,7 @@ pub struct IfInstr<I = Id, V = Var> {
     pub block: Block<I, V>,
     pub dangle: Dangle,
 }
+/// Run a branch by whether the relation applies under its iterations.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HoldInstr<I = Id, V = Var> {
     pub id: Id,
@@ -167,12 +200,14 @@ pub struct HoldInstr<I = Id, V = Var> {
     pub iter_exps: Vec<ExpIter<V>>,
     pub hold_case: HoldCase<I, V>,
 }
+/// Case analysis on an expression.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CaseInstr<I = Id, V = Var> {
     pub exp: Exp<I, V>,
     pub cases: Vec<Case<I, V>>,
     pub dangle: Dangle,
 }
+/// A rule group's block, entered when the inputs match `exps`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GroupInstr<I = Id, V = Var> {
     pub id: Id,
@@ -180,6 +215,7 @@ pub struct GroupInstr<I = Id, V = Var> {
     pub exps: Vec<Exp<I, V>>,
     pub block: Block<I, V>,
 }
+/// Bind `exp_l` to `exp_r` under the iterations, then run the block.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LetInstr<I = Id, V = Var> {
     pub exp_l: Exp<I, V>,
@@ -187,6 +223,7 @@ pub struct LetInstr<I = Id, V = Var> {
     pub iter_instrs: Vec<InstrIter<V>>,
     pub block: Block<I, V>,
 }
+/// Call the relation, bind its outputs under the iterations, then the block.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuleInstr<I = Id, V = Var> {
     pub id: Id,
@@ -195,31 +232,39 @@ pub struct RuleInstr<I = Id, V = Var> {
     pub iter_instrs: Vec<InstrIter<V>>,
     pub block: Block<I, V>,
 }
+/// The relation's outputs.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResultInstr<I = Id, V = Var> {
     pub rel_signature: RelSignature,
     pub exps: Vec<Exp<I, V>>,
 }
+/// The function's result.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReturnInstr<I = Id, V = Var> {
     pub exp: Exp<I, V>,
 }
+/// Print the expression, then run the instruction.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DebugInstr<I = Id, V = Var> {
     pub exp: Exp<I, V>,
     pub instr: Box<Instr<I, V>>,
 }
 
+/// Instructions run in order.
 pub type Block<I = Id, V = Var> = Vec<Instr<I, V>>;
+/// The otherwise block, run when the main block falls through.
 pub type ElseBlock<I = Id, V = Var> = Vec<Instr<I, V>>;
+/// An iteration over a binding instruction, as over an IL premise.
 pub type InstrIter<V = Var> = il::ast::PremIter<V>;
 
 // Hints
 
+/// A `hint(id exp)` annotation, unchanged from EL.
 pub type Hint = el::ast::Hint;
 
 // Type definitions
 
+/// A type definition: extern or defined.
 #[derive(Clone, Debug, PartialEq)]
 pub enum TypDef {
     /// `extern syntax id hint*`
@@ -228,12 +273,14 @@ pub enum TypDef {
     Defined(Box<DefinedTyp>),
 }
 
+/// A type defined outside the specification.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternTyp {
     pub id: Id,
     pub hints: Vec<Hint>,
 }
 
+/// A type with parameters and a body.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DefinedTyp {
     pub id: Id,
@@ -244,6 +291,7 @@ pub struct DefinedTyp {
 
 // Meta-variables
 
+/// A meta-variable naming a type.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VarDef {
     pub id: Id,
@@ -253,6 +301,7 @@ pub struct VarDef {
 
 // Relations
 
+/// A relation definition: extern or defined.
 #[derive(Clone, Debug, PartialEq)]
 pub enum RelDef<I = Id, V = Var> {
     /// `extern relation id : not_typ hint(input %int*) hint*`
@@ -261,14 +310,14 @@ pub enum RelDef<I = Id, V = Var> {
     Defined(DefinedRel<I, V>),
 }
 
-// not_typ `hint(input` `%`int* `)`
+/// A relation's notation type and input hint, `not_typ hint(input %int*)`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RelSignature {
     pub not_typ: NotTyp,
     pub input_hint: InputHint,
 }
 
-// id `:` rel_signature exp* hint*
+/// A relation provided by the host, `id : rel_signature exp* hint*`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternRel<I = Id, V = Var> {
     pub id: Id,
@@ -277,7 +326,8 @@ pub struct ExternRel<I = Id, V = Var> {
     pub hints: Vec<Hint>,
 }
 
-// id `:` mixop `hint(input` `%`int* `)` exp* block elseblock? hint*
+/// A relation as a block with an optional otherwise block,
+/// `id : rel_signature exp* block elseblock? hint*`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DefinedRel<I = Id, V = Var> {
     pub id: Id,
@@ -290,6 +340,7 @@ pub struct DefinedRel<I = Id, V = Var> {
 
 // Meta-functions
 
+/// A function definition: extern, builtin, table, or defined.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MetaFuncDef<I = Id, V = Var> {
     /// `extern dec id <` list(tparam, `,`) `> list(param, `,`) : typ hint*`
@@ -302,7 +353,7 @@ pub enum MetaFuncDef<I = Id, V = Var> {
     Defined(DefinedFunc<I, V>),
 }
 
-// id `<` list(tparam, `,`) `>` list(param, `,`) `:` hint*
+/// A function provided by the host, `id<tparams>(params) : typ hint*`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternFunc<I = Id, V = Var> {
     pub id: Id,
@@ -312,7 +363,7 @@ pub struct ExternFunc<I = Id, V = Var> {
     pub hints: Vec<Hint>,
 }
 
-// id `<` list(tparam, `,`) `>` list(param, `,`) `:` hint*
+/// A function provided by the interpreter, `id<tparams>(params) : typ hint*`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BuiltinFunc<I = Id, V = Var> {
     pub id: Id,
@@ -322,7 +373,7 @@ pub struct BuiltinFunc<I = Id, V = Var> {
     pub hints: Vec<Hint>,
 }
 
-// `(` list(exp, `,`)* `)` `->` exp block
+/// One row, `(exps) -> exp block`: input patterns, matched expression, block.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TableRow<I = Id, V = Var> {
     pub exps_input: Vec<Exp<I, V>>,
@@ -330,7 +381,7 @@ pub struct TableRow<I = Id, V = Var> {
     pub block: Block<I, V>,
 }
 
-// id `(` list(param, `,`) `)` `:` typ tablerow* hint*
+/// A function defined by table rows, `id(params) : typ tablerow* hint*`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TableFunc<I = Id, V = Var> {
     pub id: Id,
@@ -340,7 +391,8 @@ pub struct TableFunc<I = Id, V = Var> {
     pub hints: Vec<Hint>,
 }
 
-// id `<` list(tparam, `,`) `>` list(arg, `,`) `:` typ block elseblock? hint*
+/// A function as a block with an optional otherwise block,
+/// `id<tparams>(params) : typ block elseblock? hint*`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DefinedFunc<I = Id, V = Var> {
     pub id: Id,
@@ -354,17 +406,23 @@ pub struct DefinedFunc<I = Id, V = Var> {
 
 // Definitions
 
+/// A top-level definition with its span.
 pub type Def<I = Id, V = Var> = Phrase<DefKind<I, V>>;
 
+/// The forms of a definition.
 #[derive(Clone, Debug, PartialEq)]
 pub enum DefKind<I = Id, V = Var> {
+    /// A type definition.
     Typ(TypDef),
-    // `var` id `:` typ hint*
+    /// A meta-variable, `var id : typ hint*`.
     Var(VarDef),
+    /// A relation definition.
     Rel(RelDef<I, V>),
+    /// A function definition.
     MetaFunc(MetaFuncDef<I, V>),
 }
 
 // Spec
 
+/// A whole specification: its definitions in source order.
 pub type Spec<I = Id, V = Var> = Vec<Def<I, V>>;

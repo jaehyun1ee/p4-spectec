@@ -1,4 +1,9 @@
 //! Text rendering for structured-language data
+//!
+//! Prints SL as a numbered outline, one step per instruction,
+//! nested blocks indented under their step,
+//! with relation inputs and outputs filled into the notation and `%` elsewhere.
+//! `short` prints a step's heading without its blocks.
 
 use std::fmt::{self, Write};
 
@@ -55,6 +60,7 @@ impl<I: Print, V: Print> Print for Instr<I, V> {
     }
 }
 
+/// Prints one instruction as a numbered step, then its blocks unless `short`.
 fn write_instr_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
     instr: &Instr<I, V>,
@@ -62,11 +68,13 @@ fn write_instr_with<I: Print, V: Print>(
     level: usize,
     index: usize,
 ) -> fmt::Result {
+    // The step number is omitted in short form
     let order = format!("{}{index}. ", "  ".repeat(level));
     let mut write_order = || {
         if short { Ok(()) } else { output.write_str(&order) }
     };
     match &instr.node {
+        // `If (cond), then` and the block, marking a dangling else
         InstrKind::If(IfInstr { exp, iter_exps, block, dangle }) => {
             write_order()?;
             output.write_str("If (")?;
@@ -85,7 +93,9 @@ fn write_instr_with<I: Print, V: Print>(
             }
             Ok(())
         }
+        // `If (rel: args) holds, then` in one of two shapes
         InstrKind::Hold(HoldInstr { id, not_exp, iter_exps, hold_case }) => match hold_case {
+            // Both branches: then-block, `Else,`, else-block
             HoldCase::Both(block_hold, block_not_hold) => {
                 write_order()?;
                 output.write_str("If (")?;
@@ -105,6 +115,7 @@ fn write_instr_with<I: Print, V: Print>(
                 }
                 Ok(())
             }
+            // One branch: its block, marking a dangling else
             HoldCase::Hold(block, dangle) | HoldCase::NotHold(block, dangle) => {
                 write_order()?;
                 output.write_str("If (")?;
@@ -132,6 +143,7 @@ fn write_instr_with<I: Print, V: Print>(
                 Ok(())
             }
         },
+        // `Case analysis on` and the numbered arms
         InstrKind::Case(CaseInstr { exp, cases, dangle }) => {
             write_order()?;
             output.write_str("Case analysis on ")?;
@@ -145,6 +157,7 @@ fn write_instr_with<I: Print, V: Print>(
             }
             Ok(())
         }
+        // `Group id:` with the inputs in the notation, then the block
         InstrKind::Group(GroupInstr { id, rel_signature, exps, block }) => {
             write_order()?;
             output.write_str("Group ")?;
@@ -157,6 +170,7 @@ fn write_instr_with<I: Print, V: Print>(
             }
             Ok(())
         }
+        // `(Let x be e)` with its iterations, then the block
         InstrKind::Let(LetInstr { exp_l, exp_r, iter_instrs, block }) => {
             write_order()?;
             output.write_str("(Let ")?;
@@ -173,6 +187,7 @@ fn write_instr_with<I: Print, V: Print>(
             }
             Ok(())
         }
+        // `(rel: args)` with its iterations, then the block
         InstrKind::Rule(RuleInstr { id, not_exp, iter_instrs, block, .. }) => {
             write_order()?;
             output.write_char('(')?;
@@ -189,20 +204,24 @@ fn write_instr_with<I: Print, V: Print>(
             }
             Ok(())
         }
+        // A relation without outputs only holds
         InstrKind::Result(ResultInstr { exps, .. }) if exps.is_empty() => {
             write_order()?;
             output.write_str("The relation holds")
         }
+        // `Result in:` with the outputs in the notation
         InstrKind::Result(ResultInstr { rel_signature, exps }) => {
             write_order()?;
             output.write_str("Result in: ")?;
             write_reloutput(output, rel_signature, exps)
         }
+        // `Return` and the value
         InstrKind::Return(ReturnInstr { exp }) => {
             write_order()?;
             output.write_str("Return ")?;
             exp.print(output)
         }
+        // `Debug:` and the expression, then the wrapped instruction
         InstrKind::Debug(DebugInstr { exp, instr: nested }) => {
             write_order()?;
             output.write_str("Debug: ")?;
@@ -248,6 +267,7 @@ impl<I: Print, V: Print> Print for Guard<I, V> {
     }
 }
 
+/// Prints the arms of a case analysis, numbered from one.
 fn write_cases_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
     cases: &[Case<I, V>],
@@ -262,6 +282,7 @@ fn write_cases_with<I: Print, V: Print>(
     Ok(())
 }
 
+/// Prints one arm as `Case guard` and its block.
 fn write_case_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
     case: &Case<I, V>,
@@ -282,6 +303,7 @@ impl<I: Print, V: Print> Print for Block<I, V> {
     }
 }
 
+/// Prints a block's instructions as consecutive steps.
 fn write_block_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
     block: &Block<I, V>,
@@ -297,6 +319,7 @@ fn write_block_with<I: Print, V: Print>(
     Ok(())
 }
 
+/// Prints the otherwise block, if present.
 fn write_elseblock_opt_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
     block: &Option<ElseBlock<I, V>>,
@@ -310,6 +333,7 @@ fn write_elseblock_opt_with<I: Print, V: Print>(
     Ok(())
 }
 
+/// Prints the otherwise block as the next step, `Otherwise,`.
 fn write_elseblock_with<I: Print, V: Print>(
     output: &mut Printer<'_>,
     block: &ElseBlock<I, V>,
@@ -405,6 +429,7 @@ impl<I: Print, V: Print> Print for DefinedRel<I, V> {
     }
 }
 
+/// Fills the input expressions into the notation at the hint's positions.
 fn write_relinput<I: Print, V: Print>(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
@@ -413,6 +438,7 @@ fn write_relinput<I: Print, V: Print>(
     let not_typ = &rel_signature.not_typ;
     let input_indices = rel_signature.input_hint.indices();
     assert_eq!(input_indices.len(), exps_input.len());
+    // Each notation position takes its input, or `%`
     let args = (0..not_typ.node.arity()).map(|index| {
         input_indices
             .iter()
@@ -427,6 +453,7 @@ fn write_relinput<I: Print, V: Print>(
     })
 }
 
+/// Fills the output expressions into the notation at the non-input positions.
 fn write_reloutput<I: Print, V: Print>(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
@@ -434,6 +461,7 @@ fn write_reloutput<I: Print, V: Print>(
 ) -> fmt::Result {
     let not_typ = &rel_signature.not_typ;
     let input_indices = rel_signature.input_hint.indices();
+    // Outputs are the positions the hint leaves
     let outputs = (0..not_typ.node.arity())
         .filter(|index| !input_indices.contains(index))
         .collect::<Vec<_>>();

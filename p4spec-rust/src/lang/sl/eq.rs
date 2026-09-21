@@ -1,6 +1,9 @@
 //! Syntax equality for structured-language data
 //!
-//! Ignores source regions; compares relation hints and instruction identifiers
+//! Ignores source regions;
+//! compares relation signatures with their input hints
+//! and instruction identifiers,
+//! since both decide how a definition runs.
 
 use crate::lang::traits::eq::SyntaxEq;
 
