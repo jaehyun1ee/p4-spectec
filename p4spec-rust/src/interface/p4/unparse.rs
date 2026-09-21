@@ -1,9 +1,10 @@
-//! Render runtime values back to P4 surface syntax.
+//! Rendering of runtime values back to P4 surface syntax
 //!
-//! The unparser collects `@print` hints from one specification IR, recursively
-//! renders each runtime value, and applies a matching hint before falling back
-//! to its mixfix shape. For example, a case carrying an infix `+` hint renders
-//! its two arguments as `left + right`.
+//! The unparser collects `print` hints from one specification,
+//! recursively renders each runtime value,
+//! and applies a matching hint before falling back to its mixfix shape.
+//! For example, a case carrying an infix `+` hint renders its two arguments
+//! as `left + right`.
 
 use std::collections::HashMap;
 
@@ -25,20 +26,25 @@ use super::error::P4UnparseError;
 
 // == Unparser and errors
 
+/// Renders values using the specification's print hints.
 #[derive(Clone, Debug, Default)]
 pub struct P4Unparser {
+    /// Print hints by type name and case shape.
     hints: HashMap<(String, Mixop), AlterationHint>,
 }
 
+/// Records the print hint of each case of a variant type.
 fn insert_case_hints(
     hints: &mut HashMap<(String, Mixop), AlterationHint>,
     type_id: &str,
     def_typ: &crate::lang::il::ast::DefTyp,
 ) {
+    // Only variant cases carry print hints
     let DefTypKind::Variant(cases) = &def_typ.node else {
         return;
     };
     for TypCase { not_typ, hints: hints_case, .. } in cases {
+        // Cases without a print hint fall back to their shape
         let Some(Hint { exp, .. }) = hints_case.iter().find(|hint| hint.id.node == "print") else {
             continue;
         };
@@ -52,8 +58,10 @@ fn insert_case_hints(
 impl P4Unparser {
     // - Construction
 
+    /// Collects print hints from an AL specification.
     pub fn from_al_spec(spec_al: &[al::ast::Def]) -> Self {
         let mut hints = HashMap::new();
+        // Only defined types carry cases with print hints
         for definition_al in spec_al {
             let al::ast::DefKind::Typ(typ_def_al) = &definition_al.node else {
                 continue;
@@ -66,8 +74,10 @@ impl P4Unparser {
         Self { hints }
     }
 
+    /// Collects print hints from an SL specification.
     pub fn from_sl_spec(spec_sl: &[sl::ast::Def]) -> Self {
         let mut hints = HashMap::new();
+        // Only defined types carry cases with print hints
         for definition_sl in spec_sl {
             let sl::ast::DefKind::Typ(typ_def_sl) = &definition_sl.node else {
                 continue;
@@ -82,26 +92,35 @@ impl P4Unparser {
 
     // - Rendering
 
+    /// Renders a value as P4 text.
     pub fn render(&self, arena: &ValueArena, value: &Value) -> Result<String, P4UnparseError> {
         match arena.kind(value) {
+            // Primitives print as themselves
             ValueKind::Bool(value) => Ok(value.to_string()),
             ValueKind::Num(Number::Nat(value)) => Ok(value.to_string()),
             ValueKind::Num(Number::Int(value)) => Ok(value.to_string()),
             ValueKind::Text(value) => Ok(escape_text(value)),
+            // Structs have no P4 spelling
             ValueKind::Struct(_) => Err(P4UnparseError::UnsupportedValue("Struct")),
+            // Cases go through their hint or shape
             ValueKind::Case(value_case) => self.render_case(arena, arena.typ(value), value_case),
+            // Tuples in parentheses, comma separated
             ValueKind::Tuple(values) => {
                 let rendered = self.render_values(arena, values, ", ")?;
                 Ok(format!("({rendered})"))
             }
+            // An option is its content or nothing
             ValueKind::Opt(Some(value)) => self.render(arena, value),
             ValueKind::Opt(None) => Ok(String::new()),
+            // Lists are space separated
             ValueKind::List(values) => self.render_values(arena, values, " "),
+            // Functions and externs have no P4 spelling
             ValueKind::Func(_) => Err(P4UnparseError::UnsupportedValue("Func")),
             ValueKind::Extern(_) => Err(P4UnparseError::UnsupportedValue("Extern")),
         }
     }
 
+    /// Renders a case by its print hint when the type has one, else by shape.
     fn render_case(
         &self,
         arena: &ValueArena,
@@ -119,6 +138,7 @@ impl P4Unparser {
         Ok(rendered.join(" "))
     }
 
+    /// Renders the case arguments through a print-hint template.
     fn render_hint(
         &self,
         arena: &ValueArena,
@@ -132,6 +152,7 @@ impl P4Unparser {
         }
     }
 
+    /// Renders values joined by a separator.
     fn render_values(
         &self,
         arena: &ValueArena,
@@ -145,8 +166,10 @@ impl P4Unparser {
         Ok(rendered.join(separator))
     }
 
+    /// The P4 spelling of an atom: tags vanish, the rest lowercase or bare.
     fn render_atom(atom: &Atom) -> String {
         match atom {
+            // Tags are silent; keywords lowercase; brackets print bare
             Atom::Tag(_) => String::new(),
             Atom::Operator(op) => op.to_ascii_lowercase(),
             Atom::LAngle => "<".to_owned(),
@@ -161,6 +184,7 @@ impl P4Unparser {
         }
     }
 
+    /// Renders a case by its shape, skipping atoms that print as nothing.
     fn render_mixfix(
         &self,
         arena: &ValueArena,
@@ -168,16 +192,19 @@ impl P4Unparser {
         rendered: &mut Vec<String>,
     ) -> Result<(), P4UnparseError> {
         match mixfix {
+            // Arguments render recursively
             Mixfix::Arg(value) => {
                 let value = self.render(arena, value)?;
                 rendered.push(value);
             }
+            // Silent atoms are dropped rather than left as empty pieces
             Mixfix::Atom(atom) => {
                 let rendered_atom = Self::render_atom(&atom.node);
                 if !rendered_atom.is_empty() {
                     rendered.push(rendered_atom);
                 }
             }
+            // Brackets around the inner form
             Mixfix::Brack(atom_l, mixfix, atom_r) => {
                 let rendered_atom_l = Self::render_atom(&atom_l.node);
                 if !rendered_atom_l.is_empty() {
@@ -189,6 +216,7 @@ impl P4Unparser {
                     rendered.push(rendered_atom_r);
                 }
             }
+            // Left, operator, right
             Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
                 self.render_mixfix(arena, mixfix_l, rendered)?;
                 let rendered_atom = Self::render_atom(&atom.node);
@@ -197,6 +225,7 @@ impl P4Unparser {
                 }
                 self.render_mixfix(arena, mixfix_r, rendered)?;
             }
+            // Pieces in order
             Mixfix::Seq(mixfixes) => {
                 for mixfix in mixfixes {
                     self.render_mixfix(arena, mixfix, rendered)?;
@@ -209,6 +238,7 @@ impl P4Unparser {
 
 // == Print-hint rendering
 
+/// The print-hint renderer producing P4 text.
 struct ValueRenderer<'a>(&'a P4Unparser, &'a ValueArena);
 
 impl Renderer<&Value> for ValueRenderer<'_> {
@@ -226,6 +256,7 @@ impl Renderer<&Value> for ValueRenderer<'_> {
         Ok(P4Unparser::render_atom(&atom.node))
     }
 
+    // Empty pieces leave no double spaces
     fn join(&self, items: Vec<Self::Output>) -> Self::Output {
         let items = items.into_iter().collect::<Result<Vec<_>, _>>()?;
         Ok(items

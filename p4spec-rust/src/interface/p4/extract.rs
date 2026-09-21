@@ -1,7 +1,9 @@
-//! Extracts name-resolution metadata from completed P4 parse-tree values.
+//! Extraction of name-resolution metadata from completed P4 parse-tree values
 //!
 //! Parser semantic actions use these projections to register declaration names,
 //! referenced type identifiers, and the presence of type parameters.
+//! Each matches the value's mixop text
+//! against the grammar productions it may come from.
 
 use crate::lang::data::value::{Value, ValueArena, get};
 
@@ -9,10 +11,12 @@ use super::{context::TypeId, error::ExtractError};
 
 // == Identifier extraction
 
+/// The text of a `name` value, including the keywords usable as names.
 pub(super) fn id_name(arena: &ValueArena, value: &Value) -> Result<String, ExtractError> {
     let unexpected = || ExtractError::UnexpectedValue("id_name");
     get::matches! { arena,
         value,
+        // Identifiers carry their text; keyword names spell themselves
         "_ID text" => |values| {
             let text = get::text(arena, values[0]).map_err(|_| unexpected())?;
             Ok(text.to_owned())
@@ -33,6 +37,7 @@ pub(super) fn id_name(arena: &ValueArena, value: &Value) -> Result<String, Extra
     }
 }
 
+/// The function name of a `functionPrototype` value.
 pub(super) fn id_function_prototype(
     arena: &ValueArena,
     value: &Value,
@@ -46,9 +51,11 @@ pub(super) fn id_function_prototype(
     }
 }
 
+/// The declared name of any declaration value.
 pub(super) fn id_declaration(arena: &ValueArena, value: &Value) -> Result<String, ExtractError> {
     get::matches! { arena,
         value,
+        // One arm per declaration production, picking out its `name`
         "annotationList CONST type name initializer ';'" => |values| id_name(arena, values[2]),
         "annotationList type `( argumentList `) name ';'" => |values| id_name(arena, values[3]),
         "annotationList type `( argumentList `) name objectInitializer ';'" => |values| {
@@ -101,10 +108,12 @@ pub(super) fn id_declaration(arena: &ValueArena, value: &Value) -> Result<String
 
 // == Type identifier extraction
 
+/// The named type a `typeRef` refers to; built-in types have no members.
 pub(super) fn type_id_type_ref(arena: &ValueArena, value: &Value) -> Result<TypeId, ExtractError> {
     let unexpected = || ExtractError::UnexpectedValue("type_id_type_ref");
     get::matches! { arena,
         value,
+        // Built-in types have no members to resolve
         "BOOL"
         | "ERROR"
         | "MATCH_KIND"
@@ -121,12 +130,14 @@ pub(super) fn type_id_type_ref(arena: &ValueArena, value: &Value) -> Result<Type
             let text = get::text(arena, values[0]).map_err(|_| unexpected())?;
             Ok(TypeId::Local(text.to_owned()))
         },
+        // `.T` is looked up globally
         "_TID '.' typeName" => |values| {
             match type_id_type_ref(arena, values[0])? {
                 TypeId::Local(id) => Ok(TypeId::Global(id)),
                 _ => Err(unexpected()),
             }
         },
+        // Type arguments do not change which type is named
         "prefixedTypeName `< typeArgumentList `>" => |values| {
             type_id_type_ref(arena, values[0])
         },
@@ -137,6 +148,7 @@ pub(super) fn type_id_type_ref(arena: &ValueArena, value: &Value) -> Result<Type
     }
 }
 
+/// The declared type of a variable or instance declaration.
 pub(super) fn type_id_declaration(
     arena: &ValueArena,
     value: &Value,
@@ -154,6 +166,7 @@ pub(super) fn type_id_declaration(
 
 // == Type parameter extraction
 
+/// Whether a `typeParameterListOpt` is non-empty.
 fn has_type_params(arena: &ValueArena, value: &Value) -> Result<bool, ExtractError> {
     get::matches! { arena,
         value,
@@ -163,6 +176,7 @@ fn has_type_params(arena: &ValueArena, value: &Value) -> Result<bool, ExtractErr
     }
 }
 
+/// Whether a `functionPrototype` has type parameters.
 pub(super) fn has_type_params_function_prototype(
     arena: &ValueArena,
     value: &Value,
@@ -178,12 +192,14 @@ pub(super) fn has_type_params_function_prototype(
     }
 }
 
+/// Whether a declaration introduces type parameters.
 pub(super) fn has_type_params_declaration(
     arena: &ValueArena,
     value: &Value,
 ) -> Result<bool, ExtractError> {
     get::matches! { arena,
         value,
+        // One arm per declaration production; only some take type parameters
         "annotationList CONST type name initializer ';'"
         | "annotationList type `( argumentList `) name ';'"
         | "annotationList type `( argumentList `) name objectInitializer ';'" => |_values| {
