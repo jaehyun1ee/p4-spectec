@@ -231,13 +231,9 @@ fn lift_case_exp(
 ) -> Option<LiftedCall> {
     let mut exps_sl = not_exp_sl.args().into_iter().cloned().collect::<Vec<_>>();
     let call_lifted = lift_exps(ids_used, ids_iter_local, &mut exps_sl, RootCallPolicy::Lift)?;
-    replace_not_exp_args(not_exp_sl, exps_sl);
-    Some(call_lifted)
-}
-
-fn replace_not_exp_args(not_exp_sl: &mut sl::NotExp, exps_sl: Vec<sl::Exp>) {
     let mut exps_sl = exps_sl.into_iter();
     *not_exp_sl = not_exp_sl.map(|_| exps_sl.next().expect("lifting preserves notation arity"));
+    Some(call_lifted)
 }
 
 // - Struct expression
@@ -581,7 +577,10 @@ fn replace_rule_not_exp_args(
 ) -> Result<(), ProseError> {
     let exps_sl = input::combine(&instr_sl.input_hint, exps_input_sl, exps_output_sl)
         .map_err(|error| ProseError::new(ProseErrorKind::Input(error), span.clone()))?;
-    replace_not_exp_args(&mut instr_sl.not_exp, exps_sl);
+    let mut exps_sl = exps_sl.into_iter();
+    instr_sl.not_exp = instr_sl
+        .not_exp
+        .map(|_| exps_sl.next().expect("lifting preserves notation arity"));
     Ok(())
 }
 
@@ -605,7 +604,10 @@ fn lift_hold_instr(ids_used: &mut IdSet, instr_sl: &mut sl::HoldInstr) -> Option
 
     // Restore notation only when an argument changed
     if call_lifted.is_some() {
-        replace_not_exp_args(&mut instr_sl.not_exp, exps_sl);
+        let mut exps_sl = exps_sl.into_iter();
+        instr_sl.not_exp = instr_sl
+            .not_exp
+            .map(|_| exps_sl.next().expect("lifting preserves notation arity"));
     }
     call_lifted
 }
