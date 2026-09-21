@@ -2,10 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::lang::{
-    pl::{ast as pl, group},
-    traits::has_call::HasCall,
-};
+use crate::lang::{pl::ast as pl, traits::has_call::HasCall};
 
 type Fallthroughs = HashMap<String, pl::Fallthrough>;
 
@@ -322,6 +319,47 @@ fn stamp_defined_rel_def(mut def_rel: pl::DefinedRel) -> pl::DefinedRel {
     def_rel
 }
 
+/// Collects nested rule-group identifiers in depth-first source order.
+fn collect_ids_group<'a>(block: &'a pl::DispatchBlock, ids_group: &mut Vec<&'a pl::Id>) {
+    for instr in block {
+        match &instr.node.node {
+            pl::InstrKind::If(pl::IfInstr { block, .. }) => {
+                collect_ids_group(block, ids_group);
+            }
+            pl::InstrKind::Hold(pl::HoldInstr { hold_case, .. }) => match hold_case {
+                pl::HoldCase::Both(block_hold, block_not_hold) => {
+                    collect_ids_group(block_hold, ids_group);
+                    collect_ids_group(block_not_hold, ids_group);
+                }
+                pl::HoldCase::Hold(block, _) | pl::HoldCase::NotHold(block, _) => {
+                    collect_ids_group(block, ids_group);
+                }
+            },
+            pl::InstrKind::Case(pl::CaseInstr { cases, .. }) => {
+                for case in cases {
+                    collect_ids_group(&case.block, ids_group);
+                }
+            }
+            pl::InstrKind::CheckLetSub(pl::CheckLetSubInstr { block, .. })
+            | pl::InstrKind::CheckLetMatch(pl::CheckLetMatchInstr { block, .. })
+            | pl::InstrKind::OptionGet(pl::OptionGetInstr { block, .. }) => {
+                collect_ids_group(block, ids_group);
+            }
+            pl::InstrKind::Tier(pl::TierInstr {
+                tier: pl::DispatchInstr::Route(pl::RouteInstr { blocks }),
+            }) => {
+                for block in blocks {
+                    collect_ids_group(block, ids_group);
+                }
+            }
+            pl::InstrKind::Tier(pl::TierInstr {
+                tier: pl::DispatchInstr::Group(pl::RuleGroupInstr { id_group, .. }),
+            }) => ids_group.push(id_group),
+            pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_) => {}
+        }
+    }
+}
+
 fn collect_fallthroughs(
     fallthrough_final: pl::Fallthrough,
     block: &pl::DispatchBlock,
@@ -337,19 +375,22 @@ fn collect_fallthroughs(
     };
     let mut fallthroughs = Fallthroughs::new();
     let mut fallthrough = fallthrough_final;
-    for rulegroups in blocks
-        .into_iter()
-        .map(group::collect_rulegroups)
-        .filter(|rulegroups| !rulegroups.is_empty())
-        .rev()
-    {
+    let mut ids_group_by_block = Vec::new();
+    for block in blocks {
+        let mut ids_group = Vec::new();
+        collect_ids_group(block, &mut ids_group);
+        if !ids_group.is_empty() {
+            ids_group_by_block.push(ids_group);
+        }
+    }
+    for ids_group in ids_group_by_block.into_iter().rev() {
         fallthroughs.extend(
-            rulegroups
+            ids_group
                 .iter()
-                .map(|rulegroup| (rulegroup.id_rulegroup.node.clone(), fallthrough.clone())),
+                .map(|id_group| (id_group.node.clone(), fallthrough.clone())),
         );
-        let rulegroup_first = rulegroups.first().expect("filtered empty rule groups");
-        fallthrough = pl::Fallthrough::Group(rulegroup_first.id_rulegroup.clone());
+        let id_group_first = ids_group.first().expect("filtered empty groups");
+        fallthrough = pl::Fallthrough::Group((**id_group_first).clone());
     }
     fallthroughs
 }
