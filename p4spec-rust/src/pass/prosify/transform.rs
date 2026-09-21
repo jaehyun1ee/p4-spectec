@@ -8,6 +8,10 @@
 //! Relation bodies convert at the dispatch tier, group bodies at the group
 //! tier, and each node receives the `prose*` hints of the definition it
 //! refers to, validated against the number of items they describe.
+//!
+//! For example, an SL `let x = e` whose body applies `R(x)` becomes the PL
+//! sequence `let x be e` then `R(x)` as sibling steps rather than a nested
+//! block, so the prose reads as consecutive numbered steps.
 
 use crate::lang::{
     al,

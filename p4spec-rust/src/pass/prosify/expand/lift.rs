@@ -3,6 +3,12 @@
 //! `lift_instr` repeatedly removes the leftmost eligible call from one
 //! instruction. Expression and path dispatchers preserve the iteration state
 //! needed to rebuild the surrounding let instructions.
+//!
+//! For example, `let z = $f($g(x))` becomes
+//! `let y = $g(x) { let z = $f(y) }`: the nested call is bound first,
+//! and the outer call keeps its place.
+//! A call lifted out of an iteration keeps that dimension, so `$f(x)` under
+//! `(...)*` binds a fresh `y*` and is read back as `y` inside the iteration.
 
 use crate::lang::{
     common::{

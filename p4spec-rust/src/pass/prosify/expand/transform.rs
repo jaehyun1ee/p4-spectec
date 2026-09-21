@@ -3,6 +3,10 @@
 //! `expand_spec` descends from definitions to instructions. Each instruction
 //! first expands its nested blocks, then delegates direct call lifting to
 //! `lift::lift_instr` until the generated let instructions are stable.
+//!
+//! For example, the rule application `R($f($g(x)))` becomes
+//! `let a = $g(x); let b = $f(a); R(b)`: one let per call, innermost first,
+//! naming each intermediate result before it is used.
 
 use crate::lang::{common::ds::set::IdSet, sl::ast as sl, traits::free::FreeIds};
 
