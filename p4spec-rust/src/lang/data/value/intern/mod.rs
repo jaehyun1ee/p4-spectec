@@ -1,4 +1,8 @@
 //! Typed handles and structural, physical, or canonical interning storage
+//!
+//! `Interned<T>` is a `u32` handle valid in the interner that issued it.
+//! `Interner` shares exactly equal items, `RcInterner` shares by allocation,
+//! `CanonInterner` stores exactly and adds a coarser canonical identity.
 
 // = Implementations
 
