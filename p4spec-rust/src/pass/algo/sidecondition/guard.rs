@@ -13,7 +13,7 @@ use crate::{
     lang::{
         al::{self, ast},
         common::source::Span,
-        traits::{eq::SyntaxEq, free::Free},
+        traits::{eq::SyntaxEq, free::FreeIds},
         xl,
     },
     note_phrase, phrase,
@@ -230,7 +230,7 @@ fn filter_prems_insert(
 }
 
 fn iterate_prem(iter: ast::Iter, vars: &[ast::Var], prem_al: ast::Prem) -> Option<ast::Prem> {
-    let frees = prem_al.free();
+    let frees = prem_al.free_ids();
     let vars_bound = vars
         .iter()
         .filter(|var| frees.contains(&var.id))

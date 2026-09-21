@@ -6,7 +6,7 @@ mod revive_underscore;
 use super::{id, instr, ret, span, variable};
 use crate::lang::{
     il::ast::{ArgKind, Exp, ExpKind, Id, Iter, TypKind, Var},
-    traits::free::Free,
+    traits::free::FreeIds,
 };
 use crate::pass::structure::{
     ol::ast::*,
@@ -68,13 +68,17 @@ fn test_function_inputs_main_and_else_share_names_and_preserve_def_arguments() {
         Some(vec![ret("_x'''")]),
     )
     .unwrap();
-    let ids = args_input[0].free();
+    let ids = args_input[0].free_ids();
     let id_input = ids.iter().next().unwrap();
     assert_eq!(id_input.node, "x'");
     assert_eq!(args_input[0].span, span(4));
     assert_eq!(args_input[1], arg_def);
-    assert!(block[0].free().contains(id_input));
-    assert!(block_else.as_ref().unwrap()[0].free().contains(id_input));
+    assert!(block[0].free_ids().contains(id_input));
+    assert!(
+        block_else.as_ref().unwrap()[0]
+            .free_ids()
+            .contains(id_input)
+    );
     let body_again = pretty_func(args_input.clone(), block.clone(), block_else.clone()).unwrap();
     assert_eq!(body_again, (args_input, block, block_else));
 }

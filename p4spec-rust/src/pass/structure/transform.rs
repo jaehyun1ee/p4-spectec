@@ -14,7 +14,7 @@ use crate::lang::{
     common::{ds::set::IdSet, source::Span},
     hints::input,
     sl::ast as sl,
-    traits::{eq::SyntaxEq, free::Free},
+    traits::{eq::SyntaxEq, free::FreeIds},
 };
 
 // == Parameters
@@ -565,7 +565,7 @@ fn struct_defined_rel_def(
     span: &Span,
     without_rule_groups: bool,
 ) -> Result<sl::DefinedRel, StructureError> {
-    let frees = def_rel_al.free();
+    let frees = def_rel_al.free_ids();
     let al::DefinedRel { id, not_typ, input_hint, rule_groups, else_group, hints } = def_rel_al;
     input::validate(&input_hint, not_typ.node.arity()).map_err(|error| {
         let error_kind = StructureErrorKind::Input(error);

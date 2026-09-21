@@ -1,5 +1,5 @@
 use super::super::{ret, variable};
-use crate::lang::traits::free::Free;
+use crate::lang::traits::free::FreeIds;
 use crate::pass::structure::pretty::revive_underscore;
 #[test]
 fn test_revival_avoids_free_capture_and_agrees_with_fallback() {
@@ -8,11 +8,11 @@ fn test_revival_avoids_free_capture_and_agrees_with_fallback() {
         (vec![variable("_x")], vec![ret("_x"), ret("x")], Some(vec![ret("_x")])),
     )
     .unwrap();
-    let id = exps_match[0].free().iter().next().unwrap().clone();
+    let id = exps_match[0].free_ids().iter().next().unwrap().clone();
     assert_ne!(id.node, "_x");
     assert_ne!(id.node, "x");
-    assert!(block[0].free().contains(&id));
-    assert!(block_else.unwrap()[0].free().contains(&id));
+    assert!(block[0].free_ids().contains(&id));
+    assert!(block_else.unwrap()[0].free_ids().contains(&id));
 }
 
 use super::super::{id, instr, signature, span};

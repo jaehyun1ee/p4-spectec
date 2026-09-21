@@ -3,7 +3,7 @@ use p4spec_rust::{
         ds::set::IdSet,
         source::{Position, Span},
     },
-    lang::{hints::alter, il, pl, traits::free::Free},
+    lang::{hints::alter, il, pl, traits::free::FreeIds},
 };
 
 fn span(name: &str) -> Span {
@@ -38,7 +38,7 @@ fn test_prose_nodes_collect_free_identifiers_through_annotations() {
         hints: pl::annot::Hints::default(),
     };
 
-    assert_eq!(exp_bin.free(), IdSet::from([id("left"), id("right")]));
+    assert_eq!(exp_bin.free_ids(), IdSet::from([id("left"), id("right")]));
 }
 
 fn id(name: &str) -> il::ast::Id {

@@ -43,7 +43,7 @@ fn test_free_identifier_sets_preserve_source_spans() {
         span: Span::default(),
     };
 
-    let ids: IdSet = exp.free();
+    let ids: IdSet = exp.free_ids();
     assert!(ids.contains(&id_lookup));
     assert_eq!(ids.iter().next().unwrap().span, id_stored.span);
 }
@@ -64,7 +64,7 @@ fn test_free_into_extends_one_ordered_set_without_duplicates() {
     };
     let mut ids = IdSet::from([id("seed", "seed")]);
 
-    exp.free_into(&mut ids);
+    exp.free_ids_into(&mut ids);
 
     assert_eq!(ids, IdSet::from([id("seed", "seed"), id("x", "x"), id("y", "y")]));
 }

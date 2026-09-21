@@ -4,7 +4,7 @@ use p4spec_rust::{
         common::{ds::set::IdSet, notation::mixfix::Mixfix},
         hints::input::InputHint,
         il, sl,
-        traits::free::Free,
+        traits::free::FreeIds,
     },
 };
 
@@ -56,8 +56,8 @@ fn test_parameters_collect_only_expression_defaults() {
         span: span("definition-parameter"),
     };
 
-    assert_eq!(param_exp.free(), names(&["default"]));
-    assert_eq!(param_def.free(), names(&[]));
+    assert_eq!(param_exp.free_ids(), names(&["default"]));
+    assert_eq!(param_def.free_ids(), names(&[]));
 }
 
 #[test]
@@ -78,7 +78,7 @@ fn test_guards_collect_only_embedded_expressions() {
     ];
 
     for (guard, expected) in cases {
-        assert_eq!(guard.free(), expected);
+        assert_eq!(guard.free_ids(), expected);
     }
 }
 
@@ -189,6 +189,6 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
     ];
 
     for (instruction, expected) in instructions {
-        assert_eq!(instruction.free(), expected);
+        assert_eq!(instruction.free_ids(), expected);
     }
 }

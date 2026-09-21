@@ -29,7 +29,7 @@ use crate::{
         al,
         common::{ds::set::IdSet, notation::mixop::Mixop},
         il::{ast, fresh, var},
-        traits::free::Free,
+        traits::free::FreeIds,
         xl,
     },
     note_phrase, phrase,
@@ -345,7 +345,7 @@ fn rename_exp_bind_match(
     let typ = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
     let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp_from.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
-    let bounds = exp_from.free();
+    let bounds = exp_from.free_ids();
     renv.prepend(Rename {
         destination: destination.clone(),
         source: Source::BindMatch { pattern, exp_from },
@@ -371,7 +371,7 @@ fn rename_exp_bind_sub(
     let typ = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
     let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp_from.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
-    let bounds = exp_from.free();
+    let bounds = exp_from.free_ids();
     renv.prepend(Rename {
         destination: destination.clone(),
         source: Source::BindSub { typ_sub, exp_sub, exp_from },
@@ -393,7 +393,7 @@ pub fn rename_exp(
     iter_ctx: &mut ICtx,
     exp: ast::Exp,
 ) -> Result<ast::Exp, AlgoError> {
-    let frees = exp.free();
+    let frees = exp.free_ids();
     let has_binding = binds.iter().any(|id| frees.contains(id));
     if !has_binding && !is_upcast_terminal(&exp) {
         let exp = rename_exp_bound(ctx, renv, iter_ctx, exp);
@@ -411,7 +411,7 @@ fn rename_exp_bound(
     let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
     let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp.span.clone(), &typ);
     ctx.add_free(destination.id.clone());
-    let bounds = exp.free();
+    let bounds = exp.free_ids();
     renv.prepend(Rename {
         destination: destination.clone(),
         source: Source::Bound { exp_from: exp },

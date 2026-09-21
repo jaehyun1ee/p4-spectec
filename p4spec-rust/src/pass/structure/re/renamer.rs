@@ -13,7 +13,7 @@ use crate::lang::{
     },
     hints::input,
     il::{ast::*, fresh},
-    traits::free::Free,
+    traits::free::FreeIds,
 };
 use crate::{note_phrase, phrase};
 
@@ -83,7 +83,7 @@ impl Renamer {
         }
         let mut ids_avoid = frees
             .clone()
-            .union(block.free())
+            .union(block.free_ids())
             .union(self.dom())
             .union(self.values().into_iter().collect());
         let mut renamer_fresh = Self::empty();
@@ -416,7 +416,7 @@ impl Renamer {
     ) -> Result<ol::InstrKind, StructureError> {
         let ol::LetInstr { exp_l, exp_r, iter_instrs, block } = instr_ol;
         let exp_r = self.rename_exp(changed, exp_r);
-        let frees_l = exp_l.free();
+        let frees_l = exp_l.free_ids();
         let mut renamer = self.filter(|id, _| !frees_l.contains(id));
         let renamer_fresh = renamer.freshen_binders(&frees_l, &block);
         let exp_l = renamer_fresh.rename_exp(changed, exp_l);
@@ -444,7 +444,7 @@ impl Renamer {
         let (exps_input, exps_output) = input::split(&input_hint, exps)
             .map_err(|error| StructureError::new(StructureErrorKind::Input(error), span.clone()))?;
         let exps_input = self.rename_exps(changed, exps_input);
-        let frees_output = exps_output.as_slice().free();
+        let frees_output = exps_output.as_slice().free_ids();
         let mut renamer = self.filter(|id, _| !frees_output.contains(id));
         let renamer_fresh = renamer.freshen_binders(&frees_output, &block);
         let exps_output = renamer_fresh.rename_exps(changed, exps_output);

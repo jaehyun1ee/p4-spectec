@@ -1,9 +1,8 @@
 //! Lift nested calls into explicit SL let instructions
 
-mod free;
 mod lift;
 
-use crate::lang::{common::ds::set::IdSet, hints::input, sl::ast as sl, traits::free::Free};
+use crate::lang::{common::ds::set::IdSet, hints::input, sl::ast as sl, traits::free::FreeIds};
 
 use self::lift::{
     LiftedCall, RootCallPolicy, ids_bound_by_exp_iters, ids_bound_by_instr_iters, lift_first_exp,
@@ -168,9 +167,12 @@ fn expand_block(ids_used: &mut IdSet, block_sl: sl::Block) -> Result<sl::Block, 
 fn expand_def(mut def_sl: sl::Def) -> Result<sl::Def, ProseError> {
     match &mut def_sl.node {
         sl::DefKind::Rel(sl::RelDef::Defined(def_rel_sl)) => {
-            let mut ids_used = def_rel_sl.exps_input.free().union(def_rel_sl.block.free());
+            let mut ids_used = def_rel_sl
+                .exps_input
+                .free_ids()
+                .union(def_rel_sl.block.free_ids());
             if let Some(block_else_sl) = &def_rel_sl.block_else {
-                ids_used.append(block_else_sl.free());
+                ids_used.append(block_else_sl.free_ids());
             }
             let mut ids_body = ids_used.clone();
             def_rel_sl.block = expand_block(&mut ids_body, std::mem::take(&mut def_rel_sl.block))?;
@@ -182,16 +184,19 @@ fn expand_def(mut def_sl: sl::Def) -> Result<sl::Def, ProseError> {
             for row_sl in &mut def_func_sl.table_rows {
                 let mut ids_used = row_sl
                     .exps_input
-                    .free()
-                    .union(row_sl.exp.free())
-                    .union(row_sl.block.free());
+                    .free_ids()
+                    .union(row_sl.exp.free_ids())
+                    .union(row_sl.block.free_ids());
                 row_sl.block = expand_block(&mut ids_used, std::mem::take(&mut row_sl.block))?;
             }
         }
         sl::DefKind::MetaFunc(sl::MetaFuncDef::Defined(def_func_sl)) => {
-            let mut ids_used = def_func_sl.params.free().union(def_func_sl.block.free());
+            let mut ids_used = def_func_sl
+                .params
+                .free_ids()
+                .union(def_func_sl.block.free_ids());
             if let Some(block_else_sl) = &def_func_sl.block_else {
-                ids_used.append(block_else_sl.free());
+                ids_used.append(block_else_sl.free_ids());
             }
             let mut ids_body = ids_used.clone();
             def_func_sl.block =

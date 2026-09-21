@@ -3,7 +3,7 @@ use p4spec_rust::{
     lang::{
         common::{ds::set::IdSet, notation::atom::Atom as DomainAtom},
         el::ast::{self, BinOp, ExpKind},
-        traits::{free::Free, print::Print},
+        traits::{free::FreeIds, print::Print},
     },
 };
 

@@ -24,7 +24,7 @@ use crate::lang::{
     common::source::Span,
     hints::input,
     il::ast::{ExpField, ExpKind},
-    traits::{eq::SyntaxEq, free::Free},
+    traits::{eq::SyntaxEq, free::FreeIds},
 };
 use crate::pass::structure::{
     StructureError, StructureErrorKind, ol::ast::*, opt::merge::merge_block, re::renamer::Renamer,
@@ -40,7 +40,7 @@ struct ExpUnit<'a> {
 
 impl<'a> ExpUnit<'a> {
     fn new(exp: &'a Exp, iter_exps: &[ExpIter]) -> Self {
-        let ids = exp.free();
+        let ids = exp.free_ids();
         let iter_exps = iter_exps
             .iter()
             .map(|(iter, vars)| {

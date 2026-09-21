@@ -4,7 +4,7 @@ use crate::lang::{
     common::ds::set::IdSet,
     hints::{alter, fields},
     sl,
-    traits::{eq::SyntaxEq, free::Free, has_call::HasCall},
+    traits::{eq::SyntaxEq, free::FreeIds, has_call::HasCall},
 };
 
 // Hints
@@ -38,9 +38,9 @@ impl<N: SyntaxEq> SyntaxEq for Annotated<N> {
     }
 }
 
-impl<N: Free> Free for Annotated<N> {
-    fn free(&self) -> IdSet {
-        self.node.free()
+impl<N: FreeIds> FreeIds for Annotated<N> {
+    fn free_ids(&self) -> IdSet {
+        self.node.free_ids()
     }
 }
 

@@ -6,7 +6,7 @@ use crate::lang::{
     common::ds::set::IdSet,
     traits::{
         eq::SyntaxEq,
-        free::Free,
+        free::FreeIds,
         print::{Print, Printer},
     },
 };
@@ -30,8 +30,8 @@ impl SyntaxEq for () {
     }
 }
 
-impl Free for () {
-    fn free(&self) -> IdSet {
+impl FreeIds for () {
+    fn free_ids(&self) -> IdSet {
         IdSet::new()
     }
 }

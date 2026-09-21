@@ -46,7 +46,7 @@ use crate::{
         common::{notation::mixop::Mixop, source::Span},
         hints::input::{self, InputHint},
         il::ast,
-        traits::free::Free,
+        traits::free::FreeIds,
         xl,
     },
     phrase,
@@ -548,7 +548,7 @@ fn analyze_rule_group(
     let mut exps_input_by_rule_il = Vec::with_capacity(rules_il.len());
     let mut exps_output_by_rule_il = Vec::with_capacity(rules_il.len());
     for rule_il in rules_il {
-        ctx.add_frees(&rule_il.free());
+        ctx.add_frees(&rule_il.free_ids());
         let rule_span = rule_il.span;
         let ast::RuleKind { id, not_exp, prems } = rule_il.node;
         ids.push(id);
@@ -624,7 +624,7 @@ fn analyze_clause(
     is_else: bool,
 ) -> Result<al::ast::Clause, AlgoError> {
     let mut ctx = ctx.clone();
-    ctx.add_frees(&clause_il.free());
+    ctx.add_frees(&clause_il.free_ids());
     let span = clause_il.span;
     let ast::ClauseKind { args: args_il, exp: exp_il, prems: prems_il } = clause_il.node;
     let (venv, args_al, prem_sideconditions_al) = analyze_args_as_bind(&mut ctx, &args_il)?;
@@ -741,7 +741,7 @@ fn analyze_table_row(
     row_il: ast::TableRow,
 ) -> Result<al::ast::TableRow, AlgoError> {
     let mut ctx = ctx.clone();
-    ctx.add_frees(&row_il.free());
+    ctx.add_frees(&row_il.free_ids());
     let span = row_il.span;
     let (args_il, exp_il) = row_il.node;
     let (venv, args_input_al, prems_al) = analyze_args_as_bind_shallow(&mut ctx, &args_il, &span)?;

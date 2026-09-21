@@ -11,7 +11,7 @@ use crate::{
         el::ast as el,
         hints::input,
         il::{ast as il, fresh as il_fresh, var as il_var},
-        traits::free::Free,
+        traits::free::FreeIds,
         xl,
     },
     note_phrase, phrase,
@@ -1984,7 +1984,7 @@ fn elab_rule(
     }
     let mut ctx_local = ctx.clone();
     ctx_local.reset_frees();
-    let frees = rule.free();
+    let frees = rule.free_ids();
     ctx_local.add_frees(&frees);
     let not_exp_il = finish(elab_not_exp(&mut ctx_local, not_typ_il, exp))?;
     let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, prems, &id_rule.span))?;
@@ -2057,7 +2057,7 @@ fn elab_clause(
     let typ_ret_il = typ_ret_il.clone();
     let mut ctx_local = ctx.clone();
     ctx_local.reset_frees();
-    let frees = def.free();
+    let frees = def.free_ids();
     ctx_local.add_frees(&frees);
     ctx_local.add_tparams(&def.tparams)?;
     let args_il = finish(elab_args(&mut ctx_local, &params_il, &def.args, true, span))?;
@@ -2481,7 +2481,7 @@ fn elab_table_def(ctx: &mut Context, def: &el::TableDef) -> Result<(), ElabError
         let (args_il, exp_body_il) = {
             let mut ctx_local = ctx.clone();
             ctx_local.reset_frees();
-            let frees = row.free();
+            let frees = row.free_ids();
             ctx_local.add_frees(&frees);
             let args_il = finish(elab_args(&mut ctx_local, &params_il, &args, true, &row.span))?;
             let exp_body_il = finish(elab_exp(&mut ctx_local, &typ_il, exp_body))?;

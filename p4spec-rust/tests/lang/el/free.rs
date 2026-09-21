@@ -11,7 +11,7 @@ fn test_free_expression_ids_ignore_source_spans_and_render_in_source_order() {
         "root.watsup",
     );
 
-    assert_eq!(exp_bin.free(), ids(&["left", "right"]));
+    assert_eq!(exp_bin.free_ids(), ids(&["left", "right"]));
     assert_eq!(Print::to_string(&exp_bin), "left + right");
 }
 #[test]
@@ -89,8 +89,8 @@ fn test_free_collection_covers_paths_calls_premises_and_definition_bodies() {
             groupid: id("group", "def.watsup"),
             rules: vec![rule],
         }))
-        .free(),
+        .free_ids(),
         ids(&["argument", "bound", "field", "guard", "high", "index", "low"])
     );
-    assert_eq!(def_func.free(), ids(&["argument", "body", "debug"]));
+    assert_eq!(def_func.free_ids(), ids(&["argument", "body", "debug"]));
 }
