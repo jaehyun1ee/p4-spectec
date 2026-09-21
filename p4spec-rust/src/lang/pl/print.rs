@@ -1,4 +1,10 @@
 //! Text rendering for prose-language data
+//!
+//! Prints PL as a numbered outline, one step per instruction,
+//! nested blocks indented under their step.
+//! The shared control flow prints once, parameterized by a tier printer
+//! for the dispatch and group-body instructions.
+//! `short` prints a step's heading without its blocks.
 
 use std::fmt::{self, Write};
 
@@ -186,6 +192,7 @@ impl Print for Path {
                 exp_len.print(printer)?;
                 printer.write_char(']')
             }
+            // A field of the root prints bare
             PathKind::Dot(path, atom) if matches!(path.node, PathKind::Root) => atom.print(printer),
             PathKind::Dot(path, atom) => {
                 path.print(printer)?;
@@ -268,8 +275,10 @@ impl Print for [Arg] {
 
 // Shared control flow parameterized by the tier
 
+/// Prints a tier instruction given the short flag, indent, and step index.
 type TierPrinter<Tier> = fn(&mut Printer<'_>, &Tier, bool, usize, usize) -> fmt::Result;
 
+/// Prints one instruction as a numbered step, then its blocks unless `short`.
 fn write_instr_with<Tier>(
     output: &mut Printer<'_>,
     instr: &Instr<Tier>,
@@ -279,11 +288,13 @@ fn write_instr_with<Tier>(
     index: usize,
 ) -> fmt::Result {
     let order = format!("{}{index}. ", "  ".repeat(level));
+    // The step number is omitted in short form
     let write_order = |output: &mut Printer<'_>| {
         if short { Ok(()) } else { output.write_str(&order) }
     };
 
     match &instr.node.node {
+        // `If (cond), then` and the block, marking a dangling else
         InstrKind::If(IfInstr { exp, iter_exps, block, dangle }) => {
             write_order(output)?;
             output.write_str("If (")?;
@@ -300,7 +311,9 @@ fn write_instr_with<Tier>(
             }
             Ok(())
         }
+        // `If (rel: args) holds, then` in one of two shapes
         InstrKind::Hold(HoldInstr { id, not_exp, iter_exps, hold_case }) => {
+            // The heading reads the same for holds and does-not-holds
             let write_holding = |output: &mut Printer<'_>, negative: bool| {
                 output.write_str("If (")?;
                 id.print(output)?;
@@ -313,6 +326,7 @@ fn write_instr_with<Tier>(
                 output.write_str(", then")
             };
             match hold_case {
+                // Both branches: then-block, `Else,`, else-block
                 HoldCase::Both(block_hold, block_not_hold) => {
                     write_order(output)?;
                     write_holding(output, false)?;
@@ -324,6 +338,7 @@ fn write_instr_with<Tier>(
                     }
                     Ok(())
                 }
+                // One branch: its block, marking a dangling else
                 HoldCase::Hold(block, dangle) | HoldCase::NotHold(block, dangle) => {
                     write_order(output)?;
                     write_holding(output, matches!(hold_case, HoldCase::NotHold(..)))?;
@@ -338,6 +353,7 @@ fn write_instr_with<Tier>(
                 }
             }
         }
+        // `Case analysis on` and the numbered arms
         InstrKind::Case(CaseInstr { exp, cases, dangle }) => {
             write_order(output)?;
             output.write_str("Case analysis on ")?;
@@ -351,6 +367,7 @@ fn write_instr_with<Tier>(
             }
             Ok(())
         }
+        // `(Let x be e)` with its iterations
         InstrKind::Let(LetInstr { exp_l, exp_r, iter_instrs }) => {
             write_order(output)?;
             output.write_str("(Let ")?;
@@ -360,11 +377,13 @@ fn write_instr_with<Tier>(
             output.write_char(')')?;
             iter_instrs.as_slice().print(output)
         }
+        // `Debug:` and the expression
         InstrKind::Debug(DebugInstr { exp }) => {
             write_order(output)?;
             output.write_str("Debug: ")?;
             exp.print(output)
         }
+        // `(Destruct (fields) = e)`
         InstrKind::Destruct(DestructInstr { bindings: fields, exp: exp_r }) => {
             write_order(output)?;
             output.write_str("(Destruct (")?;
@@ -378,6 +397,7 @@ fn write_instr_with<Tier>(
             exp_r.print(output)?;
             output.write_char(')')
         }
+        // `(Let x be e, e has type t)` and the block
         InstrKind::CheckLetSub(CheckLetSubInstr { typ, exp_l, exp_r, block, .. }) => {
             write_order(output)?;
             output.write_str("(Let ")?;
@@ -395,6 +415,7 @@ fn write_instr_with<Tier>(
             }
             Ok(())
         }
+        // `(Let x be e, e matches pattern p)` and the block
         InstrKind::CheckLetMatch(CheckLetMatchInstr { pattern, exp_l, exp_r, block }) => {
             write_order(output)?;
             output.write_str("(Let ")?;
@@ -412,6 +433,7 @@ fn write_instr_with<Tier>(
             }
             Ok(())
         }
+        // `(Let x be ! e)`, unwrapping the option, and the block
         InstrKind::OptionGet(OptionGetInstr { exp_l, exp_r, block }) => {
             write_order(output)?;
             output.write_str("(Let ")?;
@@ -425,6 +447,7 @@ fn write_instr_with<Tier>(
             }
             Ok(())
         }
+        // The tier decides how its own instruction prints
         InstrKind::Tier(TierInstr { tier }) => tier_printer(output, tier, short, level, index),
     }
 }
@@ -437,6 +460,7 @@ impl Print for Instr<GroupInstr> {
     }
 }
 
+/// Prints a group-body instruction; a backtrack lists its arms.
 fn write_group_instr_with(
     output: &mut Printer<'_>,
     tier: &GroupInstr,
@@ -450,17 +474,21 @@ fn write_group_instr_with(
     }
 
     match tier {
+        // A relation without outputs only holds
         GroupInstr::Result(ResultInstr { exps_output, .. }) if exps_output.is_empty() => {
             output.write_str("The relation holds")
         }
+        // `Result in:` with the outputs in the notation
         GroupInstr::Result(ResultInstr { rel_signature, exps_output }) => {
             output.write_str("Result in: ")?;
             write_reloutput(output, rel_signature, exps_output)
         }
+        // `Return` and the value
         GroupInstr::Return(ReturnInstr { exp }) => {
             output.write_str("Return ")?;
             exp.print(output)
         }
+        // `(rel: args)` with its iterations
         GroupInstr::Rule(RuleInstr { id, not_exp, iter_instrs, .. }) => {
             output.write_char('(')?;
             id.print(output)?;
@@ -469,6 +497,7 @@ fn write_group_instr_with(
             output.write_char(')')?;
             iter_instrs.as_slice().print(output)
         }
+        // `Block (n arms)` and each arm's block
         GroupInstr::Backtrack(BacktrackInstr { blocks }) => {
             write!(output, "Block ({} arms)", blocks.len())?;
             if !short {
@@ -493,6 +522,7 @@ impl Print for GroupBlock {
     }
 }
 
+/// Prints a group-body block.
 fn write_group_block_with(
     output: &mut Printer<'_>,
     block: &GroupBlock,
@@ -510,6 +540,7 @@ impl Print for Instr<DispatchInstr> {
     }
 }
 
+/// Prints a dispatch instruction; a route lists its arms.
 fn write_dispatch_instr_with(
     output: &mut Printer<'_>,
     tier: &DispatchInstr,
@@ -523,6 +554,7 @@ fn write_dispatch_instr_with(
     }
 
     match tier {
+        // `Group id:` with the inputs in the notation, then the body
         DispatchInstr::Group(RuleGroupInstr {
             id_group, rel_signature, exps_input, block, ..
         }) => {
@@ -536,6 +568,7 @@ fn write_dispatch_instr_with(
             }
             Ok(())
         }
+        // `Block (n arms)` and each arm's block
         DispatchInstr::Route(RouteInstr { blocks }) => {
             write!(output, "Block ({} arms)", blocks.len())?;
             if !short {
@@ -560,6 +593,7 @@ impl Print for DispatchBlock {
     }
 }
 
+/// Prints a dispatch block.
 fn write_dispatch_block_with(
     output: &mut Printer<'_>,
     block: &DispatchBlock,
@@ -615,6 +649,7 @@ impl Print for Guard {
     }
 }
 
+/// Prints the arms of a case analysis, numbered from one.
 fn write_cases_with<Tier>(
     output: &mut Printer<'_>,
     cases: &[Case<Tier>],
@@ -630,6 +665,7 @@ fn write_cases_with<Tier>(
     Ok(())
 }
 
+/// Prints one arm as `Case guard` and its block.
 fn write_case_with<Tier>(
     output: &mut Printer<'_>,
     case: &Case<Tier>,
@@ -645,6 +681,7 @@ fn write_case_with<Tier>(
 
 // - Blocks
 
+/// Prints a block's instructions as consecutive steps.
 fn write_block_with<Tier>(
     output: &mut Printer<'_>,
     block: &Block<Tier>,
@@ -661,6 +698,7 @@ fn write_block_with<Tier>(
     Ok(())
 }
 
+/// Prints the otherwise block as the next step, if present.
 fn write_elseblock_opt_with<Tier>(
     output: &mut Printer<'_>,
     block: &Option<Block<Tier>>,
@@ -766,6 +804,7 @@ impl Print for DefinedRel {
     }
 }
 
+/// Fills the input expressions into the notation at the hint's positions.
 fn write_relinput(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
@@ -774,6 +813,7 @@ fn write_relinput(
     let not_typ = &rel_signature.not_typ;
     let input_indices = rel_signature.input_hint.indices();
     assert_eq!(input_indices.len(), exps_input.len());
+    // Each notation position takes its input, or `%`
     let args = (0..not_typ.node.arity()).map(|index| {
         input_indices
             .iter()
@@ -788,6 +828,7 @@ fn write_relinput(
     })
 }
 
+/// Fills the output expressions into the notation at the non-input positions.
 fn write_reloutput(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
@@ -795,6 +836,7 @@ fn write_reloutput(
 ) -> fmt::Result {
     let not_typ = &rel_signature.not_typ;
     let input_indices = rel_signature.input_hint.indices();
+    // Outputs are the positions the hint leaves
     let outputs = (0..not_typ.node.arity())
         .filter(|index| !input_indices.contains(index))
         .collect::<Vec<_>>();
@@ -936,6 +978,7 @@ impl Print for Spec {
 
 // == Helpers
 
+/// Escapes a text literal: quotes, backslashes, control bytes, and non-ASCII.
 fn escaped(text: &str) -> String {
     text.bytes()
         .map(|byte| match byte {
@@ -945,6 +988,7 @@ fn escaped(text: &str) -> String {
             9 => "\\t".into(),
             10 => "\\n".into(),
             13 => "\\r".into(),
+            // Printable ASCII passes through, other bytes as octal escapes
             32..=126 => char::from(byte).to_string(),
             _ => format!("\\{byte:03}"),
         })

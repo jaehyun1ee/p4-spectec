@@ -15,7 +15,9 @@ pub struct FieldHint {
 }
 
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
+/// A failure validating a field hint.
 pub enum FieldError {
+    /// The hint names a different number of fields than the notation has.
     #[error("field hint expects {expected} strings, but got {actual}")]
     ArityMismatch { expected: usize, actual: usize },
 }
@@ -39,7 +41,7 @@ impl FieldHint {
 
 // == Initialization
 
-/// Initializes a field hint from one text or a sequence of texts
+/// Initializes a field hint from one text or a sequence of texts.
 pub fn init(exp: &Exp) -> Option<FieldHint> {
     let fields = match &exp.node {
         ExpKind::Text(text) => vec![text.clone()],
@@ -50,6 +52,7 @@ pub fn init(exp: &Exp) -> Option<FieldHint> {
                 _ => None,
             })
             .collect::<Option<_>>()?,
+        // Anything else is not a list of field names
         _ => return None,
     };
     Some(FieldHint::new(fields))

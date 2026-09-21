@@ -1,6 +1,7 @@
 //! Syntax equality for prose-language data
 //!
-//! Ignores source regions, inferred notes, and prose annotations
+//! Ignores source regions, inferred notes, and prose annotations,
+//! so two PL trees are equal when they would run the same way.
 
 use crate::lang::traits::eq::SyntaxEq;
 

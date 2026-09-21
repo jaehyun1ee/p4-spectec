@@ -1,4 +1,8 @@
 //! Free identifiers in prose-language data
+//!
+//! Only expressions contribute identifiers;
+//! instructions of both tiers collect from their expressions and blocks,
+//! definitions from their parameters, inputs, and blocks.
 
 use crate::lang::{common::ds::set::IdSet, traits::free::FreeIds};
 

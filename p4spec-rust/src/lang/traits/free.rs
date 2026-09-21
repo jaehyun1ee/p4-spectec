@@ -1,6 +1,6 @@
 //! Free identifiers and dimension-aware variables shared across language stages
 //!
-//! `FreeIds` collects names, while `FreeVars` retains type and iteration metadata.
+//! `FreeIds` collects names, while `FreeVars` keeps type and iteration data.
 
 use std::rc::Rc;
 

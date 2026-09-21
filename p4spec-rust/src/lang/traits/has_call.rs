@@ -6,6 +6,7 @@ use crate::lang::common::source::NotePhrase;
 
 /// Reports whether syntax contains an expression call.
 pub trait HasCall {
+    /// Whether `self` contains a call expression.
     fn has_call(&self) -> bool;
 }
 

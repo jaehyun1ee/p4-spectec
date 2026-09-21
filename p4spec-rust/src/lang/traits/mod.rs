@@ -1,7 +1,8 @@
 //! Traits shared across language representations
 //!
 //! `SyntaxEq` and `SyntaxCmp` compare nodes ignoring spans and notes,
-//! `FreeIds` and `FreeVars` collect free names, while `Print` renders text;
+//! `FreeIds` and `FreeVars` collect free names, `HasCall` finds calls,
+//! while `Print` renders text;
 //! each stage implements them for its model.
 
 pub mod cmp;
