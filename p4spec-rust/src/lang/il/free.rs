@@ -1,4 +1,8 @@
-//! Free identifiers in intermediate-language data
+//! Free identifiers in internal-language data
+//!
+//! Only expressions contribute identifiers;
+//! types, patterns, iteration binders, and signatures have none.
+//! Rules, clauses, and table rows collect from their expressions and premises.
 
 use crate::lang::{common::ds::set::IdSet, traits::free::Free};
 
