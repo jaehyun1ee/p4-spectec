@@ -6,38 +6,38 @@ use crate::lang::{il::ast::OptPattern, pl::ast as pl};
 
 // == Expression aliases
 
-fn eq_exp_var(exp_a: &pl::Exp, exp_b: &pl::Exp) -> bool {
+fn is_eq_exp_var(exp_a: &pl::Exp, exp_b: &pl::Exp) -> bool {
     match (&exp_a.node.node, &exp_b.node.node) {
         (pl::ExpKind::Var(id_a), pl::ExpKind::Var(id_b)) => id_a.node == id_b.node,
-        (pl::ExpKind::Iter(exp_a, _), pl::ExpKind::Iter(exp_b, _)) => eq_exp_var(exp_a, exp_b),
+        (pl::ExpKind::Iter(exp_a, _), pl::ExpKind::Iter(exp_b, _)) => is_eq_exp_var(exp_a, exp_b),
         _ => false,
     }
 }
 
 fn is_scrutinee_alias(exp_scrut: &pl::Exp, exp_r: &pl::Exp) -> bool {
     match &exp_r.node.node {
-        pl::ExpKind::DownCast(_, exp_inner) => eq_exp_var(exp_scrut, exp_inner),
-        _ => eq_exp_var(exp_scrut, exp_r),
+        pl::ExpKind::DownCast(_, exp_inner) => is_eq_exp_var(exp_scrut, exp_inner),
+        _ => is_eq_exp_var(exp_scrut, exp_r),
     }
 }
 
-fn has_leading_rename<Tier>(exp_scrut: &pl::Exp, block: &pl::Block<Tier>) -> bool {
-    matches!(
+fn take_leading_rename<Tier>(exp_scrut: &pl::Exp, block: &mut pl::Block<Tier>) -> Option<pl::Exp> {
+    let is_leading_rename = matches!(
         block.first(),
         Some(instr) if matches!(
             &instr.node.node,
             pl::InstrKind::Let(pl::LetInstr { exp_r, iter_instrs, .. })
                 if iter_instrs.is_empty() && is_scrutinee_alias(exp_scrut, exp_r)
         )
-    )
-}
-
-fn take_leading_target<Tier>(block: &mut pl::Block<Tier>) -> pl::Exp {
+    );
+    if !is_leading_rename {
+        return None;
+    }
     let instr = block.remove(0);
     let pl::InstrKind::Let(pl::LetInstr { exp_l, .. }) = instr.node.node else {
-        unreachable!("leading rename was checked before consumption");
+        return None;
     };
-    exp_l
+    Some(exp_l)
 }
 
 // == Case guards
@@ -47,18 +47,14 @@ fn shorten_case_guards<Tier>(instr: &mut pl::Instr<Tier>) {
         return;
     };
     for case in cases {
-        if !has_leading_rename(exp, &case.block) {
-            continue;
-        }
         let guard = match &case.guard {
             pl::Guard::Sub(typ, subcheck) => {
-                let exp_target = take_leading_target(&mut case.block);
-                Some(pl::Guard::CheckLetSub(typ.clone(), subcheck.clone(), exp_target))
+                take_leading_rename(exp, &mut case.block).map(|exp_target| {
+                    pl::Guard::CheckLetSub(typ.clone(), subcheck.clone(), exp_target)
+                })
             }
-            pl::Guard::Match(pattern) => {
-                let exp_target = take_leading_target(&mut case.block);
-                Some(pl::Guard::CheckLetMatch(pattern.clone(), exp_target))
-            }
+            pl::Guard::Match(pattern) => take_leading_rename(exp, &mut case.block)
+                .map(|exp_target| pl::Guard::CheckLetMatch(pattern.clone(), exp_target)),
             _ => None,
         };
         if let Some(guard) = guard {
@@ -76,14 +72,12 @@ fn shorten_check_let<Tier>(instr: &mut pl::Instr<Tier>) {
     }
 
     let check = match &instr.node.node {
-        pl::InstrKind::If(pl::IfInstr { exp, iter_exps, block, .. }) if iter_exps.is_empty() => {
+        pl::InstrKind::If(pl::IfInstr { exp, iter_exps, .. }) if iter_exps.is_empty() => {
             match &exp.node.node {
-                pl::ExpKind::Sub(exp_scrut, typ, subcheck)
-                    if has_leading_rename(exp_scrut, block) =>
-                {
+                pl::ExpKind::Sub(exp_scrut, typ, subcheck) => {
                     Some(Check::Sub(typ.clone(), subcheck.clone(), exp_scrut.as_ref().clone()))
                 }
-                pl::ExpKind::Match(exp_scrut, pattern) if has_leading_rename(exp_scrut, block) => {
+                pl::ExpKind::Match(exp_scrut, pattern) => {
                     Some(Check::Match(pattern.clone(), exp_scrut.as_ref().clone()))
                 }
                 _ => None,
@@ -91,9 +85,6 @@ fn shorten_check_let<Tier>(instr: &mut pl::Instr<Tier>) {
         }
         pl::InstrKind::Case(pl::CaseInstr { exp, cases, .. }) if cases.len() == 1 => {
             let case = &cases[0];
-            if !has_leading_rename(exp, &case.block) {
-                return;
-            }
             match &case.guard {
                 pl::Guard::Sub(typ, subcheck) => {
                     Some(Check::Sub(typ.clone(), subcheck.clone(), exp.clone()))
@@ -111,7 +102,10 @@ fn shorten_check_let<Tier>(instr: &mut pl::Instr<Tier>) {
         pl::InstrKind::Case(pl::CaseInstr { cases, .. }) => &mut cases[0].block,
         _ => unreachable!(),
     };
-    let exp_l = take_leading_target(block);
+    let exp_scrut = match &check {
+        Check::Sub(_, _, exp_scrut) | Check::Match(_, exp_scrut) => exp_scrut,
+    };
+    let Some(exp_l) = take_leading_rename(exp_scrut, block) else { return };
     let block = std::mem::take(block);
     instr.node.node = match check {
         Check::Sub(typ, subcheck, exp_r) => {
@@ -203,8 +197,8 @@ fn shorten_option_get<Tier>(
                     return None;
                 };
                 if !iter_instrs.is_empty()
-                    || !eq_exp_var(exp_tmp, exp_scrut)
-                    || !eq_exp_var(exp_tmp, exp_r)
+                    || !is_eq_exp_var(exp_tmp, exp_scrut)
+                    || !is_eq_exp_var(exp_tmp, exp_r)
                 {
                     return None;
                 }
@@ -263,50 +257,7 @@ fn shorten_block_shorthands<Tier>(block: pl::Block<Tier>) -> pl::Block<Tier> {
         .collect()
 }
 
-// == Dispatch tier
-
-// - Holding condition
-
-fn shorten_dispatch_hold_case(
-    hold_case: pl::HoldCase<pl::DispatchInstr>,
-) -> pl::HoldCase<pl::DispatchInstr> {
-    match hold_case {
-        pl::HoldCase::Both(block_hold, block_not_hold) => {
-            let block_hold = shorten_dispatch_block(block_hold);
-            let block_not_hold = shorten_dispatch_block(block_not_hold);
-            pl::HoldCase::Both(block_hold, block_not_hold)
-        }
-        pl::HoldCase::Hold(block, dangle) => {
-            let block = shorten_dispatch_block(block);
-            pl::HoldCase::Hold(block, dangle)
-        }
-        pl::HoldCase::NotHold(block, dangle) => {
-            let block = shorten_dispatch_block(block);
-            pl::HoldCase::NotHold(block, dangle)
-        }
-    }
-}
-
-// - Tier instruction
-
-fn shorten_dispatch_tier(instr_dispatch: pl::DispatchInstr) -> pl::DispatchInstr {
-    match instr_dispatch {
-        pl::DispatchInstr::Group(mut instr_group) => {
-            instr_group.block = shorten_group_block(instr_group.block);
-            pl::DispatchInstr::Group(instr_group)
-        }
-        pl::DispatchInstr::Route(mut instr_route) => {
-            let mut blocks = Vec::with_capacity(instr_route.blocks.len());
-            for block in instr_route.blocks {
-                blocks.push(shorten_dispatch_block(block));
-            }
-            instr_route.blocks = blocks;
-            pl::DispatchInstr::Route(instr_route)
-        }
-    }
-}
-
-// - Instruction
+// - Dispatch instruction
 
 fn shorten_dispatch_instr(mut instr: pl::Instr<pl::DispatchInstr>) -> pl::Instr<pl::DispatchInstr> {
     instr.node.node = shorten_dispatch_instr_kind(instr.node.node);
@@ -353,8 +304,6 @@ fn shorten_dispatch_instr_kind(
     }
 }
 
-// - Block
-
 fn shorten_dispatch_block(block: pl::DispatchBlock) -> pl::DispatchBlock {
     shorten_block_shorthands(block)
         .into_iter()
@@ -362,25 +311,23 @@ fn shorten_dispatch_block(block: pl::DispatchBlock) -> pl::DispatchBlock {
         .collect()
 }
 
-// == Group tier
-
 // - Holding condition
 
-fn shorten_group_hold_case(
-    hold_case: pl::HoldCase<pl::GroupInstr>,
-) -> pl::HoldCase<pl::GroupInstr> {
+fn shorten_dispatch_hold_case(
+    hold_case: pl::HoldCase<pl::DispatchInstr>,
+) -> pl::HoldCase<pl::DispatchInstr> {
     match hold_case {
         pl::HoldCase::Both(block_hold, block_not_hold) => {
-            let block_hold = shorten_group_block(block_hold);
-            let block_not_hold = shorten_group_block(block_not_hold);
+            let block_hold = shorten_dispatch_block(block_hold);
+            let block_not_hold = shorten_dispatch_block(block_not_hold);
             pl::HoldCase::Both(block_hold, block_not_hold)
         }
         pl::HoldCase::Hold(block, dangle) => {
-            let block = shorten_group_block(block);
+            let block = shorten_dispatch_block(block);
             pl::HoldCase::Hold(block, dangle)
         }
         pl::HoldCase::NotHold(block, dangle) => {
-            let block = shorten_group_block(block);
+            let block = shorten_dispatch_block(block);
             pl::HoldCase::NotHold(block, dangle)
         }
     }
@@ -388,23 +335,24 @@ fn shorten_group_hold_case(
 
 // - Tier instruction
 
-fn shorten_group_tier(instr_group: pl::GroupInstr) -> pl::GroupInstr {
-    match instr_group {
-        pl::GroupInstr::Backtrack(mut instr_backtrack) => {
-            let mut blocks = Vec::with_capacity(instr_backtrack.blocks.len());
-            for block in instr_backtrack.blocks {
-                blocks.push(shorten_group_block(block));
-            }
-            instr_backtrack.blocks = blocks;
-            pl::GroupInstr::Backtrack(instr_backtrack)
+fn shorten_dispatch_tier(instr_dispatch: pl::DispatchInstr) -> pl::DispatchInstr {
+    match instr_dispatch {
+        pl::DispatchInstr::Group(mut instr_group) => {
+            instr_group.block = shorten_group_block(instr_group.block);
+            pl::DispatchInstr::Group(instr_group)
         }
-        instr_group @ (pl::GroupInstr::Result(_)
-        | pl::GroupInstr::Return(_)
-        | pl::GroupInstr::Rule(_)) => instr_group,
+        pl::DispatchInstr::Route(mut instr_route) => {
+            let mut blocks = Vec::with_capacity(instr_route.blocks.len());
+            for block in instr_route.blocks {
+                blocks.push(shorten_dispatch_block(block));
+            }
+            instr_route.blocks = blocks;
+            pl::DispatchInstr::Route(instr_route)
+        }
     }
 }
 
-// - Instruction
+// - Group instruction
 
 fn shorten_group_instr(mut instr: pl::Instr<pl::GroupInstr>) -> pl::Instr<pl::GroupInstr> {
     instr.node.node = shorten_group_instr_kind(instr.node.node);
@@ -451,13 +399,83 @@ fn shorten_group_instr_kind(
     }
 }
 
-// - Block
-
 fn shorten_group_block(block: pl::GroupBlock) -> pl::GroupBlock {
     shorten_block_shorthands(block)
         .into_iter()
         .map(shorten_group_instr)
         .collect()
+}
+
+// - Holding condition
+
+fn shorten_group_hold_case(
+    hold_case: pl::HoldCase<pl::GroupInstr>,
+) -> pl::HoldCase<pl::GroupInstr> {
+    match hold_case {
+        pl::HoldCase::Both(block_hold, block_not_hold) => {
+            let block_hold = shorten_group_block(block_hold);
+            let block_not_hold = shorten_group_block(block_not_hold);
+            pl::HoldCase::Both(block_hold, block_not_hold)
+        }
+        pl::HoldCase::Hold(block, dangle) => {
+            let block = shorten_group_block(block);
+            pl::HoldCase::Hold(block, dangle)
+        }
+        pl::HoldCase::NotHold(block, dangle) => {
+            let block = shorten_group_block(block);
+            pl::HoldCase::NotHold(block, dangle)
+        }
+    }
+}
+
+// - Tier instruction
+
+fn shorten_group_tier(instr_group: pl::GroupInstr) -> pl::GroupInstr {
+    match instr_group {
+        pl::GroupInstr::Backtrack(mut instr_backtrack) => {
+            let mut blocks = Vec::with_capacity(instr_backtrack.blocks.len());
+            for block in instr_backtrack.blocks {
+                blocks.push(shorten_group_block(block));
+            }
+            instr_backtrack.blocks = blocks;
+            pl::GroupInstr::Backtrack(instr_backtrack)
+        }
+        instr_group @ (pl::GroupInstr::Result(_)
+        | pl::GroupInstr::Return(_)
+        | pl::GroupInstr::Rule(_)) => instr_group,
+    }
+}
+
+// == Relation definitions
+
+fn shorten_rel_def(def_rel: pl::RelDef) -> pl::RelDef {
+    match def_rel {
+        pl::RelDef::Defined(mut def_rel) => {
+            def_rel.block = shorten_dispatch_block(def_rel.block);
+            def_rel.block_else_opt = def_rel.block_else_opt.map(shorten_dispatch_block);
+            pl::RelDef::Defined(def_rel)
+        }
+        pl::RelDef::Extern(def_rel) => pl::RelDef::Extern(def_rel),
+    }
+}
+
+// == Meta-function definitions
+
+fn shorten_func_def(def_func: pl::MetaFuncDef) -> pl::MetaFuncDef {
+    match def_func {
+        pl::MetaFuncDef::Table(mut def_func) => {
+            for row in &mut def_func.rows {
+                row.block = shorten_group_block(std::mem::take(&mut row.block));
+            }
+            pl::MetaFuncDef::Table(def_func)
+        }
+        pl::MetaFuncDef::Defined(mut def_func) => {
+            def_func.block = shorten_group_block(def_func.block);
+            def_func.block_else_opt = def_func.block_else_opt.map(shorten_group_block);
+            pl::MetaFuncDef::Defined(def_func)
+        }
+        def_func @ (pl::MetaFuncDef::Extern(_) | pl::MetaFuncDef::Builtin(_)) => def_func,
+    }
 }
 
 // == Definitions
@@ -478,34 +496,6 @@ fn shorten_def_kind(def_kind: pl::DefKind) -> pl::DefKind {
             pl::DefKind::MetaFunc(def_func)
         }
         kind @ (pl::DefKind::Typ(_) | pl::DefKind::Var(_)) => kind,
-    }
-}
-
-fn shorten_rel_def(def_rel: pl::RelDef) -> pl::RelDef {
-    match def_rel {
-        pl::RelDef::Defined(mut def_rel) => {
-            def_rel.block = shorten_dispatch_block(def_rel.block);
-            def_rel.block_else_opt = def_rel.block_else_opt.map(shorten_dispatch_block);
-            pl::RelDef::Defined(def_rel)
-        }
-        pl::RelDef::Extern(def_rel) => pl::RelDef::Extern(def_rel),
-    }
-}
-
-fn shorten_func_def(def_func: pl::MetaFuncDef) -> pl::MetaFuncDef {
-    match def_func {
-        pl::MetaFuncDef::Table(mut def_func) => {
-            for row in &mut def_func.rows {
-                row.block = shorten_group_block(std::mem::take(&mut row.block));
-            }
-            pl::MetaFuncDef::Table(def_func)
-        }
-        pl::MetaFuncDef::Defined(mut def_func) => {
-            def_func.block = shorten_group_block(def_func.block);
-            def_func.block_else_opt = def_func.block_else_opt.map(shorten_group_block);
-            pl::MetaFuncDef::Defined(def_func)
-        }
-        def_func @ (pl::MetaFuncDef::Extern(_) | pl::MetaFuncDef::Builtin(_)) => def_func,
     }
 }
 
