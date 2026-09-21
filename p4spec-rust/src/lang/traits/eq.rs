@@ -1,4 +1,8 @@
 //! Syntax equality shared across language stages
+//!
+//! `syntax_eq` compares what was written, not where or with what inferred type.
+//! `slice_syntax_eq` is overridable so a type can compare lists as sets,
+//! as variable binders do.
 
 use std::rc::Rc;
 
@@ -6,12 +10,12 @@ use crate::lang::common::source::NotePhrase;
 
 // == Syntax equality
 
-/// Compares syntax while ignoring source and analysis metadata
+/// Compares syntax while ignoring source and analysis metadata.
 pub trait SyntaxEq<Rhs: ?Sized = Self> {
-    /// Returns whether two nodes represent the same syntax
+    /// Returns whether two nodes represent the same syntax.
     fn syntax_eq(&self, other: &Rhs) -> bool;
 
-    /// Compares slices of nodes using this type's collection policy
+    /// Compares slices of nodes using this type's collection policy.
     fn slice_syntax_eq(items_l: &[Self], items_r: &[Rhs]) -> bool
     where
         Self: Sized,
