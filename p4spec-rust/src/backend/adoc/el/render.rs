@@ -3,7 +3,8 @@
 //! Rendering follows the original EL backend rather than the language printer.
 //! Types use display atoms so notation brackets and operators read naturally;
 //! executable syntax uses source atoms so it remains unambiguous. Documents
-//! choose flat or broken layouts at 80 columns. `render_def` is the entry point.
+//! choose flat or broken layouts at 80 columns.
+//! `render_def` is the entry point.
 
 use crate::lang::{
     common::{Iter, notation::atom::Atom as AtomKind, prim::num},
@@ -104,6 +105,7 @@ fn doc_of_atom(atom_mode: AtomMode, atom: &Atom) -> Doc {
 
 // == Lists
 
+/// Groups a comma-separated list, indenting its elements when it breaks.
 fn doc_of_comma_list<T>(
     indent: usize,
     open: &str,
@@ -111,6 +113,7 @@ fn doc_of_comma_list<T>(
     doc_of_item: impl Fn(&T) -> Doc,
     items: &[T],
 ) -> Doc {
+    // Empty lists retain their delimiters without a break
     if items.is_empty() {
         return text(format!("{open}{close}"));
     }
@@ -128,6 +131,7 @@ fn doc_of_comma_list<T>(
     ]))
 }
 
+/// Omits empty lists, including their opening and closing delimiters.
 fn doc_of_optional_comma_list<T>(
     indent: usize,
     open: &str,
@@ -144,6 +148,7 @@ fn doc_of_optional_comma_list<T>(
 
 // == Operators
 
+/// Groups display brackets with breakable spaces around the inner document.
 fn doc_of_bracket(atom_mode: AtomMode, doc_body: Doc, atom_l: &Atom, atom_r: &Atom) -> Doc {
     doc::group(doc::concat([
         doc_of_atom(atom_mode, atom_l),
@@ -569,6 +574,7 @@ fn doc_of_prems(atom_mode: AtomMode, prems: &[Prem]) -> Doc {
 
 // == Rules
 
+/// Places the conclusion and premises below the grouped rule heading.
 fn doc_of_rule(atom_mode: AtomMode, rule: &Rule) -> Doc {
     doc::cat(
         doc::group(doc::concat([
@@ -596,6 +602,7 @@ fn doc_of_rule(atom_mode: AtomMode, rule: &Rule) -> Doc {
 
 // == Tables
 
+/// Keeps the pattern and result together when the row fits.
 fn doc_of_table_row(atom_mode: AtomMode, row: &TableRow) -> Doc {
     doc::group(doc::concat([
         text("| "),
@@ -609,6 +616,7 @@ fn doc_of_table_row(atom_mode: AtomMode, row: &TableRow) -> Doc {
 
 // == Functions
 
+/// Groups a source signature with its breakable result type.
 fn doc_of_func_dec(
     prefix: &str,
     id_def: &Id,
@@ -746,6 +754,7 @@ pub fn render_def(def: &Def) -> String {
 
 // == Text escaping
 
+/// Escapes quotes, backslashes, control bytes, and non-ASCII text bytes.
 fn escaped(text_value: &str) -> String {
     text_value
         .bytes()

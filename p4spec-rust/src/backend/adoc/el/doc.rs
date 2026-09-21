@@ -109,26 +109,35 @@ pub(super) fn flow(docs: impl IntoIterator<Item = Doc>) -> Doc {
 
 /// Tests whether the queued flat layout reaches a forced newline within width.
 fn fits(mut width_remaining: isize, mut commands: Vec<Command<'_>>) -> bool {
+    // Stop lookahead when the current line exceeds its available width
     while width_remaining >= 0 {
+        // Exhausting the pending document means the line fits
         let Some(Command { indent, mode, doc }) = commands.pop() else {
             return true;
         };
         match doc {
+            // Empty documents consume no space
             Doc::Empty => {}
+            // Literal text consumes its byte width
             Doc::Text(text) => width_remaining -= text.len() as isize,
+            // Only a broken layout turns an optional break into a newline
             Doc::Break(text) => match mode {
                 Mode::Flat => width_remaining -= text.len() as isize,
                 Mode::Broken => return true,
             },
+            // Forced lines end the current line in either mode
             Doc::Line => return true,
             Doc::Cat(doc_l, doc_r) => {
+                // Push in reverse order to visit the left document first
                 commands.push(Command { indent, mode, doc: doc_r });
                 commands.push(Command { indent, mode, doc: doc_l });
             }
             Doc::Nest(offset, doc) => {
+                // Indentation takes effect at the next line break
                 commands.push(Command { indent: indent + offset, mode, doc });
             }
             Doc::Group(doc) => {
+                // Lookahead retains the enclosing mode until a line ends
                 let mode = match mode {
                     Mode::Flat => Mode::Flat,
                     Mode::Broken => Mode::Broken,
@@ -148,14 +157,17 @@ pub(super) fn render(width: usize, doc: &Doc) -> String {
     let mut column = 0;
     let mut commands = vec![Command { indent: 0, mode: Mode::Broken, doc }];
 
-    // Interpret commands iteratively so deeply nested syntax does not use the call stack
+    // Keep nested layout traversal off the call stack
     while let Some(Command { indent, mode, doc }) = commands.pop() {
         match doc {
+            // Empty documents consume no space
             Doc::Empty => {}
+            // Literal text consumes its byte width
             Doc::Text(text) => {
                 output.push_str(text);
                 column += text.len();
             }
+            // Only a broken layout turns an optional break into a newline
             Doc::Break(text) => match mode {
                 Mode::Flat => {
                     output.push_str(text);
@@ -167,19 +179,23 @@ pub(super) fn render(width: usize, doc: &Doc) -> String {
                     column = indent;
                 }
             },
+            // Forced lines end the current line in either mode
             Doc::Line => {
                 output.push('\n');
                 output.push_str(&" ".repeat(indent));
                 column = indent;
             }
             Doc::Cat(doc_l, doc_r) => {
+                // Push in reverse order to visit the left document first
                 commands.push(Command { indent, mode, doc: doc_r });
                 commands.push(Command { indent, mode, doc: doc_l });
             }
             Doc::Nest(offset, doc) => {
+                // Indentation takes effect at the next line break
                 commands.push(Command { indent: indent + offset, mode, doc });
             }
             Doc::Group(doc) => {
+                // Flatten the group only when it and the following text fit
                 let mode = match mode {
                     Mode::Flat => Mode::Flat,
                     Mode::Broken => {

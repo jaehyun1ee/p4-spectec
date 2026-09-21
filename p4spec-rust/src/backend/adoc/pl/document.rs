@@ -80,7 +80,7 @@ enum CapStep {
     Stop,
 }
 
-/// Capitalizes text until a code span or link protects the rest of the sequence.
+/// Capitalizes text until a code span or link stops the search.
 fn capitalize_prose(prose: &mut Prose) -> CapStep {
     match prose {
         Prose::Text(text) => {
@@ -172,7 +172,7 @@ fn collect_markers(
             ordinals.retain(|level_inner, _| level_inner <= level);
             match kind {
                 ItemKind::Unordered => {
-                    // An unordered entry terminates the ordered list at this level
+                    // End the ordered list at this level
                     ordinals.remove(level);
                 }
                 ItemKind::Ordered(anchor_opt) => {
@@ -372,7 +372,7 @@ impl Serializer<'_> {
         }
     }
 
-    /// Serializes blocks using the arm markers collected for the whole fragment.
+    /// Serializes blocks using the fragment's collected arm markers.
     fn block(&mut self, block: &Block) -> String {
         match block {
             Block::Empty => String::new(),
@@ -410,7 +410,7 @@ impl Serializer<'_> {
                 text
             }
             Block::Table(cols, header, rows) => {
-                // Header cells permit prose links; row cells are already rendered
+                // Render header links above the serialized row cells
                 let text_header = header
                     .iter()
                     .map(|prose| self.prose(prose, None, true))
