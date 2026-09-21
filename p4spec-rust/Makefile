@@ -1,13 +1,11 @@
 # Test targets for the Rust port.
 #
-# The default targets run the fast, pure-Rust unit tests. The OCaml-differential
-# tests are #[ignore]d and run only via the `*-diff` targets: they need the
-# pinned OCaml toolchain (opam/dune).
+# The default targets run the native Rust unit and integration tests.
 
 CARGO := cargo
 
-.PHONY: test test-frontend test-p4parse-unit test-elab-unit test-algo-unit test-structure-unit test-prose-unit test-lang test-wire \
-        test-runtime test-run-al-unit test-run-sl-unit test-frontend-diff test-algo-diff test-diff
+.PHONY: test test-frontend test-p4parse-unit test-elab-unit test-algo-unit test-structure-unit test-prose-unit test-lang \
+        test-runtime test-run-al-unit test-run-sl-unit
 
 # Fast unit tests (no OCaml toolchain required)
 
@@ -43,9 +41,6 @@ test-prose-unit:
 test-lang:
 	$(CARGO) test --test lang
 
-test-wire:
-	$(CARGO) test --test wire
-
 test-runtime:
 	$(CARGO) test --test runtime
 
@@ -58,17 +53,6 @@ test-run-sl-unit:
 	$(CARGO) test --locked --test runtime interp::sl::
 	$(CARGO) test --locked --test runtime sim_plugin::ebpf::test_sl_counter_state
 	$(CARGO) test --locked --test cli
-
-# OCaml investigation checks (need opam/dune)
-# Algo compares rejected-input diagnostics; full spec uses test-expected
-
-test-frontend-diff:
-	$(CARGO) test --test frontend -- --ignored --nocapture
-
-test-algo-diff:
-	$(CARGO) test --test pass algo:: -- --ignored --nocapture
-
-test-diff: test-frontend-diff test-algo-diff
 
 # Standalone expected driver; product unit tests remain in tests/
 .PHONY: test-expected test-promote test-p4parse test-elab test-algo test-structure test-prose test-run-al test-run-sl

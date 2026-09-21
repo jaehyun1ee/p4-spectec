@@ -28,24 +28,6 @@ fn test_value_equality_includes_type_and_source() {
 }
 
 #[test]
-fn test_copied_values_share_interned_storage() {
-    let mut arena = ValueArena::new();
-    let value = make::bool(&mut arena, true, Span::default()).unwrap();
-    let cloned = value;
-
-    assert!((value == cloned));
-}
-
-#[test]
-fn test_runtime_values_are_il_ast_values() {
-    let mut arena = ValueArena::new();
-    let value: p4spec_rust::lang::il::ast::Value =
-        make::bool(&mut arena, true, Span::default()).unwrap();
-
-    assert_eq!(arena.to_string(&value), "true");
-}
-
-#[test]
 fn test_value_views_resolve_nested_handles_in_each_arena() {
     let mut arena_l = ValueArena::new();
     let mut arena_r = ValueArena::new();

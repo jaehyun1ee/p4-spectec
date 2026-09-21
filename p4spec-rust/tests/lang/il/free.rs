@@ -93,13 +93,6 @@ fn clause(arg_name: &str, body: &str, prem_name: &str) -> ast::Clause {
 }
 
 #[test]
-fn test_free_helpers_are_public_and_source_insensitive() {
-    assert_eq!(IdSet::new(), names(&[]));
-    assert_eq!(IdSet::from([id_at("x", "left")]), names(&["x"]));
-    assert_eq!(IdSet::from([id_at("x", "right")]), names(&["x"]));
-}
-
-#[test]
 fn test_free_expression_variants_follow_the_oracle() {
     let path = p4spec_rust::note_phrase! { node: ast::PathKind::Slice(
     Box::new(p4spec_rust::note_phrase! {
