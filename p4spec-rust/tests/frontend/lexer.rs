@@ -280,7 +280,7 @@ fn test_lexical_failures_report_typed_kinds_and_precise_spans() {
     let fixtures = [
         ("\"unterminated", LexErrorKind::UnclosedTextLiteral, 0, 13),
         ("\"abc\\", LexErrorKind::MalformedToken, 0, 1),
-        ("\"bad\\q\"", LexErrorKind::IllegalEscape, 6, 6),
+        ("\"bad\\q\"", LexErrorKind::IllegalEscape, 4, 6),
         ("\"bad\u{7}\"", LexErrorKind::IllegalControlCharacter, 0, 5),
         ("\"unterminated\nnext", LexErrorKind::UnclosedTextLiteral, 0, 14),
         ("(; unclosed", LexErrorKind::UnclosedComment, 0, 11),

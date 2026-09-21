@@ -1038,8 +1038,8 @@ where
                 .next()
                 .expect("escape byte exists")
                 .len_utf8();
-        self.advance_to(invalid_end);
         let position = self.cursor;
+        self.advance_to(invalid_end);
         Err(self.error(LexErrorKind::IllegalEscape, position))
     }
 

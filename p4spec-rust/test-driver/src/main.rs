@@ -1,5 +1,6 @@
 mod algo;
 mod corpus;
+mod diagnostic;
 mod elab;
 mod p4parse;
 mod prose;
@@ -29,6 +30,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Compare active diagnostic cases and report remaining migration coverage
+    Diagnostics {
+        #[arg(long, value_enum)]
+        suite: Option<diagnostic::Suite>,
+    },
     /// Compare P4 parse/unparse/parse roundtrips with stored file results
     P4parse,
     /// Compare the elaborated P4 specification with expected output
@@ -70,7 +76,7 @@ fn execute(command: Command) -> Result<()> {
     ) && std::env::var_os("UPDATE_EXPECT").is_some()
     {
         return Err(Error::Invalid(
-            "UPDATE_EXPECT is supported only for elab, algo, and prose".to_owned(),
+            "UPDATE_EXPECT is supported only for elab, algo, prose, and diagnostics".to_owned(),
         ));
     }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -78,6 +84,7 @@ fn execute(command: Command) -> Result<()> {
         .canonicalize()?;
     std::env::set_current_dir(&root)?;
     match command {
+        Command::Diagnostics { suite } => diagnostic::run(suite),
         Command::P4parse => p4parse::run(),
         Command::Elab => elab::run(),
         Command::Algo => algo::run(),

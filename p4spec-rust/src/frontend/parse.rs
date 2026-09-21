@@ -15,6 +15,8 @@ use std::{
 
 use lalrpop_util::ParseError;
 
+use crate::diagnostic::{Label, LabelStyle, Report, Severity};
+
 use crate::lang::{
     common::{
         notation::{mixfix::Mixfix, mixop::Mixop},
@@ -25,7 +27,7 @@ use crate::lang::{
 
 use super::{
     ctx::{Bindings, Context, Location},
-    error::{FrontendError, SyntaxErrorKind},
+    error::{FrontendError, LexErrorKind, SyntaxErrorKind},
     lexer::{Lexer, Token},
     parser,
     tokens::parser_tokens,
@@ -97,14 +99,39 @@ fn parse_error(ctx: &Context, error: ParseError<Location, Token, FrontendError>)
         ParseError::ExtraToken { token: (loc_l, _, loc_r) } => {
             (SyntaxErrorKind::ExtraToken, loc_l, loc_r)
         }
-        // Lexer errors pass through unchanged
-        ParseError::User { error } => return error,
+        // Forward located failures through the temporary frontend bridge
+        ParseError::User { error } => return diagnostic_error(error),
     };
     crate::phrase! {
         node: kind,
         span: ctx.span(loc_l, loc_r),
     }
     .into()
+}
+
+/// Adapts the first lexical diagnostic until D02 migrates the lexer family.
+fn diagnostic_error(error: FrontendError) -> FrontendError {
+    const TEXT_ESCAPE_INVALID: &str = "parse/text-escape-invalid";
+    match error {
+        // Preserve the lexer's precise escape span
+        FrontendError::Lexical(error) if error.node == LexErrorKind::IllegalEscape => {
+            FrontendError::Diagnostic(Box::new(Report {
+                severity: Severity::Error,
+                code: Some(TEXT_ESCAPE_INVALID.to_owned()),
+                message: "escape is not allowed in a text literal".to_owned(),
+                labels: vec![Label {
+                    style: LabelStyle::Primary,
+                    span: error.span,
+                    message: "invalid escape".to_owned(),
+                }],
+                notes: Vec::new(),
+                source: "parse",
+                traces: Vec::new(),
+            }))
+        }
+        // Other frontend families retain their current typed errors
+        error => error,
+    }
 }
 
 /// Reads a file, checks its encoding, and parses it with the given context.

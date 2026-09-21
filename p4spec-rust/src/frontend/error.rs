@@ -7,6 +7,7 @@ use std::{io, str::Utf8Error};
 
 use thiserror::Error;
 
+use crate::diagnostic::Report;
 use crate::lang::common::source::Phrase;
 
 /// A lexical failure category produced before parsing begins.
@@ -71,6 +72,9 @@ pub type InvalidUtf8Error = Utf8Error;
 /// A failure from any stage of the SpecTec source frontend.
 #[derive(Debug, Error)]
 pub enum FrontendError {
+    /// Carries migrated diagnostics until the frontend transition is complete.
+    #[error(transparent)]
+    Diagnostic(Box<Report>),
     /// The lexer rejected the source.
     #[error(transparent)]
     Lexical(#[from] LexError),

@@ -56,6 +56,7 @@ test-run-sl-unit:
 
 # Standalone expected driver; product unit tests remain in tests/
 .PHONY: test-expected test-promote test-p4parse test-elab test-algo test-structure test-prose test-run-al test-run-sl
+.PHONY: test-diagnostics test-diagnostics-promote
 DRIVER_TARGET_DIR ?= $(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),target)
 DRIVER = $(CARGO) run --locked --release --manifest-path test-driver/Cargo.toml --target-dir $(DRIVER_TARGET_DIR) --
 
@@ -74,6 +75,12 @@ test-structure:
 test-prose:
 	env -u UPDATE_EXPECT $(DRIVER) prose
 
+test-diagnostics:
+	env -u UPDATE_EXPECT $(DRIVER) diagnostics
+
+test-diagnostics-promote:
+	UPDATE_EXPECT=1 $(DRIVER) diagnostics
+
 test-run-al:
 	env -u UPDATE_EXPECT $(DRIVER) run-al
 
@@ -81,7 +88,7 @@ test-run-sl:
 	env -u UPDATE_EXPECT $(DRIVER) run-sl
 	env -u UPDATE_EXPECT $(DRIVER) run-sl --det
 
-test-expected: test-p4parse test-elab test-algo test-structure test-prose test-run-al test-run-sl
+test-expected: test-p4parse test-elab test-algo test-structure test-prose test-run-al test-run-sl test-diagnostics
 
 # Rerun elab/algo/prose and update snapshots; does not approve a previous run
 # P4 parser/structure/AL expected and excludes are never promoted
