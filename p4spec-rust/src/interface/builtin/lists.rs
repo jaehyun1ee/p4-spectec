@@ -1,9 +1,10 @@
-//! List builtins in specification order.
+//! List builtins in specification order
 //!
-//! Each builtin first extracts its type and value args, performs the list
-//! operation, and returns the newly constructed runtime value. For
-//! example, `rev_` turns `[a, b]` into `[b, a]` while preserving the element
-//! type supplied by the specification.
+//! Each builtin first extracts its type and value arguments,
+//! performs the list operation,
+//! and returns the newly constructed runtime value.
+//! For example, `rev_` turns `[a, b]` into `[b, a]`
+//! while preserving the element type supplied by the specification.
 
 use std::rc::Rc;
 
@@ -24,17 +25,18 @@ use super::{BuiltinError, extract};
 
 // == Conversion between runtime values and Rust collections
 
+/// The elements of a list value.
 fn list_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a [Value], BuiltinError> {
     get::list(arena, value).map_err(|error| BuiltinError::new(error.to_string()))
 }
 
+/// The integer in a number value.
 fn bigint_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
     let num = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
     Ok(num::to_int(num))
 }
 
-// dec $rev_<X>(X*) : X*
-
+/// `dec $rev_<X>(X*) : X*`, the list reversed.
 pub fn rev_(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -49,8 +51,7 @@ pub fn rev_(
     Ok(value)
 }
 
-// dec $concat_<X>((X*)*) : X*
-
+/// `dec $concat_<X>((X*)*) : X*`, the lists joined in order.
 pub fn concat_(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -61,6 +62,7 @@ pub fn concat_(
     let mut concatenated = Vec::new();
     let value_lists = extract::one(values)?;
     let lists = list_of_value(arena, value_lists)?;
+    // Every element must itself be a list
     for value_list in lists {
         let values = list_of_value(arena, value_list)?;
         concatenated.extend(values.iter().cloned());
@@ -69,8 +71,8 @@ pub fn concat_(
     Ok(value)
 }
 
-// dec $distinct_<K>(K*) : bool
-
+/// `dec $distinct_<K>(K*) : bool`,
+/// whether no two elements are syntactically equal.
 pub fn distinct_(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -80,6 +82,7 @@ pub fn distinct_(
     let value_list = extract::one(values)?;
     let values = list_of_value(arena, value_list)?;
     let mut values = values.to_vec();
+    // Sort, then equal elements are neighbors
     values.sort_by(|value_a, value_b| arena.view(*value_a).syntax_cmp(&arena.view(*value_b)));
     let all_distinct = values
         .windows(2)
@@ -88,8 +91,8 @@ pub fn distinct_(
     Ok(value)
 }
 
-// dec $partition_<X>(X*, nat) : (X*, X*)
-
+/// `dec $partition_<X>(X*, nat) : (X*, X*)`,
+/// the first `nat` elements and the rest.
 pub fn partition_(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -100,11 +103,13 @@ pub fn partition_(
     let (value_list, value_len) = extract::two(values)?;
     let values = list_of_value(arena, value_list)?;
     let len = bigint_of_value(arena, value_len)?;
+    // Split by index against the requested length
     let (values_left, values_right): (Vec<_>, Vec<_>) = values
         .iter()
         .copied()
         .enumerate()
         .partition(|(index, _)| BigInt::from(*index) < *len);
+    // Each half keeps the element type
     let value_left = make::list(
         arena,
         typ_list.clone(),
@@ -123,8 +128,8 @@ pub fn partition_(
     Ok(value)
 }
 
-// dec $assoc_<X, Y>(X, (X, Y)*) : Y?
-
+/// `dec $assoc_<X, Y>(X, (X, Y)*) : Y?`,
+/// the value of the first pair whose key matches, if any.
 pub fn assoc_(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -134,12 +139,14 @@ pub fn assoc_(
     let (value, value_list) = extract::two(values)?;
     let mut found = None;
     for pair in list_of_value(arena, value_list)? {
+        // Every element must be a pair
         let pair = match arena.kind(pair) {
             ValueKind::Tuple(pair) if pair.len() == 2 => pair,
             _ => {
                 return Err(BuiltinError::new("expected an association pair"));
             }
         };
+        // The first match wins, but the rest are still checked for shape
         if found.is_none() && arena.view(*value).syntax_eq(&arena.view(pair[0])) {
             found = Some(pair[1]);
         }
@@ -149,8 +156,8 @@ pub fn assoc_(
     Ok(value)
 }
 
-// dec $sort_<X>((nat, X)*) : (nat, X)*
-
+/// `dec $sort_<X>((nat, X)*) : (nat, X)*`,
+/// the pairs sorted by their natural key, stably.
 pub fn sort_(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -163,6 +170,7 @@ pub fn sort_(
     let value_list = extract::one(values)?;
     let pairs = list_of_value(arena, value_list)?;
     for pair in pairs {
+        // Every element must be a pair whose first component is the key
         let pair_values = match arena.kind(pair) {
             ValueKind::Tuple(pair) if pair.len() == 2 => pair,
             _ => {
@@ -172,14 +180,14 @@ pub fn sort_(
         let key = bigint_of_value(arena, &pair_values[0])?.clone();
         keyed.push((key, *pair));
     }
+    // A stable sort keeps equal keys in input order
     keyed.sort_by(|(key_l, _), (key_r, _)| key_l.cmp(key_r));
     let values = keyed.into_iter().map(|(_, value)| value).collect();
     let value = make::list(arena, typ_list.node.into(), values, Span::default())?;
     Ok(value)
 }
 
-// builtin dec $transpose_<X>(X**) : X**
-
+/// `builtin dec $transpose_<X>(X**) : X**`, rows turned into columns.
 pub fn transpose_(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -191,6 +199,7 @@ pub fn transpose_(
     let typ_list = Rc::new(typ_list.node);
     let value_matrix = extract::one(values)?;
     let rows = list_of_value(arena, value_matrix)?;
+    // The first row fixes the width; an empty matrix has none
     let width = match rows.first() {
         Some(row) => {
             let values = list_of_value(arena, row)?;
@@ -201,6 +210,7 @@ pub fn transpose_(
     let mut columns = vec![Vec::with_capacity(rows.len()); width];
     for row in rows {
         let row = list_of_value(arena, row)?;
+        // Every row must have the same width
         if row.len() != width {
             return Err(BuiltinError::new("cannot transpose a matrix of values"));
         }

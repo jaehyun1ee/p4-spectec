@@ -1,12 +1,14 @@
-//! Fixed-arity argument extraction for builtin calls.
+//! Fixed-arity argument extraction for builtin calls
 //!
-//! Each helper returns borrowed arguments on an exact match and an arity error
-//! otherwise; for example, `two(&[a, b])` returns `(a, b)`.
+//! Each helper returns borrowed arguments on an exact match
+//! and an arity error otherwise;
+//! for example, `two(&[a, b])` returns `(a, b)`.
 
 use super::BuiltinError;
 
 // == Shorthand for extracting type arguments and values
 
+/// No arguments.
 pub fn zero<T>(values: &[T]) -> Result<(), BuiltinError> {
     match values {
         [] => Ok(()),
@@ -14,6 +16,7 @@ pub fn zero<T>(values: &[T]) -> Result<(), BuiltinError> {
     }
 }
 
+/// Exactly one argument.
 pub fn one<T>(values: &[T]) -> Result<&T, BuiltinError> {
     match values {
         [value] => Ok(value),
@@ -21,6 +24,7 @@ pub fn one<T>(values: &[T]) -> Result<&T, BuiltinError> {
     }
 }
 
+/// Exactly two arguments.
 pub fn two<T>(values: &[T]) -> Result<(&T, &T), BuiltinError> {
     match values {
         [value_a, value_b] => Ok((value_a, value_b)),
@@ -28,6 +32,7 @@ pub fn two<T>(values: &[T]) -> Result<(&T, &T), BuiltinError> {
     }
 }
 
+/// Exactly three arguments.
 pub fn three<T>(values: &[T]) -> Result<(&T, &T, &T), BuiltinError> {
     match values {
         [value_a, value_b, value_c] => Ok((value_a, value_b, value_c)),
@@ -35,6 +40,7 @@ pub fn three<T>(values: &[T]) -> Result<(&T, &T, &T), BuiltinError> {
     }
 }
 
+/// Exactly four arguments.
 pub fn four<T>(values: &[T]) -> Result<(&T, &T, &T, &T), BuiltinError> {
     match values {
         [value_a, value_b, value_c, value_d] => Ok((value_a, value_b, value_c, value_d)),

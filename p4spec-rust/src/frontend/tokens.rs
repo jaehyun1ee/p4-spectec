@@ -1,12 +1,15 @@
 //! Contextual token adaptation between the lexer and LALRPOP
 //!
-//! `parser_tokens` wraps a lexer iterator in [`ParserTokens`]. Each
-//! `ParserTokens::next` call converts source positions to [`Location`]
-//! handles and forwards lexical failures as [`FrontendError`]. Outside
-//! arithmetic mode it relabels `Star` as `IterStar` for postfix iteration.
+//! `parser_tokens` wraps a lexer iterator in [`ParserTokens`].
+//! Each `ParserTokens::next` call
+//! converts source positions to [`Location`] handles
+//! and forwards lexical failures as [`FrontendError`].
+//! Outside arithmetic mode it relabels `Star` as `IterStar`
+//! for postfix iteration.
 //!
-//! `ends_sequence` and `starts_sequence` identify adjacent notation atoms. If
-//! both predicates match, `ParserTokens::next` returns a synthetic `Sequence`
+//! `ends_sequence` and `starts_sequence` identify adjacent notation atoms.
+//! If both predicates match,
+//! `ParserTokens::next` returns a synthetic `Sequence`
 //! and stores the real lookahead in `pending` for the following call.
 //!
 //! # Examples
@@ -27,6 +30,7 @@ use super::{
     lexer::Token,
 };
 
+/// Wraps a lexeme stream for the parser.
 pub(crate) fn parser_tokens<I>(ctx: &Context, lexemes: I) -> ParserTokens<'_, I>
 where
     I: Iterator,
@@ -34,14 +38,21 @@ where
     ParserTokens { ctx, lexemes, previous_right: None, previous_token: None, pending: None }
 }
 
+/// The adapted token stream.
 pub(crate) struct ParserTokens<'ctx, I: Iterator> {
+    /// Parser state: modes and position interning.
     ctx: &'ctx Context,
+    /// The lexer.
     lexemes: I,
+    /// Where the last emitted token ended, for a `Sequence` span.
     previous_right: Option<Position>,
+    /// The last emitted token, to test `ends_sequence`.
     previous_token: Option<Token>,
+    /// A lexeme held back while a `Sequence` is emitted first.
     pending: Option<Phrase<Token>>,
 }
 
+/// Whether a token can begin a notation atom that follows another.
 fn starts_sequence(token: &Token) -> bool {
     matches!(
         token,
@@ -75,6 +86,7 @@ fn starts_sequence(token: &Token) -> bool {
     )
 }
 
+/// Whether a token can end a notation atom that another follows.
 fn ends_sequence(token: &Token) -> bool {
     matches!(
         token,
@@ -116,6 +128,7 @@ where
     type Item = Result<(Location, Token, Location), FrontendError>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // A held-back lexeme comes before the next one from the lexer
         let mut lexeme = match self.pending.take() {
             Some(lexeme) => lexeme,
             None => match self.lexemes.next()? {
@@ -124,10 +137,12 @@ where
             },
         };
 
+        // `*` is iteration unless the parser is inside arithmetic
         if lexeme.node == Token::Star && !self.ctx.in_arith() {
             lexeme.node = Token::IterStar;
         }
 
+        // Two adjacent atoms get a `Sequence` between them; the lexeme waits
         if self.previous_token.as_ref().is_some_and(ends_sequence) && starts_sequence(&lexeme.node)
         {
             let pos_l = self
@@ -141,6 +156,7 @@ where
             return Some(Ok((self.ctx.location(pos_l), Token::Sequence, self.ctx.location(pos_r))));
         }
 
+        // Intern both ends and remember this token for the next call
         let loc_l = self.ctx.location(lexeme.span.left);
         self.previous_right = Some(lexeme.span.right.clone());
         let loc_r = self.ctx.location(lexeme.span.right);

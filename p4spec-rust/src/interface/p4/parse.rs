@@ -1,10 +1,10 @@
 //! Preprocessing and parsing P4 into runtime values
 //!
-//! `parse_file` preprocesses includes before delegating to `parse_string`, which
-//! creates a fresh name-resolution ctx, lexes the source, adapts located
-//! tokens for LALRPOP, and builds the mixfix value tree. Parse failures retain
-//! lexer locations through the same ctx. For example, an empty source
-//! produces the grammar's empty `p4program` case value.
+//! `parse_file` preprocesses includes before delegating to `parse_string`,
+//! which creates a fresh name-resolution context, lexes the source,
+//! adapts located tokens for LALRPOP, and builds the mixfix value tree.
+//! Parse failures retain lexer locations through the same context.
+//! For example, an empty source produces the grammar's empty `p4program` case.
 
 use std::{
     path::{Path, PathBuf},
@@ -30,6 +30,7 @@ use super::{
 
 // - LALRPOP bridge
 
+/// Interns each token's positions into copyable locations for LALRPOP.
 fn parser_input<'a, I>(
     ctx: &'a Context,
     tokens: I,
@@ -38,6 +39,7 @@ fn parser_input<'a, I>(
 where
     I: Iterator<Item = Result<Phrase<Token>, P4Error>> + 'a,
 {
+    // Each left location remembers the previous right one, for empty spans
     let mut location_prev = ctx.location_add(position, None);
     tokens.map(move |token| {
         token.map(|token| {
@@ -49,16 +51,20 @@ where
     })
 }
 
+/// Maps a LALRPOP error to a syntax error with a resolved span.
 fn translate_lalrpop_error(ctx: &Context, error: ParseError<Location, Token, P4Error>) -> P4Error {
     let span = match error {
+        // Point errors span one location
         ParseError::InvalidToken { location } | ParseError::UnrecognizedEof { location, .. } => {
             let position = ctx.location_get(location);
             Span::new(position.clone(), position)
         }
+        // Token errors span the token
         ParseError::UnrecognizedToken { token: (location_l, _, location_r), .. }
         | ParseError::ExtraToken { token: (location_l, _, location_r) } => {
             ctx.location_span(location_l, location_r)
         }
+        // Lexer errors pass through unchanged
         ParseError::User { error } => return error,
     };
     P4Error::new(P4ErrorKind::Syntax, span)
@@ -66,13 +72,14 @@ fn translate_lalrpop_error(ctx: &Context, error: ParseError<Location, Token, P4E
 
 // - Source strings
 
-/// Parses an already-preprocessed P4 source string.
+/// Parses an already preprocessed P4 source string into a value tree.
 pub fn parse_string(
     arena: &mut ValueArena,
     path: impl AsRef<Path>,
     source: &str,
 ) -> Result<Value, P4Error> {
     let file: Rc<str> = Rc::from(path.as_ref().to_string_lossy().into_owned());
+    // The lexer and parser share one context for name classification
     let ctx = Rc::new(Context::new(arena));
     let position = Position::new(Rc::clone(&file), 1, 0);
     let lexer = Lexer::new(file, source, Rc::clone(&ctx));

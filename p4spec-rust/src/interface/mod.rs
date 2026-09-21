@@ -1,5 +1,9 @@
 //! Interface presets assemble specification builtins
-//! For example, `p4(&spec)` adds `print_` using the specification's print hints
+//!
+//! `p4` is the preset for the P4 specification:
+//! the standard builtins plus `print_`,
+//! which renders a value back to P4 syntax
+//! using the specification's print hints.
 
 use crate::{
     lang::{common::source::Span, data::value},
@@ -16,6 +20,7 @@ pub mod p4;
 
 // == P4
 
+/// The P4 builtin interface, with `print_` reading hints from `spec`.
 pub fn p4(spec: &Spec) -> BuiltinInterface {
     let unparser = match spec {
         Spec::Al(spec) => P4Unparser::from_al_spec(spec),
@@ -24,9 +29,11 @@ pub fn p4(spec: &Spec) -> BuiltinInterface {
     p4_with_unparser(unparser)
 }
 
+/// Installs `print_` over the standard builtins.
 fn p4_with_unparser(unparser: P4Unparser) -> BuiltinInterface {
     let builtins = Builtins::with_extensions([(
         "print_",
+        // `print_<T>(T) : text`: one type argument, one value
         Box::new(move |arena, targs, values| {
             let _typ = extract::one(targs)?;
             let value = extract::one(values)?;

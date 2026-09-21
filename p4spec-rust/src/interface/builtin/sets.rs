@@ -1,8 +1,8 @@
-//! Set builtins backed by a collection with actual set semantics.
+//! Set builtins backed by a collection with actual set semantics
 //!
-//! Runtime syntax is decoded into a sorted list, operated on, and encoded back
-//! in semantic value order. For example, the union of `{a}` and `{a, b}` is
-//! emitted once as `{a, b}`.
+//! Runtime syntax is decoded into a sorted, deduplicated list,
+//! operated on, and encoded back in syntax order.
+//! For example, the union of `{a}` and `{a, b}` is emitted once as `{a, b}`.
 
 use std::rc::Rc;
 
@@ -23,13 +23,16 @@ use super::{BuiltinError, extract};
 
 // == Value set
 
+/// A set as a sorted list without duplicates.
 type ValueSet = Vec<Value>;
 
+/// Sorts by syntax and drops syntactic duplicates.
 fn sort_set(arena: &ValueArena, set: &mut ValueSet) {
     set.sort_by(|value_a, value_b| arena.view(*value_a).syntax_cmp(&arena.view(*value_b)));
     set.dedup_by(|value_a, value_b| arena.view(*value_a).syntax_eq(&arena.view(*value_b)));
 }
 
+/// Membership by binary search; the set must be sorted.
 fn contains(arena: &ValueArena, set: &[Value], value: &Value) -> bool {
     set.binary_search_by(|value_element| arena.view(*value_element).syntax_cmp(&arena.view(*value)))
         .is_ok()
@@ -37,13 +40,16 @@ fn contains(arena: &ValueArena, set: &[Value], value: &Value) -> bool {
 
 // == Conversion between meta-sets and runtime lists
 
+/// The `{ ... }` shape of a set value.
 fn set_mixop() -> Rc<Mixop> {
     shape("`{ k `}")
 }
 
+/// Decodes a `set<K>` value into a sorted set.
 fn set_of_value(arena: &ValueArena, value: &Value) -> Result<ValueSet, BuiltinError> {
     let value_case = get::case(arena, value).map_err(|_| BuiltinError::new("expected a set"))?;
     let set_mixop = set_mixop();
+    // The value must be a set case wrapping one list
     if !value_case.eq_shape(&set_mixop) {
         return Err(BuiltinError::new("expected a set"));
     }
@@ -55,11 +61,13 @@ fn set_of_value(arena: &ValueArena, value: &Value) -> Result<ValueSet, BuiltinEr
     Ok(set)
 }
 
+/// Encodes a set as a `set<K>` value.
 fn value_of_set(
     arena: &mut ValueArena,
     typ_key: &Typ,
     set: ValueSet,
 ) -> Result<Value, BuiltinError> {
+    // The element list is typed `K*`, the case `set<K>`
     let values_elem = set.into_iter().collect();
     let typ_list = typ::make::list(typ_key.clone());
     let value_set = make::list(arena, typ_list.node.into(), values_elem, Span::default())?;
@@ -74,8 +82,7 @@ fn value_of_set(
 
 // == Built-in implementations
 
-// dec $intersect_set<K>(set<K>, set<K>) : set<K>
-
+/// `dec $intersect_set<K>(set<K>, set<K>) : set<K>`, the elements in both.
 pub fn intersect_set(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -92,8 +99,7 @@ pub fn intersect_set(
     value_of_set(arena, typ_key, intersection)
 }
 
-// dec $union_set<K>(set<K>, set<K>) : set<K>
-
+/// `dec $union_set<K>(set<K>, set<K>) : set<K>`, the elements in either.
 pub fn union_set(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -109,8 +115,7 @@ pub fn union_set(
     value_of_set(arena, typ_key, union)
 }
 
-// dec $unions_set<K>(set<K>*) : set<K>
-
+/// `dec $unions_set<K>(set<K>*) : set<K>`, the elements in any of the sets.
 pub fn unions_set(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -121,6 +126,7 @@ pub fn unions_set(
     let values =
         get::list(arena, value_sets).map_err(|error| BuiltinError::new(error.to_string()))?;
     let mut union = ValueSet::new();
+    // Gather every element, then sort and deduplicate once
     for value in values {
         let set = set_of_value(arena, value)?;
         union.extend(set);
@@ -129,8 +135,8 @@ pub fn unions_set(
     value_of_set(arena, typ_key, union)
 }
 
-// dec $diff_set<K>(set<K>, set<K>) : set<K>
-
+/// `dec $diff_set<K>(set<K>, set<K>) : set<K>`,
+/// the elements of the first not in the second.
 pub fn diff_set(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -147,8 +153,8 @@ pub fn diff_set(
     value_of_set(arena, typ_key, difference)
 }
 
-// dec $sub_set<K>(set<K>, set<K>) : bool
-
+/// `dec $sub_set<K>(set<K>, set<K>) : bool`,
+/// whether the first is a subset of the second.
 pub fn sub_set(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -163,8 +169,8 @@ pub fn sub_set(
     Ok(value)
 }
 
-// dec $eq_set<K>(set<K>, set<K>) : bool
-
+/// `dec $eq_set<K>(set<K>, set<K>) : bool`,
+/// whether both have the same elements.
 pub fn eq_set(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -174,6 +180,7 @@ pub fn eq_set(
     let (value_set_l, value_set_r) = extract::two(values)?;
     let set_l = set_of_value(arena, value_set_l)?;
     let set_r = set_of_value(arena, value_set_r)?;
+    // Sorted and deduplicated, equal sets are equal lists
     let equal = set_l.len() == set_r.len()
         && set_l
             .iter()

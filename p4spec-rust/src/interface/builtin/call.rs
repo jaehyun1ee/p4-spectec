@@ -1,9 +1,11 @@
-//! Dispatch specification builtin calls to their Rust implementations.
+//! Dispatch of specification builtin calls to their Rust implementations
 //!
-//! Construction installs the standard entries in specification order and
-//! then applies interface-specific overrides. Invocation resolves one name and
-//! calls its implementation; for example, `sum_nat` dispatches to
-//! `nats::sum_nat`, while `fresh_typeId` advances state hidden in `fresh`.
+//! Construction installs the standard entries in specification order
+//! and then applies interface-specific overrides.
+//! Invocation resolves one name and calls its implementation;
+//! for example, `sum_nat` dispatches to `nats::sum_nat`,
+//! while `fresh_typeId` advances state hidden in `fresh`
+//! and is therefore marked impure, so its results are never cached.
 
 use std::collections::HashMap;
 
@@ -18,17 +20,23 @@ use super::{
 
 // == Extensibility point: extra or override builtins per interface
 
+/// A builtin body: arena, type arguments, values in; a value out.
 pub type BuiltinImpl =
     Box<dyn FnMut(&mut ValueArena, &[Typ], &[Value]) -> Result<Value, BuiltinError>>;
 
+/// A registered builtin and whether calling it has effects.
 enum BuiltinEntry {
+    /// No effects; the interpreter may memoize the result.
     Pure(BuiltinImpl),
+    /// Has effects; every call runs.
     Impure(BuiltinImpl),
 }
 
 // == Builtin registry
 
+/// The builtin table of one interface.
 pub struct Builtins {
+    /// Entries by the specification's builtin name.
     funcs: HashMap<String, BuiltinEntry>,
 }
 
@@ -39,10 +47,13 @@ impl Default for Builtins {
 }
 
 impl Builtins {
+    /// The standard builtins alone.
     pub fn new() -> Self {
         Self::with_extensions([])
     }
 
+    /// The standard builtins plus `entries`,
+    /// which override by name and count as pure.
     pub fn with_extensions<const N: usize>(entries: [(&str, BuiltinImpl); N]) -> Self {
         let mut funcs = HashMap::from([
             // Nats
@@ -116,7 +127,7 @@ impl Builtins {
             ("bitacc".to_owned(), BuiltinEntry::Pure(Box::new(numerics::bitacc))),
             ("bitacc_replace".to_owned(), BuiltinEntry::Pure(Box::new(numerics::bitacc_replace))),
         ]);
-        // Extension entries are merged last, allowing interface-specific overrides.
+        // Extensions merge last so an interface can override standard entries
         for (name, builtin_impl) in entries {
             funcs.insert(name.to_owned(), BuiltinEntry::Pure(builtin_impl));
         }
@@ -125,12 +136,14 @@ impl Builtins {
 
     // - Initialization
 
+    /// Resets builtin state between programs.
     pub fn init(&mut self) {
         fresh::init();
     }
 
     // - Calls
 
+    /// Calls a builtin by name; the flag reports whether it had effects.
     pub fn invoke(
         &mut self,
         arena: &mut ValueArena,
@@ -138,14 +151,17 @@ impl Builtins {
         targs: &[Typ],
         values: &[Value],
     ) -> Result<(Value, bool), BuiltinError> {
+        // An undeclared builtin is a hard error, not a mismatch
         let entry = self.funcs.get_mut(&id.node).ok_or_else(|| BuiltinError {
             kind: BuiltinErrorKind::MissingImplementation(id.node.clone()),
         })?;
         let (value, side_effected) = match entry {
+            // Pure results may be memoized by the interpreter
             BuiltinEntry::Pure(builtin_impl) => {
                 let value = builtin_impl(arena, targs, values)?;
                 (value, false)
             }
+            // Impure results may not
             BuiltinEntry::Impure(builtin_impl) => {
                 let value = builtin_impl(arena, targs, values)?;
                 (value, true)

@@ -1,4 +1,7 @@
-//! Natural-num aggregation builtins in specification order.
+//! Natural-number aggregation builtins in specification order
+//!
+//! Sums, maxima, and minima over natural lists;
+//! an empty list has no maximum or minimum and is an error.
 
 use num_bigint::BigInt;
 use num_traits::Zero;
@@ -13,11 +16,13 @@ use super::{BuiltinError, extract};
 
 // == Conversion between meta-numerics and Rust numerics
 
+/// The integer in a number value.
 fn bigint_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
     let num = get::num(arena, value).map_err(|error| BuiltinError::new(error.to_string()))?;
     Ok(num::to_int(num))
 }
 
+/// A natural value; a negative integer is an error.
 fn value_of_bigint(arena: &mut ValueArena, value: BigInt) -> Result<Value, BuiltinError> {
     let value =
         num::Natural::try_from(value).map_err(|error| BuiltinError::new(error.to_string()))?;
@@ -25,6 +30,7 @@ fn value_of_bigint(arena: &mut ValueArena, value: BigInt) -> Result<Value, Built
     Ok(value)
 }
 
+/// The elements of the single list argument.
 fn input_values<'a>(arena: &'a ValueArena, values: &[Value]) -> Result<&'a [Value], BuiltinError> {
     let value = extract::one(values)?;
     get::list(arena, value).map_err(|error| BuiltinError::new(error.to_string()))
@@ -32,8 +38,7 @@ fn input_values<'a>(arena: &'a ValueArena, values: &[Value]) -> Result<&'a [Valu
 
 // == Built-in implementations
 
-// dec $sum_nat(nat*) : nat
-
+/// `dec $sum_nat(nat*) : nat`, the sum of the list.
 pub fn sum_nat(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -47,8 +52,7 @@ pub fn sum_nat(
     value_of_bigint(arena, sum)
 }
 
-// dec $max_nat(nat*) : nat
-
+/// `dec $max_nat(nat*) : nat`, the largest element.
 pub fn max_nat(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -56,6 +60,7 @@ pub fn max_nat(
 ) -> Result<Value, BuiltinError> {
     extract::zero(targs)?;
     let values = input_values(arena, values)?;
+    // An empty list has no maximum
     let (first, rest) = values
         .split_first()
         .ok_or_else(|| BuiltinError::new("max of empty list"))?;
@@ -67,8 +72,7 @@ pub fn max_nat(
     value_of_bigint(arena, maximum)
 }
 
-// dec $min_nat(nat*) : nat
-
+/// `dec $min_nat(nat*) : nat`, the smallest element.
 pub fn min_nat(
     arena: &mut ValueArena,
     targs: &[Typ],
@@ -76,6 +80,7 @@ pub fn min_nat(
 ) -> Result<Value, BuiltinError> {
     extract::zero(targs)?;
     let values = input_values(arena, values)?;
+    // An empty list has no minimum
     let (first, rest) = values
         .split_first()
         .ok_or_else(|| BuiltinError::new("min of empty list"))?;
