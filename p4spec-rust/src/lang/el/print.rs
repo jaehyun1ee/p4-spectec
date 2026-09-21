@@ -1,4 +1,8 @@
 //! Text rendering for elaboration-language data
+//!
+//! Prints EL back in its source syntax,
+//! so a parsed and printed specification reads like the original.
+//! Premises print on their own `--` lines under a rule.
 
 use std::fmt::{self, Write};
 
@@ -463,12 +467,14 @@ impl Print for Prem {
                 exp.print(printer)
             }
             PremKind::Else => printer.write_str("otherwise"),
+            // Nested iterations stack without parentheses
             PremKind::Iter(IterPrem { prem: inner, iter })
                 if matches!(inner.node, PremKind::Iter(_)) =>
             {
                 inner.print(printer)?;
                 iter.print(printer)
             }
+            // Any other premise is parenthesized under its iteration
             PremKind::Iter(IterPrem { prem: inner, iter }) => {
                 printer.write_char('(')?;
                 inner.print(printer)?;
@@ -701,6 +707,7 @@ impl Print for Spec {
 
 // == Helpers
 
+/// Escapes a text literal: quotes, backslashes, control bytes, and non-ASCII.
 fn escaped(text: &str) -> String {
     text.bytes()
         .map(|byte| match byte {
@@ -710,6 +717,7 @@ fn escaped(text: &str) -> String {
             9 => "\\t".into(),
             10 => "\\n".into(),
             13 => "\\r".into(),
+            // Printable ASCII passes through, other bytes as octal escapes
             32..=126 => char::from(byte).to_string(),
             _ => format!("\\{byte:03}"),
         })

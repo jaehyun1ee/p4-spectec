@@ -1,4 +1,4 @@
-//! Intermediate-to-algorithmic language conversion
+//! Internal-to-algorithmic language conversion
 //!
 //! `convert` runs two passes over an IL specification.
 //!

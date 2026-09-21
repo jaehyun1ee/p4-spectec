@@ -1,4 +1,4 @@
-//! Elaboration-language validation and conversion to intermediate syntax
+//! Elaboration-language validation and conversion to internal syntax
 //!
 //! `elaborate` walks EL definitions in source order
 //! and builds the `Context` as declarations appear;

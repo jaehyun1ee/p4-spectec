@@ -1,4 +1,9 @@
 //! Free identifiers in elaboration-language data
+//!
+//! Only expressions contribute identifiers;
+//! types, operators, and declarations have none.
+//! Rules, table rows, and function clauses collect from their expressions
+//! and premises.
 
 use crate::lang::{common::ds::set::IdSet, traits::free::Free};
 

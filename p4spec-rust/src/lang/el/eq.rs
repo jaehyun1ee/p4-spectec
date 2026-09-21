@@ -1,6 +1,8 @@
 //! Syntax equality for elaboration-language data
 //!
-//! Ignores source regions while comparing parsed syntax and hints
+//! Ignores source regions while comparing parsed syntax and hints.
+//! Every `SyntaxEq` impl here compares node contents structurally;
+//! operators and syntax-only definitions compare by value.
 
 use crate::lang::traits::eq::SyntaxEq;
 

@@ -1,4 +1,4 @@
-//! Runtime operations over intermediate-language types
+//! Runtime operations over internal-language types
 //!
 //! `expand` unfolds aliases, `equiv` and `sub` compare expanded types,
 //! `subst` applies substitutions, with `fresh` binders for function types,

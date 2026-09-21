@@ -1,6 +1,8 @@
-//! Syntax equality for intermediate-language data
+//! Syntax equality for internal-language data
 //!
-//! Ignores source regions while comparing node contents
+//! Ignores source regions while comparing node contents.
+//! Type notes on expressions are ignored too, as are subtype checks,
+//! which are derived from the types they annotate.
 
 use crate::lang::traits::eq::SyntaxEq;
 

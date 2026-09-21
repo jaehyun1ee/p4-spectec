@@ -1,4 +1,4 @@
-//! Runtime equivalence for intermediate-language types
+//! Runtime equivalence for internal-language types
 //!
 //! Equivalence expands aliases first, then compares structurally;
 //! type variables must name the same type with equivalent arguments.
