@@ -81,11 +81,11 @@ fn test_group_printer_escapes_text_and_omits_annotations_and_fallthrough() {
     let mut instr_a = group_instr(pl::ast::InstrKind::Tier(pl::ast::TierInstr {
         tier: pl::ast::GroupInstr::Return(pl::ast::ReturnInstr { exp: text("line\n\"\\") }),
     }));
-    instr_a.node.note = Some(pl::ast::Fallthrough::FallNext);
+    instr_a.node.note = Some(pl::ast::Fallthrough::Next);
     instr_a.hints.prose = Some(alter::AlterationHint::Text("first prose".to_owned()));
 
     let mut instr_b = instr_a.clone();
-    instr_b.node.note = Some(pl::ast::Fallthrough::FallFail);
+    instr_b.node.note = Some(pl::ast::Fallthrough::Fail);
     instr_b.node.span = span("other-source");
     instr_b.hints.prose = Some(alter::AlterationHint::Text("other prose".to_owned()));
 

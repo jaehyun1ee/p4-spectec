@@ -177,10 +177,10 @@ pub enum Guard {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Fallthrough {
-    FallGroup(Id),
-    FallNext,
-    FallElse,
-    FallFail,
+    Group(Id),
+    Next,
+    Else,
+    Fail,
 }
 
 pub type InstrNode<Tier> = NotePhrase<InstrKind<Tier>, Option<Fallthrough>>;

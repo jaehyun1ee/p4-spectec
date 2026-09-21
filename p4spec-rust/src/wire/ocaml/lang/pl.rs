@@ -438,10 +438,10 @@ fn encode_param(param: &ast::Param) -> json {
 fn decode_fallthrough(json: &json) -> Result<Fallthrough, DecodeError> {
     let (tag, fields) = variant(json)?;
     match (tag, fields) {
-        ("FallGroup", [id]) => Ok(Fallthrough::FallGroup(il::decode_id(id)?)),
-        ("FallNext", []) => Ok(Fallthrough::FallNext),
-        ("FallElse", []) => Ok(Fallthrough::FallElse),
-        ("FallFail", []) => Ok(Fallthrough::FallFail),
+        ("FallGroup", [id]) => Ok(Fallthrough::Group(il::decode_id(id)?)),
+        ("FallNext", []) => Ok(Fallthrough::Next),
+        ("FallElse", []) => Ok(Fallthrough::Else),
+        ("FallFail", []) => Ok(Fallthrough::Fail),
         ("FallGroup" | "FallNext" | "FallElse" | "FallFail", _) => {
             Err(DecodeError::Expected("valid PL fallthrough arity"))
         }
@@ -451,10 +451,10 @@ fn decode_fallthrough(json: &json) -> Result<Fallthrough, DecodeError> {
 
 fn encode_fallthrough(fallthrough: &Fallthrough) -> json {
     match fallthrough {
-        Fallthrough::FallGroup(id) => json!(["FallGroup", il::encode_id(id)]),
-        Fallthrough::FallNext => json!(["FallNext"]),
-        Fallthrough::FallElse => json!(["FallElse"]),
-        Fallthrough::FallFail => json!(["FallFail"]),
+        Fallthrough::Group(id) => json!(["FallGroup", il::encode_id(id)]),
+        Fallthrough::Next => json!(["FallNext"]),
+        Fallthrough::Else => json!(["FallElse"]),
+        Fallthrough::Fail => json!(["FallFail"]),
     }
 }
 

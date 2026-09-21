@@ -556,8 +556,8 @@ fn test_failure_stamp_tracks_next_arm_then_final_failure() {
         panic!("expected backtracking alternatives");
     };
     assert_eq!(blocks.len(), 2);
-    assert_eq!(blocks[0][0].node.note, Some(pl::Fallthrough::FallNext));
-    assert_eq!(blocks[1][0].node.note, Some(pl::Fallthrough::FallFail));
+    assert_eq!(blocks[0][0].node.note, Some(pl::Fallthrough::Next));
+    assert_eq!(blocks[1][0].node.note, Some(pl::Fallthrough::Fail));
 }
 
 #[test]
@@ -571,7 +571,7 @@ fn test_nonempty_else_changes_final_failure_destination() {
     let pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(def_func_pl)) = def_pl.node.node else {
         panic!("expected defined function");
     };
-    assert_eq!(def_func_pl.block[0].node.note, Some(pl::Fallthrough::FallElse));
+    assert_eq!(def_func_pl.block[0].node.note, Some(pl::Fallthrough::Else));
 
     let mut spec_pl = prose::convert(vec![defined_func_with_else(
         vec![return_call("main", 1)],
@@ -582,7 +582,7 @@ fn test_nonempty_else_changes_final_failure_destination() {
     let pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(def_func_pl)) = def_pl.node.node else {
         panic!("expected defined function");
     };
-    assert_eq!(def_func_pl.block[0].node.note, Some(pl::Fallthrough::FallFail));
+    assert_eq!(def_func_pl.block[0].node.note, Some(pl::Fallthrough::Fail));
 }
 
 #[test]
@@ -701,7 +701,7 @@ fn test_relation_routes_stamp_each_group_toward_the_next_dispatch_arm() {
         .collect::<Vec<_>>();
     assert_eq!(
         destinations,
-        vec![Some(pl::Fallthrough::FallGroup(id("second"))), Some(pl::Fallthrough::FallFail),]
+        vec![Some(pl::Fallthrough::Group(id("second"))), Some(pl::Fallthrough::Fail),]
     );
 }
 
