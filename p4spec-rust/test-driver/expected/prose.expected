@@ -10704,11 +10704,13 @@ def $lift_nameIR_as_tableCustomName(t)
 
 def $lift_nameListIR_as_nonTypeNameList((nameIR)*{nameIR <- nameIR*})
 
-1. (Let name be ($lift_nameIR_as_nonTypeName(nameIR) as name))*{nameIR <- nameIR*, name -> name*}
+1. (Let nonTypeName be $lift_nameIR_as_nonTypeName(nameIR))*{nameIR <- nameIR*, nonTypeName -> nonTypeName*}
 
-2. (Let nameList be $unflatten_nameList((name)*{name <- name*}))
+2. (Let name be (nonTypeName as name))*{nonTypeName <- nonTypeName*, name -> name*}
 
-3. Return nameList
+3. (Let nameList be $unflatten_nameList((name)*{name <- name*}))
+
+4. Return nameList
 
 def $unflatten_nameList((name)*{name <- name*})
 
@@ -31364,17 +31366,19 @@ def $find_object_unqualified_e(ARCH, id)
 
 1. (Let (`{ ((objectId ':' object))*{object <- object*, objectId <- objectId*} `}) be ARCH.STORE)
 
-2. (Let (object_id)?{object_id <- object_id?} be $ite<object?>($objectId_ends_with(objectId, id), ?(object), ?()))*{object <- object*, objectId <- objectId*, object_id? -> object_id?*}
+2. (Let bool be $objectId_ends_with(objectId, id))*{objectId <- objectId*, bool -> bool*}
 
-3. (Let ((object'')?{object'' <- object''?})*{object''? <- object''?*} be $filter_<object?>(((object_id)?{object_id <- object_id?})*{object_id? <- object_id?*}, (((object_id)?{object_id <- object_id?} =/= ?()))*{object_id? <- object_id?*}))
+3. (Let (object_id)?{object_id <- object_id?} be $ite<object?>(bool, ?(object), ?()))*{bool <- bool*, object <- object*, object_id? -> object_id?*}
 
-4. (Let [(object')?{object' <- object'?}] be ((object'')?{object'' <- object''?})*{object''? <- object''?*}, ((object'')?{object'' <- object''?})*{object''? <- object''?*} matches pattern [ _/1 ])
+4. (Let ((object'')?{object'' <- object''?})*{object''? <- object''?*} be $filter_<object?>(((object_id)?{object_id <- object_id?})*{object_id? <- object_id?*}, (((object_id)?{object_id <- object_id?} =/= ?()))*{object_id? <- object_id?*}))
+
+5. (Let [(object')?{object' <- object'?}] be ((object'')?{object'' <- object''?})*{object''? <- object''?*}, ((object'')?{object'' <- object''?})*{object''? <- object''?*} matches pattern [ _/1 ])
 
   1. (Let ?(object_id_found) be (object')?{object' <- object'?}, (object')?{object' <- object'?} matches pattern (_))
 
     1. Return ?(object_id_found)
 
-5. Otherwise,
+6. Otherwise,
 
   1. Return ?()
 
@@ -31410,11 +31414,13 @@ def $update_object_unqualified_e(ARCH_0, id, object)
 
 1. (Let (`{ ((objectId ':' _object))*{_object <- _object*, objectId <- objectId*} `}) be ARCH_0.STORE)
 
-2. (Let (objectId_id)?{objectId_id <- objectId_id?} be $ite<objectId?>($objectId_ends_with(objectId, id), ?(objectId), ?()))*{objectId <- objectId*, objectId_id? -> objectId_id?*}
+2. (Let bool be $objectId_ends_with(objectId, id))*{objectId <- objectId*, bool -> bool*}
 
-3. (Let ((objectId'')?{objectId'' <- objectId''?})*{objectId''? <- objectId''?*} be $filter_<objectId?>(((objectId_id)?{objectId_id <- objectId_id?})*{objectId_id? <- objectId_id?*}, (((objectId_id)?{objectId_id <- objectId_id?} =/= ?()))*{objectId_id? <- objectId_id?*}))
+3. (Let (objectId_id)?{objectId_id <- objectId_id?} be $ite<objectId?>(bool, ?(objectId), ?()))*{bool <- bool*, objectId <- objectId*, objectId_id? -> objectId_id?*}
 
-4. (Let [(objectId')?{objectId' <- objectId'?}] be ((objectId'')?{objectId'' <- objectId''?})*{objectId''? <- objectId''?*}, ((objectId'')?{objectId'' <- objectId''?})*{objectId''? <- objectId''?*} matches pattern [ _/1 ])
+4. (Let ((objectId'')?{objectId'' <- objectId''?})*{objectId''? <- objectId''?*} be $filter_<objectId?>(((objectId_id)?{objectId_id <- objectId_id?})*{objectId_id? <- objectId_id?*}, (((objectId_id)?{objectId_id <- objectId_id?} =/= ?()))*{objectId_id? <- objectId_id?*}))
+
+5. (Let [(objectId')?{objectId' <- objectId'?}] be ((objectId'')?{objectId'' <- objectId''?})*{objectId''? <- objectId''?*}, ((objectId'')?{objectId'' <- objectId''?})*{objectId''? <- objectId''?*} matches pattern [ _/1 ])
 
   1. (Let ?(objectId_found) be (objectId')?{objectId' <- objectId'?}, (objectId')?{objectId' <- objectId'?} matches pattern (_))
 

@@ -431,7 +431,7 @@ fn test_nested_call_in_update_path_is_lifted_before_return() {
 }
 
 #[test]
-fn test_instruction_iterator_local_call_stays_in_scope() {
+fn test_instruction_iterator_local_call_lifts_with_its_binding() {
     let span_let = span("iter-local", 0);
     let exp_local_call = exp_call("local", exp_var("x", span("x-use", 0)), span("local", 0));
     let exp_lifted_call =
@@ -456,23 +456,42 @@ fn test_instruction_iterator_local_call_stays_in_scope() {
     };
 
     let def_func_pl = converted_func(vec![instr_let]);
-    assert_eq!(def_func_pl.block.len(), 3);
+    assert_eq!(def_func_pl.block.len(), 4);
 
-    let pl::InstrKind::Let(pl::LetInstr { exp_r, .. }) = &def_func_pl.block[0].node.node else {
-        panic!("expected independent call to be lifted");
+    let pl::InstrKind::Let(pl::LetInstr { exp_l, exp_r, iter_instrs, .. }) =
+        &def_func_pl.block[0].node.node
+    else {
+        panic!("expected local call to be lifted");
     };
-    assert!(matches!(&exp_r.node.node, pl::ExpKind::Call(id, _, _) if id.node == "independent"));
+    let pl::ExpKind::Var(id_local) = &exp_l.node.node else {
+        panic!("expected fresh variable for local call");
+    };
+    assert!(matches!(&exp_r.node.node, pl::ExpKind::Call(id, _, _) if id.node == "local"));
+    assert_eq!(iter_instrs.len(), 1);
+    assert_eq!(iter_instrs[0].iter, il::ast::Iter::List);
+    assert_eq!(iter_instrs[0].vars_bound, vec![var("x")]);
+    assert_eq!(iter_instrs[0].vars_bind[0].id.node, id_local.node);
 
     let pl::InstrKind::Let(pl::LetInstr { exp_r, iter_instrs, .. }) =
         &def_func_pl.block[1].node.node
     else {
+        panic!("expected independent call to be lifted");
+    };
+    assert!(matches!(&exp_r.node.node, pl::ExpKind::Call(id, _, _) if id.node == "independent"));
+    assert!(iter_instrs.is_empty());
+
+    let pl::InstrKind::Let(pl::LetInstr { exp_r, iter_instrs, .. }) =
+        &def_func_pl.block[2].node.node
+    else {
         panic!("expected original iterated let");
     };
     assert_eq!(iter_instrs.len(), 1);
+    assert_eq!(iter_instrs[0].vars_bound.len(), 1);
+    assert_eq!(iter_instrs[0].vars_bound[0].id.node, id_local.node);
     let pl::ExpKind::Tuple(exps) = &exp_r.node.node else {
         panic!("expected tuple right-hand side");
     };
-    assert!(matches!(&exps[0].node.node, pl::ExpKind::Call(id, _, _) if id.node == "local"));
+    assert!(matches!(&exps[0].node.node, pl::ExpKind::Var(id) if id.node == id_local.node));
     assert!(matches!(exps[1].node.node, pl::ExpKind::Var(_)));
 }
 
