@@ -22,7 +22,6 @@ mod transform;
 mod tests;
 
 pub use error::ElabError;
-use error::{ElabErrorKind, EntityKind, TypeShape};
 
 use crate::{
     diagnostic::Report,
@@ -41,7 +40,6 @@ pub fn convert_with_warnings(
     spec_el: el::ast::Spec,
 ) -> (Result<il::ast::Spec, ElabError>, Vec<Report>) {
     let mut warnings = Vec::new();
-    let result =
-        transform::elab_spec(spec_el, &mut warnings).map_err(error::MigrationError::into_report);
+    let result = transform::elab_spec(spec_el, &mut warnings);
     (result, warnings)
 }

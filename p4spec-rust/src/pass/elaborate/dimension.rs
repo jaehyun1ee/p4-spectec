@@ -33,13 +33,13 @@ use crate::{
             source::{Phrase, Span},
         },
         il::ast,
-        traits::{eq::SyntaxEq, print::Print},
+        traits::eq::SyntaxEq,
     },
     phrase,
     runtime::{dim::Dim, envs::elab::VEnv},
 };
 
-use super::{ElabErrorKind, error::MigrationError as ElabError};
+use super::{ElabError, error};
 
 // == Dimension inference
 
@@ -83,15 +83,18 @@ impl DimContext {
                 .iter()
                 .find(|occurrence| !dim_min.node.sub(&occurrence.node))
             {
-                return Err(ElabError::new(
-                    ElabErrorKind::DimensionMismatch,
-                    dim_conflict.span.clone(),
-                    format!(
-                        "mismatched iteration dimensions for identifier `{}`: {} vs {}",
-                        id.node,
-                        Print::to_string(&dim_min.node),
-                        Print::to_string(&dim_conflict.node),
-                    ),
+                // Label the later source occurrence independently of bound selection
+                let (dim_earlier, dim_later) = if dim_min.span.left <= dim_conflict.span.left {
+                    (dim_min, dim_conflict)
+                } else {
+                    (dim_conflict, dim_min)
+                };
+                return Err(error::iteration_dimension_mismatch(
+                    id,
+                    &dim_later.node,
+                    &dim_later.span,
+                    &dim_earlier.node,
+                    &dim_earlier.span,
                 ));
             }
             bounds.insert(id.clone(), dim_min.node.clone());
@@ -234,11 +237,7 @@ fn infer_prem(
             if !iter_prem.prem_iter.vars_bound.is_empty()
                 || !iter_prem.prem_iter.vars_bind.is_empty()
             {
-                return Err(ElabError::new(
-                    ElabErrorKind::InvalidIteration,
-                    prem.span.clone(),
-                    "iterated premise should initially have no annotations",
-                ));
+                return Err(error::iteration_annotation_invalid(&prem.span, "premise"));
             }
             let mut iters_inner = Vec::with_capacity(iters.len() + 1);
             iters_inner.push(iter_prem.prem_iter.iter);
@@ -313,15 +312,10 @@ impl Occurrences {
             if let Some(dim) = self.0.get(id) {
                 // A shared identifier must have the same type on both sides
                 if !dim.typ.syntax_eq(&dim_other.typ) {
-                    return Err(ElabError::new(
-                        ElabErrorKind::TypeMismatch,
-                        id.span.clone(),
-                        format!(
-                            "type mismatch for identifier `{}` in union: {} vs {}",
-                            id.node,
-                            Print::to_string(&dim.typ),
-                            Print::to_string(&dim_other.typ),
-                        ),
+                    return Err(error::iteration_identifier_type_mismatch(
+                        id,
+                        &dim.typ,
+                        &dim_other.typ,
                     ));
                 }
                 // Keep the occurrence with fewer iterations
@@ -654,22 +648,14 @@ fn annotate_iter_exp(
 ) -> Result<Occurrences, ElabError> {
     // Iterated expressions must arrive without annotations
     if !vars.is_empty() {
-        return Err(ElabError::new(
-            ElabErrorKind::InvalidIteration,
-            span.clone(),
-            "iterated expression should initially have no annotations",
-        ));
+        return Err(error::iteration_annotation_invalid(span, "expression"));
     }
     let occurs = annotate_exp(bounds, exp_inner)?;
     // Variables the iteration ranges over
     let vars_inner = collect_iter_vars(bounds, &occurs, iter);
     // An iteration must range over at least one variable
     if vars_inner.is_empty() {
-        return Err(ElabError::new(
-            ElabErrorKind::InvalidIteration,
-            span.clone(),
-            "empty iteration",
-        ));
+        return Err(error::iteration_expression_empty(span));
     }
     let occurs = occurs.iterate(&vars_inner, iter);
     *vars = vars_inner;
@@ -873,11 +859,7 @@ fn annotate_iter_prem(
 ) -> Result<Occurrences, ElabError> {
     // Iterated premises must arrive without binding annotations
     if !iter_prem.prem_iter.vars_bound.is_empty() || !iter_prem.prem_iter.vars_bind.is_empty() {
-        return Err(ElabError::new(
-            ElabErrorKind::InvalidIteration,
-            span.clone(),
-            "iterated premise should initially have no annotations",
-        ));
+        return Err(error::iteration_annotation_invalid(span, "premise"));
     }
     let occurs = annotate_prem(bounds, &mut iter_prem.prem)?;
     let iter = iter_prem.prem_iter.iter;
@@ -885,11 +867,7 @@ fn annotate_iter_prem(
     let vars_bound = collect_iter_vars(bounds, &occurs, iter);
     // An iteration must range over at least one variable
     if vars_bound.is_empty() {
-        return Err(ElabError::new(
-            ElabErrorKind::InvalidIteration,
-            span.clone(),
-            "empty iteration",
-        ));
+        return Err(error::iteration_premise_empty(span));
     }
     let occurs = occurs.iterate(&vars_bound, iter);
     iter_prem.prem_iter.vars_bound = vars_bound;

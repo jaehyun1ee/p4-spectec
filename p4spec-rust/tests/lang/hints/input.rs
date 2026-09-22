@@ -36,3 +36,34 @@ fn test_input_hints_validate_and_preserve_split_order() {
     );
     assert_eq!(input_impl::is_conditional(&InputHint::new(vec![0]), &["left", "right"]), Ok(false));
 }
+
+#[test]
+fn test_zero_arity_default_hint_supports_operations_but_not_source_validation() {
+    let hint = InputHint::new(vec![]);
+    assert_eq!(input_impl::validate(&hint, 0), Err(InputError::Empty));
+    assert_eq!(input_impl::split::<()>(&hint, vec![]), Ok((vec![], vec![])));
+    assert_eq!(input_impl::combine::<()>(&hint, vec![], vec![]), Ok(vec![]));
+    assert_eq!(input_impl::is_conditional::<()>(&hint, &[]), Ok(true));
+    assert_eq!(input_impl::split(&hint, vec![0]), Err(InputError::Empty));
+}
+
+#[test]
+fn test_input_hint_duplicates_take_precedence_over_bounds() {
+    let hint = InputHint::new(vec![9, 0, 0]);
+    assert_eq!(input_impl::validate(&hint, 2), Err(InputError::DuplicateIndex(0)));
+}
+
+#[test]
+fn test_input_hint_preserves_element_spans_without_changing_equivalence() {
+    let mut exp_a = exp(ExpKind::Hole(Hole::Num(2)));
+    let mut exp_b = exp(ExpKind::Hole(Hole::Num(0)));
+    exp_a.span = Span::new(Position::new("hint", 1, 11), Position::new("hint", 1, 13));
+    exp_b.span = Span::new(Position::new("hint", 1, 14), Position::new("hint", 1, 16));
+    let exp_hint = exp(ExpKind::Seq(vec![exp_a.clone(), exp_b.clone()]));
+    let hint = input_impl::init(&exp_hint).unwrap();
+    assert_eq!(hint.span(0), Some(&exp_a.span));
+    assert_eq!(hint.span(1), Some(&exp_b.span));
+    assert_eq!(hint.span(2), None);
+    assert_eq!(hint, InputHint::new(vec![2, 0]));
+    assert_eq!(InputHint::new(vec![2, 0]).span(0), None);
+}

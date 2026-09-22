@@ -5,6 +5,7 @@
 //! `split` and `combine` move between source order and the input/output lists.
 
 use crate::lang::{
+    common::source::Span,
     el::ast::{Exp, ExpKind, Hole},
     traits::eq::SyntaxEq,
 };
@@ -15,10 +16,12 @@ use thiserror::Error;
 /// `new` does not validate indices;
 /// call `validate` when the relation arity is known;
 /// operations such as `split` validate before consuming items.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub struct InputHint {
     /// Input positions, in the order the hint lists them.
     indices: Vec<usize>,
+    /// Source spans of parsed positions; absent for generated hints.
+    spans: Vec<Span>,
 }
 
 /// An invalid hint or a list that does not fit it.
@@ -48,7 +51,7 @@ pub enum InputError {
 impl InputHint {
     /// Preserves indices without validation.
     pub fn new(indices: Vec<usize>) -> Self {
-        Self { indices }
+        Self { indices, spans: Vec::new() }
     }
 
     /// Borrows positions in source order.
@@ -60,9 +63,20 @@ impl InputHint {
     pub fn into_indices(self) -> Vec<usize> {
         self.indices
     }
+
+    /// Borrows the source span of a parsed position, when available.
+    pub fn span(&self, position: usize) -> Option<&Span> {
+        self.spans.get(position)
+    }
 }
 
 // Syntax equivalence of hints
+
+impl PartialEq for InputHint {
+    fn eq(&self, other: &Self) -> bool {
+        self.indices == other.indices
+    }
+}
 
 impl SyntaxEq for InputHint {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -74,21 +88,22 @@ impl SyntaxEq for InputHint {
 
 /// Reads a hint from `%N` holes, one or a sequence; anything else is no hint.
 pub fn init(hint_exp: &Exp) -> Option<InputHint> {
-    let indices = match &hint_exp.node {
+    let positions: Vec<_> = match &hint_exp.node {
         // A sequence of `%N` holes, all of which must be holes
         ExpKind::Seq(hint_exps) => hint_exps
             .iter()
             .map(|hint_exp| match hint_exp.node {
-                ExpKind::Hole(Hole::Num(index)) => Some(index),
+                ExpKind::Hole(Hole::Num(index)) => Some((index, hint_exp.span.clone())),
                 _ => None,
             })
             .collect(),
         // A single hole
-        ExpKind::Hole(Hole::Num(index)) => Some(vec![*index]),
+        ExpKind::Hole(Hole::Num(index)) => Some(vec![(*index, hint_exp.span.clone())]),
         // Anything else is not an input hint
         _ => None,
     }?;
-    Some(InputHint::new(indices))
+    let (indices, spans) = positions.into_iter().unzip();
+    Some(InputHint { indices, spans })
 }
 
 // Validating hints
@@ -111,6 +126,11 @@ pub fn validate(hint: &InputHint, arity: usize) -> Result<(), InputError> {
     Ok(())
 }
 
+/// Validates operational positions, including a zero-arity relation's default.
+fn validate_items(hint: &InputHint, arity: usize) -> Result<(), InputError> {
+    if arity == 0 && hint.indices.is_empty() { Ok(()) } else { validate(hint, arity) }
+}
+
 // Splitting and combining expressions based on input hints
 
 /// Splits items into input and output positions
@@ -120,7 +140,7 @@ pub fn split<Item>(
     hint: &InputHint,
     items: Vec<Item>,
 ) -> Result<(Vec<Item>, Vec<Item>), InputError> {
-    validate(hint, items.len())?;
+    validate_items(hint, items.len())?;
     let mut items_input = Vec::new();
     let mut items_output = Vec::new();
     // Inputs and outputs each keep source order
@@ -146,7 +166,7 @@ pub fn combine<Item>(
     let input_actual = items_input.len();
     let output_actual = items_output.len();
     let items_len = input_actual + output_actual;
-    validate(hint, items_len)?;
+    validate_items(hint, items_len)?;
     let input_expected = hint.indices.len();
     let output_expected = items_len - input_expected;
     // Both lists must have the lengths the hint implies
@@ -191,7 +211,7 @@ pub fn combine<Item>(
 ///
 /// Validates the hint against `items.len()`
 pub fn is_conditional<Item>(hint: &InputHint, items: &[Item]) -> Result<bool, InputError> {
-    validate(hint, items.len())?;
+    validate_items(hint, items.len())?;
     Ok(items
         .iter()
         .enumerate()

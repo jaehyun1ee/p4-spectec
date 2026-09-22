@@ -27,7 +27,7 @@ use crate::{
     },
 };
 
-use super::error::{self, EntityKind, MigrationError as ElabError};
+use super::error::{self, ElabError};
 
 /// Bindings and fresh state threaded through one elaboration operation.
 #[derive(Clone, Debug)]
@@ -80,21 +80,13 @@ impl Context {
 
     pub(super) fn find_typdef(&self, id: &Id) -> Result<&TypeDef, ElabError> {
         self.find_typdef_opt(id)
-            .ok_or_else(|| error::type_undefined(id).into())
-    }
-
-    pub(super) fn bound_typdef(&self, id: &Id) -> bool {
-        self.find_typdef_opt(id).is_some()
+            .ok_or_else(|| error::type_undefined(id))
     }
 
     // - Meta-variables
 
     pub(super) fn find_metavar_opt(&self, id: &Id) -> Option<&ast::Typ> {
         self.menv.get(id)
-    }
-
-    pub(super) fn bound_metavar(&self, id: &Id) -> bool {
-        self.find_metavar_opt(id).is_some()
     }
 
     // - Relations
@@ -113,10 +105,10 @@ impl Context {
             Some(ast::RelDef::Defined(rel_il)) => Ok(rel_il),
             // Extern declarations identify the reason rules are forbidden
             Some(ast::RelDef::Extern(rel_il)) => {
-                Err(error::relation_extern_rule_unsupported(id, &rel_il.id.span).into())
+                Err(error::relation_extern_rule_unsupported(id, &rel_il.id.span))
             }
             // Missing user names remain located errors
-            None => Err(error::relation_rule_undefined(id).into()),
+            None => Err(error::relation_rule_undefined(id)),
         }
     }
 
@@ -137,7 +129,7 @@ impl Context {
         id: &Id,
     ) -> Result<(&ast::NotTyp, &InputHint), ElabError> {
         self.find_rel_signature_opt(id)
-            .ok_or_else(|| error::relation_undefined(id).into())
+            .ok_or_else(|| error::relation_undefined(id))
     }
 
     /// Finds the original identifier of a regular or otherwise rule group.
@@ -166,11 +158,9 @@ impl Context {
             // Table declarations admit row definitions
             Some((_, ast::MetaFuncDef::Table(func_il))) => Ok(func_il),
             // A different function kind is present, so relate its declaration
-            Some((id_previous, _)) => {
-                Err(error::function_table_required(id, &id_previous.span).into())
-            }
+            Some((id_previous, _)) => Err(error::function_table_required(id, &id_previous.span)),
             // A missing table has no related declaration
-            None => Err(error::function_table_undefined(id).into()),
+            None => Err(error::function_table_undefined(id)),
         }
     }
 
@@ -184,7 +174,7 @@ impl Context {
 
     pub(super) fn find_defined_func(&self, id: &Id) -> Result<&ast::DefinedFunc, ElabError> {
         self.find_defined_func_opt(id)
-            .ok_or_else(|| error::function_declaration_required(id).into())
+            .ok_or_else(|| error::function_declaration_required(id))
     }
 
     /// Finds the type parameters, parameters, and return type of any function.
@@ -214,7 +204,7 @@ impl Context {
         id: &Id,
     ) -> Result<(&[ast::TParam], &[ast::Param], &ast::Typ), ElabError> {
         self.find_func_signature_opt(id)
-            .ok_or_else(|| error::function_undefined(id).into())
+            .ok_or_else(|| error::function_undefined(id))
     }
 
     // == Adders
@@ -240,7 +230,7 @@ impl Context {
     pub(super) fn add_metavar(&mut self, id: Id, typ: ast::Typ) -> Result<(), ElabError> {
         // Keep the original binding for the related label
         if let Some((id_previous, _)) = self.menv.get_key_value(&id) {
-            return Err(error::meta_variable_repeated(&id, &id_previous.span).into());
+            return Err(error::meta_variable_repeated(&id, &id_previous.span));
         }
         self.menv.insert(id, typ);
         Ok(())
@@ -249,8 +239,8 @@ impl Context {
     // - Type definitions
 
     pub(super) fn add_typdef(&mut self, id: Id, typdef: TypeDef) -> Result<(), ElabError> {
-        if self.bound_typdef(&id) {
-            return Err(ElabError::duplicate(EntityKind::Type, &id.node, id.span));
+        if let Some((id_previous, _)) = self.tdenv.get_key_value(&id) {
+            return Err(error::type_declaration_repeated(&id, &id_previous.span));
         }
         self.tdenv.insert(id, typdef);
         Ok(())
@@ -258,11 +248,11 @@ impl Context {
 
     /// Binds a type parameter as a type and as a meta-variable of that type.
     pub(super) fn add_tparam(&mut self, tparam: ast::TParam) -> Result<(), ElabError> {
-        if self.bound_typdef(&tparam) {
-            return Err(ElabError::duplicate(EntityKind::Type, &tparam.node, tparam.span));
+        if let Some((id_previous, _)) = self.tdenv.get_key_value(&tparam) {
+            return Err(error::type_parameter_repeated(&tparam, &id_previous.span));
         }
-        if self.bound_metavar(&tparam) {
-            return Err(ElabError::duplicate(EntityKind::MetaVariable, &tparam.node, tparam.span));
+        if let Some((id_previous, _)) = self.menv.get_key_value(&tparam) {
+            return Err(error::type_parameter_repeated(&tparam, &id_previous.span));
         }
         let typ = typ::make::var(tparam.clone(), vec![]);
         self.add_typdef(tparam.clone(), TypeDef::Parameter)?;
@@ -284,7 +274,7 @@ impl Context {
     ) -> Result<(), ElabError> {
         let id = extern_rel_il.id.clone();
         if let Some((id_previous, _)) = self.renv.get_key_value(&id) {
-            return Err(error::relation_extern_repeated(&id, &id_previous.span).into());
+            return Err(error::relation_extern_repeated(&id, &id_previous.span));
         }
         self.renv
             .insert(id, ast::RelDef::Extern(Box::new(extern_rel_il)));
@@ -297,7 +287,7 @@ impl Context {
     ) -> Result<(), ElabError> {
         let id = defined_rel_il.id.clone();
         if let Some((id_previous, _)) = self.renv.get_key_value(&id) {
-            return Err(error::relation_repeated(&id, &id_previous.span).into());
+            return Err(error::relation_repeated(&id, &id_previous.span));
         }
         self.renv
             .insert(id, ast::RelDef::Defined(Box::new(defined_rel_il)));
@@ -314,7 +304,7 @@ impl Context {
         assert!(self.find_defined_rel_opt(relid).is_some());
         let groupid = &rule_group.node.id;
         if let Some(id_previous) = self.find_rule_group_id(relid, groupid) {
-            return Err(error::relation_rule_group_repeated(groupid, &id_previous.span).into());
+            return Err(error::relation_rule_group_repeated(groupid, &id_previous.span));
         }
         let ast::RelDef::Defined(defined_rel_il) =
             self.renv.get_mut(relid).expect("defined relation")
@@ -335,7 +325,7 @@ impl Context {
         assert!(self.find_defined_rel_opt(relid).is_some());
         let groupid = &else_group.node.id;
         if let Some(id_previous) = self.find_rule_group_id(relid, groupid) {
-            return Err(error::relation_rule_group_repeated(groupid, &id_previous.span).into());
+            return Err(error::relation_rule_group_repeated(groupid, &id_previous.span));
         }
         let ast::RelDef::Defined(defined_rel_il) =
             self.renv.get_mut(relid).expect("defined relation")
@@ -348,8 +338,7 @@ impl Context {
                 relid,
                 &else_group.span,
                 &group_previous.span,
-            )
-            .into());
+            ));
         }
         defined_rel_il.else_group = Some(else_group);
         Ok(())
@@ -364,7 +353,7 @@ impl Context {
         let id = extern_func_il.id.clone();
         // Check the shared namespace before storing this declaration kind
         if let Some((id_previous, _)) = self.fenv.get_key_value(&id) {
-            return Err(error::function_extern_repeated(&id, &id_previous.span).into());
+            return Err(error::function_extern_repeated(&id, &id_previous.span));
         }
         self.fenv
             .insert(id, ast::MetaFuncDef::Extern(extern_func_il));
@@ -378,7 +367,7 @@ impl Context {
         let id = builtin_func_il.id.clone();
         // Check the shared namespace before storing this declaration kind
         if let Some((id_previous, _)) = self.fenv.get_key_value(&id) {
-            return Err(error::function_builtin_repeated(&id, &id_previous.span).into());
+            return Err(error::function_builtin_repeated(&id, &id_previous.span));
         }
         self.fenv
             .insert(id, ast::MetaFuncDef::Builtin(builtin_func_il));
@@ -392,7 +381,7 @@ impl Context {
         let id = table_func_il.id.clone();
         // Check the shared namespace before storing this declaration kind
         if let Some((id_previous, _)) = self.fenv.get_key_value(&id) {
-            return Err(error::function_table_repeated(&id, &id_previous.span).into());
+            return Err(error::function_table_repeated(&id, &id_previous.span));
         }
         self.fenv.insert(id, ast::MetaFuncDef::Table(table_func_il));
         Ok(())
@@ -405,7 +394,7 @@ impl Context {
         let id = defined_func_il.id.clone();
         // Check the shared namespace before storing this declaration kind
         if let Some((id_previous, _)) = self.fenv.get_key_value(&id) {
-            return Err(error::function_repeated(&id, &id_previous.span).into());
+            return Err(error::function_repeated(&id, &id_previous.span));
         }
         self.fenv
             .insert(id, ast::MetaFuncDef::Defined(Box::new(defined_func_il)));
@@ -424,7 +413,7 @@ impl Context {
             .expect("elaborated table declaration");
         // The later table identifier owns the failure, the earlier row is related
         if let Some(row_previous) = table_func_il.rows.first() {
-            return Err(error::table_row_repeated(id, &row_previous.span).into());
+            return Err(error::table_row_repeated(id, &row_previous.span));
         }
         let ast::MetaFuncDef::Table(table_func_il) = self.fenv.get_mut(id).expect("table function")
         else {
@@ -465,8 +454,7 @@ impl Context {
                 id,
                 &else_clause.span,
                 &clause_previous.span,
-            )
-            .into());
+            ));
         }
         defined_func_il.else_clause = Some(else_clause);
         Ok(())

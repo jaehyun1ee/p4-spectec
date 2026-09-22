@@ -2,30 +2,64 @@
 //!
 //! Many constructs have several readings,
 //! such as `a ++ b` being a list or a text concatenation.
-//!
-//! `choose_sequential` runs the first alternative on a copy of the context
-//! and falls back to the second,
-//! keeping the failure traces of both
-//! so that `finish` can report the most informative error
-//! when every alternative fails.
+//! `choose_sequential` isolates each branch's context and commits only a winner.
+//! Failed branches retain complete reports while flat local metadata selects
+//! the most informative summary without inspecting diagnostic presentation.
 
-use crate::{lang::common::source::Span, runtime::ops::typ::TypeError};
-
-use super::{
-    ElabErrorKind, context::Context, error::ElabTrace, error::MigrationError as ElabError,
+use crate::{
+    diagnostic::{LabelStyle, Report, ReportKind},
+    lang::common::source::Span,
 };
+
+use super::{context::Context, error, error::ElabError};
 
 /// A successful elaboration result or recoverable backtracking failure.
 pub(super) type Attempt<T> = Result<T, Backtrack>;
 
+/// Distinguishes broad no-match context from a concrete failed check.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Specificity {
+    Generic,
+    Specific,
+}
+
+/// Summary used only to select the final attempt frame.
+#[derive(Debug)]
+struct Selection {
+    span: Span,
+    message: String,
+    located: bool,
+    specificity: Specificity,
+    depth: usize,
+}
+
+impl Selection {
+    /// Builds local selection metadata without consulting diagnostic presentation.
+    fn new(span: Span, message: String, specificity: Specificity) -> Self {
+        let located = span != Span::default();
+        Self { span, message, located, specificity, depth: 0 }
+    }
+
+    /// Orders candidates by location, specificity, then nesting depth.
+    fn outranks(&self, other: &Self) -> bool {
+        (self.located, self.specificity, self.depth)
+            > (other.located, other.specificity, other.depth)
+    }
+}
+
 // == Attempt helpers
 
-/// Fails an attempt with a single located error.
+/// Fails an attempt with a concrete structured cause.
 pub(super) fn fail<T>(error: ElabError) -> Attempt<T> {
     Err(error.into())
 }
 
-/// Fails an attempt without a trace, for alternatives that never apply.
+/// Fails an attempt with broad no-match context.
+pub(super) fn fail_generic<T>(report: Report) -> Attempt<T> {
+    Err(Backtrack::from_report(report, Specificity::Generic))
+}
+
+/// Fails an attempt without a report, for alternatives that never apply.
 pub(super) fn fail_silent<T>() -> Attempt<T> {
     Err(Backtrack::default())
 }
@@ -33,7 +67,7 @@ pub(super) fn fail_silent<T>() -> Attempt<T> {
 /// Tries the first alternative and falls back to the second on failure.
 ///
 /// Only the context of the successful alternative is kept;
-/// the traces of both failures are merged when neither succeeds.
+/// the reports of both failures are merged when neither succeeds.
 pub(super) fn choose_sequential<T>(
     ctx: &mut Context,
     first: impl FnOnce(&mut Context) -> Attempt<T>,
@@ -66,74 +100,79 @@ pub(super) fn finish<T>(attempt: Attempt<T>) -> Result<T, ElabError> {
     attempt.map_err(Backtrack::into_error)
 }
 
-/// Backtracking state that accumulates elaboration traces for error reporting.
+/// Backtracking state with a report forest and flat selection metadata.
 #[derive(Debug, Default)]
 pub(super) struct Backtrack {
-    traces: Vec<ElabTrace>,
+    reports: Vec<Report>,
+    selection: Option<Selection>,
 }
 
 impl Backtrack {
-    /// Wraps the collected traces under a new parent error.
-    pub(super) fn nest(self, error: ElabError) -> Self {
-        Self { traces: vec![ElabTrace { error, children: self.traces }] }
+    /// Creates a failure while preserving the incoming report unchanged.
+    pub(super) fn from_report(report: Report, specificity: Specificity) -> Self {
+        let (span, message) = match &report.kind {
+            ReportKind::Frame { span, message } => (span.clone(), message.clone()),
+            ReportKind::Cause(diagnostic) => {
+                let span = diagnostic
+                    .labels
+                    .iter()
+                    .find(|label| label.style == LabelStyle::Primary)
+                    .map(|label| label.span.clone())
+                    .unwrap_or_default();
+                (span, diagnostic.message.clone())
+            }
+        };
+        Self { reports: vec![report], selection: Some(Selection::new(span, message, specificity)) }
     }
 
-    /// Appends the traces of another failed alternative.
-    pub(super) fn merge(mut self, mut other: Self) -> Self {
-        self.traces.append(&mut other.traces);
+    /// Wraps the collected reports under a new attempt-context frame.
+    pub(super) fn nest(mut self, span: Span, message: impl Into<String>) -> Self {
+        if let Some(selection) = &mut self.selection {
+            selection.depth += 1;
+        }
+        let message = message.into();
+        let selection_parent = Selection::new(span.clone(), message.clone(), Specificity::Generic);
+        if self
+            .selection
+            .as_ref()
+            .is_none_or(|selection| selection_parent.outranks(selection))
+        {
+            self.selection = Some(selection_parent);
+        }
+        self.reports =
+            vec![Report { kind: ReportKind::Frame { span, message }, children: self.reports }];
         self
     }
 
-    /// Visits a trace tree and keeps the most informative error.
-    ///
-    /// Located errors beat unlocated ones,
-    /// specific kinds beat the generic no-match kind,
-    /// and deeper errors beat shallower ones.
-    fn best_error_in<'a>(
-        trace: &'a ElabTrace,
-        depth: usize,
-        best: &mut Option<(usize, bool, bool, &'a ElabError)>,
-    ) {
-        let located = trace.error.span != Span::default();
-        let specific = trace.error.kind != ElabErrorKind::NoMatchingAlternative;
-        // Prefer located, then specific, then deeper errors
-        if best.is_none_or(|(best_depth, best_located, best_specific, _)| {
-            (located, specific, depth) > (best_located, best_specific, best_depth)
-        }) {
-            *best = Some((depth, located, specific, &trace.error));
+    /// Appends the reports of another failed alternative.
+    pub(super) fn merge(mut self, mut other: Self) -> Self {
+        if let Some(selection_other) = other.selection.take()
+            && self
+                .selection
+                .as_ref()
+                .is_none_or(|selection| selection_other.outranks(selection))
+        {
+            self.selection = Some(selection_other);
         }
-        for child in &trace.children {
-            Self::best_error_in(child, depth + 1, best);
-        }
+        self.reports.append(&mut other.reports);
+        self
     }
 
-    /// Selects the best error among all traces and attaches the traces to it.
+    /// Selects the best summary and attaches every full report beneath it.
     pub(super) fn into_error(self) -> ElabError {
-        let mut best = None;
-        for trace in &self.traces {
-            Self::best_error_in(trace, 0, &mut best);
+        match self.selection {
+            Some(selection) => {
+                let mut report = error::frame(&selection.span, selection.message);
+                report.children = self.reports;
+                Box::new(report)
+            }
+            None => error::elaboration_alternative_missing(),
         }
-        // Fall back to a generic no-match error when no trace exists
-        best.map(|(_, _, _, error)| error.selection())
-            .unwrap_or_else(|| {
-                ElabError::new(
-                    ElabErrorKind::NoMatchingAlternative,
-                    Span::default(),
-                    "no elaboration alternative matched",
-                )
-            })
-            .with_traces(self.traces)
     }
 }
 
 impl From<ElabError> for Backtrack {
     fn from(error: ElabError) -> Self {
-        Self { traces: vec![ElabTrace::leaf(error)] }
-    }
-}
-
-impl From<TypeError> for Backtrack {
-    fn from(error: TypeError) -> Self {
-        ElabError::from(error).into()
+        Self::from_report(*error, Specificity::Specific)
     }
 }

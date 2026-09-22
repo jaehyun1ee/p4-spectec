@@ -5,7 +5,11 @@
 
 use crate::lang::{
     common::prim::num,
-    common::{self, notation::atom, source::Phrase},
+    common::{
+        self,
+        notation::atom,
+        source::{Phrase, Span},
+    },
 };
 
 // Numbers
@@ -158,7 +162,7 @@ pub enum ExpKind {
     /// `%N` or `%` or `%%` or `!%`
     Hole(Hole),
     /// `exp # exp`
-    Fuse(Box<Exp>, Box<Exp>),
+    Fuse(Box<Exp>, Span, Box<Exp>),
     /// `## exp`
     Unparen(Box<Exp>),
     /// `latex (` `"..."`* `)`

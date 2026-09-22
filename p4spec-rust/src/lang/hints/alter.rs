@@ -64,7 +64,7 @@ pub fn init(exp: &Exp) -> Option<AlterationHint> {
         // `%` and `%N`; `%%` and `!%` have no template meaning
         ExpKind::Hole(ElHole::Next) => AlterationHint::Hole(Hole::Next),
         ExpKind::Hole(ElHole::Num(index)) => AlterationHint::Hole(Hole::Num(*index)),
-        ExpKind::Fuse(exp_l, exp_r) => {
+        ExpKind::Fuse(exp_l, _, exp_r) => {
             AlterationHint::Fuse(Box::new(init(exp_l)?), Box::new(init(exp_r)?))
         }
         // Anything else is kept as an expression for the renderer

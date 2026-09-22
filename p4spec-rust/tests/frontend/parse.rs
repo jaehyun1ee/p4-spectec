@@ -122,6 +122,41 @@ fn test_trailing_hint_sets_the_definition_span() {
 }
 
 #[test]
+fn test_empty_hint_expression_points_at_the_closing_parenthesis() {
+    for source in ["relation R: nat |- nat hint(input)", "relation R: nat |- nat hint(input  )"] {
+        let spec_el = crate::spec_fixture::parse(source).unwrap();
+        let DefKind::Rel(def) = &spec_el[0].node else { panic!("expected relation") };
+        let exp_hint = &def.hints[0].exp;
+        assert!(matches!(&exp_hint.node, ExpKind::Seq(exps) if exps.is_empty()));
+        assert_eq!(exp_hint.span.left.column, source.rfind(')').unwrap());
+        assert_eq!(exp_hint.span.left, exp_hint.span.right);
+    }
+}
+
+#[test]
+fn test_fuse_operator_spans_survive_expression_and_table_grammar_paths() {
+    for source in ["def $f = 0 # 1", "tbl def $f = | 0 # 1 => 2 # 3"] {
+        let spec_el = crate::spec_fixture::parse(source).unwrap();
+        let exps = match &spec_el[0].node {
+            DefKind::FuncDef(def) => vec![&def.exp],
+            DefKind::TableDef(def) => {
+                vec![&def.rows[0].node.exp_pattern, &def.rows[0].node.exp_body]
+            }
+            _ => panic!("expected function or table definition"),
+        };
+        let columns: Vec<_> = source.match_indices('#').map(|(idx, _)| idx).collect();
+        assert_eq!(exps.len(), columns.len());
+        for (exp, column) in exps.into_iter().zip(columns) {
+            let ExpKind::Fuse(exp_l, span, exp_r) = &exp.node else { panic!("expected fuse") };
+            assert_eq!((span.left.line, span.left.column), (1, column));
+            assert_eq!((span.right.line, span.right.column), (1, column + 1));
+            assert_eq!(exp.span.left, exp_l.span.left);
+            assert_eq!(exp.span.right, exp_r.span.right);
+        }
+    }
+}
+
+#[test]
 fn test_bracketed_type_syntax_sets_the_definition_span() {
     let spec = crate::spec_fixture::parse("syntax set<K> = `{ K* `}")
         .expect("parse a bracketed notation type");

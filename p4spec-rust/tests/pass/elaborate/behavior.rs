@@ -46,6 +46,16 @@ fn test_parenthesized_variant_keeps_the_case_origin() {
 }
 
 #[test]
+fn test_matching_parameterized_forward_type_definition_is_accepted() {
+    let spec_el = crate::spec_fixture::parse("syntax foo<T>\nsyntax foo<T> = nat")
+        .expect("parse matching forward type definition");
+
+    let (result, warnings) = elaborate::convert_with_warnings(spec_el);
+    assert!(result.is_ok(), "{result:?}");
+    assert!(warnings.is_empty());
+}
+
+#[test]
 fn test_failed_variant_alternative_does_not_leak_wildcard_bindings() {
     let spec_el = crate::spec_fixture::parse(
         "syntax choice =\n\
@@ -75,4 +85,35 @@ fn test_failed_variant_alternative_does_not_leak_wildcard_bindings() {
             .iter()
             .any(|exp| { matches!(&exp.node, ast::ExpKind::Id(id) if id.node == "_bool") })
     );
+}
+
+#[test]
+fn test_zero_arity_default_input_hint_supports_positive_and_negated_premises() {
+    let spec_el = crate::spec_fixture::parse(
+        "relation R: _OK\n\
+         rule R/base: _OK\n\
+         relation S: _OK\n\
+         rule S/base: _OK\n\
+         -- R: _OK\n\
+         -- R:/ _OK",
+    )
+    .expect("parse atom-only relations");
+
+    let (result, warnings) = elaborate::convert_with_warnings(spec_el);
+    assert!(result.is_ok(), "{result:?}");
+    assert_eq!(warnings.len(), 2);
+}
+
+#[test]
+fn test_function_argument_signatures_are_alpha_equivalent() {
+    let spec_el = crate::spec_fixture::parse(
+        "dec $passed<T>(T) : T\n\
+         dec $caller(def $expected<U>(U) : U) : nat\n\
+         dec $main : nat\n\
+         def $main = $caller(def $passed)",
+    )
+    .expect("parse alpha-renamed function signatures");
+
+    let (result, _warnings) = elaborate::convert_with_warnings(spec_el);
+    assert!(result.is_ok(), "{result:?}");
 }

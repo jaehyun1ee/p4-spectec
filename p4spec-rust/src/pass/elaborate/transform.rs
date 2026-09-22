@@ -19,7 +19,7 @@ use crate::{
         common::prim,
         common::{
             Id,
-            ds::map::{ArityMismatch, IdMap},
+            ds::map::IdMap,
             notation::mixfix::Mixfix,
             source::{Phrase, Span},
         },
@@ -31,19 +31,18 @@ use crate::{
     note_phrase, phrase,
     runtime::{
         ops::typ::{
-            Theta, TypeArityMismatch, TypeErrorKind, equiv_func_typ, equiv_typ, expand_typ,
-            optimize_sub_typ, sub_typ, subst_not_typ, subst_params, subst_typ, subst_typs,
+            Theta, equiv_func_typ, equiv_typ, expand_typ, optimize_sub_typ, sub_typ, subst_not_typ,
+            subst_params, subst_typ, subst_typs,
         },
         typdef::TypeDef,
     },
 };
 
 use super::{
-    ElabErrorKind, EntityKind, TypeShape,
-    attempt::{Attempt, choose_sequential, fail, fail_silent, finish},
+    attempt::{Attempt, Backtrack, choose_sequential, fail, fail_generic, fail_silent, finish},
     context::Context,
     dimension,
-    error::{self, MigrationError as ElabError},
+    error::{self, ElabError},
 };
 
 // == Checks
@@ -56,17 +55,15 @@ fn valid_tid(id: &Id) -> bool {
 }
 
 /// Rejects duplicated type parameters.
-fn distinct_tparams(tparams: &[el::TParam], span: &Span) -> Result<(), ElabError> {
-    let mut seen = std::collections::HashSet::new();
-    if tparams.iter().all(|tparam| seen.insert(&tparam.node)) {
-        Ok(())
-    } else {
-        Err(ElabError::new(
-            ElabErrorKind::Duplicate(EntityKind::Type),
-            span.clone(),
-            "type parameters are not distinct",
-        ))
+fn distinct_tparams(tparams: &[el::TParam]) -> Result<(), ElabError> {
+    let mut seen = IdMap::new();
+    for tparam in tparams {
+        if let Some(span_previous) = seen.get(tparam) {
+            return Err(error::type_parameter_repeated(tparam, span_previous));
+        }
+        seen.insert(tparam.clone(), tparam.span.clone());
     }
+    Ok(())
 }
 
 /// Finds the first repeated parameter while retaining the earlier occurrence.
@@ -86,78 +83,78 @@ fn find_repeated_tparam(tparams: &[el::TParam]) -> Option<(&Id, &Span)> {
 
 // - Type destructuring
 
-fn destruct_error(shape: TypeShape, span: Span) -> ElabError {
-    ElabError::new(
-        ElabErrorKind::CannotDestructure(shape),
-        span,
-        format!("cannot destruct type as {shape}"),
-    )
-}
-
 /// Requires the expanded type to be `text`.
 fn as_text_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<()> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
+    let typ_il = expand_typ(&ctx.tdenv, typ_il).map_err(|error| {
+        Backtrack::from(error::type_operation_invalid("cannot expand type", error))
+    })?;
     match &typ_il.node {
         il::TypKind::Text => Ok(()),
-        _ => fail(destruct_error(TypeShape::Text, typ_il.span.clone())),
+        _ => fail(error::type_shape_mismatch("text", &typ_il.span)),
     }
 }
 
 /// Destructs the expanded type into its element type and iteration.
 fn as_iter_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<(il::Typ, il::Iter)> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)?.into_owned();
+    let typ_il = expand_typ(&ctx.tdenv, typ_il)
+        .map_err(|error| {
+            Backtrack::from(error::type_operation_invalid("cannot expand type", error))
+        })?
+        .into_owned();
     let span = typ_il.span;
     let il::TypKind::Iter(typ_inner_il, iter_il) = typ_il.node else {
-        return fail(destruct_error(TypeShape::Iteration, span));
+        return fail(error::type_shape_mismatch("an iteration", &span));
     };
     Ok((*typ_inner_il, iter_il))
 }
 
 /// Destructs the expanded type into its tuple component types.
 fn as_tuple_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<Vec<il::Typ>> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)?.into_owned();
+    let typ_il = expand_typ(&ctx.tdenv, typ_il)
+        .map_err(|error| {
+            Backtrack::from(error::type_operation_invalid("cannot expand type", error))
+        })?
+        .into_owned();
     let span = typ_il.span;
     let il::TypKind::Tuple(typs_il) = typ_il.node else {
-        return fail(destruct_error(TypeShape::Tuple, span));
+        return fail(error::type_shape_mismatch("a tuple", &span));
     };
     Ok(typs_il)
 }
 
 /// Destructs the expanded type into the element type of a list.
 fn as_list_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<il::Typ> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)?.into_owned();
+    let typ_il = expand_typ(&ctx.tdenv, typ_il)
+        .map_err(|error| {
+            Backtrack::from(error::type_operation_invalid("cannot expand type", error))
+        })?
+        .into_owned();
     let span = typ_il.span;
     let il::TypKind::Iter(typ_inner_il, il::Iter::List) = typ_il.node else {
-        return fail(destruct_error(TypeShape::List, span));
+        return fail(error::type_shape_mismatch("a list", &span));
     };
     Ok(*typ_inner_il)
 }
 
 /// Destructs the expanded type into the fields of the struct type it names.
 fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<Vec<il::TypField>> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
+    let typ_il = expand_typ(&ctx.tdenv, typ_il).map_err(|error| {
+        Backtrack::from(error::type_operation_invalid("cannot expand type", error))
+    })?;
     // Struct types are always named types with a definition
     let il::TypKind::Var(id, _) = &typ_il.node else {
-        return fail(destruct_error(TypeShape::Struct, typ_il.span.clone()));
+        return fail(error::type_shape_mismatch("a struct", &typ_il.span));
     };
     let Some(TypeDef::Defined(_, def_typ_il)) = ctx.find_typdef_opt(id) else {
-        return fail(destruct_error(TypeShape::Struct, typ_il.span.clone()));
+        return fail(error::type_shape_mismatch("a struct", &typ_il.span));
     };
     match &def_typ_il.node {
         il::DefTypKind::Struct(typ_fields_il) => Ok(typ_fields_il.clone()),
-        _ => fail(destruct_error(TypeShape::Struct, typ_il.span.clone())),
+        _ => fail(error::type_shape_mismatch("a struct", &typ_il.span)),
     }
 }
 
 // - Plain types
-
-/// Builds a type-argument arity error.
-fn arity_error(expected: usize, actual: usize, span: Span) -> ElabError {
-    let mismatch = ArityMismatch::new(expected, actual);
-    let mismatch = TypeArityMismatch::TypeArgument(mismatch);
-    let type_error = TypeErrorKind::ArityMismatch(mismatch);
-    ElabError::new(ElabErrorKind::ArityMismatch, span, type_error.to_string())
-}
 
 /// Elaborates a plain type, checking the type-argument arity of named types.
 fn elab_plain_typ(ctx: &Context, plain_typ: &el::PlainTyp) -> Result<il::Typ, ElabError> {
@@ -168,10 +165,22 @@ fn elab_plain_typ(ctx: &Context, plain_typ: &el::PlainTyp) -> Result<il::Typ, El
         el::PlainTypKind::Text => il::TypKind::Text,
         // Named types must be defined and fully applied
         el::PlainTypKind::Var(id, targs) => {
-            let typdef = ctx.find_typdef(id)?;
+            let (id_declaration, typdef) = ctx
+                .tdenv
+                .get_key_value(id)
+                .ok_or_else(|| error::type_undefined(id))?;
             let tparams = typdef.tparams();
             if tparams.len() != targs.len() {
-                return Err(arity_error(tparams.len(), targs.len(), id.span.clone()));
+                let span = targs
+                    .get(tparams.len())
+                    .map_or_else(|| id.span.clone(), |targ| targ.span.clone());
+                return Err(error::type_argument_arity_mismatch(
+                    id,
+                    tparams.len(),
+                    targs.len(),
+                    &span,
+                    Some(&id_declaration.span),
+                ));
             }
             let mut targs_il = Vec::with_capacity(targs.len());
             for targ in targs {
@@ -256,41 +265,52 @@ fn elab_not_typ(ctx: &Context, typ: &el::Typ) -> Result<il::NotTyp, ElabError> {
 /// the case `u` in `syntax t = u | C` contributes `A` and `B`,
 /// with the type arguments of `u` substituted.
 fn elab_typ_case_plain(ctx: &Context, typ_il: &il::Typ) -> Result<Vec<il::TypCase>, ElabError> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)?;
+    let typ_il = expand_typ(&ctx.tdenv, typ_il)
+        .map_err(|error| error::type_operation_invalid("cannot expand variant extension", error))?;
     let il::TypKind::Var(id, targs_il) = &typ_il.node else {
-        return Err(ElabError::new(
-            ElabErrorKind::InvalidTypeExtension,
-            typ_il.span.clone(),
-            "cannot extend a non-variant type",
-        ));
+        return Err(error::type_extension_primitive_unsupported(&*typ_il, &typ_il.span));
     };
+    let span_declaration = ctx
+        .tdenv
+        .get_key_value(id)
+        .map(|(id_declaration, _)| id_declaration.span.clone());
     match ctx.find_typdef(id)? {
         // Only a completed variant type can be extended
-        TypeDef::Defining(_) => Err(ElabError::new(
-            ElabErrorKind::InvalidTypeExtension,
-            typ_il.span.clone(),
-            "cannot extend an incomplete type",
+        TypeDef::Defining(_) => Err(error::type_extension_incomplete(
+            &*typ_il,
+            &typ_il.span,
+            span_declaration.as_ref().unwrap_or(&id.span),
         )),
         TypeDef::Defined(tparams, def_typ_il) => {
             let il::DefTypKind::Variant(typ_cases_il) = &def_typ_il.node else {
-                return Err(ElabError::new(
-                    ElabErrorKind::InvalidTypeExtension,
-                    typ_il.span.clone(),
-                    "cannot extend a non-variant type",
+                return Err(error::type_extension_struct_unsupported(
+                    &*typ_il,
+                    &typ_il.span,
+                    span_declaration.as_ref().unwrap_or(&id.span),
                 ));
             };
             // Substitute the type arguments into each inherited case
             let theta = Theta::from_lists(tparams, targs_il).map_err(|mismatch| {
-                arity_error(mismatch.expected, mismatch.actual, typ_il.span.clone())
+                error::type_argument_arity_mismatch(
+                    id,
+                    mismatch.expected,
+                    mismatch.actual,
+                    &typ_il.span,
+                    Some(span_declaration.as_ref().unwrap_or(&id.span)),
+                )
             })?;
             typ_cases_il
                 .iter()
                 .map(|il::TypCase { not_typ: not_typ_il, typ_origin: typ_origin_il, hints }| {
                     let find_subst = |id: &il::Id| theta.get(id);
                     let not_typ_il =
-                        subst_not_typ(&find_subst, not_typ_il).map_err(ElabError::from)?;
+                        subst_not_typ(&find_subst, not_typ_il).map_err(|error| {
+                            error::type_operation_invalid("cannot substitute variant notation", error)
+                        })?;
                     let targs_il =
-                        subst_typs(&find_subst, &typ_origin_il.node.targs).map_err(ElabError::from)?;
+                        subst_typs(&find_subst, &typ_origin_il.node.targs).map_err(|error| {
+                            error::type_operation_invalid("cannot substitute variant origin", error)
+                        })?;
                     let typ_origin_il = phrase! {
                         node: il::TypOriginKind { id: typ_origin_il.node.id.clone(), targs: targs_il },
                         span: typ_origin_il.span.clone(),
@@ -300,10 +320,15 @@ fn elab_typ_case_plain(ctx: &Context, typ_il: &il::Typ) -> Result<Vec<il::TypCas
                 .collect()
         }
         // Parameter and extern types have no cases to inherit
-        TypeDef::Parameter | TypeDef::Extern => Err(ElabError::new(
-            ElabErrorKind::InvalidTypeExtension,
-            typ_il.span.clone(),
-            "cannot extend a non-variant type",
+        TypeDef::Parameter => Err(error::type_extension_parameter_unsupported(
+            &*typ_il,
+            &typ_il.span,
+            span_declaration.as_ref().unwrap_or(&id.span),
+        )),
+        TypeDef::Extern => Err(error::type_extension_extern_unsupported(
+            &*typ_il,
+            &typ_il.span,
+            span_declaration.as_ref().unwrap_or(&id.span),
         )),
     }
 }
@@ -363,14 +388,14 @@ fn elab_def_typ(
             // Two cases with the same mixfix shape would be ambiguous
             for (index, typ_case_il) in typ_cases_il.iter().enumerate() {
                 let mixop = typ_case_il.not_typ.node.to_mixop();
-                if typ_cases_il[..index]
+                if let Some(typ_case_previous_il) = typ_cases_il[..index]
                     .iter()
-                    .any(|typ_case_other_il| typ_case_other_il.not_typ.node.to_mixop() == mixop)
+                    .find(|typ_case_other_il| typ_case_other_il.not_typ.node.to_mixop() == mixop)
                 {
-                    return Err(ElabError::new(
-                        ElabErrorKind::AmbiguousVariant,
-                        def_typ.span.clone(),
-                        "variant cases are ambiguous",
+                    return Err(error::variant_case_shape_repeated(
+                        &Print::to_string(&mixop),
+                        &typ_case_il.not_typ.span,
+                        &typ_case_previous_il.not_typ.span,
                     ));
                 }
             }
@@ -384,11 +409,6 @@ fn elab_def_typ(
 
 // == Elaboration helpers
 
-/// Fails an attempt with a freshly built located error.
-fn fail_attempt<T>(kind: ElabErrorKind, span: Span, message: impl Into<String>) -> Attempt<T> {
-    fail(ElabError::new(kind, span, message))
-}
-
 /// Wraps a type kind with the span of the term it describes.
 fn typ_at(typ_kind_il: il::TypKind, span: &Span) -> il::Typ {
     phrase!(node: typ_kind_il, span: span.clone())
@@ -400,11 +420,7 @@ fn typ_at(typ_kind_il: il::TypKind, span: &Span) -> il::Typ {
 
 /// Fails inference of a construct whose type cannot be synthesized.
 fn fail_infer<T>(span: &Span, construct: &str) -> Attempt<T> {
-    fail_attempt(
-        ElabErrorKind::CannotInfer,
-        span.clone(),
-        format!("cannot infer type of {construct}"),
-    )
+    fail(error::expression_inference_invalid(span, construct))
 }
 
 /// Synthesizes the type of an expression bottom-up.
@@ -449,10 +465,10 @@ fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Attempt<il::Exp> {
         el::ExpKind::Seq(_) => fail_infer(&exp.span, "sequence expression"),
         el::ExpKind::Infix(_, _, _) => fail_infer(&exp.span, "infix expression"),
         el::ExpKind::Brack(_, _, _) => fail_infer(&exp.span, "bracket expression"),
-        el::ExpKind::Hole(_)
-        | el::ExpKind::Fuse(_, _)
-        | el::ExpKind::Unparen(_)
-        | el::ExpKind::Latex(_) => fail_infer(&exp.span, "hint expression"),
+        el::ExpKind::Hole(_) => fail(error::hole_outside_hint_unsupported(&exp.span)),
+        el::ExpKind::Fuse(_, span, _) => fail(error::fuse_outside_hint_unsupported(span)),
+        el::ExpKind::Unparen(_) => fail(error::unparen_outside_hint_unsupported(&exp.span)),
+        el::ExpKind::Latex(_) => fail(error::latex_outside_hint_unsupported(&exp.span)),
     }
 }
 
@@ -514,11 +530,7 @@ fn infer_id_exp(ctx: &mut Context, span: &Span, id: &Id) -> Attempt<il::Exp> {
 // - Operator inference failures
 
 fn operator_error<T>(span: Span) -> Attempt<T> {
-    fail_attempt(
-        ElabErrorKind::OperatorNotDefined,
-        span,
-        "operator is not defined for the operand types",
-    )
+    fail(error::operator_operand_type_mismatch(&span))
 }
 
 // - Unary expression inference
@@ -723,7 +735,12 @@ fn infer_list_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Attempt<i
     // Remaining elements must have an equivalent type
     for exp_il in &exps_rest_il {
         let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
-        let equivalent = equiv_typ(&ctx.tdenv, &typ_first_il, &typ_il)?;
+        let equivalent = equiv_typ(&ctx.tdenv, &typ_first_il, &typ_il).map_err(|error| {
+            Backtrack::from(error::type_operation_invalid(
+                "cannot compare list element types",
+                error,
+            ))
+        })?;
         if !equivalent {
             return fail_infer(span, "list with heterogeneous elements");
         }
@@ -1063,9 +1080,22 @@ fn infer_call_exp(
         Ok((tparams, params, typ_ret)) => (tparams.to_vec(), params.to_vec(), typ_ret.clone()),
         Err(error) => return fail(error),
     };
+    let span_declaration = ctx
+        .fenv
+        .get_key_value(id)
+        .map(|(id_declaration, _)| id_declaration.span.clone());
     // Type arguments must match the declared type parameters
     if tparams_il.len() != targs.len() {
-        return fail(arity_error(tparams_il.len(), targs.len(), id.span.clone()));
+        let span_error = targs
+            .get(tparams_il.len())
+            .map_or_else(|| id.span.clone(), |targ| targ.span.clone());
+        return fail(error::function_call_type_argument_arity_mismatch(
+            id,
+            tparams_il.len(),
+            targs.len(),
+            &span_error,
+            span_declaration.as_ref(),
+        ));
     }
     let mut targs_il = Vec::with_capacity(targs.len());
     for targ in targs {
@@ -1078,15 +1108,26 @@ fn infer_call_exp(
     let theta = match Theta::from_lists(&tparams_il, &targs_il) {
         Ok(theta) => theta,
         Err(mismatch) => {
-            return fail(arity_error(mismatch.expected, mismatch.actual, id.span.clone()));
+            return fail(error::function_call_type_argument_arity_mismatch(
+                id,
+                mismatch.expected,
+                mismatch.actual,
+                &id.span,
+                span_declaration.as_ref(),
+            ));
         }
     };
     // Substitute the type arguments into the parameters and return type
     let find_subst = |id: &il::Id| theta.get(id);
-    let params_il = subst_params(&find_subst, &params_il)?;
-    let typ_ret_il = subst_typ(&find_subst, &typ_ret_il)?;
+    let params_il = subst_params(&find_subst, &params_il).map_err(|error| {
+        Backtrack::from(error::type_operation_invalid("cannot instantiate call parameters", error))
+    })?;
+    let typ_ret_il = subst_typ(&find_subst, &typ_ret_il).map_err(|error| {
+        Backtrack::from(error::type_operation_invalid("cannot instantiate call result", error))
+    })?;
     // Check the arguments against the instantiated parameters
-    let args_il = elab_args(ctx, &params_il, args, false, span)?;
+    let args_il =
+        elab_args(ctx, &params_il, args, false, span, Some((id, span_declaration.as_ref())))?;
     let exp_il = note_phrase! {
         node: il::ExpKind::Call(id.clone(), targs_il, args_il),
         note: typ_ret_il.node,
@@ -1131,17 +1172,22 @@ fn infer_sub_exp(
         Err(error) => return fail(error),
     };
     // The types must be related in at least one direction
-    let source_sub = sub_typ(&ctx.tdenv, &typ_source_il, &typ_target_il)?;
-    let target_sub = sub_typ(&ctx.tdenv, &typ_target_il, &typ_source_il)?;
+    let source_sub = sub_typ(&ctx.tdenv, &typ_source_il, &typ_target_il).map_err(|error| {
+        Backtrack::from(error::type_operation_invalid("cannot compare subtype expression", error))
+    })?;
+    let target_sub = sub_typ(&ctx.tdenv, &typ_target_il, &typ_source_il).map_err(|error| {
+        Backtrack::from(error::type_operation_invalid("cannot compare subtype expression", error))
+    })?;
     if !source_sub && !target_sub {
-        return fail_attempt(
-            ElabErrorKind::TypeMismatch,
-            exp_il.span.clone(),
+        return fail(error::expression_type_mismatch(
+            &exp_il.span,
             "subtype expression compares incomparable types",
-        );
+        ));
     }
     // Precompute the runtime check the test performs
-    let check = optimize_sub_typ(&ctx.tdenv, &typ_source_il, &typ_target_il)?;
+    let check = optimize_sub_typ(&ctx.tdenv, &typ_source_il, &typ_target_il).map_err(|error| {
+        Backtrack::from(error::type_operation_invalid("cannot optimize subtype expression", error))
+    })?;
     let exp_il = note_phrase! {
         node: il::ExpKind::Sub(Box::new(exp_il), Box::new(typ_target_il), Box::new(check)),
         note: il::TypKind::Bool,
@@ -1156,12 +1202,16 @@ fn infer_sub_exp(
 fn cast_exp(ctx: &Context, typ_expect_il: &il::Typ, exp_il: il::Exp) -> Attempt<il::Exp> {
     let typ_infer_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
     // Equivalent types need no cast
-    let equivalent = equiv_typ(&ctx.tdenv, typ_expect_il, &typ_infer_il)?;
+    let equivalent = equiv_typ(&ctx.tdenv, typ_expect_il, &typ_infer_il).map_err(|error| {
+        Backtrack::from(error::type_operation_invalid("cannot compare expression types", error))
+    })?;
     if equivalent {
         return Ok(exp_il);
     }
     // A subtype is upcast to the expected type
-    let subtype = sub_typ(&ctx.tdenv, &typ_infer_il, typ_expect_il)?;
+    let subtype = sub_typ(&ctx.tdenv, &typ_infer_il, typ_expect_il).map_err(|error| {
+        Backtrack::from(error::type_operation_invalid("cannot compare expression types", error))
+    })?;
     if subtype {
         let span = exp_il.span.clone();
         let exp_il = note_phrase! {
@@ -1171,11 +1221,7 @@ fn cast_exp(ctx: &Context, typ_expect_il: &il::Typ, exp_il: il::Exp) -> Attempt<
         };
         return Ok(exp_il);
     }
-    fail_attempt(
-        ElabErrorKind::InvalidCast,
-        exp_il.span,
-        "cannot cast inferred expression to expected type",
-    )
+    fail(error::expression_cast_invalid(&exp_il.span))
 }
 
 /// Moves the span of an expression and its casts to the enclosing parentheses.
@@ -1194,11 +1240,6 @@ fn respan_parenthesized_exp(exp_il: &mut il::Exp, span: &Span) {
 /// Failures are nested under one error for the whole expression
 /// so that traces stay readable.
 fn elab_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
-    let error = ElabError::new(
-        ElabErrorKind::NoMatchingAlternative,
-        exp.span.clone(),
-        "expression elaboration failed",
-    );
     // A parenthesized result takes the span of the parentheses
     let parenthesized = matches!(exp.node, el::ExpKind::Paren(_));
     let span = exp.span.clone();
@@ -1209,7 +1250,7 @@ fn elab_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Attemp
             }
             exp_il
         })
-        .map_err(|failure| failure.nest(error))
+        .map_err(|failure| failure.nest(exp.span.clone(), "expression elaboration failed"))
 }
 
 /// Tries the singleton reading first when an iteration type is expected.
@@ -1297,24 +1338,38 @@ fn elab_exp_normal_fallback(
         let theta = match Theta::from_lists(tparams, targs_il) {
             Ok(theta) => theta,
             Err(mismatch) => {
-                return fail(arity_error(
+                return fail(error::type_argument_arity_mismatch(
+                    id,
                     mismatch.expected,
                     mismatch.actual,
-                    typ_expect_il.span.clone(),
+                    &typ_expect_il.span,
+                    ctx.tdenv
+                        .get_key_value(id)
+                        .map(|(id_declaration, _)| &id_declaration.span),
                 ));
             }
         };
         match &def_typ_il.node {
             // Alias: elaborate against the aliased type
             il::DefTypKind::Plain(typ_il) => {
-                let typ_il = subst_typ(&|id| theta.get(id), typ_il)?;
+                let typ_il = subst_typ(&|id| theta.get(id), typ_il).map_err(|error| {
+                    Backtrack::from(error::type_operation_invalid(
+                        "cannot instantiate type alias",
+                        error,
+                    ))
+                })?;
                 return elab_exp_normal(ctx, &typ_il, exp);
             }
             // Struct: match the fields
             il::DefTypKind::Struct(typ_fields_il) => {
                 let mut typ_fields_subst_il = Vec::with_capacity(typ_fields_il.len());
                 for il::TypField { atom, typ: typ_il } in typ_fields_il {
-                    let typ_il = subst_typ(&|id| theta.get(id), typ_il)?;
+                    let typ_il = subst_typ(&|id| theta.get(id), typ_il).map_err(|error| {
+                        Backtrack::from(error::type_operation_invalid(
+                            "cannot instantiate struct field",
+                            error,
+                        ))
+                    })?;
                     typ_fields_subst_il.push(il::TypField { atom: atom.clone(), typ: typ_il });
                 }
                 return elab_struct_exp(ctx, typ_expect_il, &typ_fields_subst_il, exp);
@@ -1326,8 +1381,19 @@ fn elab_exp_normal_fallback(
                     typ_cases_il
                 {
                     let find_subst = |id: &il::Id| theta.get(id);
-                    let not_typ_il = subst_not_typ(&find_subst, not_typ_il)?;
-                    let targs_il = subst_typs(&find_subst, &typ_origin_il.node.targs)?;
+                    let not_typ_il = subst_not_typ(&find_subst, not_typ_il).map_err(|error| {
+                        Backtrack::from(error::type_operation_invalid(
+                            "cannot instantiate variant case",
+                            error,
+                        ))
+                    })?;
+                    let targs_il =
+                        subst_typs(&find_subst, &typ_origin_il.node.targs).map_err(|error| {
+                            Backtrack::from(error::type_operation_invalid(
+                                "cannot instantiate variant origin",
+                                error,
+                            ))
+                        })?;
                     let typ_origin_il = phrase! {
                         node: il::TypOriginKind { id: typ_origin_il.node.id.clone(), targs: targs_il },
                         span: typ_origin_il.span.clone(),
@@ -1377,11 +1443,10 @@ fn elab_plain_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> 
         el::ExpKind::Iter(exp_inner, iter) => elab_iter_exp(ctx, typ_expect_il, exp_inner, *iter)?,
         // Anything else needed inference
         _ => {
-            return fail_attempt(
-                ElabErrorKind::NoMatchingAlternative,
-                exp.span.clone(),
+            return fail_generic(error::frame(
+                &exp.span,
                 "expression requires unsupported contextual elaboration",
-            );
+            ));
         }
     };
     Ok(note_phrase! {
@@ -1413,11 +1478,10 @@ fn elab_list_exp(
     let (typ_base_il, iter_expect_il) = as_iter_typ(ctx, typ_expect_il)?;
     // A list literal needs a list type, not an option
     if iter_expect_il != il::Iter::List {
-        return fail_attempt(
-            ElabErrorKind::InvalidIteration,
-            typ_expect_il.span.clone(),
+        return fail(error::expression_iteration_mismatch(
+            &typ_expect_il.span,
             "list expression has optional expected type",
-        );
+        ));
     }
     let mut exps_il = Vec::with_capacity(exps.len());
     for exp in exps {
@@ -1485,11 +1549,10 @@ fn elab_tuple_exp(
     // Component count must match the tuple type
     let typs_expect_il = as_tuple_typ(ctx, typ_expect_il)?;
     if typs_expect_il.len() != exps.len() {
-        return fail_attempt(
-            ElabErrorKind::ArityMismatch,
-            typ_expect_il.span.clone(),
+        return fail(error::expression_arity_mismatch(
+            &typ_expect_il.span,
             "tuple expression arity does not match",
-        );
+        ));
     }
     let mut exps_il = Vec::with_capacity(exps.len());
     for (typ_expect_il, exp) in typs_expect_il.iter().zip(exps) {
@@ -1522,11 +1585,7 @@ fn elab_iter_exp(
     // The iteration must match the expected one
     let iter_il = iter;
     if iter_il != iter_expect_il {
-        return fail_attempt(
-            ElabErrorKind::InvalidIteration,
-            exp.span.clone(),
-            "iteration mismatch",
-        );
+        return fail(error::expression_iteration_mismatch(&exp.span, "iteration mismatch"));
     }
     let exp_il = elab_exp(ctx, &typ_base_il, exp)?;
     Ok(il::ExpKind::Iter(Box::new(exp_il), il::ExpIter { iter: iter_il, vars: vec![] }))
@@ -1556,11 +1615,10 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
         // Sequences match element-wise
         (Mixfix::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
             if not_typs_il.len() != exps.len() {
-                return fail_attempt(
-                    ElabErrorKind::NoMatchingAlternative,
-                    exp.span.clone(),
+                return fail_generic(error::frame(
+                    &exp.span,
                     "notation sequence arity does not match",
-                );
+                ));
             }
             let mut not_exps_il = Vec::with_capacity(exps.len());
             for (not_typ_inner_il, exp) in not_typs_il.iter().zip(exps) {
@@ -1601,11 +1659,7 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
             ))
         }
         // Any other shape mismatch fails
-        _ => fail_attempt(
-            ElabErrorKind::NoMatchingAlternative,
-            exp.span.clone(),
-            "expression does not match notation",
-        ),
+        _ => fail_generic(error::frame(&exp.span, "expression does not match notation")),
     }
 }
 
@@ -1619,19 +1673,14 @@ fn elab_struct_exp(
     exp: &el::Exp,
 ) -> Attempt<il::Exp> {
     let el::ExpKind::Str(exp_fields) = &exp.node else {
-        return fail_attempt(
-            ElabErrorKind::NoMatchingAlternative,
-            exp.span.clone(),
-            "expression is not a struct",
-        );
+        return fail_generic(error::frame(&exp.span, "expression is not a struct"));
     };
     // Field count must match the struct type
     if typ_fields_il.len() != exp_fields.len() {
-        return fail_attempt(
-            ElabErrorKind::ArityMismatch,
-            exp.span.clone(),
+        return fail(error::expression_arity_mismatch(
+            &exp.span,
             "struct field count does not match",
-        );
+        ));
     }
     let mut exp_fields_il = Vec::with_capacity(exp_fields.len());
     for (il::TypField { atom: atom_expect, typ: typ_il }, (atom, exp_field)) in
@@ -1639,11 +1688,10 @@ fn elab_struct_exp(
     {
         // Fields must appear in declaration order
         if atom_expect.node != atom.node {
-            return fail_attempt(
-                ElabErrorKind::TypeMismatch,
-                atom.span.clone(),
+            return fail(error::expression_type_mismatch(
+                &atom.span,
                 "struct field does not match",
-            );
+            ));
         }
         let exp_field_il = elab_exp(ctx, typ_il, exp_field)?;
         exp_fields_il.push(il::ExpField { atom: atom_expect.clone(), exp: exp_field_il });
@@ -1667,11 +1715,18 @@ fn elab_variant_exp(
     // Try each case on a copy of the context
     let mut ctx_match = ctx.clone();
     let mut exps_match_il = Vec::new();
+    let mut failure_candidates: Option<Backtrack> = None;
     for il::TypCase { not_typ: not_typ_il, typ_origin: typ_origin_il, .. } in typ_cases_il {
         let mut ctx_candidate = ctx_match.clone();
         let not_exp_il = match elab_not_exp(&mut ctx_candidate, not_typ_il, exp) {
             Ok(not_exp_il) => not_exp_il,
-            Err(_) => continue,
+            Err(failure) => {
+                failure_candidates = Some(match failure_candidates {
+                    Some(failure_previous) => failure_previous.merge(failure),
+                    None => failure,
+                });
+                continue;
+            }
         };
         let typ_case_kind_il =
             il::TypKind::Var(typ_origin_il.node.id.clone(), typ_origin_il.node.targs.clone());
@@ -1685,7 +1740,13 @@ fn elab_variant_exp(
         // The case type must still cast to the expected type
         let exp_case_il = match cast_exp(&ctx_candidate, typ_expect_il, exp_case_il) {
             Ok(exp_case_il) => exp_case_il,
-            Err(_) => continue,
+            Err(failure) => {
+                failure_candidates = Some(match failure_candidates {
+                    Some(failure_previous) => failure_previous.merge(failure),
+                    None => failure,
+                });
+                continue;
+            }
         };
         ctx_match = ctx_candidate;
         exps_match_il.push(exp_case_il);
@@ -1696,16 +1757,15 @@ fn elab_variant_exp(
             *ctx = ctx_match;
             Ok(exps_match_il.pop().expect("single variant match"))
         }
-        0 => fail_attempt(
-            ElabErrorKind::NoMatchingAlternative,
-            exp.span.clone(),
-            "expression does not match any variant case",
-        ),
-        _ => fail_attempt(
-            ElabErrorKind::AmbiguousVariant,
-            exp.span.clone(),
-            "expression matches multiple variant cases",
-        ),
+        0 => match failure_candidates {
+            Some(failure) => {
+                Err(failure.nest(exp.span.clone(), "expression does not match any variant case"))
+            }
+            None => {
+                fail_generic(error::frame(&exp.span, "expression does not match any variant case"))
+            }
+        },
+        _ => fail(error::variant_expression_match_repeated(&exp.span)),
     }
 }
 
@@ -1798,11 +1858,10 @@ fn elab_slice_path(
     let is_list = as_list_typ(ctx, &typ_inner_il).is_ok();
     let is_text = as_text_typ(ctx, &typ_inner_il).is_ok();
     if !is_list && !is_text {
-        return fail_attempt(
-            ElabErrorKind::CannotDestructure(TypeShape::List),
-            typ_inner_il.span,
+        return fail(error::expression_type_mismatch(
+            &typ_inner_il.span,
             "slice path requires a list or text",
-        );
+        ));
     }
     let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
     let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
@@ -1857,15 +1916,10 @@ fn elab_param(ctx: &mut Context, param: &el::Param) -> Result<il::Param, ElabErr
             il::ParamKind::Exp(typ_il)
         }
         el::ParamKind::Def(id, tparams, params, plain_typ_ret) => {
-            let mut seen = std::collections::HashSet::new();
-            if !tparams
-                .iter()
-                .all(|tparam| seen.insert(tparam.node.clone()))
-            {
-                return Err(ElabError::new(
-                    ElabErrorKind::Duplicate(EntityKind::Type),
-                    id.span.clone(),
-                    "type parameters are not distinct",
+            if let Some((tparam, span_previous)) = find_repeated_tparam(tparams) {
+                return Err(error::function_parameter_type_parameter_repeated(
+                    tparam,
+                    span_previous,
                 ));
             }
             // Type parameters scope over the parameters and return type only
@@ -1930,11 +1984,7 @@ fn elab_arg(
             el::ArgKind::Def(id_arg),
         ) if as_def => {
             if id_param.node != id_arg.node {
-                return fail_attempt(
-                    ElabErrorKind::InvalidArgument,
-                    arg.span.clone(),
-                    "function argument does not match its declared parameter",
-                );
+                return fail(error::function_argument_name_mismatch(id_arg, id_param));
             }
             let defined_func_il = il::DefinedFunc {
                 id: id_param.clone(),
@@ -1953,12 +2003,39 @@ fn elab_arg(
             Ok(arg_il)
         }
         // Call: the named function must have an equivalent signature
-        (il::ParamKind::Def(_, tparams_il, params_il, typ_ret_il), el::ArgKind::Def(id_arg)) => {
+        (
+            il::ParamKind::Def(id_param, tparams_il, params_il, typ_ret_il),
+            el::ArgKind::Def(id_arg),
+        ) => {
             let (tparams_arg_il, params_arg_il, typ_ret_arg_il) =
                 match ctx.find_func_signature(id_arg) {
                     Ok(signature) => signature,
                     Err(error) => return fail(error),
                 };
+            let span_arg_declaration = ctx
+                .fenv
+                .get_key_value(id_arg)
+                .map(|(id_declaration, _)| &id_declaration.span);
+            if tparams_il.len() != tparams_arg_il.len() {
+                return fail(error::function_argument_type_parameter_arity_mismatch(
+                    id_param,
+                    id_arg,
+                    tparams_il.len(),
+                    tparams_arg_il.len(),
+                    &arg.span,
+                    span_arg_declaration,
+                ));
+            }
+            if params_il.len() != params_arg_il.len() {
+                return fail(error::function_argument_parameter_arity_mismatch(
+                    id_param,
+                    id_arg,
+                    params_il.len(),
+                    params_arg_il.len(),
+                    &arg.span,
+                    span_arg_declaration,
+                ));
+            }
             let typ_param_il = il::FuncTyp {
                 tparams: tparams_il.clone(),
                 typs_params: params_il.iter().map(typ_of_param).collect(),
@@ -1971,23 +2048,42 @@ fn elab_arg(
             };
             let find_typdef_opt = |id: &il::Id| ctx.tdenv.get(id);
             let equivalent =
-                equiv_func_typ(&find_typdef_opt, &arg.span, &typ_param_il, &typ_arg_il)?;
+                equiv_func_typ(&find_typdef_opt, &arg.span, &typ_param_il, &typ_arg_il).map_err(
+                    |type_error| {
+                        Backtrack::from(error::type_operation_invalid(
+                            "cannot compare function argument signatures",
+                            type_error,
+                        ))
+                    },
+                )?;
             if !equivalent {
-                return fail_attempt(
-                    ElabErrorKind::InvalidArgument,
-                    arg.span.clone(),
-                    "function argument type does not match",
-                );
+                return fail(error::function_argument_signature_mismatch(
+                    id_param,
+                    id_arg,
+                    &arg.span,
+                    span_arg_declaration,
+                ));
             }
             let arg_il = il::ArgKind::Def(id_arg.clone());
             let arg_il = phrase!(node: arg_il, span: arg.span.clone());
             Ok(arg_il)
         }
-        _ => fail_attempt(
-            ElabErrorKind::InvalidArgument,
-            arg.span.clone(),
-            "argument kind does not match parameter kind",
-        ),
+        (il::ParamKind::Exp(_), el::ArgKind::Def(_)) => {
+            fail(error::function_argument_kind_mismatch(
+                "an expression",
+                "a function",
+                &arg.span,
+                &param_il.span,
+            ))
+        }
+        (il::ParamKind::Def(_, _, _, _), el::ArgKind::Exp(_)) => {
+            fail(error::function_argument_kind_mismatch(
+                "a function",
+                "an expression",
+                &arg.span,
+                &param_il.span,
+            ))
+        }
     }
 }
 
@@ -1998,14 +2094,21 @@ fn elab_args(
     args: &[el::Arg],
     as_def: bool,
     span: &Span,
+    callee: Option<(&Id, Option<&Span>)>,
 ) -> Attempt<Vec<il::Arg>> {
     // Argument count must match parameter count
     if params_il.len() != args.len() {
-        return fail_attempt(
-            ElabErrorKind::ArityMismatch,
-            span.clone(),
-            "argument count does not match parameter count",
-        );
+        let (id, span_declaration) = callee.map_or((None, None), |(id, span)| (Some(id), span));
+        let span_error = args
+            .get(params_il.len())
+            .map_or_else(|| span.clone(), |arg| arg.span.clone());
+        return fail(error::function_call_argument_arity_mismatch(
+            id,
+            params_il.len(),
+            args.len(),
+            &span_error,
+            span_declaration,
+        ));
     }
     let mut args_il = Vec::with_capacity(args.len());
     for (param_il, arg) in params_il.iter().zip(args) {
@@ -2053,27 +2156,30 @@ fn elab_prem(ctx: &mut Context, prem: &el::Prem) -> Attempt<PremInternal> {
 fn elab_prems(
     ctx: &mut Context,
     prems: &[el::Prem],
-    span: &Span,
+    _span: &Span,
 ) -> Attempt<(Vec<il::Prem>, bool)> {
     let mut prems_il = Vec::new();
-    let mut else_count = 0;
+    let mut span_else_first = None;
+    let mut span_else_second = None;
     for prem in prems {
         let prem_internal = elab_prem(ctx, prem)?;
         match prem_internal {
             PremInternal::Some(prem_il) => prems_il.push(prem_il),
             PremInternal::Var => {}
-            PremInternal::Else => else_count += 1,
+            PremInternal::Else => {
+                if span_else_first.is_none() {
+                    span_else_first = Some(&prem.span);
+                } else if span_else_second.is_none() {
+                    span_else_second = Some(&prem.span);
+                }
+            }
         }
     }
     // At most one otherwise premise
-    if else_count > 1 {
-        return fail_attempt(
-            ElabErrorKind::InvalidPremise,
-            span.clone(),
-            "cannot use multiple otherwise premises",
-        );
+    if let (Some(span_else_first), Some(span_else_second)) = (span_else_first, span_else_second) {
+        return fail(error::premise_otherwise_repeated(span_else_second, span_else_first));
     }
-    Ok((prems_il, else_count == 1))
+    Ok((prems_il, span_else_first.is_some()))
 }
 
 // - Variable premise elaboration
@@ -2081,19 +2187,11 @@ fn elab_prems(
 /// Binds the meta-variable declared by a variable premise.
 fn elab_var_prem(ctx: &mut Context, prem: &el::VarPrem) -> Attempt<()> {
     if !valid_tid(&prem.id) {
-        return fail_attempt(
-            ElabErrorKind::InvalidIdentifier,
-            prem.id.span.clone(),
-            "invalid meta-variable identifier",
-        );
+        return fail(error::premise_variable_identifier_invalid(&prem.id));
     }
     // A meta-variable name must not clash with a type
-    if ctx.bound_typdef(&prem.id) {
-        return fail_attempt(
-            ElabErrorKind::Duplicate(EntityKind::Type),
-            prem.id.span.clone(),
-            "type already defined",
-        );
+    if let Some((id_previous, _)) = ctx.tdenv.get_key_value(&prem.id) {
+        return fail(error::premise_variable_type_repeated(&prem.id, &id_previous.span));
     }
     let typ_il = match elab_plain_typ(ctx, &prem.plain_typ) {
         Ok(typ_il) => typ_il,
@@ -2118,11 +2216,7 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Attempt<il::PremKin
     let conditional = match input::is_conditional(&input_hint, &exps_il) {
         Ok(conditional) => conditional,
         Err(error) => {
-            return fail_attempt(
-                ElabErrorKind::InvalidInputHint,
-                prem.exp.span.clone(),
-                error.to_string(),
-            );
+            return fail(error::relation_input_hint_mismatch(&prem.exp.span, error.to_string()));
         }
     };
     // A premise without outputs only checks that the relation holds
@@ -2147,23 +2241,19 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Attempt<il::
     };
     let not_exp_il = elab_not_exp(ctx, &not_typ_il, &prem.exp)?;
     let exps_il = not_exp_il.args();
-    let conditional = match input::is_conditional(&input_hint, &exps_il) {
-        Ok(conditional) => conditional,
+    let (_, exps_output_il) = match input::split(&input_hint, exps_il) {
+        Ok(parts) => parts,
         Err(error) => {
-            return fail_attempt(
-                ElabErrorKind::InvalidInputHint,
-                prem.exp.span.clone(),
-                error.to_string(),
-            );
+            return fail(error::relation_input_hint_mismatch(&prem.exp.span, error.to_string()));
         }
     };
     // A negated premise cannot bind outputs
-    if !conditional {
-        return fail_attempt(
-            ElabErrorKind::InvalidPremise,
-            prem.exp.span.clone(),
-            "negated rule premise takes outputs",
-        );
+    if let Some(exp_output_il) = exps_output_il.first() {
+        return fail(error::premise_negated_output_unsupported(
+            &prem.id,
+            &exp_output_il.span,
+            &not_typ_il.span,
+        ));
     }
     Ok(il::PremKind::IfNotHold(il::IfNotHoldPrem { id: prem.id.clone(), not_exp: not_exp_il }))
 }
@@ -2182,12 +2272,14 @@ fn elab_if_prem(ctx: &mut Context, prem: &el::IfPrem) -> Attempt<il::PremKind> {
 fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Attempt<il::PremKind> {
     let prem_inner_il = elab_prem(ctx, &prem.prem)?;
     // Only premises that produce an IL premise can be iterated
-    let PremInternal::Some(prem_inner_il) = prem_inner_il else {
-        return fail_attempt(
-            ElabErrorKind::InvalidIteration,
-            prem.prem.span.clone(),
-            "cannot iterate variable or otherwise premise",
-        );
+    let prem_inner_il = match prem_inner_il {
+        PremInternal::Some(prem_inner_il) => prem_inner_il,
+        PremInternal::Var => {
+            return fail(error::premise_variable_iteration_unsupported(&prem.prem.span));
+        }
+        PremInternal::Else => {
+            return fail(error::premise_otherwise_iteration_unsupported(&prem.prem.span));
+        }
     };
     let prem_iter_il = il::PremIter { iter: prem.iter, vars_bound: vec![], vars_bind: vec![] };
     Ok(il::PremKind::Iter(il::IterPrem { prem: Box::new(prem_inner_il), prem_iter: prem_iter_il }))
@@ -2213,11 +2305,7 @@ fn elab_rule(
 ) -> Result<(il::Rule, bool), ElabError> {
     let el::RuleKind { id_rel: id_rel_rule, id_rule, exp, prems } = &rule.node;
     if id_rel_rule.node != id_rel.node {
-        return Err(ElabError::new(
-            ElabErrorKind::InvalidRule,
-            id_rule.span.clone(),
-            "rule relation does not match its group",
-        ));
+        return Err(error::relation_rule_group_name_mismatch(id_rel_rule, id_rel));
     }
     // Elaborate under a local context seeded with the rule's free identifiers
     let mut ctx_local = ctx.clone();
@@ -2264,11 +2352,27 @@ fn elab_rule_group(
             let else_group_il = phrase!(node: else_group_kind_il, span: span.clone());
             Ok((None, Some(else_group_il)))
         }
-        _ => Err(ElabError::new(
-            ElabErrorKind::InvalidRule,
-            span.clone(),
-            "invalid otherwise rule group",
+        _ if rules_else_il.len() > 1 => Err(error::relation_rule_otherwise_repeated(
+            &rules_else_il[1].span,
+            &rules_else_il[0].span,
         )),
+        _ => {
+            let rule_else_il = &rules_else_il[0];
+            let rule_other_il = &rules_il[0];
+            if rule_else_il.span.left < rule_other_il.span.left {
+                Err(error::relation_rule_otherwise_invalid(
+                    &rule_other_il.span,
+                    &rule_else_il.span,
+                    "`otherwise` rule here",
+                ))
+            } else {
+                Err(error::relation_rule_otherwise_invalid(
+                    &rule_else_il.span,
+                    &rule_other_il.span,
+                    "other rule here",
+                ))
+            }
+        }
     }
 }
 
@@ -2283,6 +2387,15 @@ fn elab_clause(
     let def = def.node;
     let il::DefinedFunc { tparams: tparams_expect_il, params: params_il, typ: typ_ret_il, .. } =
         ctx.find_defined_func(&def.id)?;
+    let span_declaration = ctx
+        .fenv
+        .get_key_value(&def.id)
+        .map(|(id_declaration, _)| id_declaration.span.clone())
+        .unwrap_or_else(|| def.id.span.clone());
+    let span_tparams_declaration = match (tparams_expect_il.first(), tparams_expect_il.last()) {
+        (Some(first), Some(last)) => Span::new(first.span.left.clone(), last.span.right.clone()),
+        _ => span_declaration.clone(),
+    };
     // Type parameters must repeat the declaration exactly
     if def.tparams.len() != tparams_expect_il.len()
         || def
@@ -2291,21 +2404,42 @@ fn elab_clause(
             .zip(tparams_expect_il)
             .any(|(tparam, tparam_expect_il)| tparam.node != tparam_expect_il.node)
     {
-        return Err(ElabError::new(
-            ElabErrorKind::ArityMismatch,
-            def.id.span.clone(),
-            "type parameters do not match",
+        let span_tparams = match (def.tparams.first(), def.tparams.last()) {
+            (Some(first), Some(last)) => {
+                Span::new(first.span.left.clone(), last.span.right.clone())
+            }
+            _ => def.id.span.clone(),
+        };
+        return Err(error::function_clause_type_parameter_mismatch(
+            &def.id,
+            tparams_expect_il,
+            &def.tparams,
+            &span_tparams,
+            &span_tparams_declaration,
         ));
     }
     let params_il = params_il.to_vec();
     let typ_ret_il = typ_ret_il.clone();
+    if params_il.len() != def.args.len() {
+        let span_args = def
+            .args
+            .get(params_il.len())
+            .map_or_else(|| span.clone(), |arg| arg.span.clone());
+        return Err(error::function_clause_argument_arity_mismatch(
+            &def.id,
+            params_il.len(),
+            def.args.len(),
+            &span_args,
+            &span_declaration,
+        ));
+    }
     // Local context with the clause's free identifiers and type parameters
     let mut ctx_local = ctx.clone();
     ctx_local.reset_frees();
     let frees = def.free_ids();
     ctx_local.add_frees(&frees);
     ctx_local.add_tparams(&def.tparams)?;
-    let args_il = finish(elab_args(&mut ctx_local, &params_il, &def.args, true, span))?;
+    let args_il = finish(elab_args(&mut ctx_local, &params_il, &def.args, true, span, None))?;
     let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, &def.prems, span))?;
     let exp_il = finish(elab_exp(&mut ctx_local, &typ_ret_il, &def.exp))?;
     let clause_kind_il = il::ClauseKind { args: args_il, exp: exp_il, prems: prems_il };
@@ -2318,7 +2452,11 @@ fn elab_clause(
 // - Definition dispatch
 
 /// Elaborates a definition; bodies for earlier declarations yield nothing.
-fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabError> {
+fn elab_def(
+    ctx: &mut Context,
+    def_el: el::Def,
+    warnings: &mut Vec<Report>,
+) -> Result<Option<il::Def>, ElabError> {
     let span = def_el.span;
     match def_el.node {
         // An extern type becomes an IL definition
@@ -2348,13 +2486,13 @@ fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabE
         }
         // An extern relation declaration
         el::DefKind::ExternRel(extern_rel_def) => {
-            let def_kind_il = elab_extern_rel_def(ctx, extern_rel_def, &span)?;
+            let def_kind_il = elab_extern_rel_def(ctx, extern_rel_def, &span, warnings)?;
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
         // A relation declaration; its rules arrive later
         el::DefKind::Rel(rel_def) => {
-            let def_kind_il = elab_rel_def(ctx, rel_def, &span)?;
+            let def_kind_il = elab_rel_def(ctx, rel_def, &span, warnings)?;
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
@@ -2418,11 +2556,7 @@ fn elab_extern_syntax_def(
     def: el::ExternSyntaxDef,
 ) -> Result<il::DefKind, ElabError> {
     if !valid_tid(&def.id) {
-        return Err(ElabError::new(
-            ElabErrorKind::InvalidIdentifier,
-            def.id.span.clone(),
-            "invalid type identifier",
-        ));
+        return Err(error::type_extern_identifier_invalid(&def.id));
     }
     // An extern type also names a meta-variable
     ctx.add_typdef(def.id.clone(), TypeDef::Extern)?;
@@ -2436,13 +2570,9 @@ fn elab_extern_syntax_def(
 /// Forward-declares the types of a syntax block ahead of their bodies.
 fn elab_syntax_def(ctx: &mut Context, def: &el::SyntaxDef) -> Result<(), ElabError> {
     for entry in &def.entries {
-        distinct_tparams(&entry.tparams, &entry.id.span)?;
+        distinct_tparams(&entry.tparams)?;
         if !valid_tid(&entry.id) {
-            return Err(ElabError::new(
-                ElabErrorKind::InvalidIdentifier,
-                entry.id.span.clone(),
-                "invalid type identifier",
-            ));
+            return Err(error::type_syntax_identifier_invalid(&entry.id));
         }
         // A type without parameters also names a meta-variable
         ctx.add_typdef(entry.id.clone(), TypeDef::Defining(entry.tparams.clone()))?;
@@ -2459,49 +2589,67 @@ fn elab_syntax_def(ctx: &mut Context, def: &el::SyntaxDef) -> Result<(), ElabErr
 
 /// Elaborates a type body, completing a forward declaration or a new type.
 fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabError> {
-    match ctx.find_typdef_opt(&def.id) {
+    let previous = ctx
+        .tdenv
+        .get_key_value(&def.id)
+        .map(|(id, typdef)| (id.clone(), typdef.clone()));
+    let is_new = match previous {
         // A forward-declared type must repeat its parameters
-        Some(TypeDef::Defining(tparams)) => {
+        Some((id_previous, TypeDef::Defining(tparams))) => {
             let matches = tparams.len() == def.tparams.len()
                 && tparams
                     .iter()
                     .zip(&def.tparams)
                     .all(|(id_l, id_r)| id_l.node == id_r.node);
             if !matches {
-                return Err(ElabError::new(
-                    ElabErrorKind::ArityMismatch,
-                    def.id.span.clone(),
-                    "type parameters do not match",
+                let span_tparams = match (def.tparams.first(), def.tparams.last()) {
+                    (Some(first), Some(last)) => {
+                        Span::new(first.span.left.clone(), last.span.right.clone())
+                    }
+                    _ => def.id.span.clone(),
+                };
+                let span_tparams_previous = match (tparams.first(), tparams.last()) {
+                    (Some(first), Some(last)) => {
+                        Span::new(first.span.left.clone(), last.span.right.clone())
+                    }
+                    _ => id_previous.span.clone(),
+                };
+                return Err(error::type_parameter_mismatch(
+                    &def.id,
+                    &tparams,
+                    &def.tparams,
+                    &span_tparams,
+                    &span_tparams_previous,
                 ));
             }
+            false
         }
-        Some(TypeDef::Defined(_, _)) => {
-            // The stored identifier still points at the first declaration
-            let (id_previous, _) = ctx.tdenv.get_key_value(&def.id).expect("defined type");
-            return Err(error::type_definition_repeated(&def.id, &id_previous.span).into());
+        Some((id_previous, TypeDef::Defined(_, _))) => {
+            return Err(error::type_definition_repeated(&def.id, &id_previous.span));
         }
-        Some(_) => {
-            return Err(ElabError::new(
-                ElabErrorKind::Duplicate(EntityKind::Type),
-                def.id.span.clone(),
-                "type was already defined",
-            ));
+        Some((id_previous, TypeDef::Extern)) => {
+            return Err(error::type_definition_extern_unsupported(&def.id, &id_previous.span));
         }
+        Some((_, TypeDef::Parameter)) => unreachable!("top-level type parameter"),
         // A new type is declared on the spot
         None => {
-            if !valid_tid(&def.id) || def.tparams.iter().any(|id| !valid_tid(id)) {
-                return Err(ElabError::new(
-                    ElabErrorKind::InvalidIdentifier,
-                    def.id.span.clone(),
-                    "invalid type identifier",
-                ));
+            if !valid_tid(&def.id) {
+                return Err(error::type_identifier_invalid(&def.id));
             }
-            ctx.add_typdef(def.id.clone(), TypeDef::Defining(def.tparams.clone()))?;
-            if def.tparams.is_empty() {
-                let typ_kind_il = il::TypKind::Var(def.id.clone(), vec![]);
-                let typ_il = phrase!(node: typ_kind_il, span: def.id.span.clone());
-                ctx.add_metavar(def.id.clone(), typ_il)?;
-            }
+            true
+        }
+    };
+    // Parameter validation follows declaration admission and mismatch checks
+    if let Some(tparam) = def.tparams.iter().find(|tparam| !valid_tid(tparam)) {
+        return Err(error::type_parameter_identifier_invalid(tparam));
+    }
+    distinct_tparams(&def.tparams)?;
+    if is_new {
+        ctx.add_typdef(def.id.clone(), TypeDef::Defining(def.tparams.clone()))?;
+        if def.tparams.is_empty() {
+            let typ_kind_il = il::TypKind::Var(def.id.clone(), vec![]);
+            let typ_il = phrase!(node: typ_kind_il, span: def.id.span.clone());
+            ctx.add_metavar(def.id.clone(), typ_il)?;
         }
     }
     // Elaborate the body with the type parameters in scope
@@ -2521,11 +2669,11 @@ fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabE
 /// Declares a global meta-variable.
 fn elab_var_def(ctx: &mut Context, def: el::VarDef) -> Result<il::DefKind, ElabError> {
     if !valid_tid(&def.id) {
-        return Err(error::meta_variable_identifier_invalid(&def.id).into());
+        return Err(error::meta_variable_identifier_invalid(&def.id));
     }
     // A meta-variable name must not clash with a type
     if let Some((id_previous, _)) = ctx.tdenv.get_key_value(&def.id) {
-        return Err(error::meta_variable_type_repeated(&def.id, &id_previous.span).into());
+        return Err(error::meta_variable_type_repeated(&def.id, &id_previous.span));
     }
     let typ_il = elab_plain_typ(ctx, &def.plain_typ)?;
     ctx.add_metavar(def.id.clone(), typ_il.clone())?;
@@ -2535,29 +2683,104 @@ fn elab_var_def(ctx: &mut Context, def: el::VarDef) -> Result<il::DefKind, ElabE
 
 // - Input hints
 
+/// Covers every source token that contributes to a relation notation.
+fn notation_span(not_typ_il: &il::NotTyp) -> Span {
+    fn collect(not_typ_il: &Mixfix<il::Typ>, spans: &mut Vec<Span>) {
+        match not_typ_il {
+            Mixfix::Arg(typ_il) => spans.push(typ_il.span.clone()),
+            Mixfix::Atom(atom) => spans.push(atom.span.clone()),
+            Mixfix::Brack(atom_l, not_typ_inner_il, atom_r) => {
+                spans.push(atom_l.span.clone());
+                collect(not_typ_inner_il, spans);
+                spans.push(atom_r.span.clone());
+            }
+            Mixfix::Infix(not_typ_l_il, atom, not_typ_r_il) => {
+                collect(not_typ_l_il, spans);
+                spans.push(atom.span.clone());
+                collect(not_typ_r_il, spans);
+            }
+            Mixfix::Seq(not_typs_il) => {
+                for not_typ_il in not_typs_il {
+                    collect(not_typ_il, spans);
+                }
+            }
+        }
+    }
+
+    let mut spans = Vec::new();
+    collect(&not_typ_il.node, &mut spans);
+    Span::over(&spans)
+}
+
 /// Reads a relation's `input` hint; by default every position is an input.
 fn fetch_input_hint(
     span: &Span,
+    id: &Id,
     not_typ_il: &il::NotTyp,
     hints: &[el::Hint],
+    warnings: &mut Vec<Report>,
 ) -> Result<input::InputHint, ElabError> {
     let arity = not_typ_il.node.arity();
     // Without a hint every position is an input
     let Some(el::Hint { exp: exp_hint, .. }) = hints.iter().find(|hint| hint.id.node == "input")
     else {
+        warnings.push(error::relation_input_hint_missing(id, span));
         return Ok(input::InputHint::new((0..arity).collect()));
     };
     let Some(input_hint) = input::init(exp_hint) else {
-        return Err(ElabError::new(
-            ElabErrorKind::InvalidInputHint,
-            span.clone(),
-            "malformed input hint",
+        return Err(error::relation_input_hint_invalid(
+            &exp_hint.span,
+            &Print::to_string(exp_hint),
         ));
     };
     // The hint must stay within the notation arity
-    input::validate(&input_hint, arity).map_err(|error| {
-        ElabError::new(ElabErrorKind::InvalidInputHint, span.clone(), error.to_string())
-    })?;
+    if let Err(input_error) = input::validate(&input_hint, arity) {
+        return Err(match input_error {
+            input::InputError::Empty => error::relation_input_hint_empty(&exp_hint.span),
+            input::InputError::DuplicateIndex(index) => {
+                let mut positions = input_hint
+                    .indices()
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(position, candidate)| (*candidate == index).then_some(position));
+                let first = positions
+                    .next()
+                    .expect("duplicate input index has a first position");
+                let duplicate = positions
+                    .next()
+                    .expect("duplicate input index has a repeated position");
+                let span_first = input_hint.span(first).unwrap_or(&exp_hint.span);
+                let span_duplicate = input_hint.span(duplicate).unwrap_or(&exp_hint.span);
+                error::relation_input_hint_index_repeated(index, span_duplicate, span_first)
+            }
+            input::InputError::IndexOutOfBounds { index, arity } => {
+                let position = input_hint
+                    .indices()
+                    .iter()
+                    .position(|candidate| *candidate == index)
+                    .expect("out-of-bounds input index has a position");
+                let span_index = input_hint.span(position).unwrap_or(&exp_hint.span);
+                error::relation_input_hint_index_out_of_bounds(
+                    index,
+                    arity,
+                    span_index,
+                    &notation_span(not_typ_il),
+                )
+            }
+            input::InputError::InputCountMismatch { expected, actual } => {
+                error::relation_input_hint_mismatch(
+                    &exp_hint.span,
+                    format!("input hint expects {expected} input items, but got {actual}"),
+                )
+            }
+            input::InputError::OutputCountMismatch { expected, actual } => {
+                error::relation_input_hint_mismatch(
+                    &exp_hint.span,
+                    format!("input hint expects {expected} output items, but got {actual}"),
+                )
+            }
+        });
+    }
     Ok(input_hint)
 }
 
@@ -2568,10 +2791,11 @@ fn elab_extern_rel_def(
     ctx: &mut Context,
     def: el::ExternRelDef,
     span: &Span,
+    warnings: &mut Vec<Report>,
 ) -> Result<il::DefKind, ElabError> {
     let typ = el::Typ::Notation(def.not_typ.clone());
     let not_typ_il = elab_not_typ(ctx, &typ)?;
-    let input_hint = fetch_input_hint(span, &not_typ_il, &def.hints)?;
+    let input_hint = fetch_input_hint(span, &def.id, &not_typ_il, &def.hints, warnings)?;
     let extern_rel_il =
         il::ExternRel { id: def.id, not_typ: not_typ_il, input_hint, hints: def.hints };
     ctx.add_extern_rel(extern_rel_il.clone())?;
@@ -2579,10 +2803,15 @@ fn elab_extern_rel_def(
 }
 
 /// Declares a relation whose rule groups arrive later.
-fn elab_rel_def(ctx: &mut Context, def: el::RelDef, span: &Span) -> Result<il::DefKind, ElabError> {
+fn elab_rel_def(
+    ctx: &mut Context,
+    def: el::RelDef,
+    span: &Span,
+    warnings: &mut Vec<Report>,
+) -> Result<il::DefKind, ElabError> {
     let typ = el::Typ::Notation(def.not_typ.clone());
     let not_typ_il = elab_not_typ(ctx, &typ)?;
-    let input_hint = fetch_input_hint(span, &not_typ_il, &def.hints)?;
+    let input_hint = fetch_input_hint(span, &def.id, &not_typ_il, &def.hints, warnings)?;
     let defined_rel_il = il::DefinedRel {
         id: def.id,
         not_typ: not_typ_il,
@@ -2619,7 +2848,7 @@ fn elab_rule_group_def(
 fn elab_extern_dec_def(ctx: &mut Context, def: el::ExternDecDef) -> Result<il::DefKind, ElabError> {
     // Label both occurrences of the first repeated type parameter
     if let Some((tparam, span_previous)) = find_repeated_tparam(&def.tparams) {
-        return Err(error::function_extern_type_parameter_repeated(tparam, span_previous).into());
+        return Err(error::function_extern_type_parameter_repeated(tparam, span_previous));
     }
     // Parameters and return type see the type parameters
     let (params_il, typ_il) = {
@@ -2651,7 +2880,7 @@ fn elab_builtin_dec_def(
 ) -> Result<il::DefKind, ElabError> {
     // Label both occurrences of the first repeated type parameter
     if let Some((tparam, span_previous)) = find_repeated_tparam(&def.tparams) {
-        return Err(error::function_builtin_type_parameter_repeated(tparam, span_previous).into());
+        return Err(error::function_builtin_type_parameter_repeated(tparam, span_previous));
     }
     // Parameters and return type see the type parameters
     let (params_il, typ_il) = {
@@ -2686,19 +2915,20 @@ fn elab_table_dec_def(ctx: &mut Context, def: el::TableDecDef) -> Result<il::Def
     // Locate the offending function parameter rather than the whole declaration
     for param_il in &params_il {
         if let il::ParamKind::Def(id, _, _, _) = &param_il.node {
-            return Err(error::table_parameter_unsupported(id, &param_il.span).into());
+            return Err(error::table_parameter_unsupported(id, &param_il.span));
         }
     }
     // Accept boolean aliases under the same equivalence relation as other types
     let typ_il = elab_plain_typ(ctx, &def.plain_typ)?;
     let typ_bool_il = phrase!(node: il::TypKind::Bool, span: typ_il.span.clone());
-    if !equiv_typ(&ctx.tdenv, &typ_il, &typ_bool_il)? {
+    if !equiv_typ(&ctx.tdenv, &typ_il, &typ_bool_il)
+        .map_err(|error| error::type_operation_invalid("cannot check table return type", error))?
+    {
         return Err(error::table_return_type_invalid(
             &def.id,
             &typ_il.span,
             &Print::to_string(&typ_il),
-        )
-        .into());
+        ));
     }
     let table_func_il = il::TableFunc {
         id: def.id,
@@ -2715,7 +2945,7 @@ fn elab_table_dec_def(ctx: &mut Context, def: el::TableDecDef) -> Result<il::Def
 fn elab_func_dec_def(ctx: &mut Context, def: el::FuncDecDef) -> Result<il::DefKind, ElabError> {
     // Label both occurrences of the first repeated type parameter
     if let Some((tparam, span_previous)) = find_repeated_tparam(&def.tparams) {
-        return Err(error::function_type_parameter_repeated(tparam, span_previous).into());
+        return Err(error::function_type_parameter_repeated(tparam, span_previous));
     }
     // Parameters and return type see the type parameters
     let (params_il, typ_il) = {
@@ -2747,6 +2977,11 @@ fn elab_func_dec_def(ctx: &mut Context, def: el::FuncDecDef) -> Result<il::DefKi
 /// Elaborates table rows against the declared parameters and result type.
 fn elab_table_def(ctx: &mut Context, def: &el::TableDef) -> Result<(), ElabError> {
     let table_func_il = ctx.find_table_func(&def.id)?;
+    let span_declaration = ctx
+        .fenv
+        .get_key_value(&def.id)
+        .map(|(id_declaration, _)| id_declaration.span.clone())
+        .unwrap_or_else(|| def.id.span.clone());
     let params_il = table_func_il.params.clone();
     let typ_il = table_func_il.typ.clone();
     let mut rows_il = Vec::with_capacity(def.rows.len());
@@ -2771,7 +3006,14 @@ fn elab_table_def(ctx: &mut Context, def: &el::TableDef) -> Result<(), ElabError
             ctx_local.reset_frees();
             let frees = row.free_ids();
             ctx_local.add_frees(&frees);
-            let args_il = finish(elab_args(&mut ctx_local, &params_il, &args, true, &row.span))?;
+            let args_il = finish(elab_args(
+                &mut ctx_local,
+                &params_il,
+                &args,
+                true,
+                &row.span,
+                Some((&def.id, Some(&span_declaration))),
+            ))?;
             let exp_body_il = finish(elab_exp(&mut ctx_local, &typ_il, exp_body))?;
             (args_il, exp_body_il)
         };
@@ -2846,17 +3088,15 @@ fn populate_meta_func(ctx: &mut Context, meta_func_def_il: il::MetaFuncDef) -> i
 }
 
 /// Fills every declaration with the bodies collected in the context.
-fn populate_defs(mut ctx: Context, defs_il: il::Spec) -> il::Spec {
+fn populate_defs(ctx: &mut Context, defs_il: il::Spec) -> il::Spec {
     defs_il
         .into_iter()
         .map(|def_il| {
             // Only relations and functions collect bodies
             let def_kind_il = match def_il.node {
-                il::DefKind::Rel(rel_def_il) => {
-                    il::DefKind::Rel(populate_rel(&mut ctx, rel_def_il))
-                }
+                il::DefKind::Rel(rel_def_il) => il::DefKind::Rel(populate_rel(ctx, rel_def_il)),
                 il::DefKind::MetaFunc(meta_func_def_il) => {
-                    il::DefKind::MetaFunc(populate_meta_func(&mut ctx, meta_func_def_il))
+                    il::DefKind::MetaFunc(populate_meta_func(ctx, meta_func_def_il))
                 }
                 def_kind_il => def_kind_il,
             };
@@ -2867,8 +3107,14 @@ fn populate_defs(mut ctx: Context, defs_il: il::Spec) -> il::Spec {
 
 // - Missing definition warnings
 
-/// Collects missing-body warnings for relations before functions.
-fn warn_undef_defs(defs_il: &[il::Def], warnings: &mut Vec<Report>) {
+/// Collects missing definitions in type, relation, then function order.
+fn warn_undef_defs(ctx: &Context, defs_il: &[il::Def], warnings: &mut Vec<Report>) {
+    // Report incomplete types in identifier order
+    for (id, typdef) in ctx.tdenv.iter() {
+        if let TypeDef::Defining(tparams) = typdef {
+            warnings.push(error::type_definition_missing(id, tparams));
+        }
+    }
     // Report missing relation bodies before missing function bodies
     for def_il in defs_il {
         if let il::DefKind::Rel(il::RelDef::Defined(rel_il)) = &def_il.node
@@ -2908,14 +3154,14 @@ pub(super) fn elab_spec(
     let mut defs_il = Vec::new();
     // Declarations become IL definitions, bodies are collected in the context
     for def_el in spec_el {
-        if let Some(def_il) = elab_def(&mut ctx, def_el)? {
+        if let Some(def_il) = elab_def(&mut ctx, def_el, warnings)? {
             defs_il.push(def_il);
         }
     }
     // Attach the collected bodies to their declarations
-    let mut defs_il = populate_defs(ctx, defs_il);
+    let mut defs_il = populate_defs(&mut ctx, defs_il);
     // Retain missing-body warnings even if dimension analysis fails
-    warn_undef_defs(&defs_il, warnings);
+    warn_undef_defs(&ctx, &defs_il, warnings);
     // Annotate iterations with the variables they range over
     dimension::analyze_spec(&mut defs_il)?;
     Ok(defs_il)

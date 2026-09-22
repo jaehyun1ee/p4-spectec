@@ -757,3 +757,23 @@ fn test_elab_command_keeps_warnings_on_success() {
     let text = String::from_utf8(output.stderr).unwrap();
     assert!(text.contains("warning[elab/function-clause-missing]"), "{text}");
 }
+
+#[test]
+fn test_elab_command_keeps_committed_warnings_before_failure() {
+    let path = std::env::temp_dir()
+        .join(format!("p4spec-cli-warning-before-error-{}.watsup", std::process::id()));
+    std::fs::write(&path, "relation R: nat |- nat\ndef $missing = 0\n").unwrap();
+    let output = binary().arg("elab").arg(&path).output().unwrap();
+    std::fs::remove_file(path).unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    let text = String::from_utf8(output.stderr).unwrap();
+    let pos_warning = text
+        .find("warning[elab/relation-input-hint-missing]")
+        .expect("render the committed declaration warning");
+    let pos_error = text
+        .find("error[elab/function-declaration-required]")
+        .expect("render the later declaration failure");
+    assert!(pos_warning < pos_error, "{text}");
+    assert!(!text.contains("elab/relation-rule-missing"), "{text}");
+}
