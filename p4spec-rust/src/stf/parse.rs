@@ -32,21 +32,25 @@ pub(crate) struct Location {
 }
 
 impl Location {
+    /// The line and column of a source position.
     fn from_position(position: Position) -> Self {
         Self { line: position.line, column: position.column }
     }
 
+    /// A source position in `file` at this location.
     fn into_position(self, file: Rc<str>) -> Position {
         Position::new(file, self.line, self.column)
     }
 }
 
+/// The span between two locations in `file`.
 pub(crate) fn location_span(file: &Rc<str>, loc_l: Location, loc_r: Location) -> Span {
     let pos_l = loc_l.into_position(Rc::clone(file));
     let pos_r = loc_r.into_position(Rc::clone(file));
     Span::new(pos_l, pos_r)
 }
 
+/// Adapts located lexer tokens into the triples LALRPOP expects.
 fn parser_input<I>(tokens: I) -> impl Iterator<Item = Result<(Location, Token, Location), StfError>>
 where
     I: Iterator<Item = Result<Phrase<Token>, StfError>>,
@@ -61,6 +65,7 @@ where
     })
 }
 
+/// Turns a LALRPOP error into a typed STF error with its span.
 fn translate_lalrpop_error(
     file: &Rc<str>,
     error: ParseError<Location, Token, StfError>,
@@ -85,6 +90,7 @@ fn translate_lalrpop_error(
     StfError::new(kind, span)
 }
 
+/// Parses an add priority, rejecting values above the half-range cap.
 pub(crate) fn parse_priority(spelling: String, span: Span) -> Result<i64, StfError> {
     let priority = spelling.parse::<i64>().ok();
     match priority.filter(|priority| *priority <= MAX_PRIORITY) {

@@ -1,4 +1,4 @@
-//! STF packet-test language frontend and utilities.
+//! STF packet-test language frontend and utilities
 
 mod name;
 

@@ -1,4 +1,4 @@
-//! Typed STF frontend failures.
+//! Typed STF frontend failures
 
 use std::{fmt, io};
 
@@ -7,6 +7,7 @@ use thiserror::Error;
 use crate::lang::common::source::Span;
 
 #[derive(Debug, Error)]
+/// A kind of STF lexing or parsing failure.
 pub enum StfErrorKind {
     #[error("invalid character {0:?}")]
     InvalidCharacter(char),
@@ -29,12 +30,16 @@ pub enum StfErrorKind {
 }
 
 #[derive(Debug)]
+/// An STF failure paired with its source span.
 pub struct StfError {
+    /// What went wrong.
     pub kind: StfErrorKind,
+    /// Where in the source.
     pub span: Span,
 }
 
 impl StfError {
+    /// Pairs a failure kind with the span it occurred at.
     pub fn new(kind: impl Into<StfErrorKind>, span: Span) -> Self {
         Self { kind: kind.into(), span }
     }

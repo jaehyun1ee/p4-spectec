@@ -5,7 +5,7 @@
 
 /// Tests an actual packet against an STF expectation
 ///
-/// `*` matches exactly one nibble
+/// `*` matches exactly one nibble.
 pub fn matches(actual: &str, expected: &str) -> bool {
     actual.chars().count() == expected.chars().count()
         && actual

@@ -7,7 +7,7 @@ use crate::runner::ExternError;
 
 // == Arithmetic
 
-/// Return a nonnegative remainder; requires a positive modulus
+/// Return a nonnegative remainder; requires a positive modulus.
 pub(crate) fn remainder(int: &BigInt, int_modulus: &BigInt) -> BigInt {
     let int = int % int_modulus;
     if int.is_negative() { int + int_modulus } else { int }
@@ -15,13 +15,14 @@ pub(crate) fn remainder(int: &BigInt, int_modulus: &BigInt) -> BigInt {
 
 // == Bit operations
 
+/// The width as a `usize`, or an error when it does not fit.
 pub(crate) fn width_bit(width: &BigInt) -> Result<usize, ExternError> {
     width
         .to_usize()
         .ok_or_else(|| ExternError::Failure(format!("invalid hash bit width: {width}")))
 }
 
-/// Flip the low `width` bits, keeping higher bits unchanged
+/// Flip the low `width` bits, keeping higher bits unchanged.
 pub fn bitwise_neg(int: &BigInt, width: &BigInt) -> Result<BigInt, ExternError> {
     if width <= &BigInt::zero() {
         return Ok(int.clone());
