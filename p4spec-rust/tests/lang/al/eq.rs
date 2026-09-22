@@ -76,8 +76,18 @@ fn test_syntax_equality_distinguishes_recursive_operands_variants_and_collection
             input_hint,
         }), span: span("rule") }
     };
-    assert!(prem_rule(InputHint::new(vec![0])).syntax_eq(&prem_rule(InputHint::new(vec![0]))));
-    assert!(!prem_rule(InputHint::new(vec![0])).syntax_eq(&prem_rule(InputHint::new(vec![1]))));
+    assert!(
+        prem_rule(InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]))
+            .syntax_eq(&prem_rule(InputHint::new(vec![
+                p4spec_rust::phrase!(node: 0, span: Default::default())
+            ])))
+    );
+    assert!(
+        !prem_rule(InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]))
+            .syntax_eq(&prem_rule(InputHint::new(vec![
+                p4spec_rust::phrase!(node: 1, span: Default::default())
+            ])))
+    );
     assert!(
         !p4spec_rust::phrase! {
             node: al::ast::PremKind::If(al::ast::IfPrem { exp: id_exp("x") }),

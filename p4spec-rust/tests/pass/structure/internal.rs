@@ -31,7 +31,7 @@ fn ret(text: &str) -> ast_ol::Instr {
 fn signature() -> RelSignature {
     RelSignature {
         not_typ: crate::phrase! { node: Mixfix::Arg(crate::phrase! {node: TypKind::Bool, span: span(1)}), span: span(1)},
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
     }
 }
 

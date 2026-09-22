@@ -546,7 +546,7 @@ fn test_conversion_traverses_relation_matches_paths_and_else_without_sibling_lea
         not_typ: crate::phrase! { node:
             Mixfix::Seq(vec![Mixfix::Arg(typ::make::bool()), Mixfix::Arg(typ::make::bool())]), span:
             span(1) },
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         rule_groups: vec![
             crate::phrase! { node: ast::RuleGroupKind { id: id("match_group", 9), rules: vec![match_rule] }, span:  span(9) },
             crate::phrase! { node:

@@ -87,7 +87,7 @@ fn test_rule_inputs_precede_output_shadowing_and_freshening() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
         not_exp: Mixfix::Seq(vec![Mixfix::Arg(id_exp("x")), Mixfix::Arg(id_exp("y"))]),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         iter_instrs: vec![iterator()],
         block: vec![ret("x"), ret("y")],
     }));
@@ -105,7 +105,7 @@ fn test_rule_inputs_precede_output_shadowing_and_freshening() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
         not_exp: Mixfix::Seq(vec![Mixfix::Arg(id_exp("x")), Mixfix::Arg(id_exp("x"))]),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         iter_instrs: vec![],
         block: vec![ret("x")],
     }));
@@ -123,7 +123,7 @@ fn test_invalid_rule_hint_reports_instruction_span() {
     let mut instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
         not_exp: Mixfix::Arg(id_exp("x")),
-        input_hint: InputHint::new(vec![2]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 2, span: Default::default())]),
         iter_instrs: vec![],
         block: vec![],
     }));
@@ -132,7 +132,10 @@ fn test_invalid_rule_hint_reports_instruction_span() {
     assert_eq!(error.span, span(7));
     assert_eq!(
         error.kind,
-        StructureErrorKind::Input(InputError::IndexOutOfBounds { index: 2, arity: 1 })
+        StructureErrorKind::Input(InputError::IndexOutOfBounds {
+            idx: Box::new(crate::phrase!(node: 2, span: Default::default())),
+            arity: 1
+        })
     );
 }
 
@@ -197,7 +200,7 @@ fn test_rule_outputs_freshen_under_hold_and_case() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
         not_exp: Mixfix::Seq(vec![Mixfix::Arg(id_exp("x")), Mixfix::Arg(id_exp("y"))]),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         iter_instrs: vec![iter_instr],
         block: vec![ret("x"), ret("y")],
     }));

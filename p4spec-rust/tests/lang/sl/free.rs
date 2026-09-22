@@ -87,7 +87,7 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
             node: Mixfix::Seq(Vec::new()),
             span: span("notation"),
         },
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
     };
     let instructions = vec![
         (
@@ -159,7 +159,9 @@ fn test_instructions_collect_nested_expressions_and_omit_binding_metadata() {
             instr(sl::ast::InstrKind::Rule(sl::ast::RuleInstr {
                 id: id("rule"),
                 not_exp: Mixfix::Arg(id_exp("rule-input")),
-                input_hint: InputHint::new(vec![0]),
+                input_hint: InputHint::new(vec![
+                    p4spec_rust::phrase!(node: 0, span: Default::default()),
+                ]),
                 iter_instrs: vec![il::ast::PremIter {
                     iter: il::ast::Iter::List,
                     vars_bound: vec![binder.clone()],

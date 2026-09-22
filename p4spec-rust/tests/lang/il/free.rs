@@ -328,7 +328,9 @@ fn test_free_path_argument_and_premise_variants_follow_the_oracle() {
             prem(ast::PremKind::Rule(ast::RulePrem {
                 id: id("relation"),
                 not_exp: notexp("rule"),
-                input_hint: InputHint::new(vec![0]),
+                input_hint: InputHint::new(vec![
+                    p4spec_rust::phrase!(node: 0, span: Default::default()),
+                ]),
             })),
             names(&["rule"]),
         ),

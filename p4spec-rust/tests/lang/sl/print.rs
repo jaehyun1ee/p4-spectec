@@ -73,8 +73,10 @@ fn hint(source: &str) -> el::ast::Hint {
 }
 
 fn composite_spec(metadata: &str) -> sl::ast::Spec {
-    let signature =
-        sl::ast::RelSignature { not_typ: notation(), input_hint: InputHint::new(vec![0]) };
+    let signature = sl::ast::RelSignature {
+        not_typ: notation(),
+        input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
+    };
     let param = p4spec_rust::phrase! {
         node: sl::ast::ParamKind::Exp(typ(il::ast::TypKind::Bool), Box::new(id_exp("default"))),
         span: span("parameter"),

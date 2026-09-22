@@ -131,7 +131,7 @@ fn test_lowering_preserves_payloads_spans_and_nested_fallbacks() {
         ast_ol::InstrKind::Rule(ast_ol::RuleInstr {
             id: id("R"),
             not_exp: not_exp.clone(),
-            input_hint: InputHint::new(vec![0]),
+            input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
             iter_instrs: vec![],
             block: block_ol.clone(),
         }),
@@ -162,7 +162,7 @@ fn test_lowering_preserves_payloads_spans_and_nested_fallbacks() {
         InstrKind::Rule(RuleInstr {
             id: id("R"),
             not_exp,
-            input_hint: InputHint::new(vec![0]),
+            input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
             iter_instrs: vec![],
             block: block_sl.clone(),
         }),

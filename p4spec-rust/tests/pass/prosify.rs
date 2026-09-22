@@ -122,7 +122,7 @@ fn rel_signature() -> sl::RelSignature {
             node: Mixfix::Arg(typ_bool()),
             span: span("signature", 0),
         },
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
     }
 }
 
@@ -150,7 +150,7 @@ fn rule_instr(name: &str, column: usize) -> sl::Instr {
                 exp_bool(true, span_rule.clone()),
                 span_rule.clone(),
             )),
-            input_hint: InputHint::new(vec![0]),
+            input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
             iter_instrs: Vec::new(),
             block: Vec::new(),
         }),
@@ -252,7 +252,7 @@ fn test_group_in_group_body_reports_the_instruction_span() {
                     node: p4spec_rust::lang::common::notation::mixfix::Mixfix::Arg(typ_bool()),
                     span: span("signature", 0),
                 },
-                input_hint: p4spec_rust::lang::hints::input::InputHint::new(vec![0]),
+                input_hint: p4spec_rust::lang::hints::input::InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
             },
             exps: vec![exp_bool(true, span_group.clone())],
             block: Vec::new(),

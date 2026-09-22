@@ -18,7 +18,7 @@ fn rule(text: &str, block: Block) -> Instr {
     instr(InstrKind::Rule(RuleInstr {
         id: id("relation"),
         not_exp: Mixfix::Seq(vec![Mixfix::Arg(id_exp("input")), Mixfix::Arg(id_exp(text))]),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         iter_instrs: vec![],
         block,
     }))

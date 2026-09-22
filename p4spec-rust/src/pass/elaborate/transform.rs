@@ -2752,7 +2752,11 @@ fn fetch_input_hint(
     let Some(el::Hint { exp: exp_hint, .. }) = hints.iter().find(|hint| hint.id.node == "input")
     else {
         warnings.push(error::relation_input_hint_missing(id, span));
-        return Ok(input::InputHint::new((0..arity).collect()));
+        return Ok(input::InputHint::new(
+            (0..arity)
+                .map(|idx| phrase!(node: idx, span: Span::default()))
+                .collect(),
+        ));
     };
     let Some(input_hint) = input::init(exp_hint) else {
         return Err(error::relation_input_hint_invalid(
@@ -2764,30 +2768,14 @@ fn fetch_input_hint(
     if let Err(error_input) = input::validate(&input_hint, arity) {
         return Err(match error_input {
             input::InputError::Empty => error::relation_input_hint_empty(&exp_hint.span),
-            input::InputError::DuplicateIndex(idx) => {
-                let mut idxs_hint = input_hint
-                    .indices()
-                    .iter()
-                    .filter(|idx_hint| idx_hint.node == idx);
-                let idx_first = idxs_hint
-                    .next()
-                    .expect("duplicate input index has a first position");
-                let idx_repeated = idxs_hint
-                    .next()
-                    .expect("duplicate input index has a repeated position");
-                error::relation_input_hint_index_repeated(idx, &idx_repeated.span, &idx_first.span)
+            input::InputError::DuplicateIndex { idx, idx_previous } => {
+                error::relation_input_hint_index_repeated(idx.node, &idx.span, &idx_previous.span)
             }
-            input::InputError::IndexOutOfBounds { index: idx, arity } => {
-                let idx_hint = input_hint
-                    .indices()
-                    .iter()
-                    .find(|idx_candidate| idx_candidate.node == idx)
-                    .expect("out-of-bounds input index has a position");
-                let span_idx = &idx_hint.span;
+            input::InputError::IndexOutOfBounds { idx, arity } => {
                 error::relation_input_hint_index_out_of_bounds(
-                    idx,
+                    idx.node,
                     arity,
-                    span_idx,
+                    &idx.span,
                     &not_typ_il.node.at(),
                 )
             }

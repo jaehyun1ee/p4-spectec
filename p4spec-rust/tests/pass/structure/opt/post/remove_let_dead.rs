@@ -17,12 +17,14 @@ fn test_dead_pure_bindings_disappear_but_live_and_calls_remain() {
 
 #[test]
 fn test_downstream_shadowing_and_rule_input_output_roles() {
-    let instr_rule = rule(vec![], InputHint::new(vec![0]));
+    let instr_rule =
+        rule(vec![], InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]));
     assert_eq!(
         apply(vec![binding(literal(), vec![instr_rule.clone(), ret("x")])]).unwrap(),
         vec![instr_rule.clone(), ret("x")]
     );
-    let instr_input = rule(vec![], InputHint::new(vec![1]));
+    let instr_input =
+        rule(vec![], InputHint::new(vec![crate::phrase!(node: 1, span: Default::default())]));
     let instr_live = binding(literal(), vec![instr_input]);
     assert_eq!(apply(vec![instr_live.clone()]).unwrap(), vec![instr_live]);
     let instr_nested = binding(literal(), vec![ret("other")]);
@@ -30,7 +32,13 @@ fn test_downstream_shadowing_and_rule_input_output_roles() {
         apply(vec![binding(literal(), vec![instr_nested, ret("x")])]).unwrap(),
         vec![ret("other"), ret("x")]
     );
-    let instr_live = binding(literal(), vec![rule(vec![ret("x")], InputHint::new(vec![0]))]);
+    let instr_live = binding(
+        literal(),
+        vec![rule(
+            vec![ret("x")],
+            InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
+        )],
+    );
     assert_eq!(apply(vec![instr_live.clone()]).unwrap(), vec![instr_live]);
 }
 
@@ -46,14 +54,15 @@ fn test_debug_contributes_liveness_without_rewriting_its_instruction() {
 
 #[test]
 fn test_invalid_downstream_rule_hint_retains_rule_span() {
-    let mut instr_rule = rule(vec![], InputHint::new(vec![3]));
+    let mut instr_rule =
+        rule(vec![], InputHint::new(vec![crate::phrase!(node: 3, span: Default::default())]));
     instr_rule.span = span(12);
     let error = apply(vec![binding(literal(), vec![instr_rule])]).unwrap_err();
     assert_eq!(error.span, span(12));
     assert_eq!(
         error.kind,
         StructureErrorKind::Input(crate::lang::hints::input::InputError::IndexOutOfBounds {
-            index: 3,
+            idx: Box::new(crate::phrase!(node: 3, span: Default::default())),
             arity: 2
         })
     );

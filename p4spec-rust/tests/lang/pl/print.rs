@@ -54,7 +54,7 @@ fn signature() -> pl::ast::RelSignature {
             node: Mixfix::Arg(typ()),
             span: span("signature"),
         },
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
     }
 }
 

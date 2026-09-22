@@ -114,7 +114,7 @@ fn test_rule_outputs_freshen_under_hold_and_case() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
         not_exp: Mixfix::Seq(vec![Mixfix::Arg(id_exp("x")), Mixfix::Arg(id_exp("y"))]),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         iter_instrs: vec![iterator()],
         block: vec![ret("x"), ret("y")],
     }));
@@ -235,7 +235,7 @@ fn test_nested_rule_shadows_rename_inside_let_iterator() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
         not_exp: Mixfix::Seq(vec![Mixfix::Arg(id_exp("x")), Mixfix::Arg(id_exp("x"))]),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         iter_instrs: vec![iter_instr],
         block: vec![ret("x"), ret("y")],
     }));
@@ -278,7 +278,7 @@ fn test_empty_renaming_moves_notation_payloads() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
         not_exp: Mixfix::Arg(id_exp("input")),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         iter_instrs: vec![],
         block: vec![binding("bound", vec![ret("bound")])],
     }));

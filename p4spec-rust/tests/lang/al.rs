@@ -229,13 +229,13 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<usize>) -> al::ast::Spec {
         p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef::Extern(Box::new(al::ast::ExternRel {
             id: id("Check"),
             not_typ: notation(vec![Mixfix::Atom(keyword("check")), Mixfix::Arg(typ())]),
-            input_hint: InputHint::new(extern_inputs),
+            input_hint: InputHint::new(extern_inputs.into_iter().map(|idx| p4spec_rust::phrase!(node: idx, span: Default::default())).collect()),
             hints: hints.clone(),
         }))), span: span(metadata) },
         p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef::Defined(Box::new(al::ast::DefinedRel {
             id: id("Evaluate"),
             not_typ: evaluate_notation,
-            input_hint: InputHint::new(vec![0]),
+            input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
             rule_groups: vec![evaluate_group],
             else_group: Some(else_group),
             hints: hints.clone(),
@@ -243,7 +243,7 @@ fn composite_spec(metadata: &str, extern_inputs: Vec<usize>) -> al::ast::Spec {
         p4spec_rust::phrase! { node: al::ast::DefKind::Rel(al::ast::RelDef::Defined(Box::new(al::ast::DefinedRel {
             id: id("Ready"),
             not_typ: ready_notation,
-            input_hint: InputHint::new(vec![0]),
+            input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
             rule_groups: vec![ready_group],
             else_group: None,
             hints: hints.clone(),

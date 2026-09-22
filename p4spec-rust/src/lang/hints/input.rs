@@ -5,7 +5,7 @@
 //! `split` and `combine` move between source order and the input/output lists.
 
 use crate::lang::{
-    common::source::{Phrase, Span},
+    common::source::Phrase,
     el::ast::{Exp, ExpKind, Hole},
     traits::eq::SyntaxEq,
 };
@@ -30,12 +30,12 @@ pub enum InputError {
     Empty,
 
     /// A position listed twice.
-    #[error("input hint contains duplicate index {0}")]
-    DuplicateIndex(usize),
+    #[error("input hint contains duplicate index {}", idx.node)]
+    DuplicateIndex { idx: Box<Phrase<usize>>, idx_previous: Box<Phrase<usize>> },
 
     /// A position past the relation's arity.
-    #[error("input hint index {index} is out of bounds for arity {arity}")]
-    IndexOutOfBounds { index: usize, arity: usize },
+    #[error("input hint index {} is out of bounds for arity {arity}", idx.node)]
+    IndexOutOfBounds { idx: Box<Phrase<usize>>, arity: usize },
 
     /// The input list has the wrong length.
     #[error("input hint expects {expected} input items, but got {actual}")]
@@ -47,14 +47,9 @@ pub enum InputError {
 }
 
 impl InputHint {
-    /// Wraps generated indices with default spans without validation.
-    pub fn new(indices: Vec<usize>) -> Self {
-        Self {
-            indices: indices
-                .into_iter()
-                .map(|idx| crate::phrase!(node: idx, span: Span::default()))
-                .collect(),
-        }
+    /// Stores located indices without validation.
+    pub fn new(indices: Vec<Phrase<usize>>) -> Self {
+        Self { indices }
     }
 
     /// Borrows located positions in the order the hint lists them.
@@ -107,7 +102,7 @@ pub fn init(hint_exp: &Exp) -> Option<InputHint> {
         // Anything else is not an input hint
         _ => None,
     }?;
-    Some(InputHint { indices })
+    Some(InputHint::new(indices))
 }
 
 // Validating hints
@@ -119,16 +114,19 @@ pub fn validate(hint: &InputHint, arity: usize) -> Result<(), InputError> {
     }
     // Each position at most once
     for (idx_hint, idx) in hint.indices.iter().enumerate() {
-        if hint.indices[..idx_hint]
+        if let Some(idx_previous) = hint.indices[..idx_hint]
             .iter()
-            .any(|idx_previous| idx_previous.node == idx.node)
+            .find(|idx_previous| idx_previous.node == idx.node)
         {
-            return Err(InputError::DuplicateIndex(idx.node));
+            return Err(InputError::DuplicateIndex {
+                idx: Box::new(idx.clone()),
+                idx_previous: Box::new(idx_previous.clone()),
+            });
         }
     }
     // Every position within the arity
     if let Some(idx) = hint.indices.iter().find(|idx| idx.node >= arity) {
-        return Err(InputError::IndexOutOfBounds { index: idx.node, arity });
+        return Err(InputError::IndexOutOfBounds { idx: Box::new(idx.clone()), arity });
     }
     Ok(())
 }

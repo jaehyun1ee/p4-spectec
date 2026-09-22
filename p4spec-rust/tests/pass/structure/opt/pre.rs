@@ -72,7 +72,7 @@ fn containers(block: Block) -> Block {
         instr(InstrKind::Rule(RuleInstr {
             id: id("relation"),
             not_exp: Mixfix::Arg(id_exp("input")),
-            input_hint: InputHint::new(vec![0]),
+            input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
             iter_instrs: vec![iter_instr],
             block,
         })),
