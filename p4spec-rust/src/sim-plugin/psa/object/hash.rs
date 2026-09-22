@@ -1,3 +1,7 @@
+//! The PSA `Hash` extern, a hash over a data tuple
+//!
+//! The constructor's algorithm enumerator maps to a `hash` algorithm name.
+
 use crate::sim_plugin::{
     hash,
     spec::{args, func, pack, unpack},
@@ -17,7 +21,9 @@ use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// A hash configured with one algorithm.
 pub struct HashExtern {
+    /// The `hash` algorithm name.
     pub algo: String,
 }
 
@@ -35,9 +41,11 @@ impl HashExtern {
         let args = args::assoc(arena, value_ids, value_args)?;
         let value_algo = args::find(&args, "algo")?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_algo)?;
+        // Only a `PSA_HashAlgorithm_t` enumerator selects the algorithm
         if id_enum != "PSA_HashAlgorithm_t" {
             return Err(ExternError::Failure("invalid PSA hash algorithm enum type".to_owned()));
         }
+        // Map the enumerator to the internal algorithm name
         let algo = match id_type.as_str() {
             "IDENTITY" => "identity",
             "CRC32" => "crc32",
@@ -104,6 +112,7 @@ impl HashExtern {
         self.return_hash(ctx, value_ctx, value_arch, int_hash)
     }
 
+    /// Casts the hash to the output type `O` and returns it.
     fn return_hash<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,

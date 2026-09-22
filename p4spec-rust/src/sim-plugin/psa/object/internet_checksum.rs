@@ -1,3 +1,8 @@
+//! The PSA `InternetChecksum` extern, a ones-complement 16-bit checksum
+//!
+//! State is the running ones-complement sum;
+//! `add` and `subtract` fold data in and out, `get` returns the complement.
+
 use crate::sim_plugin::{
     hash,
     spec::{func, pack, unpack},
@@ -18,7 +23,9 @@ use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// The running ones-complement sum.
 pub struct InternetChecksum {
+    /// The accumulated 16-bit sum.
     pub int: BigInt,
 }
 
@@ -106,6 +113,7 @@ impl InternetChecksum {
         self.update(ctx, value_ctx, value_arch, "csum16_sub")
     }
 
+    /// Folds `data` into the sum with `algo`, then stores its complement.
     fn update<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
