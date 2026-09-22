@@ -1,3 +1,9 @@
+//! PSA architecture with its two pipelines, replication engines, and objects
+//!
+//! Ingress and egress each parse, control, and deparse;
+//! the PRE and BQE schedule clones, multicast, resubmit, and recirculate.
+//! Stateful objects live in `object`, the scheduler in `pipe`.
+
 use crate::{
     lang::data::value::Value,
     runner::{Interface, Interpreter, RunnerContext},
@@ -16,6 +22,7 @@ pub use pipe::{Psa, drive_pipe, init_pipe, transform_stf_stmt};
 
 // == Extern calls
 
+/// Hands every extern hook to the pipeline module.
 impl external::Impl for Psa {
     fn eval_extern_init<Interp, Iface>(
         &self,
