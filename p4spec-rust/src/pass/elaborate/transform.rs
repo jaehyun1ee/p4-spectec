@@ -1274,14 +1274,14 @@ fn elab_exp_normal(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) ->
         },
         Err(failure_infer) => {
             // Retain inference diagnostics if contextual elaboration also fails
-            elab_exp_contextual(ctx, typ_expect_il, exp)
+            elab_exp_normal_fallback(ctx, typ_expect_il, exp)
                 .map_err(|failure| failure_infer.merge(failure))
         }
     }
 }
 
 /// Elaborates an expression against the shape of its expected type.
-fn elab_exp_contextual(
+fn elab_exp_normal_fallback(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
     exp: &el::Exp,
