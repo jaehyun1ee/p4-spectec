@@ -74,10 +74,10 @@ pub fn run(suite: Option<Suite>) -> Result<()> {
     // Absence selects every active suite in stage order
     match suite {
         Some(Suite::Parse) => run_parse(),
-        Some(Suite::Elab) => run_elab(),
+        Some(Suite::Elab) => run_suite("elab", cases::ELAB, elab::run),
         None => {
             run_parse()?;
-            run_elab()
+            run_suite("elab", cases::ELAB, elab::run)
         }
     }
 }
@@ -85,15 +85,4 @@ pub fn run(suite: Option<Suite>) -> Result<()> {
 /// Adapts parser failures to the shared diagnostic sequence.
 fn run_parse() -> Result<()> {
     run_suite("parse", cases::PARSE, |name| parse::run(name).map(|report| vec![*report]))
-}
-
-/// Runs declaration acceptance and reports later-unit inventory separately.
-fn run_elab() -> Result<()> {
-    run_suite("elab", cases::ELAB, elab::run)?;
-    eprintln!(
-        "diagnostics/elab pending: D04 {} cases; D05 {} cases",
-        cases::ELAB_D04_PENDING,
-        cases::ELAB_D05_PENDING
-    );
-    Ok(())
 }
