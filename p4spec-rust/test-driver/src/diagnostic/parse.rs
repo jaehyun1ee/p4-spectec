@@ -11,18 +11,18 @@ use std::{io, os::unix::fs::PermissionsExt};
 
 use p4spec_rust::{
     diagnostic::Report,
-    frontend::parse::{parse_utf8_bytes, parse_files, parse_mixop},
+    frontend::parse::{parse_files, parse_mixop, parse_utf8_bytes},
 };
 
-use super::cases::Case;
+use super::failure;
 use crate::Result;
 
 // = Helpers
 
 /// Requires the parser to reject a negative input.
-fn rejected<T>(case: &Case, result: std::result::Result<T, Box<Report>>) -> Result<Box<Report>> {
+fn rejected<T>(name: &str, result: std::result::Result<T, Box<Report>>) -> Result<Box<Report>> {
     match result {
-        Ok(_) => Err(case.failure("parser unexpectedly accepted negative input")),
+        Ok(_) => Err(failure(name, "parser unexpectedly accepted negative input")),
         Err(report) => Ok(report),
     }
 }
@@ -37,11 +37,10 @@ struct Directory {
 
 impl Directory {
     /// Enters an isolated directory without placing generated files in the checkout.
-    fn enter(case: &Case) -> Result<Self> {
+    fn enter(name: &str) -> Result<Self> {
         // Exclusive creation rejects stale resources rather than reusing them
         let path_previous = env::current_dir()?;
-        let path =
-            env::temp_dir().join(format!("p4spec-diagnostic-{}-{}", std::process::id(), case.name));
+        let path = env::temp_dir().join(format!("p4spec-diagnostic-{}-{name}", std::process::id()));
         fs::create_dir(&path)?;
         let directory = Self { path, path_previous };
         env::set_current_dir(&directory.path)?;
@@ -66,9 +65,9 @@ impl Drop for Directory {
 
 /// Rejects a directory only after proving that the process cannot read it.
 #[cfg(unix)]
-fn unreadable_directory(case: &Case) -> Result<Box<Report>> {
+fn unreadable_directory(name: &str) -> Result<Box<Report>> {
     // Build the same permission failure as the pinned reference harness
-    let _directory = Directory::enter(case)?;
+    let _directory = Directory::enter(name)?;
     let path = "unreadable-dir";
     fs::create_dir(path)?;
     fs::set_permissions(path, fs::Permissions::from_mode(0o000))?;
@@ -78,38 +77,38 @@ fn unreadable_directory(case: &Case) -> Result<Box<Report>> {
         // Check the effective failure, not just the permission bits
         Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {}
         // Preserve unexpected filesystem failures as setup errors
-        Err(error) => return Err(case.failure(format!("permission setup failed: {error}"))),
+        Err(error) => return Err(failure(name, format!("permission setup failed: {error}"))),
         // Require an unprivileged process for this reference case
-        Ok(_) => return Err(case.failure("directory remains readable with mode 000")),
+        Ok(_) => return Err(failure(name, "directory remains readable with mode 000")),
     }
-    rejected(case, parse_files([path]))
+    rejected(name, parse_files([path]))
 }
 
 #[cfg(not(unix))]
-fn unreadable_directory(case: &Case) -> Result<Box<Report>> {
-    Err(case.failure("directory permission case requires Unix permissions"))
+fn unreadable_directory(name: &str) -> Result<Box<Report>> {
+    Err(failure(name, "directory permission case requires Unix permissions"))
 }
 
 // = Entry point
 
-/// Runs the actual public parser before any diagnostic assertions or rendering.
-pub fn run(case: &Case) -> Result<Box<Report>> {
+/// Runs the public parser and requires a diagnostic for each negative input.
+pub fn run(name: &str) -> Result<Box<Report>> {
     // File fixtures use the same relative identity in parsing and rendering
-    if case.name.ends_with(".watsup") {
-        return rejected(case, parse_files([format!("parse/{}", case.name)]));
+    if name.ends_with(".watsup") {
+        return rejected(name, parse_files([format!("parse/{name}")]));
     }
 
     // Construct the seven inputs that the reference creates without fixture files
-    let bytes: &[u8] = match case.name {
+    let bytes: &[u8] = match name {
         // Missing files retain a file-only span
         "parse-io-error" => {
-            let _directory = Directory::enter(case)?;
-            return rejected(case, parse_files(["missing-input.watsup"]));
+            let _directory = Directory::enter(name)?;
+            return rejected(name, parse_files(["missing-input.watsup"]));
         }
         // Directory traversal fails before file parsing starts
-        "parse-directory-io-error" => return unreadable_directory(case),
+        "parse-directory-io-error" => return unreadable_directory(name),
         // Mixfix parsing has its own public boundary and no source region
-        "parse-malformed-mixop" => return rejected(case, parse_mixop("")),
+        "parse-malformed-mixop" => return rejected(name, parse_mixop("")),
         // OCaml decimal escape 011 denotes the vertical-tab byte
         "parse-illegal-control-in-text-literal" => b"\"\x0b",
         // Invalid UTF-8 is passed without replacement characters
@@ -118,9 +117,9 @@ pub fn run(case: &Case) -> Result<Box<Report>> {
         "parse-malformed-utf8-in-comment" => b"(;\x80;)",
         // A control byte outside a literal is a distinct lexical context
         "parse-misplaced-control-char" => b"\x0b",
-        // Every active catalog identity must have a real input
-        _ => return Err(case.failure("unknown constructed parser case")),
+        // Every listed case must have a real input
+        _ => return Err(failure(name, "unknown constructed parser case")),
     };
 
-    rejected(case, parse_utf8_bytes(Rc::from("<string>"), bytes))
+    rejected(name, parse_utf8_bytes(Rc::from("<string>"), bytes))
 }

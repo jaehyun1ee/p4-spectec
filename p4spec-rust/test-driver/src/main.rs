@@ -30,7 +30,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Compare active diagnostic cases and report remaining migration coverage
+    /// Compare diagnostic output with stored snapshots
     Diagnostics {
         #[arg(long, value_enum)]
         suite: Option<diagnostic::Suite>,
