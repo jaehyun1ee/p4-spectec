@@ -24,6 +24,18 @@ pub struct Label {
     pub message: String,
 }
 
+impl Label {
+    /// Labels the source occurrence responsible for a diagnostic.
+    pub fn primary(span: &Span, message: impl Into<String>) -> Self {
+        Self { style: LabelStyle::Primary, span: span.clone(), message: message.into() }
+    }
+
+    /// Relates another source occurrence to the responsible occurrence.
+    pub fn secondary(span: &Span, message: impl Into<String>) -> Self {
+        Self { style: LabelStyle::Secondary, span: span.clone(), message: message.into() }
+    }
+}
+
 // = Diagnostic data
 
 /// Carries one diagnostic without descendants, source text, or terminal policy.
@@ -41,6 +53,20 @@ pub struct Diagnostic {
     pub notes: Vec<String>,
     /// Identifies the component that authored the diagnostic.
     pub source: &'static str,
+}
+
+impl Diagnostic {
+    /// Constructs diagnostic data without source loading or rendering policy.
+    pub fn new(
+        source: &'static str,
+        severity: Severity,
+        code: Option<String>,
+        message: impl Into<String>,
+        labels: Vec<Label>,
+        notes: Vec<String>,
+    ) -> Self {
+        Self { severity, code, message: message.into(), labels, notes, source }
+    }
 }
 
 impl fmt::Display for Diagnostic {
@@ -85,6 +111,13 @@ pub enum ReportKind {
     },
     /// Retains a cause with its own code, severity, labels, and notes.
     Cause(Diagnostic),
+}
+
+impl Report {
+    /// Groups ordered child reports under an uncoded source context.
+    pub fn frame(span: Span, message: impl Into<String>, children: Vec<Report>) -> Self {
+        Self { kind: ReportKind::Frame { span, message: message.into() }, children }
+    }
 }
 
 impl From<Diagnostic> for Report {

@@ -8,8 +8,11 @@ use crate::{
     runtime::ops::typ::TypeError,
 };
 
-use super::{ElabError, cause, primary, related, warning};
-use crate::{diagnostic::Report, lang::common::source::Span};
+use super::{ElabError, cause, warning};
+use crate::{
+    diagnostic::{Label, Report},
+    lang::common::source::Span,
+};
 
 const ELABORATION_ALTERNATIVE_MISSING: &str = "elab/elaboration-alternative-missing";
 
@@ -18,7 +21,7 @@ pub(in crate::pass::elaborate) fn elaboration_alternative_missing() -> ElabError
     cause(
         ELABORATION_ALTERNATIVE_MISSING,
         "no elaboration alternative matched",
-        vec![primary(&Span::default())],
+        vec![Label::primary(&Span::default(), "")],
         Vec::new(),
     )
 }
@@ -31,7 +34,7 @@ pub(in crate::pass::elaborate) fn type_operation_invalid(
     error: TypeError,
 ) -> ElabError {
     let message = format!("{description_operation}: {}", error.kind);
-    cause(TYPE_OPERATION_INVALID, message, vec![primary(&error.span)], Vec::new())
+    cause(TYPE_OPERATION_INVALID, message, vec![Label::primary(&error.span, "")], Vec::new())
 }
 
 const TYPE_SHAPE_MISMATCH: &str = "elab/type-shape-mismatch";
@@ -44,7 +47,7 @@ pub(in crate::pass::elaborate) fn type_shape_mismatch(
     cause(
         TYPE_SHAPE_MISMATCH,
         format!("cannot destruct type as {description_shape}"),
-        vec![primary(span)],
+        vec![Label::primary(span, "")],
         Vec::new(),
     )
 }
@@ -60,9 +63,9 @@ pub(in crate::pass::elaborate) fn type_argument_arity_mismatch(
     span_declaration: Option<&Span>,
 ) -> ElabError {
     let text_suffix = if targs_len_expect == 1 { "" } else { "s" };
-    let mut labels = vec![primary(span)];
+    let mut labels = vec![Label::primary(span, "")];
     if let Some(span_declaration) = span_declaration {
-        labels.push(related(span_declaration, "type declared here"));
+        labels.push(Label::secondary(span_declaration, "type declared here"));
     }
     cause(
         TYPE_ARGUMENT_ARITY_MISMATCH,
@@ -83,7 +86,10 @@ pub(in crate::pass::elaborate) fn type_parameter_repeated(
     tparam: &Id,
     span_previous: &Span,
 ) -> ElabError {
-    let labels = vec![primary(&tparam.span), related(span_previous, "first declared here")];
+    let labels = vec![
+        Label::primary(&tparam.span, ""),
+        Label::secondary(span_previous, "first declared here"),
+    ];
     cause(
         TYPE_PARAMETER_REPEATED,
         format!("type parameter `{}` is repeated", tparam.node),
@@ -99,7 +105,8 @@ pub(in crate::pass::elaborate) fn type_declaration_repeated(
     id: &Id,
     span_previous: &Span,
 ) -> ElabError {
-    let labels = vec![primary(&id.span), related(span_previous, "first declared here")];
+    let labels =
+        vec![Label::primary(&id.span, ""), Label::secondary(span_previous, "first declared here")];
     cause(
         TYPE_DECLARATION_REPEATED,
         format!("type `{}` was already declared", id.node),
@@ -117,7 +124,7 @@ fn invalid_identifier(code: &str, description_kind: &str, id: &Id) -> ElabError 
     cause(
         code,
         format!("{description_kind} identifier `{}` must not have a suffix", id.node),
-        vec![primary(&id.span)],
+        vec![Label::primary(&id.span, "")],
         Vec::new(),
     )
 }
@@ -156,9 +163,9 @@ fn type_extension(
     label_related: Option<(&Span, &str)>,
     note: &str,
 ) -> ElabError {
-    let mut labels = vec![primary(span)];
+    let mut labels = vec![Label::primary(span, "")];
     if let Some((span_related, message)) = label_related {
-        labels.push(related(span_related, message));
+        labels.push(Label::secondary(span_related, message));
     }
     cause(
         code,
@@ -255,7 +262,10 @@ pub(in crate::pass::elaborate) fn variant_case_shape_repeated(
     span: &Span,
     span_previous: &Span,
 ) -> ElabError {
-    let labels = vec![primary(span), related(span_previous, "earlier case with this shape")];
+    let labels = vec![
+        Label::primary(span, ""),
+        Label::secondary(span_previous, "earlier case with this shape"),
+    ];
     cause(
         VARIANT_CASE_SHAPE_REPEATED,
         format!(
@@ -297,7 +307,10 @@ pub(in crate::pass::elaborate) fn type_parameter_mismatch(
             )
         }
     }
-    let labels = vec![primary(span), related(span_declaration, "forward declaration here")];
+    let labels = vec![
+        Label::primary(span, ""),
+        Label::secondary(span_declaration, "forward declaration here"),
+    ];
     cause(
         TYPE_PARAMETER_MISMATCH,
         format!(
@@ -324,7 +337,10 @@ pub(in crate::pass::elaborate) fn type_definition_extern_unsupported(
     id: &Id,
     span_declaration: &Span,
 ) -> ElabError {
-    let labels = vec![primary(&id.span), related(span_declaration, "extern type declared here")];
+    let labels = vec![
+        Label::primary(&id.span, ""),
+        Label::secondary(span_declaration, "extern type declared here"),
+    ];
     cause(
         TYPE_DEFINITION_EXTERN_UNSUPPORTED,
         format!("extern type `{}` does not allow a definition", id.node),
@@ -352,7 +368,7 @@ pub(in crate::pass::elaborate) fn type_definition_missing(id: &Id, tparams: &[Id
     warning(
         TYPE_DEFINITION_MISSING,
         format!("type `{}{text_suffix}` was declared but not defined", id.node),
-        vec![primary(&id.span)],
+        vec![Label::primary(&id.span, "")],
         Vec::new(),
     )
 }

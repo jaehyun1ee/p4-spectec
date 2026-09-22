@@ -1472,10 +1472,7 @@ fn elab_plain_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> 
         }
         // Anything else needed inference
         _ => {
-            return mismatch!(report: error::frame(
-                &exp.span,
-                "expression requires unsupported contextual elaboration",
-            ));
+            return mismatch!(report: Report::frame(exp.span.clone(), "expression requires unsupported contextual elaboration", Vec::new()));
         }
     };
     success!(note_phrase! {
@@ -1648,10 +1645,7 @@ fn elab_not_exp(
         // Sequences match element-wise
         (Mixfix::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
             if not_typs_il.len() != exps.len() {
-                return mismatch!(report: error::frame(
-                    &exp.span,
-                    "notation sequence arity does not match",
-                ));
+                return mismatch!(report: Report::frame(exp.span.clone(), "notation sequence arity does not match", Vec::new()));
             }
             let mut not_exps_il = Vec::with_capacity(exps.len());
             for (not_typ_inner_il, exp) in not_typs_il.iter().zip(exps) {
@@ -1696,7 +1690,9 @@ fn elab_not_exp(
             ))
         }
         // Any other shape mismatch fails
-        _ => mismatch!(report: error::frame(&exp.span, "expression does not match notation")),
+        _ => {
+            mismatch!(report: Report::frame(exp.span.clone(), "expression does not match notation", Vec::new()))
+        }
     }
 }
 
@@ -1710,7 +1706,7 @@ fn elab_struct_exp(
     exp: &el::Exp,
 ) -> Backtrack<il::Exp> {
     let el::ExpKind::Str(exp_fields) = &exp.node else {
-        return mismatch!(report: error::frame(&exp.span, "expression is not a struct"));
+        return mismatch!(report: Report::frame(exp.span.clone(), "expression is not a struct", Vec::new()));
     };
     // Field count must match the struct type
     if typ_fields_il.len() != exp_fields.len() {
@@ -1786,10 +1782,9 @@ fn elab_variant_exp(
             *ctx = ctx_match;
             success!(exps_match_il.pop().expect("single variant match"))
         }
-        0 if reports_mismatch.is_empty() => mismatch!(report: error::frame(
-            &exp.span,
-            "expression does not match any variant case",
-        )),
+        0 if reports_mismatch.is_empty() => {
+            mismatch!(report: Report::frame(exp.span.clone(), "expression does not match any variant case", Vec::new()))
+        }
         0 => mismatch!(reports_mismatch)
             .nest(exp.span.clone(), "expression does not match any variant case"),
         _ => mismatch!(error: error::variant_expression_match_repeated(&exp.span)),

@@ -107,10 +107,7 @@ impl<T> Backtrack<T> {
     /// Fatal reports pass through unchanged so their direct cause is retained.
     pub(super) fn nest(self, span: Span, message: impl Into<String>) -> Self {
         match self {
-            mismatch!(children) => mismatch!(vec![Report {
-                kind: ReportKind::Frame { span, message: message.into() },
-                children,
-            }]),
+            mismatch!(children) => mismatch!(vec![Report::frame(span, message, children)]),
             result => result,
         }
     }
@@ -171,8 +168,7 @@ fn finish_reports(mut reports: Vec<Report>) -> ElabError {
         1 => Box::new(reports.pop().expect("one report remains")),
         _ => {
             let span = reports.iter().find_map(report_span).unwrap_or_default();
-            let mut report = error::frame(&span, "elaboration alternatives failed");
-            report.children = reports;
+            let report = Report::frame(span, "elaboration alternatives failed", reports);
             Box::new(report)
         }
     }

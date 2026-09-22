@@ -3,9 +3,10 @@
 //! Argument elaboration validates counts and kinds before signatures,
 //! then uses these constructors with the offending use and declaration spans.
 
+use crate::diagnostic::Label;
 use crate::lang::common::{Id, source::Span};
 
-use super::{ElabError, cause, primary, related};
+use super::{ElabError, cause};
 
 const FUNCTION_PARAMETER_TYPE_PARAMETER_REPEATED: &str =
     "elab/function-parameter-type-parameter-repeated";
@@ -15,7 +16,10 @@ pub(in crate::pass::elaborate) fn function_parameter_type_parameter_repeated(
     tparam: &Id,
     span_previous: &Span,
 ) -> ElabError {
-    let labels = vec![primary(&tparam.span), related(span_previous, "first declared here")];
+    let labels = vec![
+        Label::primary(&tparam.span, ""),
+        Label::secondary(span_previous, "first declared here"),
+    ];
     cause(
         FUNCTION_PARAMETER_TYPE_PARAMETER_REPEATED,
         format!("type parameter `{}` is repeated", tparam.node),
@@ -31,8 +35,10 @@ pub(in crate::pass::elaborate) fn function_argument_name_mismatch(
     id_arg: &Id,
     id_param: &Id,
 ) -> ElabError {
-    let labels =
-        vec![primary(&id_arg.span), related(&id_param.span, "function parameter declared here")];
+    let labels = vec![
+        Label::primary(&id_arg.span, ""),
+        Label::secondary(&id_param.span, "function parameter declared here"),
+    ];
     cause(
         FUNCTION_ARGUMENT_NAME_MISMATCH,
         format!(
@@ -62,10 +68,12 @@ fn function_signature_labels(
     span_arg_declaration: Option<&Span>,
     span: &Span,
 ) -> Vec<crate::diagnostic::Label> {
-    let mut labels =
-        vec![primary(span), related(&id_param.span, "function parameter declared here")];
+    let mut labels = vec![
+        Label::primary(span, ""),
+        Label::secondary(&id_param.span, "function parameter declared here"),
+    ];
     if let Some(span_arg_declaration) = span_arg_declaration {
-        labels.push(related(span_arg_declaration, "passed function declared here"));
+        labels.push(Label::secondary(span_arg_declaration, "passed function declared here"));
     }
     labels
 }
@@ -155,7 +163,8 @@ pub(in crate::pass::elaborate) fn function_argument_kind_mismatch(
     span: &Span,
     span_param: &Span,
 ) -> ElabError {
-    let labels = vec![primary(span), related(span_param, "parameter declared here")];
+    let labels =
+        vec![Label::primary(span, ""), Label::secondary(span_param, "parameter declared here")];
     cause(
         FUNCTION_ARGUMENT_KIND_MISMATCH,
         format!(
@@ -191,9 +200,9 @@ pub(in crate::pass::elaborate) fn function_call_argument_arity_mismatch(
             {args_len_actual}"
         ),
     };
-    let mut labels = vec![primary(span)];
+    let mut labels = vec![Label::primary(span, "")];
     if let Some(span_declaration) = span_declaration {
-        labels.push(related(span_declaration, "function declared here"));
+        labels.push(Label::secondary(span_declaration, "function declared here"));
     }
     cause(FUNCTION_CALL_ARGUMENT_ARITY_MISMATCH, message, labels, Vec::new())
 }
@@ -210,9 +219,9 @@ pub(in crate::pass::elaborate) fn function_call_type_argument_arity_mismatch(
     span_declaration: Option<&Span>,
 ) -> ElabError {
     let text_suffix = if targs_len_expect == 1 { "" } else { "s" };
-    let mut labels = vec![primary(span)];
+    let mut labels = vec![Label::primary(span, "")];
     if let Some(span_declaration) = span_declaration {
-        labels.push(related(span_declaration, "function declared here"));
+        labels.push(Label::secondary(span_declaration, "function declared here"));
     }
     cause(
         FUNCTION_CALL_TYPE_ARGUMENT_ARITY_MISMATCH,
@@ -238,7 +247,10 @@ pub(in crate::pass::elaborate) fn function_clause_argument_arity_mismatch(
     span_declaration: &Span,
 ) -> ElabError {
     let text_suffix = if args_len_expect == 1 { "" } else { "s" };
-    let labels = vec![primary(span), related(span_declaration, "function declared here")];
+    let labels = vec![
+        Label::primary(span, ""),
+        Label::secondary(span_declaration, "function declared here"),
+    ];
     cause(
         FUNCTION_CLAUSE_ARGUMENT_ARITY_MISMATCH,
         format!(
@@ -276,8 +288,10 @@ pub(in crate::pass::elaborate) fn function_clause_type_parameter_mismatch(
             )
         }
     };
-    let labels =
-        vec![primary(span), related(span_declaration, "expected type parameters declared here")];
+    let labels = vec![
+        Label::primary(span, ""),
+        Label::secondary(span_declaration, "expected type parameters declared here"),
+    ];
     cause(
         FUNCTION_CLAUSE_TYPE_PARAMETER_MISMATCH,
         format!(

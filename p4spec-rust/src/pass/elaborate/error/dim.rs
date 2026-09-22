@@ -3,12 +3,13 @@
 //! Dimension analysis calls these constructors after elaboration has populated
 //! bodies, preserving both occurrence spans for conflicts found during merging.
 
+use crate::diagnostic::Label;
 use crate::{
     lang::{common::Id, traits::print::Print},
     runtime::dim::Dim,
 };
 
-use super::{ElabError, cause, primary, related};
+use super::{ElabError, cause};
 use crate::lang::common::source::Span;
 
 const ITERATION_DIMENSION_MISMATCH: &str = "elab/iteration-dimension-mismatch";
@@ -24,8 +25,11 @@ pub(in crate::pass::elaborate) fn iteration_dimension_mismatch(
     let text_dim_actual = Print::to_string(dim);
     let text_dim_expect = Print::to_string(dim_previous);
     let labels = vec![
-        primary(span),
-        related(span_previous, format!("other occurrence has dimension `{text_dim_expect}`")),
+        Label::primary(span, ""),
+        Label::secondary(
+            span_previous,
+            format!("other occurrence has dimension `{text_dim_expect}`"),
+        ),
     ];
     cause(
         ITERATION_DIMENSION_MISMATCH,
@@ -56,7 +60,7 @@ pub(in crate::pass::elaborate) fn iteration_identifier_type_mismatch(
             Print::to_string(typ),
             Print::to_string(typ_other)
         ),
-        vec![primary(&id.span)],
+        vec![Label::primary(&id.span, "")],
         Vec::new(),
     )
 }
@@ -71,7 +75,7 @@ pub(in crate::pass::elaborate) fn iteration_annotation_invalid(
     cause(
         ITERATION_ANNOTATION_INVALID,
         format!("iterated {description} should initially have no annotations"),
-        vec![primary(span)],
+        vec![Label::primary(span, "")],
         Vec::new(),
     )
 }
@@ -83,7 +87,7 @@ fn empty_iteration(code: &str, span: &Span) -> ElabError {
     cause(
         code,
         "iteration has no variable to iterate over",
-        vec![primary(span)],
+        vec![Label::primary(span, "")],
         vec![
             concat!(
                 "Each iteration consumes one `*` or `?` from a variable inside ",

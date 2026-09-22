@@ -40,15 +40,8 @@ fn describe_utf8_error(bytes: &[u8], error: &std::str::Utf8Error) -> String {
 }
 
 /// Creates diagnostic data authored by the SpecTec frontend.
-fn make_diagnostic(code: &str, message: String, labels: Vec<Label>) -> Diagnostic {
-    Diagnostic {
-        severity: Severity::Error,
-        code: Some(code.to_owned()),
-        message,
-        labels,
-        notes: Vec::new(),
-        source: "parse",
-    }
+fn diagnostic(code: &str, message: String, labels: Vec<Label>) -> Diagnostic {
+    Diagnostic::new("parse", Severity::Error, Some(code.to_owned()), message, labels, Vec::new())
 }
 
 // = Diagnostic helpers and constructors

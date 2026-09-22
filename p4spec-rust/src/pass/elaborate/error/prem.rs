@@ -4,11 +4,11 @@
 //! rule elaboration attach these failures to their enclosing attempt frames.
 
 use crate::{
-    diagnostic::Report,
+    diagnostic::{Label, Report},
     lang::common::{Id, source::Span},
 };
 
-use super::{ElabError, cause, primary, related, warning};
+use super::{ElabError, cause, warning};
 
 const PREMISE_VARIABLE_IDENTIFIER_INVALID: &str = "elab/premise-variable-identifier-invalid";
 
@@ -17,7 +17,7 @@ pub(in crate::pass::elaborate) fn premise_variable_identifier_invalid(id: &Id) -
     cause(
         PREMISE_VARIABLE_IDENTIFIER_INVALID,
         format!("meta-variable identifier `{}` must not have a suffix", id.node),
-        vec![primary(&id.span)],
+        vec![Label::primary(&id.span, "")],
         Vec::new(),
     )
 }
@@ -29,7 +29,8 @@ pub(in crate::pass::elaborate) fn premise_variable_type_repeated(
     id: &Id,
     span_previous: &Span,
 ) -> ElabError {
-    let labels = vec![primary(&id.span), related(span_previous, "type declared here")];
+    let labels =
+        vec![Label::primary(&id.span, ""), Label::secondary(span_previous, "type declared here")];
     cause(
         PREMISE_VARIABLE_TYPE_REPEATED,
         format!("meta-variable name `{}` is already used by a type", id.node),
@@ -45,7 +46,10 @@ pub(in crate::pass::elaborate) fn premise_otherwise_repeated(
     span: &Span,
     span_previous: &Span,
 ) -> ElabError {
-    let labels = vec![primary(span), related(span_previous, "first `otherwise` premise here")];
+    let labels = vec![
+        Label::primary(span, ""),
+        Label::secondary(span_previous, "first `otherwise` premise here"),
+    ];
     cause(
         PREMISE_OTHERWISE_REPEATED,
         "cannot use more than one `otherwise` premise",
@@ -63,8 +67,8 @@ pub(in crate::pass::elaborate) fn premise_negated_output_unsupported(
     span_signature: &Span,
 ) -> ElabError {
     let labels = vec![
-        primary(span_output),
-        related(span_signature, "relation signature with output positions here"),
+        Label::primary(span_output, ""),
+        Label::secondary(span_signature, "relation signature with output positions here"),
     ];
     cause(
         PREMISE_NEGATED_OUTPUT_UNSUPPORTED,
@@ -86,7 +90,7 @@ pub(in crate::pass::elaborate) fn premise_variable_iteration_unsupported(span: &
     cause(
         PREMISE_VARIABLE_ITERATION_UNSUPPORTED,
         "cannot iterate a `var` premise",
-        vec![primary(span)],
+        vec![Label::primary(span, "")],
         vec!["A variable premise declares its variable once for the rule.".to_owned()],
     )
 }
@@ -98,7 +102,7 @@ pub(in crate::pass::elaborate) fn premise_otherwise_iteration_unsupported(
     cause(
         PREMISE_OTHERWISE_ITERATION_UNSUPPORTED,
         "cannot iterate an `otherwise` premise",
-        vec![primary(span)],
+        vec![Label::primary(span, "")],
         vec!["An `otherwise` premise selects one fallback path for the rule.".to_owned()],
     )
 }
@@ -111,8 +115,11 @@ pub(in crate::pass::elaborate) fn relation_rule_group_name_mismatch(
     id_group: &Id,
 ) -> ElabError {
     let labels = vec![
-        primary(&id_rule.span),
-        related(&id_group.span, format!("enclosing rule group names relation `{}`", id_group.node)),
+        Label::primary(&id_rule.span, ""),
+        Label::secondary(
+            &id_group.span,
+            format!("enclosing rule group names relation `{}`", id_group.node),
+        ),
     ];
     cause(
         RELATION_RULE_GROUP_NAME_MISMATCH,
@@ -133,7 +140,10 @@ pub(in crate::pass::elaborate) fn relation_rule_otherwise_repeated(
     span: &Span,
     span_previous: &Span,
 ) -> ElabError {
-    let labels = vec![primary(span), related(span_previous, "first `otherwise` rule here")];
+    let labels = vec![
+        Label::primary(span, ""),
+        Label::secondary(span_previous, "first `otherwise` rule here"),
+    ];
     cause(
         RELATION_RULE_OTHERWISE_REPEATED,
         "cannot use more than one `otherwise` rule in a rule group",
@@ -150,7 +160,7 @@ pub(in crate::pass::elaborate) fn relation_rule_otherwise_invalid(
     span_other: &Span,
     message_other: &str,
 ) -> ElabError {
-    let labels = vec![primary(span), related(span_other, message_other)];
+    let labels = vec![Label::primary(span, ""), Label::secondary(span_other, message_other)];
     cause(
         RELATION_RULE_OTHERWISE_INVALID,
         "an `otherwise` rule must be the only rule in its rule group",
@@ -171,7 +181,7 @@ pub(in crate::pass::elaborate) fn relation_input_hint_empty(span: &Span) -> Elab
     cause(
         RELATION_INPUT_HINT_EMPTY,
         "input hint must contain at least one index such as `%0`",
-        vec![primary(span)],
+        vec![Label::primary(span, "")],
         Vec::new(),
     )
 }
@@ -182,7 +192,8 @@ pub(in crate::pass::elaborate) fn relation_input_hint_index_repeated(
     span: &Span,
     span_previous: &Span,
 ) -> ElabError {
-    let labels = vec![primary(span), related(span_previous, "first occurrence here")];
+    let labels =
+        vec![Label::primary(span, ""), Label::secondary(span_previous, "first occurrence here")];
     cause(
         RELATION_INPUT_HINT_INDEX_REPEATED,
         format!("input hint repeats index `%{idx}`"),
@@ -200,8 +211,8 @@ pub(in crate::pass::elaborate) fn relation_input_hint_index_out_of_bounds(
 ) -> ElabError {
     let text_positions = if arity == 1 { "position" } else { "positions" };
     let labels = vec![
-        primary(span),
-        related(span_notation, format!("relation has {arity} {text_positions}")),
+        Label::primary(span, ""),
+        Label::secondary(span_notation, format!("relation has {arity} {text_positions}")),
     ];
     cause(
         RELATION_INPUT_HINT_INDEX_OUT_OF_BOUNDS,
@@ -225,7 +236,7 @@ pub(in crate::pass::elaborate) fn relation_input_hint_invalid(
             "input hint must be a sequence of indexed holes such as `%0`, \
             but got `{text_actual}`"
         ),
-        vec![primary(span)],
+        vec![Label::primary(span, "")],
         Vec::new(),
     )
 }
@@ -235,7 +246,7 @@ pub(in crate::pass::elaborate) fn relation_input_hint_missing(id: &Id, span: &Sp
     warning(
         RELATION_INPUT_HINT_MISSING,
         format!("relation `{}` has no input hint", id.node),
-        vec![primary(span)],
+        vec![Label::primary(span, "")],
         Vec::new(),
     )
 }
@@ -247,5 +258,5 @@ pub(in crate::pass::elaborate) fn relation_input_hint_mismatch(
     span: &Span,
     message: impl Into<String>,
 ) -> ElabError {
-    cause(RELATION_INPUT_HINT_MISMATCH, message, vec![primary(span)], Vec::new())
+    cause(RELATION_INPUT_HINT_MISMATCH, message, vec![Label::primary(span, "")], Vec::new())
 }
