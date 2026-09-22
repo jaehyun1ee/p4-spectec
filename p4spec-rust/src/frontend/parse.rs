@@ -165,12 +165,13 @@ fn parse_bytes_with_context(
         // Utf8Error guarantees that the prefix before valid_up_to is valid
         let prefix = str::from_utf8(&bytes[..error_utf8.valid_up_to()])
             .expect("UTF-8 decoder validated the prefix");
-        // The existing lexer identifies whether the prefix ends inside a block comment
+        // Classify comment encoding only when lexing reaches the invalid bytes
         let mut lexer = Lexer::new(Rc::clone(&name), prefix, |_| false);
         while lexer.next().is_some_and(|token| token.is_ok()) {}
         if lexer.in_block_comment() {
             error::comment_encoding_invalid(span, bytes, &error_utf8)
         } else {
+            // Earlier lexical errors leave the encoding context unknown
             error::source_encoding_invalid(span, bytes, &error_utf8)
         }
     })?;

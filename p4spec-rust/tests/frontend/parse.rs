@@ -205,6 +205,19 @@ fn test_parse_bytes_distinguishes_nested_comments_from_comment_text() {
 }
 
 #[test]
+fn test_parse_bytes_uses_source_encoding_fallback_after_lexical_errors() {
+    use p4spec_rust::frontend::parse::parse_bytes;
+
+    for (bytes, column) in [(&b"@ (;\xff"[..], 4), (&b"\"\\q\" (;\xff"[..], 7)] {
+        let report = parse_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
+        assert_eq!(report.code.as_deref(), Some("parse/source-encoding-invalid"));
+        assert_eq!(report.labels[0].span.left, Position::new("bytes.watsup", 1, column));
+        assert_eq!(report.labels[0].span.right, Position::new("bytes.watsup", 1, column + 1));
+        assert!(report.labels[0].message.contains("0xFF"));
+    }
+}
+
+#[test]
 fn test_missing_path_fails_before_parsing_collected_files() {
     let directory = TempDirectory::new();
     let invalid = directory.path("invalid.watsup");
