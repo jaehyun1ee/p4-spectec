@@ -29,3 +29,41 @@ pub const PARSE: &[&str] = &[
     "parse-misplaced-control-char",
     "parse-directory-io-error",
 ];
+
+/// Lists elaboration declaration fixtures in pinned reference order.
+pub const ELAB: &[&str] = &[
+    "ctx-builtin-dec-redefined.watsup",
+    "ctx-builtin-dec-tparam-duplicate.watsup",
+    "ctx-dec-redefined.watsup",
+    "ctx-dec-tparam-duplicate.watsup",
+    "ctx-dec-undefined.watsup",
+    "ctx-defined-dec-undefined.watsup",
+    "ctx-extern-dec-redefined.watsup",
+    "ctx-extern-dec-tparam-duplicate.watsup",
+    "ctx-extern-relation-redefined.watsup",
+    "ctx-extern-relation-rules.watsup",
+    "ctx-function-otherwise-redefined.watsup",
+    "ctx-metavar-id-has-suffix.watsup",
+    "ctx-metavar-redefined.watsup",
+    "ctx-otherwise-redefined.watsup",
+    "ctx-relation-redefined.watsup",
+    "ctx-relation-undefined.watsup",
+    "ctx-rulegroup-redefined.watsup",
+    "ctx-table-dec-redefined.watsup",
+    "ctx-table-dec-undefined.watsup",
+    "ctx-table-function-required.watsup",
+    "ctx-table-rows-redefined.watsup",
+    "ctx-type-already-defined-in-var.watsup",
+    "ctx-type-fully-redefined.watsup",
+    "relation-missing-rules.watsup",
+    "table-function-parameter.watsup",
+    "table-missing-rows.watsup",
+    "table-non-bool-return.watsup",
+    "type-dec-missing-clauses.watsup",
+];
+
+/// Counts elaboration cases assigned to D04 but not registered yet.
+pub const ELAB_D04_PENDING: usize = 21;
+
+/// Counts elaboration cases assigned to D05 but not registered yet.
+pub const ELAB_D05_PENDING: usize = 29;

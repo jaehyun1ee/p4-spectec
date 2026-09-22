@@ -1,0 +1,301 @@
+=== ctx-builtin-dec-redefined.watsup ===
+error[elab/function-builtin-repeated]: builtin function `f` was already defined
+  ┌─ elab/ctx-builtin-dec-redefined.watsup:4:14
+  │
+3 │ builtin dec $f : nat
+  │              - first declaration
+4 │ builtin dec $f : nat
+  │              ^
+
+---
+=== ctx-builtin-dec-tparam-duplicate.watsup ===
+error[elab/function-builtin-type-parameter-repeated]: type parameter `U` was already defined
+  ┌─ elab/ctx-builtin-dec-tparam-duplicate.watsup:4:22
+  │
+4 │ builtin dec $f<T, U, U, T> : nat
+  │                   -  ^
+  │                   │   
+  │                   first declaration
+
+---
+=== ctx-dec-redefined.watsup ===
+error[elab/function-repeated]: function `f` was already defined
+  ┌─ elab/ctx-dec-redefined.watsup:4:6
+  │
+3 │ dec $f(nat) : nat
+  │      -- first declaration
+4 │ dec $f(nat) : nat
+  │      ^^
+
+---
+=== ctx-dec-tparam-duplicate.watsup ===
+error[elab/function-type-parameter-repeated]: type parameter `U` was already defined
+  ┌─ elab/ctx-dec-tparam-duplicate.watsup:3:14
+  │
+3 │ dec $f<T, U, U, T> : nat
+  │           -  ^
+  │           │   
+  │           first declaration
+
+---
+=== ctx-dec-undefined.watsup ===
+note: function `missing` is undefined
+  ┌─ elab/ctx-dec-undefined.watsup:6:19
+  │
+6 │ def $caller(n) = $missing(n)
+  │                   --------
+
+trace[0]:
+error: expression elaboration failed
+  ┌─ elab/ctx-dec-undefined.watsup:6:18
+  │
+6 │ def $caller(n) = $missing(n)
+  │                  ^^^^^^^^^^^
+  │
+  = source: elab
+
+trace[1]:
+error[elab/function-undefined]: function `missing` is undefined
+  ┌─ elab/ctx-dec-undefined.watsup:6:19
+  │
+6 │ def $caller(n) = $missing(n)
+  │                   ^^^^^^^^
+
+trace[1]:
+error: expression requires unsupported contextual elaboration
+  ┌─ elab/ctx-dec-undefined.watsup:6:18
+  │
+6 │ def $caller(n) = $missing(n)
+  │                  ^^^^^^^^^^^
+  │
+  = source: elab
+
+---
+=== ctx-defined-dec-undefined.watsup ===
+error[elab/function-declaration-required]: a definition of function `missing` requires a preceding matching `dec` declaration
+  ┌─ elab/ctx-defined-dec-undefined.watsup:3:6
+  │
+3 │ def $missing(n) = n
+  │      ^^^^^^^^
+
+---
+=== ctx-extern-dec-redefined.watsup ===
+error[elab/function-extern-repeated]: extern function `f` was already defined
+  ┌─ elab/ctx-extern-dec-redefined.watsup:2:13
+  │
+1 │ extern dec $f : nat
+  │             - first declaration
+2 │ extern dec $f : nat
+  │             ^
+
+---
+=== ctx-extern-dec-tparam-duplicate.watsup ===
+error[elab/function-extern-type-parameter-repeated]: type parameter `U` was already defined
+  ┌─ elab/ctx-extern-dec-tparam-duplicate.watsup:1:21
+  │
+1 │ extern dec $f<T, U, U, T> : nat
+  │                  -  ^
+  │                  │   
+  │                  first declaration
+
+---
+=== ctx-extern-relation-redefined.watsup ===
+error[elab/relation-extern-repeated]: extern relation `R` was already defined
+  ┌─ elab/ctx-extern-relation-redefined.watsup:5:17
+  │
+1 │ extern relation R:
+  │                 - first declaration
+  ·
+5 │ extern relation R:
+  │                 ^
+
+---
+=== ctx-extern-relation-rules.watsup ===
+error[elab/relation-extern-rule-unsupported]: extern relation `R` does not allow rules
+  ┌─ elab/ctx-extern-relation-rules.watsup:5:6
+  │
+1 │ extern relation R:
+  │                 - extern relation declared here
+  ·
+5 │ rule R/case:
+  │      ^
+
+---
+=== ctx-function-otherwise-redefined.watsup ===
+error[elab/function-otherwise-repeated]: an `otherwise` clause for function `fallback` was already defined
+  ┌─ elab/ctx-function-otherwise-redefined.watsup:8:1
+  │    
+5 │   ╭ def $fallback = 0
+6 │   │   -- otherwise
+  │   ╰──────────────' first otherwise clause
+7 │     
+8 │ ╭   def $fallback = 1
+9 │ │     -- otherwise
+  │ ╰────────────────^
+
+---
+=== ctx-metavar-id-has-suffix.watsup ===
+error[elab/meta-variable-identifier-invalid]: meta-variable identifier `x_1` must not have a suffix
+  ┌─ elab/ctx-metavar-id-has-suffix.watsup:4:5
+  │
+4 │ var x_1 : nat
+  │     ^^^
+
+---
+=== ctx-metavar-redefined.watsup ===
+error[elab/meta-variable-repeated]: meta-variable `x` was already defined
+  ┌─ elab/ctx-metavar-redefined.watsup:4:5
+  │
+3 │ var x : nat
+  │     - first declaration
+4 │ var x : int
+  │     ^
+
+---
+=== ctx-otherwise-redefined.watsup ===
+error[elab/relation-otherwise-repeated]: an `otherwise` rule for relation `R` was already defined
+   ┌─ elab/ctx-otherwise-redefined.watsup:10:1
+   │    
+ 6 │   ╭ rule R/first:
+ 7 │   │   0 |- 0
+ 8 │   │   -- otherwise
+   │   ╰──────────────' first otherwise rule
+ 9 │     
+10 │ ╭   rule R/second:
+11 │ │     0 |- 0
+12 │ │     -- otherwise
+   │ ╰────────────────^
+
+---
+=== ctx-relation-redefined.watsup ===
+error[elab/relation-repeated]: relation `R` was already defined
+  ┌─ elab/ctx-relation-redefined.watsup:8:10
+  │
+5 │ relation R: nat |- foo
+  │          - first declaration
+  ·
+8 │ relation R: nat |- foo
+  │          ^
+
+---
+=== ctx-relation-undefined.watsup ===
+error[elab/relation-rule-undefined]: relation `Missing` is undefined
+  ┌─ elab/ctx-relation-undefined.watsup:5:6
+  │
+5 │ rule Missing/case:
+  │      ^^^^^^^
+
+---
+=== ctx-rulegroup-redefined.watsup ===
+error[elab/relation-rule-group-repeated]: rule group `same` was already defined
+  ┌─ elab/ctx-rulegroup-redefined.watsup:9:7
+  │
+6 │ rule R/same:
+  │       ----- first declaration
+  ·
+9 │ rule R/same:
+  │       ^^^^^
+
+---
+=== ctx-table-dec-redefined.watsup ===
+error[elab/function-table-repeated]: table function `lookup` was already defined
+  ┌─ elab/ctx-table-dec-redefined.watsup:2:10
+  │
+1 │ tbl dec $lookup(nat) : bool
+  │          ------- first declaration
+2 │ tbl dec $lookup(nat) : bool
+  │          ^^^^^^^
+
+---
+=== ctx-table-dec-undefined.watsup ===
+error[elab/function-table-undefined]: table function `missing` is undefined
+  ┌─ elab/ctx-table-dec-undefined.watsup:1:10
+  │
+1 │ tbl def $missing =
+  │          ^^^^^^^
+
+---
+=== ctx-table-function-required.watsup ===
+error[elab/function-table-required]: non-table function `lookup` does not allow table rows
+  ┌─ elab/ctx-table-function-required.watsup:3:10
+  │
+1 │ dec $lookup(nat) : bool
+  │      ------- function declared here
+2 │ 
+3 │ tbl def $lookup =
+  │          ^^^^^^
+
+---
+=== ctx-table-rows-redefined.watsup ===
+error[elab/table-row-repeated]: table `lookup` was already defined
+  ┌─ elab/ctx-table-rows-redefined.watsup:6:10
+  │
+4 │   | _ => true
+  │     --------- first table definition
+5 │ 
+6 │ tbl def $lookup =
+  │          ^^^^^^
+
+---
+=== ctx-type-already-defined-in-var.watsup ===
+error[elab/meta-variable-type-repeated]: meta-variable name `foo` is already used by a type
+  ┌─ elab/ctx-type-already-defined-in-var.watsup:6:5
+  │
+4 │ syntax foo = nat
+  │        --- first declaration
+5 │ 
+6 │ var foo : int
+  │     ^^^
+
+---
+=== ctx-type-fully-redefined.watsup ===
+error[elab/type-definition-repeated]: type `foo` was already defined
+  ┌─ elab/ctx-type-fully-redefined.watsup:4:8
+  │
+3 │ syntax foo = nat
+  │        --- first declaration
+4 │ syntax foo = int
+  │        ^^^
+
+---
+=== relation-missing-rules.watsup ===
+warning[elab/relation-rule-missing]: relation `Foo_ok` has no rules defined
+  ┌─ elab/relation-missing-rules.watsup:6:1
+  │  
+6 │ ╭ relation Foo_ok: |- foo
+7 │ │   hint(input %0)
+  │ ╰────────────────^
+
+---
+=== table-function-parameter.watsup ===
+error[elab/table-parameter-unsupported]: table parameter `key` must be a value parameter, but it is a function parameter
+  ┌─ elab/table-function-parameter.watsup:1:17
+  │
+1 │ tbl dec $lookup(def $key : nat) : bool
+  │                 ^^^^^^^^^^^^^^
+
+---
+=== table-missing-rows.watsup ===
+warning[elab/table-row-missing]: table `lookup` has no rows defined
+  ┌─ elab/table-missing-rows.watsup:1:1
+  │
+1 │ tbl dec $lookup(nat) : bool
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+---
+=== table-non-bool-return.watsup ===
+error[elab/table-return-type-invalid]: table `lookup` must return `bool`, but its return type is `nat`
+  ┌─ elab/table-non-bool-return.watsup:7:24
+  │
+7 │ tbl dec $lookup(nat) : nat
+  │                        ^^^
+
+---
+=== type-dec-missing-clauses.watsup ===
+warning[elab/function-clause-missing]: function `missing` has no clauses defined
+  ┌─ elab/type-dec-missing-clauses.watsup:1:1
+  │
+1 │ dec $missing : nat
+  │ ^^^^^^^^^^^^^^^^^^
+
+---
