@@ -1,19 +1,20 @@
 //! Command-line specification transformation and execution
 //!
-//! Commands call the public transformation pipeline and runner APIs.
+//! Commands render elaboration warnings before running downstream passes.
 //! `run` propagates typed failures to `main`,
-//! which prints one diagnostic and chooses the process exit code.
+//! which renders source reports and chooses the process exit code.
 
 use std::{path::PathBuf, process::ExitCode};
 
 use clap::{Args, Parser, Subcommand};
 
 use p4spec_rust::{
-    diagnostic::{RenderConfig, Renderer},
-    frontend::error::FrontendError,
+    diagnostic::{RenderConfig, Renderer, Report},
     interface::p4::{error::P4Error, parse::parse_file},
     interp::shared::error::Error as InterpError,
+    lang::{al, il, pl, sl},
     lang::{data::value::external::Encoding, traits::print::Print},
+    pass,
     runner::{self, BuiltinInterface, Interpreter, Runner},
     sim_plugin::{self, dummy::Dummy},
 };
@@ -22,13 +23,12 @@ use p4spec_rust::{
 
 // - Diagnostic output
 
-/// Renders frontend reports while preserving their structured payloads.
-fn frontend_error(report: FrontendError) -> ExitCode {
+/// Renders reports without changing their structured payloads.
+fn render_report(report: &Report) {
     let mut renderer = Renderer::new(RenderConfig::default());
-    if let Err(error) = renderer.render_to_stderr(&report) {
+    if let Err(error) = renderer.render_to_stderr(report) {
         eprintln!("{report}\ndiagnostic rendering failed: {error}");
     }
-    ExitCode::FAILURE
 }
 
 // = Errors
@@ -50,6 +50,44 @@ enum CliError {
     Runtime(#[from] InterpError),
 }
 
+// = Specification loading
+
+/// Elaborates source paths and emits warnings before propagating a failure.
+fn elaborate(paths: &[PathBuf]) -> Result<il::ast::Spec, CliError> {
+    let spec_el = p4spec_rust::parse(paths)?;
+    let (result, warnings) = pass::elaborate::convert_with_warnings(spec_el);
+    for report in warnings {
+        render_report(&report);
+    }
+    result
+        .map_err(p4spec_rust::Error::Elab)
+        .map_err(CliError::from)
+}
+
+/// Converts source paths to AL after rendering elaboration warnings.
+fn algorithmic(paths: &[PathBuf]) -> Result<al::ast::Spec, CliError> {
+    let spec_il = elaborate(paths)?;
+    pass::algo::convert(spec_il)
+        .map_err(p4spec_rust::Error::Algo)
+        .map_err(CliError::from)
+}
+
+/// Converts source paths to SL after rendering elaboration warnings.
+fn structured(paths: &[PathBuf], without_rule_groups: bool) -> Result<sl::ast::Spec, CliError> {
+    let spec_al = algorithmic(paths)?;
+    pass::structure::convert(spec_al, without_rule_groups)
+        .map_err(p4spec_rust::Error::Structure)
+        .map_err(CliError::from)
+}
+
+/// Converts source paths to PL after rendering elaboration warnings.
+fn prose(paths: &[PathBuf]) -> Result<pl::ast::Spec, CliError> {
+    let spec_sl = structured(paths, false)?;
+    pass::prosify::convert(spec_sl)
+        .map_err(p4spec_rust::Error::Prose)
+        .map_err(CliError::from)
+}
+
 // = Elab command
 
 #[derive(Args)]
@@ -60,7 +98,7 @@ struct ElabArgs {
 }
 
 fn elab_command(args: ElabArgs) -> Result<(), CliError> {
-    let spec_il = p4spec_rust::elab(&args.paths)?;
+    let spec_il = elaborate(&args.paths)?;
     println!("{}", Print::to_string(&spec_il));
     Ok(())
 }
@@ -75,7 +113,7 @@ struct AlgoArgs {
 }
 
 fn algo_command(args: AlgoArgs) -> Result<(), CliError> {
-    let spec_al = p4spec_rust::algo(&args.paths)?;
+    let spec_al = algorithmic(&args.paths)?;
     println!("{}", Print::to_string(&spec_al));
     Ok(())
 }
@@ -90,7 +128,7 @@ struct StructArgs {
 }
 
 fn struct_command(args: StructArgs) -> Result<(), CliError> {
-    let spec_sl = p4spec_rust::structure(&args.paths, true)?;
+    let spec_sl = structured(&args.paths, true)?;
     println!("{}", Print::to_string(&spec_sl));
     Ok(())
 }
@@ -105,7 +143,7 @@ struct ProseArgs {
 }
 
 fn prose_command(args: ProseArgs) -> Result<(), CliError> {
-    let spec_pl = p4spec_rust::prosify(&args.paths)?;
+    let spec_pl = prose(&args.paths)?;
     println!("{}", Print::to_string(&spec_pl));
     Ok(())
 }
@@ -126,17 +164,14 @@ struct InterpreterArgs {
     pl: bool,
 }
 
-fn interp_spec(
-    paths: &[PathBuf],
-    interpreter: &InterpreterArgs,
-) -> Result<runner::Spec, p4spec_rust::Error> {
+fn interp_spec(paths: &[PathBuf], interpreter: &InterpreterArgs) -> Result<runner::Spec, CliError> {
     // Each pipeline stops at the language selected by the command
     if interpreter.al {
-        p4spec_rust::algo(paths).map(runner::Spec::Al)
+        algorithmic(paths).map(runner::Spec::Al)
     } else if interpreter.sl {
-        p4spec_rust::structure(paths, true).map(runner::Spec::Sl)
+        structured(paths, true).map(runner::Spec::Sl)
     } else {
-        p4spec_rust::prosify(paths).map(runner::Spec::Pl)
+        prose(paths).map(runner::Spec::Pl)
     }
 }
 
@@ -293,8 +328,13 @@ fn main() -> ExitCode {
     match run(Cli::parse()) {
         // Successful commands have already written their output
         Ok(()) => ExitCode::SUCCESS,
-        // Render structured frontend failures from every specification pipeline
-        Err(CliError::Spec(p4spec_rust::Error::Frontend(report))) => frontend_error(report),
+        // Preserve source diagnostics from both parsing and elaboration
+        Err(CliError::Spec(
+            p4spec_rust::Error::Frontend(report) | p4spec_rust::Error::Elab(report),
+        )) => {
+            render_report(&report);
+            ExitCode::FAILURE
+        }
         // Report other typed failures once at the process boundary
         Err(error) => {
             eprintln!("{error}");
