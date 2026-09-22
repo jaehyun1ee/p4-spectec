@@ -1,3 +1,7 @@
+//! The eBPF `CounterArray` extern
+//!
+//! A dense array of 32-bit counters the data plane increments.
+
 use crate::sim_plugin::spec::{args, func, unpack};
 use crate::{
     lang::{
@@ -12,7 +16,9 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// A counter array as a vector of 32-bit values.
 pub struct CounterArray {
+    /// The counter values, indexed from zero.
     pub counts: Vec<u32>,
 }
 
@@ -99,6 +105,7 @@ impl CounterArray {
         self.update(ctx, value_ctx, value_arch, idx, int)
     }
 
+    /// Adds `int` to the counter at `idx`, wrapping; out of range does nothing.
     fn update<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
@@ -113,10 +120,12 @@ impl CounterArray {
         Interp: Interpreter<Iface, Ext>,
     {
         // Update counter
+        // Out of range: no counter is updated
         if let Some(count) = self.counts.get_mut(idx) {
             *count = count.wrapping_add(int);
         }
         // Create call result
+        // Return without a value
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
