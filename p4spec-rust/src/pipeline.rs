@@ -1,6 +1,6 @@
 //! File-based entry points for specification transformations
 //!
-//! `parse`, `elab`, `algo`, `structure`, and `annotate` run the passes
+//! `parse`, `elab`, `algo`, `structure`, and `prosify` run the passes
 //! from ordered source paths to the requested language.
 //! Errors preserve the failing stage and its source diagnostics;
 //! callers choose how to report them.
@@ -88,7 +88,7 @@ where
 }
 
 /// Converts specification paths through SL with rule groups into annotated PL.
-pub fn annotate<I, P>(paths: I) -> Result<pl::ast::Spec, Error>
+pub fn prosify<I, P>(paths: I) -> Result<pl::ast::Spec, Error>
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,

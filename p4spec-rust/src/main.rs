@@ -80,6 +80,21 @@ fn struct_command(args: StructArgs) -> Result<(), CliError> {
     Ok(())
 }
 
+// = Prose command
+
+#[derive(Args)]
+struct ProseArgs {
+    /// Specification files in processing order
+    #[arg(required = true, value_name = "PATH")]
+    paths: Vec<PathBuf>,
+}
+
+fn prose_command(args: ProseArgs) -> Result<(), CliError> {
+    let spec_pl = p4spec_rust::prosify(&args.paths)?;
+    println!("{}", Print::to_string(&spec_pl));
+    Ok(())
+}
+
 // = Run command
 
 #[derive(Args)]
@@ -106,7 +121,7 @@ fn interp_spec(
     } else if interpreter.sl {
         p4spec_rust::structure(paths, true).map(runner::Spec::Sl)
     } else {
-        p4spec_rust::annotate(paths).map(runner::Spec::Pl)
+        p4spec_rust::prosify(paths).map(runner::Spec::Pl)
     }
 }
 
@@ -240,6 +255,8 @@ enum Command {
     Algo(AlgoArgs),
     /// Structure specifications and print the representation without rule groups
     Struct(StructArgs),
+    /// Convert specifications and print the prose representation
+    Prose(ProseArgs),
     /// Run a P4 program with the algorithmic interpreter
     Run(RunArgs),
     /// Simulate a P4 program and STF test on a target architecture
@@ -251,6 +268,7 @@ fn run(cli: Cli) -> Result<(), CliError> {
         Command::Elab(args) => elab_command(args),
         Command::Algo(args) => algo_command(args),
         Command::Struct(args) => struct_command(args),
+        Command::Prose(args) => prose_command(args),
         Command::Run(args) => run_command(args),
         Command::Sim(args) => sim_command(args),
     }

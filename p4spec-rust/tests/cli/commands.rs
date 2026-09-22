@@ -63,6 +63,37 @@ fn test_struct_command_prints_control_flow_without_rule_groups() {
 }
 
 #[test]
+fn test_prose_command_prints_annotated_rule_groups() {
+    let output = binary()
+        .arg("prose")
+        .arg(fixture("structure/definitions.watsup"))
+        .output()
+        .expect("run prose command");
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("Group ret:"), "{stdout}");
+    assert!(stdout.contains("Group else:"), "{stdout}");
+    assert!(stdout.contains("Return ((CONT) as flow)"), "{stdout}");
+    assert!(stdout.ends_with('\n'));
+}
+
+#[test]
+fn test_prose_command_reports_pipeline_errors_on_stderr() {
+    for (path, message) in [
+        ("frontend/negative/malformed-token.watsup", "malformed token"),
+        ("elaboration/operator_not_defined.watsup", "operator is not defined"),
+        ("algorithmic/impure_else_premises.watsup", "otherwise branch contains an impure premise"),
+    ] {
+        let output = binary().arg("prose").arg(fixture(path)).output().unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(stderr.contains(message), "{stderr}");
+    }
+}
+
+#[test]
 fn test_struct_command_reports_pipeline_errors_on_stderr() {
     for (path, message) in [
         ("frontend/negative/malformed-token.watsup", "malformed token"),
@@ -130,7 +161,7 @@ fn test_elab_command_reports_elaboration_errors_on_stderr() {
 
 #[test]
 fn test_commands_require_at_least_one_path() {
-    for command in ["elab", "algo", "struct"] {
+    for command in ["elab", "algo", "struct", "prose"] {
         let output = binary().arg(command).output().expect("run command");
         assert_eq!(output.status.code(), Some(2));
         assert!(output.stdout.is_empty());
@@ -150,6 +181,7 @@ fn test_help_prints_commands() {
     assert!(stdout.contains("elab"));
     assert!(stdout.contains("algo"));
     assert!(stdout.contains("struct"));
+    assert!(stdout.contains("prose"));
 }
 
 #[test]

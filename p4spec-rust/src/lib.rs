@@ -1,6 +1,6 @@
 //! Language models and codecs for P4 `SpecTec`
 //!
-//! `parse`, `elab`, `algo`, `structure`, and `annotate` transform source paths
+//! `parse`, `elab`, `algo`, `structure`, and `prosify` transform source paths
 //! into EL, IL, AL, SL, and PL through `frontend` and `pass`;
 //! `interp` and `runner` execute AL, SL, or PL against a P4 program,
 //! with `interface` builtins and `sim_plugin` architectures;
@@ -19,4 +19,4 @@ pub mod sim_plugin;
 pub mod stf;
 pub mod util;
 
-pub use pipeline::{Error, algo, annotate, elab, parse, structure};
+pub use pipeline::{Error, algo, elab, parse, prosify, structure};

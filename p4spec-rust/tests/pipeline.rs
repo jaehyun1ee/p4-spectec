@@ -21,7 +21,7 @@ fn transformations_preserve_input_order() {
         Print::to_string(&p4spec_rust::elab(&paths).unwrap()),
         Print::to_string(&p4spec_rust::algo(&paths).unwrap()),
         Print::to_string(&p4spec_rust::structure(&paths, true).unwrap()),
-        Print::to_string(&p4spec_rust::annotate(&paths).unwrap()),
+        Print::to_string(&p4spec_rust::prosify(&paths).unwrap()),
     ];
     for output in outputs {
         let lines: Vec<_> = output.lines().filter(|line| !line.is_empty()).collect();
@@ -32,17 +32,17 @@ fn transformations_preserve_input_order() {
 #[test]
 fn pipeline_errors_preserve_the_failing_stage_and_location() {
     let path = fixture("frontend/negative/malformed-token.watsup");
-    let error = p4spec_rust::annotate([&path]).unwrap_err();
+    let error = p4spec_rust::prosify([&path]).unwrap_err();
     assert!(matches!(error, Error::Frontend(_)));
     assert!(error.to_string().contains(path.to_str().unwrap()));
 
     let path = fixture("elaboration/operator_not_defined.watsup");
-    let error = p4spec_rust::annotate([&path]).unwrap_err();
+    let error = p4spec_rust::prosify([&path]).unwrap_err();
     assert!(matches!(error, Error::Elab(_)));
     assert!(error.to_string().contains(path.to_str().unwrap()));
 
     let path = fixture("algorithmic/impure_else_premises.watsup");
-    let error = p4spec_rust::annotate([&path]).unwrap_err();
+    let error = p4spec_rust::prosify([&path]).unwrap_err();
     assert!(matches!(error, Error::Algo(_)));
     assert!(error.to_string().contains(path.to_str().unwrap()));
 }
@@ -55,7 +55,7 @@ fn structure_exposes_rule_group_preservation() {
         assert_eq!(Print::to_string(&spec_sl).contains("Group "), !without_rule_groups);
     }
     // Prose conversion requires the relation's rule groups
-    let spec_pl = p4spec_rust::annotate(&paths).unwrap();
+    let spec_pl = p4spec_rust::prosify(&paths).unwrap();
     let output = Print::to_string(&spec_pl);
     assert!(output.contains("Group ret:"), "{output}");
     assert!(output.contains("Group else:"), "{output}");

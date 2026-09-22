@@ -222,7 +222,7 @@ pub fn run_sl(det: bool) -> Result<()> {
 
 pub fn run_pl(det: bool) -> Result<()> {
     run_with(det, || {
-        p4spec_rust::annotate(["spec"])
+        p4spec_rust::prosify(["spec"])
             .map(Spec::Pl)
             .map_err(|error| Error::Invalid(error.to_string()))
     })
