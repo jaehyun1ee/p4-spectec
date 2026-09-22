@@ -50,10 +50,12 @@ pub struct Case {
     pub obligations: &'static str,
 }
 
-/// Lists all reference cases, grouped in the source suite's order.
+/// Lists reference acceptance cases, grouped in the source suite's order.
+///
+/// The plain-type hint case represents four reference syntax variants.
 pub const CASES: &[Case] = &[
     Case {
-        name: "parse-hint-on-plain-bar-multi.watsup",
+        name: "parse-hint-on-plain.watsup",
         suite: Suite::Parse,
         owner: "D02",
         reference_code: Some("parse/hint-on-plain-type"),
@@ -63,61 +65,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Active,
         primary: Some(Location {
-            file: "parse-hint-on-plain-bar-multi.watsup",
-            start: (4, 19),
-            end: Some((4, 29)),
-        }),
-        secondary: &[],
-        obligations: "Match the primary source range.",
-    },
-    Case {
-        name: "parse-hint-on-plain-bar-single.watsup",
-        suite: Suite::Parse,
-        owner: "D02",
-        reference_code: Some("parse/hint-on-plain-type"),
-        code: Some("parse/plain-type-hint-unsupported"),
-        severity: Severity::Error,
-        source: "parse",
-        kind: Kind::Failure,
-        state: State::Active,
-        primary: Some(Location {
-            file: "parse-hint-on-plain-bar-single.watsup",
-            start: (4, 19),
-            end: Some((4, 29)),
-        }),
-        secondary: &[],
-        obligations: "Match the primary source range.",
-    },
-    Case {
-        name: "parse-hint-on-plain-no-bar-multi.watsup",
-        suite: Suite::Parse,
-        owner: "D02",
-        reference_code: Some("parse/hint-on-plain-type"),
-        code: Some("parse/plain-type-hint-unsupported"),
-        severity: Severity::Error,
-        source: "parse",
-        kind: Kind::Failure,
-        state: State::Active,
-        primary: Some(Location {
-            file: "parse-hint-on-plain-no-bar-multi.watsup",
-            start: (4, 17),
-            end: Some((4, 27)),
-        }),
-        secondary: &[],
-        obligations: "Match the primary source range.",
-    },
-    Case {
-        name: "parse-hint-on-plain-no-bar-single.watsup",
-        suite: Suite::Parse,
-        owner: "D02",
-        reference_code: Some("parse/hint-on-plain-type"),
-        code: Some("parse/plain-type-hint-unsupported"),
-        severity: Severity::Error,
-        source: "parse",
-        kind: Kind::Failure,
-        state: State::Active,
-        primary: Some(Location {
-            file: "parse-hint-on-plain-no-bar-single.watsup",
+            file: "parse-hint-on-plain.watsup",
             start: (4, 17),
             end: Some((4, 27)),
         }),

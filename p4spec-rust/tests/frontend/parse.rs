@@ -304,3 +304,11 @@ fn test_expected_identifiers_include_contextually_bound_uppercase_names() {
         assert!(!report.labels[0].message.contains("lowercase"));
     }
 }
+
+#[test]
+fn test_plain_type_hints_are_rejected_in_both_definition_grammar_branches() {
+    for source in ["syntax foo = nat hint(blah)", "syntax foo = | nat hint(blah)"] {
+        let report = crate::spec_fixture::parse(source).unwrap_err();
+        assert_eq!(report.code.as_deref(), Some("parse/plain-type-hint-unsupported"), "{source}");
+    }
+}
