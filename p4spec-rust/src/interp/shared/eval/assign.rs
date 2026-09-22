@@ -57,7 +57,7 @@ pub fn assign_tparams<Ctx: WriteContext>(
     for (tparam, targ) in tparams.iter().zip(targs) {
         let def_typ = phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
         unwrap_from_result!(
-            ctx.bind_tparam(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
+            ctx.add_typdef_local(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
             &tparam.span
         );
     }

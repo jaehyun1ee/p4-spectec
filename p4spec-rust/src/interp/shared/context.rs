@@ -49,8 +49,8 @@ pub trait ReadContext {
 pub trait WriteContext: ReadContext + Clone {
     // == Types
 
-    /// Binds a type parameter, rejecting duplicates only in the local scope.
-    fn bind_tparam(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error>;
+    /// Binds a type definition, rejecting duplicates only in the local scope.
+    fn add_typdef_local(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error>;
 
     // == Values
 

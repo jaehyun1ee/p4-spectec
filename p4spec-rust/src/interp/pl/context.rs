@@ -274,7 +274,7 @@ impl WriteContext for Context<'_> {
 
     // - Types
 
-    fn bind_tparam(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
+    fn add_typdef_local(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
         // A type parameter may shadow a global definition
         if self.local.tdenv.contains_key(&id) {
             return Err(Error::duplicate(EntityKind::Type, id.node, id.span));
