@@ -6,7 +6,7 @@
 
 use std::borrow::Borrow;
 
-use super::expr::strip_hints;
+use super::strip::strip_hints;
 use crate::{
     interp::{
         pl::context::Context,

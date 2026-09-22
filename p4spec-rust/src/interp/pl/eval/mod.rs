@@ -2,12 +2,14 @@
 //!
 //! `Invoker` for `PlInterp` delegates to `call`;
 //! `instr` evaluates group and dispatch blocks into flows;
-//! `assign` binds parameters; `expr` re-exports shared expression evaluation.
+//! `assign` binds parameters; `expr` delegates to shared expression evaluation
+//! after `strip` removes prose hints.
 
 mod assign;
 pub(super) mod call;
 mod expr;
 mod instr;
+mod strip;
 
 use crate::{
     interp::{
