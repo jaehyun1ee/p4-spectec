@@ -3,6 +3,7 @@
 //! `eval_group_block` executes a rule group or function body;
 //! `eval_dispatch_block` selects relation groups through routing instructions.
 //! `eval_block` isolates bindings; `eval_alternatives` selects conclusions.
+//! Both delegate outcome selection to `pl::flow`.
 //! Expression and assignment adapters remove hints before shared evaluation.
 
 use super::{
@@ -411,20 +412,18 @@ pub(super) fn eval_block<'g, 'instr, Tier: 'instr, Iface: Interface, Ext: Extern
     ) -> Backtrack<(Context<'g>, Flow)>,
 ) -> Backtrack<(Context<'g>, Flow)> {
     // Assignments extend this block, not its enclosing scope
-    let mut ctx_local = ctx.clone();
-    let mut errors = vec![];
-    for instr in instrs {
-        let (ctx_post, flow) = unwrap!(evaluate(runner_ctx, ctx_local, instr));
-        ctx_local = ctx_post;
-        // Retain the deepest failure until an instruction concludes
-        match flow {
-            // A continuing instruction contributes failure diagnostics
-            Flow::Cont(errors_post) => flow::retain_deepest_errors(&mut errors, errors_post),
-            // A conclusion leaves the block with its original bindings
-            flow => return ok!((ctx, flow)),
-        }
-    }
-    ok!((ctx, Flow::Cont(errors)))
+    let mut ctx_local = Some(ctx.clone());
+    // Transfer each instruction's bindings to the next without cloning frames
+    let flow = unwrap!(flow::choose_sequential(instrs, |instr| {
+        let ctx = ctx_local
+            .take()
+            .expect("continuing instructions restore local bindings");
+        let (ctx_post, flow) = unwrap!(evaluate(runner_ctx, ctx, instr));
+        ctx_local = Some(ctx_post);
+        ok!(flow)
+    }));
+    // Leaving the block restores the enclosing bindings
+    ok!((ctx, flow))
 }
 
 // = Alternative selection
@@ -441,38 +440,23 @@ fn eval_alternatives<'g, Tier, Iface: Interface, Ext: Extern>(
     ) -> Backtrack<(Context<'g>, Flow)>,
 ) -> Backtrack<(Context<'g>, Flow)> {
     let det = runner_ctx.interp().config.det;
-    let mut flow = Flow::Cont(vec![]);
-    for block in blocks {
-        // Every alternative starts from the enclosing bindings
-        let flow_post = match evaluate(runner_ctx, ctx.clone(), block) {
-            // Local alternative bindings do not escape
-            ok!((_, flow)) => flow,
-            // Sequential choice retains the most specific mismatch
-            unmatch!(errors) if !det => Flow::Cont(errors),
-            // Deterministic choice skips mismatching alternatives
-            unmatch!(_) => continue,
-            // A fatal error aborts alternative selection
-            err!(errors) => return err!(errors),
-        };
-        // Deterministic choice must evaluate every alternative
-        if det {
-            let span = block
+    // Every alternative starts from the enclosing bindings
+    let mut eval = |block| {
+        let (_, flow) = unwrap!(evaluate(runner_ctx, ctx.clone(), block));
+        ok!(flow)
+    };
+    let flow = if det {
+        // Deterministic choice checks alternatives for conflicting conclusions
+        unwrap!(flow::choose_deterministic(blocks, eval, |block| {
+            block
                 .first()
-                .map_or_else(Span::default, |instr| instr.node.span.clone());
-            flow = unwrap!(flow::combine_deterministic(flow, flow_post, &span));
-        } else {
-            // Sequential choice keeps the first conclusion
-            match flow_post {
-                // Continue looking after remembering the deepest failure
-                Flow::Cont(errors_post) => {
-                    let Flow::Cont(errors) = &mut flow else { unreachable!() };
-                    flow::retain_deepest_errors(errors, errors_post);
-                }
-                // The first conclusion selects this alternative
-                flow => return ok!((ctx, flow)),
-            }
-        }
-    }
+                .map_or_else(Span::default, |instr| instr.node.span.clone())
+        }))
+    } else {
+        // A mismatch ends this alternative, but permits trying the next one
+        unwrap!(flow::choose_sequential(blocks, |block| { Flow::cont_from_unmatch(eval(block)) }))
+    };
+    // Local alternative bindings never escape
     ok!((ctx, flow))
 }
 

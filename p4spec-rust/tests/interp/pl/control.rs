@@ -95,6 +95,60 @@ fn alternatives_start_with_the_same_bindings() {
 }
 
 #[test]
+fn alternatives_choose_the_first_conclusion_or_report_nondeterminism() {
+    let spec_pl = function(vec![backtrack(vec![vec![returning(nat(1))], vec![returning(nat(2))]])]);
+    let mut runner = configured(spec_pl.clone(), false);
+    let value = runner.context().call_func("entry", &[], &[]).unwrap();
+    assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "1");
+
+    let mut runner = configured(spec_pl, true);
+    let error = runner.context().call_func("entry", &[], &[]).unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("nondeterministic instruction evaluation"),
+        "{error}"
+    );
+}
+
+#[test]
+fn mismatches_abort_the_block_before_trying_the_next_alternative() {
+    let mut spec_pl =
+        spec("builtin dec $unavailable() : nat\ndec $entry() : nat\ndef $entry() = $unavailable()");
+    let func = spec_pl
+        .iter_mut()
+        .find_map(|def| match &mut def.node.node {
+            ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func)) => Some(func),
+            _ => None,
+        })
+        .unwrap();
+    let mut block = std::mem::take(&mut func.block);
+    // This conclusion must not run after the unavailable builtin mismatches
+    block.push(returning(nat(99)));
+    func.block = vec![backtrack(vec![block, vec![returning(nat(7))]])];
+    for det in [false, true] {
+        let mut runner = configured(spec_pl.clone(), det);
+        let value = runner.context().call_func("entry", &[], &[]).unwrap();
+        assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "7", "det={det}");
+    }
+}
+
+#[test]
+fn fatal_errors_abort_alternative_selection() {
+    for det in [false, true] {
+        let mut runner = configured(
+            function(vec![backtrack(vec![
+                vec![returning(variable("missing"))],
+                vec![returning(nat(7))],
+            ])]),
+            det,
+        );
+        let error = runner.context().call_func("entry", &[], &[]).unwrap_err();
+        assert!(error.to_string().contains("value `missing` is undefined"), "det={det}: {error}");
+    }
+}
+
+#[test]
 fn dispatch_alternatives_keep_their_bindings_local() {
     for det in [false, true] {
         let mut spec_pl =
