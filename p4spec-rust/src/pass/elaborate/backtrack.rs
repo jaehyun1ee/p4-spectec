@@ -11,6 +11,8 @@ use crate::{
 
 use super::{context::Context, error, error::ElabError};
 
+// == Result
+
 /// A successful elaboration, fatal failure, or recoverable mismatch.
 #[derive(Debug)]
 pub(super) enum Backtrack<T> {
@@ -22,10 +24,12 @@ pub(super) enum Backtrack<T> {
     Mismatch(Vec<Report>),
 }
 
+// == Macros
+
 /// Builds [`Backtrack::Success`].
 macro_rules! success {
     ($($value:tt)*) => {
-        $crate::pass::elaborate::attempt::Backtrack::Success($($value)*)
+        $crate::pass::elaborate::backtrack::Backtrack::Success($($value)*)
     };
 }
 pub(super) use success;
@@ -33,10 +37,10 @@ pub(super) use success;
 /// Builds [`Backtrack::Fatal`] from a report list.
 macro_rules! fatal {
     (error: $error:expr $(,)?) => {
-        $crate::pass::elaborate::attempt::Backtrack::Fatal(vec![*$error])
+        $crate::pass::elaborate::backtrack::Backtrack::Fatal(vec![*$error])
     };
     ($($reports:tt)*) => {
-        $crate::pass::elaborate::attempt::Backtrack::Fatal($($reports)*)
+        $crate::pass::elaborate::backtrack::Backtrack::Fatal($($reports)*)
     };
 }
 pub(super) use fatal;
@@ -44,13 +48,13 @@ pub(super) use fatal;
 /// Builds [`Backtrack::Mismatch`] from a report list.
 macro_rules! mismatch {
     (error: $error:expr $(,)?) => {
-        $crate::pass::elaborate::attempt::Backtrack::Mismatch(vec![*$error])
+        $crate::pass::elaborate::backtrack::Backtrack::Mismatch(vec![*$error])
     };
     (report: $report:expr $(,)?) => {
-        $crate::pass::elaborate::attempt::Backtrack::Mismatch(vec![$report])
+        $crate::pass::elaborate::backtrack::Backtrack::Mismatch(vec![$report])
     };
     ($($reports:tt)*) => {
-        $crate::pass::elaborate::attempt::Backtrack::Mismatch($($reports)*)
+        $crate::pass::elaborate::backtrack::Backtrack::Mismatch($($reports)*)
     };
 }
 pub(super) use mismatch;
@@ -59,12 +63,12 @@ pub(super) use mismatch;
 macro_rules! unwrap {
     ($result:expr) => {
         match $result {
-            $crate::pass::elaborate::attempt::success!(value) => value,
-            $crate::pass::elaborate::attempt::fatal!(reports) => {
-                return $crate::pass::elaborate::attempt::fatal!(reports)
+            $crate::pass::elaborate::backtrack::success!(value) => value,
+            $crate::pass::elaborate::backtrack::fatal!(reports) => {
+                return $crate::pass::elaborate::backtrack::fatal!(reports)
             }
-            $crate::pass::elaborate::attempt::mismatch!(reports) => {
-                return $crate::pass::elaborate::attempt::mismatch!(reports)
+            $crate::pass::elaborate::backtrack::mismatch!(reports) => {
+                return $crate::pass::elaborate::backtrack::mismatch!(reports)
             }
         }
     };
@@ -76,7 +80,7 @@ macro_rules! unwrap_from_result {
     ($result:expr) => {
         match $result {
             Ok(value) => value,
-            Err(error) => return $crate::pass::elaborate::attempt::fatal!(vec![*error]),
+            Err(error) => return $crate::pass::elaborate::backtrack::fatal!(vec![*error]),
         }
     };
 }
@@ -95,7 +99,7 @@ impl<T> Backtrack<T> {
     }
 
     /// Promotes a mismatch to fatal at a non-backtracking boundary.
-    pub(super) fn promote_mismatch(self) -> Self {
+    pub(super) fn mismatch_as_failure(self) -> Self {
         match self {
             mismatch!(reports) => fatal!(reports),
             result => result,
@@ -113,7 +117,7 @@ impl<T> Backtrack<T> {
     }
 }
 
-// == Choice and finishing
+// == Choice
 
 /// Tries the second alternative only when the first mismatches.
 ///
@@ -152,6 +156,8 @@ pub(super) fn choose_sequential<T>(
         }
     }
 }
+
+// == Finishing
 
 /// Converts a completed backtrack into a plain elaboration result.
 pub(super) fn finish<T>(result: Backtrack<T>) -> Result<T, ElabError> {

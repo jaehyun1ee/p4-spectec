@@ -11,7 +11,7 @@
 
 #![allow(clippy::result_large_err)]
 
-mod attempt;
+mod backtrack;
 mod context;
 mod dimension;
 mod error;

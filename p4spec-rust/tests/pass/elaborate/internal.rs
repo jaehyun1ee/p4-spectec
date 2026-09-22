@@ -5,7 +5,7 @@ use crate::{
         il::ast::TypKind,
     },
     pass::elaborate::{
-        attempt::{Backtrack, choose_sequential, finish},
+        backtrack::{Backtrack, choose_sequential, finish},
         context::Context,
         error,
     },

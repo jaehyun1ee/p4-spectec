@@ -39,7 +39,7 @@ use crate::{
 };
 
 use super::{
-    attempt::{
+    backtrack::{
         Backtrack, choose_sequential, fatal, finish, mismatch, success, unwrap, unwrap_from_result,
     },
     context::Context,
@@ -2016,7 +2016,7 @@ fn elab_arg(
     match (&param_il.node, &arg.node) {
         // Expression arguments elaborate against the parameter type
         (il::ParamKind::Exp(typ_il), el::ArgKind::Exp(exp)) => {
-            let exp_il = unwrap!(elab_exp(ctx, typ_il, exp).promote_mismatch());
+            let exp_il = unwrap!(elab_exp(ctx, typ_il, exp).mismatch_as_failure());
             let arg_il = il::ArgKind::Exp(Box::new(exp_il));
             let arg_il = phrase!(node: arg_il, span: arg.span.clone());
             success!(arg_il)
@@ -2255,7 +2255,7 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Backtrack<il::PremK
         Ok((not_typ_il, input_hint)) => (not_typ_il.clone(), input_hint.clone()),
         Err(error) => return fatal!(error: error),
     };
-    let not_exp_il = unwrap!(elab_not_exp(ctx, &not_typ_il, &prem.exp).promote_mismatch());
+    let not_exp_il = unwrap!(elab_not_exp(ctx, &not_typ_il, &prem.exp).mismatch_as_failure());
     let exps_il = not_exp_il.args();
     let conditional = match input::is_conditional(&input_hint, &exps_il) {
         Ok(conditional) => conditional,
@@ -2283,7 +2283,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il
         Ok((not_typ_il, input_hint)) => (not_typ_il.clone(), input_hint.clone()),
         Err(error) => return fatal!(error: error),
     };
-    let not_exp_il = unwrap!(elab_not_exp(ctx, &not_typ_il, &prem.exp).promote_mismatch());
+    let not_exp_il = unwrap!(elab_not_exp(ctx, &not_typ_il, &prem.exp).mismatch_as_failure());
     let exps_il = not_exp_il.args();
     let (_, exps_output_il) = match input::split(&input_hint, exps_il) {
         Ok(parts) => parts,
@@ -2309,7 +2309,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il
 
 fn elab_if_prem(ctx: &mut Context, prem: &el::IfPrem) -> Backtrack<il::PremKind> {
     let typ_bool_il = typ_at(il::TypKind::Bool, &prem.exp.span);
-    let exp_il = unwrap!(elab_exp(ctx, &typ_bool_il, &prem.exp).promote_mismatch());
+    let exp_il = unwrap!(elab_exp(ctx, &typ_bool_il, &prem.exp).mismatch_as_failure());
     success!(il::PremKind::If(il::IfPrem { exp: exp_il }))
 }
 
@@ -2338,7 +2338,7 @@ fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Backtrack<il::PremK
 // - Debug premise elaboration
 
 fn elab_debug_prem(ctx: &mut Context, prem: &el::DebugPrem) -> Backtrack<il::PremKind> {
-    let exp_il = unwrap!(infer_exp(ctx, &prem.exp).promote_mismatch());
+    let exp_il = unwrap!(infer_exp(ctx, &prem.exp).mismatch_as_failure());
     success!(il::PremKind::Debug(il::DebugPrem { exp: exp_il }))
 }
 
