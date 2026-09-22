@@ -1,4 +1,4 @@
-//! Target-specific normalizations used between STF parsing and simulation.
+//! Target-specific normalizations used between STF parsing and simulation
 //!
 //! Public transforms rewrite qualified-name components, validity markers, and
 //! action qualification before simulation. For example, `hdr.$valid$` becomes
@@ -11,12 +11,14 @@ use super::{
 
 // == Case-insensitive string helpers
 
+/// Whether `value` contains `pattern`, ignoring ASCII case.
 fn contains_ignore_ascii_case(value: &str, pattern: &str) -> bool {
     value
         .to_ascii_lowercase()
         .contains(&pattern.to_ascii_lowercase())
 }
 
+/// Replaces the first case-insensitive match of `pattern` with `replacement`.
 fn replace_first_ignore_ascii_case(value: &str, pattern: &str, replacement: &str) -> String {
     let value_lower = value.to_ascii_lowercase();
     let pattern_lower = pattern.to_ascii_lowercase();
@@ -65,6 +67,7 @@ impl Name {
 // == Table matches
 
 impl TableMatch {
+    /// Rewrites a `$valid$` match key to an `isValid()` call.
     pub fn rewrite_valid(mut self) -> Self {
         let name = self.name.into_string();
         self.name = name.replace("$valid$", "isValid()").into();
@@ -75,6 +78,7 @@ impl TableMatch {
 // == Actions
 
 impl Action {
+    /// Drops all but the last dotted segment of the action name.
     pub fn into_unqualified(mut self) -> Self {
         let name = self.name.into_string();
         let unqualified = name.rsplit('.').next().unwrap_or(&name).to_owned();
@@ -82,6 +86,7 @@ impl Action {
         self
     }
 
+    /// Replaces the requested substrings in the action name.
     pub fn replace_substring(mut self, substrings: &[&str], replacement: &str) -> Self {
         self.name = self.name.replace_substring(substrings, replacement);
         self
