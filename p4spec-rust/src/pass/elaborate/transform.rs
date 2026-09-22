@@ -14,18 +14,19 @@
 //! so a `nat` variable where `int` is expected becomes an upcast.
 
 use crate::{
+    diagnostic::Report,
     lang::{
         common::prim,
         common::{
             Id,
-            ds::map::ArityMismatch,
+            ds::map::{ArityMismatch, IdMap},
             notation::mixfix::Mixfix,
             source::{Phrase, Span},
         },
         el::ast as el,
         hints::input,
         il::{ast as il, fresh as il_fresh, var as il_var},
-        traits::free::FreeIds,
+        traits::{free::FreeIds, print::Print},
     },
     note_phrase, phrase,
     runtime::{
@@ -38,10 +39,11 @@ use crate::{
 };
 
 use super::{
-    ElabError, ElabErrorKind, EntityKind, TypeShape,
+    ElabErrorKind, EntityKind, TypeShape,
     attempt::{Attempt, choose_sequential, fail, fail_silent, finish},
     context::Context,
     dimension,
+    error::{self, MigrationError as ElabError},
 };
 
 // == Checks
@@ -65,6 +67,19 @@ fn distinct_tparams(tparams: &[el::TParam], span: &Span) -> Result<(), ElabError
             "type parameters are not distinct",
         ))
     }
+}
+
+/// Finds the first repeated parameter while retaining the earlier occurrence.
+fn repeated_tparam(tparams: &[el::TParam]) -> Option<(&Id, &Span)> {
+    let mut seen = IdMap::new();
+    for tparam in tparams {
+        // Stop at the first duplicate in source order
+        if let Some(span_previous) = seen.get(tparam) {
+            return Some((tparam, *span_previous));
+        }
+        seen.insert(tparam.clone(), &tparam.span);
+    }
+    None
 }
 
 // == Types
@@ -1257,68 +1272,78 @@ fn elab_exp_normal(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) ->
             }
             Err(failure) => Err(failure),
         },
-        Err(_) => {
-            // A wildcard `_` becomes a fresh variable of the expected type
-            if matches!(&exp.node, el::ExpKind::Id(id) if id.node == "_") {
-                return elab_wildcard_exp(ctx, typ_expect_il, exp);
-            }
-            // Unfold a named expected type into its definition
-            if let il::TypKind::Var(id, targs_il) = &typ_expect_il.node
-                && let Some(TypeDef::Defined(tparams, def_typ_il)) = ctx.find_typdef_opt(id)
-            {
-                let theta = match Theta::from_lists(tparams, targs_il) {
-                    Ok(theta) => theta,
-                    Err(mismatch) => {
-                        return fail(arity_error(
-                            mismatch.expected,
-                            mismatch.actual,
-                            typ_expect_il.span.clone(),
-                        ));
-                    }
-                };
-                match &def_typ_il.node {
-                    // Alias: elaborate against the aliased type
-                    il::DefTypKind::Plain(typ_il) => {
-                        let typ_il = subst_typ(&|id| theta.get(id), typ_il)?;
-                        return elab_exp_normal(ctx, &typ_il, exp);
-                    }
-                    // Struct: match the fields
-                    il::DefTypKind::Struct(typ_fields_il) => {
-                        let mut typ_fields_subst_il = Vec::with_capacity(typ_fields_il.len());
-                        for il::TypField { atom, typ: typ_il } in typ_fields_il {
-                            let typ_il = subst_typ(&|id| theta.get(id), typ_il)?;
-                            typ_fields_subst_il
-                                .push(il::TypField { atom: atom.clone(), typ: typ_il });
-                        }
-                        return elab_struct_exp(ctx, typ_expect_il, &typ_fields_subst_il, exp);
-                    }
-                    // Variant: match exactly one case
-                    il::DefTypKind::Variant(typ_cases_il) => {
-                        let mut typ_cases_subst_il = Vec::with_capacity(typ_cases_il.len());
-                        for il::TypCase { not_typ: not_typ_il, typ_origin: typ_origin_il, hints } in
-                            typ_cases_il
-                        {
-                            let find_subst = |id: &il::Id| theta.get(id);
-                            let not_typ_il = subst_not_typ(&find_subst, not_typ_il)?;
-                            let targs_il = subst_typs(&find_subst, &typ_origin_il.node.targs)?;
-                            let typ_origin_il = phrase! {
-                                node: il::TypOriginKind { id: typ_origin_il.node.id.clone(), targs: targs_il },
-                                span: typ_origin_il.span.clone(),
-                            };
-                            typ_cases_subst_il.push(il::TypCase {
-                                not_typ: not_typ_il,
-                                typ_origin: typ_origin_il,
-                                hints: hints.clone(),
-                            });
-                        }
-                        return elab_variant_exp(ctx, typ_expect_il, &typ_cases_subst_il, exp);
-                    }
-                }
-            }
-            // Other constructs are shaped by the expected type alone
-            elab_plain_exp(ctx, typ_expect_il, exp)
+        Err(failure_infer) => {
+            // Retain inference diagnostics if contextual elaboration also fails
+            elab_exp_contextual(ctx, typ_expect_il, exp)
+                .map_err(|failure| failure_infer.merge(failure))
         }
     }
+}
+
+/// Elaborates an expression against the shape of its expected type.
+fn elab_exp_contextual(
+    ctx: &mut Context,
+    typ_expect_il: &il::Typ,
+    exp: &el::Exp,
+) -> Attempt<il::Exp> {
+    // A wildcard `_` becomes a fresh variable of the expected type
+    if matches!(&exp.node, el::ExpKind::Id(id) if id.node == "_") {
+        return elab_wildcard_exp(ctx, typ_expect_il, exp);
+    }
+    // Unfold a named expected type into its definition
+    if let il::TypKind::Var(id, targs_il) = &typ_expect_il.node
+        && let Some(TypeDef::Defined(tparams, def_typ_il)) = ctx.find_typdef_opt(id)
+    {
+        let theta = match Theta::from_lists(tparams, targs_il) {
+            Ok(theta) => theta,
+            Err(mismatch) => {
+                return fail(arity_error(
+                    mismatch.expected,
+                    mismatch.actual,
+                    typ_expect_il.span.clone(),
+                ));
+            }
+        };
+        match &def_typ_il.node {
+            // Alias: elaborate against the aliased type
+            il::DefTypKind::Plain(typ_il) => {
+                let typ_il = subst_typ(&|id| theta.get(id), typ_il)?;
+                return elab_exp_normal(ctx, &typ_il, exp);
+            }
+            // Struct: match the fields
+            il::DefTypKind::Struct(typ_fields_il) => {
+                let mut typ_fields_subst_il = Vec::with_capacity(typ_fields_il.len());
+                for il::TypField { atom, typ: typ_il } in typ_fields_il {
+                    let typ_il = subst_typ(&|id| theta.get(id), typ_il)?;
+                    typ_fields_subst_il.push(il::TypField { atom: atom.clone(), typ: typ_il });
+                }
+                return elab_struct_exp(ctx, typ_expect_il, &typ_fields_subst_il, exp);
+            }
+            // Variant: match exactly one case
+            il::DefTypKind::Variant(typ_cases_il) => {
+                let mut typ_cases_subst_il = Vec::with_capacity(typ_cases_il.len());
+                for il::TypCase { not_typ: not_typ_il, typ_origin: typ_origin_il, hints } in
+                    typ_cases_il
+                {
+                    let find_subst = |id: &il::Id| theta.get(id);
+                    let not_typ_il = subst_not_typ(&find_subst, not_typ_il)?;
+                    let targs_il = subst_typs(&find_subst, &typ_origin_il.node.targs)?;
+                    let typ_origin_il = phrase! {
+                        node: il::TypOriginKind { id: typ_origin_il.node.id.clone(), targs: targs_il },
+                        span: typ_origin_il.span.clone(),
+                    };
+                    typ_cases_subst_il.push(il::TypCase {
+                        not_typ: not_typ_il,
+                        typ_origin: typ_origin_il,
+                        hints: hints.clone(),
+                    });
+                }
+                return elab_variant_exp(ctx, typ_expect_il, &typ_cases_subst_il, exp);
+            }
+        }
+    }
+    // Other constructs are shaped by the expected type alone
+    elab_plain_exp(ctx, typ_expect_il, exp)
 }
 
 // - Wildcard expression elaboration
@@ -2356,7 +2381,7 @@ fn elab_def(ctx: &mut Context, def_el: el::Def) -> Result<Option<il::Def>, ElabE
         }
         // A table declaration; its rows arrive later
         el::DefKind::TableDec(table_dec_def) => {
-            let def_kind_il = elab_table_dec_def(ctx, table_dec_def, &span)?;
+            let def_kind_il = elab_table_dec_def(ctx, table_dec_def)?;
             let def_il = phrase!(node: def_kind_il, span: span);
             Ok(Some(def_il))
         }
@@ -2450,6 +2475,11 @@ fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabE
                 ));
             }
         }
+        Some(TypeDef::Defined(_, _)) => {
+            // The stored identifier still points at the first declaration
+            let (id_previous, _) = ctx.tdenv.get_key_value(&def.id).expect("defined type");
+            return Err(error::type_definition_repeated(&def.id, &id_previous.span).into());
+        }
         Some(_) => {
             return Err(ElabError::new(
                 ElabErrorKind::Duplicate(EntityKind::Type),
@@ -2480,7 +2510,7 @@ fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabE
         ctx_local.add_tparams(&def.tparams)?;
         elab_def_typ(&ctx_local, &def.id, &def.tparams, &def.def_typ)?
     };
-    ctx.update_typdef(&def.id, typdef)?;
+    ctx.update_typdef(&def.id, typdef);
     let defined_typ_il =
         il::DefinedTyp { id: def.id, tparams: def.tparams, def_typ: def_typ_il, hints: def.hints };
     Ok(il::DefKind::Typ(il::TypDef::Defined(Box::new(defined_typ_il))))
@@ -2491,19 +2521,11 @@ fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabE
 /// Declares a global meta-variable.
 fn elab_var_def(ctx: &mut Context, def: el::VarDef) -> Result<il::DefKind, ElabError> {
     if !valid_tid(&def.id) {
-        return Err(ElabError::new(
-            ElabErrorKind::InvalidIdentifier,
-            def.id.span.clone(),
-            "invalid meta-variable identifier",
-        ));
+        return Err(error::meta_variable_identifier_invalid(&def.id).into());
     }
     // A meta-variable name must not clash with a type
-    if ctx.bound_typdef(&def.id) {
-        return Err(ElabError::new(
-            ElabErrorKind::Duplicate(EntityKind::Type),
-            def.id.span.clone(),
-            "type already defined",
-        ));
+    if let Some((id_previous, _)) = ctx.tdenv.get_key_value(&def.id) {
+        return Err(error::meta_variable_type_repeated(&def.id, &id_previous.span).into());
     }
     let typ_il = elab_plain_typ(ctx, &def.plain_typ)?;
     ctx.add_metavar(def.id.clone(), typ_il.clone())?;
@@ -2595,7 +2617,10 @@ fn elab_rule_group_def(
 
 /// Declares an extern function.
 fn elab_extern_dec_def(ctx: &mut Context, def: el::ExternDecDef) -> Result<il::DefKind, ElabError> {
-    distinct_tparams(&def.tparams, &def.id.span)?;
+    // Label both occurrences of the first repeated type parameter
+    if let Some((tparam, span_previous)) = repeated_tparam(&def.tparams) {
+        return Err(error::function_extern_type_parameter_repeated(tparam, span_previous).into());
+    }
     // Parameters and return type see the type parameters
     let (params_il, typ_il) = {
         let mut ctx_local = ctx.clone();
@@ -2624,7 +2649,10 @@ fn elab_builtin_dec_def(
     ctx: &mut Context,
     def: el::BuiltinDecDef,
 ) -> Result<il::DefKind, ElabError> {
-    distinct_tparams(&def.tparams, &def.id.span)?;
+    // Label both occurrences of the first repeated type parameter
+    if let Some((tparam, span_previous)) = repeated_tparam(&def.tparams) {
+        return Err(error::function_builtin_type_parameter_repeated(tparam, span_previous).into());
+    }
     // Parameters and return type see the type parameters
     let (params_il, typ_il) = {
         let mut ctx_local = ctx.clone();
@@ -2649,35 +2677,28 @@ fn elab_builtin_dec_def(
 }
 
 /// Declares a table function, which takes plain parameters and returns `bool`.
-fn elab_table_dec_def(
-    ctx: &mut Context,
-    def: el::TableDecDef,
-    span: &Span,
-) -> Result<il::DefKind, ElabError> {
+fn elab_table_dec_def(ctx: &mut Context, def: el::TableDecDef) -> Result<il::DefKind, ElabError> {
     let params_il = def
         .params
         .iter()
         .map(|param| elab_param(ctx, param))
         .collect::<Result<Vec<_>, _>>()?;
-    // Table parameters must be plain expressions
-    if params_il
-        .iter()
-        .any(|param_il| !matches!(param_il.node, il::ParamKind::Exp(_)))
-    {
-        return Err(ElabError::new(
-            ElabErrorKind::InvalidDefinition,
-            span.clone(),
-            "table cannot have function parameters",
-        ));
+    // Locate the offending function parameter rather than the whole declaration
+    for param_il in &params_il {
+        if let il::ParamKind::Def(id, _, _, _) = &param_il.node {
+            return Err(error::table_parameter_unsupported(id, &param_il.span).into());
+        }
     }
-    // Tables return booleans
+    // Accept boolean aliases under the same equivalence relation as other types
     let typ_il = elab_plain_typ(ctx, &def.plain_typ)?;
-    if typ_il.node != il::TypKind::Bool {
-        return Err(ElabError::new(
-            ElabErrorKind::TypeMismatch,
-            typ_il.span,
-            "table must return boolean",
-        ));
+    let typ_bool_il = phrase!(node: il::TypKind::Bool, span: typ_il.span.clone());
+    if !equiv_typ(&ctx.tdenv, &typ_il, &typ_bool_il)? {
+        return Err(error::table_return_type_invalid(
+            &def.id,
+            &typ_il.span,
+            &Print::to_string(&typ_il),
+        )
+        .into());
     }
     let table_func_il = il::TableFunc {
         id: def.id,
@@ -2692,7 +2713,10 @@ fn elab_table_dec_def(
 
 /// Declares a function whose clauses arrive later.
 fn elab_func_dec_def(ctx: &mut Context, def: el::FuncDecDef) -> Result<il::DefKind, ElabError> {
-    distinct_tparams(&def.tparams, &def.id.span)?;
+    // Label both occurrences of the first repeated type parameter
+    if let Some((tparam, span_previous)) = repeated_tparam(&def.tparams) {
+        return Err(error::function_type_parameter_repeated(tparam, span_previous).into());
+    }
     // Parameters and return type see the type parameters
     let (params_il, typ_il) = {
         let mut ctx_local = ctx.clone();
@@ -2767,7 +2791,7 @@ fn elab_func_def(ctx: &mut Context, def: &Phrase<&el::FuncDef>) -> Result<(), El
     if is_else {
         ctx.add_defined_func_else_clause(&def.id, clause_il)?;
     } else {
-        ctx.add_defined_func_clause(&def.id, clause_il)?;
+        ctx.add_defined_func_clause(&def.id, clause_il);
     }
     Ok(())
 }
@@ -2777,87 +2801,66 @@ fn elab_func_def(ctx: &mut Context, def: &Phrase<&el::FuncDef>) -> Result<(), El
 // - Definition population
 
 /// Moves the collected rule groups of a relation into its IL definition.
-fn populate_rel(
-    ctx: &mut Context,
-    rel_def_il: il::RelDef,
-    span: &Span,
-) -> Result<il::RelDef, ElabError> {
+fn populate_rel(ctx: &mut Context, rel_def_il: il::RelDef) -> il::RelDef {
     match rel_def_il {
-        il::RelDef::Extern(_) => Ok(rel_def_il),
+        il::RelDef::Extern(_) => rel_def_il,
         il::RelDef::Defined(mut defined_rel_il) => {
-            if !defined_rel_il.rule_groups.is_empty() || defined_rel_il.else_group.is_some() {
-                return Err(ElabError::new(
-                    ElabErrorKind::AlreadyPopulated,
-                    span.clone(),
-                    "relation was already populated",
-                ));
-            }
+            // elab_rel_def constructs an empty declaration
+            assert!(defined_rel_il.rule_groups.is_empty() && defined_rel_il.else_group.is_none());
+
             // The collected rule groups replace the empty declaration
-            let defined_rel_stored_il = ctx.take_defined_rel(&defined_rel_il.id)?;
+            let defined_rel_stored_il = ctx.take_defined_rel(&defined_rel_il.id);
             defined_rel_il.rule_groups = defined_rel_stored_il.rule_groups;
             defined_rel_il.else_group = defined_rel_stored_il.else_group;
-            Ok(il::RelDef::Defined(defined_rel_il))
+            il::RelDef::Defined(defined_rel_il)
         }
     }
 }
 
 /// Moves the collected rows or clauses of a function into its IL definition.
-fn populate_meta_func(
-    ctx: &mut Context,
-    meta_func_def_il: il::MetaFuncDef,
-    span: &Span,
-) -> Result<il::MetaFuncDef, ElabError> {
+fn populate_meta_func(ctx: &mut Context, meta_func_def_il: il::MetaFuncDef) -> il::MetaFuncDef {
     match meta_func_def_il {
         // Extern and builtin functions have no body to fill
-        il::MetaFuncDef::Extern(_) => Ok(meta_func_def_il),
-        il::MetaFuncDef::Builtin(_) => Ok(meta_func_def_il),
+        il::MetaFuncDef::Extern(_) => meta_func_def_il,
+        il::MetaFuncDef::Builtin(_) => meta_func_def_il,
         il::MetaFuncDef::Table(mut table_func_il) => {
-            if !table_func_il.rows.is_empty() {
-                return Err(ElabError::new(
-                    ElabErrorKind::AlreadyPopulated,
-                    span.clone(),
-                    "table was already populated",
-                ));
-            }
+            // elab_table_dec_def constructs an empty declaration
+            assert!(table_func_il.rows.is_empty());
+
             // The collected rows replace the empty declaration
-            let table_func_stored_il = ctx.take_table_func(&table_func_il.id)?;
+            let table_func_stored_il = ctx.take_table_func(&table_func_il.id);
             table_func_il.rows = table_func_stored_il.rows;
-            Ok(il::MetaFuncDef::Table(table_func_il))
+            il::MetaFuncDef::Table(table_func_il)
         }
         il::MetaFuncDef::Defined(mut defined_func_il) => {
-            if !defined_func_il.clauses.is_empty() || defined_func_il.else_clause.is_some() {
-                return Err(ElabError::new(
-                    ElabErrorKind::AlreadyPopulated,
-                    span.clone(),
-                    "function was already populated",
-                ));
-            }
+            // elab_func_dec_def constructs an empty declaration
+            assert!(defined_func_il.clauses.is_empty() && defined_func_il.else_clause.is_none());
+
             // The collected clauses replace the empty declaration
-            let defined_func_stored_il = ctx.take_defined_func(&defined_func_il.id)?;
+            let defined_func_stored_il = ctx.take_defined_func(&defined_func_il.id);
             defined_func_il.clauses = defined_func_stored_il.clauses;
             defined_func_il.else_clause = defined_func_stored_il.else_clause;
-            Ok(il::MetaFuncDef::Defined(defined_func_il))
+            il::MetaFuncDef::Defined(defined_func_il)
         }
     }
 }
 
 /// Fills every declaration with the bodies collected in the context.
-fn populate_defs(mut ctx: Context, defs_il: il::Spec) -> Result<il::Spec, ElabError> {
+fn populate_defs(mut ctx: Context, defs_il: il::Spec) -> il::Spec {
     defs_il
         .into_iter()
         .map(|def_il| {
             // Only relations and functions collect bodies
             let def_kind_il = match def_il.node {
                 il::DefKind::Rel(rel_def_il) => {
-                    il::DefKind::Rel(populate_rel(&mut ctx, rel_def_il, &def_il.span)?)
+                    il::DefKind::Rel(populate_rel(&mut ctx, rel_def_il))
                 }
-                il::DefKind::MetaFunc(meta_func_def_il) => il::DefKind::MetaFunc(
-                    populate_meta_func(&mut ctx, meta_func_def_il, &def_il.span)?,
-                ),
+                il::DefKind::MetaFunc(meta_func_def_il) => {
+                    il::DefKind::MetaFunc(populate_meta_func(&mut ctx, meta_func_def_il))
+                }
                 def_kind_il => def_kind_il,
             };
-            let def_il = phrase!(node: def_kind_il, span: def_il.span);
-            Ok(def_il)
+            phrase!(node: def_kind_il, span: def_il.span)
         })
         .collect()
 }
@@ -2865,7 +2868,10 @@ fn populate_defs(mut ctx: Context, defs_il: il::Spec) -> Result<il::Spec, ElabEr
 // - Entry point
 
 /// Elaborates a specification: definitions, population, dimension analysis.
-pub(super) fn elab_spec(spec_el: el::Spec) -> Result<il::Spec, ElabError> {
+pub(super) fn elab_spec(
+    spec_el: el::Spec,
+    warnings: &mut Vec<Report>,
+) -> Result<il::Spec, ElabError> {
     let mut ctx = Context::new();
     let mut defs_il = Vec::new();
     // Declarations become IL definitions, bodies are collected in the context
@@ -2875,7 +2881,33 @@ pub(super) fn elab_spec(spec_el: el::Spec) -> Result<il::Spec, ElabError> {
         }
     }
     // Attach the collected bodies to their declarations
-    let mut defs_il = populate_defs(ctx, defs_il)?;
+    let mut defs_il = populate_defs(ctx, defs_il);
+    // Report missing relation bodies before missing function bodies
+    for def_il in &defs_il {
+        if let il::DefKind::Rel(il::RelDef::Defined(rel_il)) = &def_il.node
+            && rel_il.rule_groups.is_empty()
+            && rel_il.else_group.is_none()
+        {
+            warnings.push(error::relation_rule_missing(&rel_il.id, &def_il.span));
+        }
+    }
+    // Population warnings remain committed if dimension analysis later fails
+    for def_il in &defs_il {
+        match &def_il.node {
+            // Empty tables remain valid declarations
+            il::DefKind::MetaFunc(il::MetaFuncDef::Table(func_il)) if func_il.rows.is_empty() => {
+                warnings.push(error::table_row_missing(&func_il.id, &def_il.span));
+            }
+            // An otherwise clause is a body even without regular clauses
+            il::DefKind::MetaFunc(il::MetaFuncDef::Defined(func_il))
+                if func_il.clauses.is_empty() && func_il.else_clause.is_none() =>
+            {
+                warnings.push(error::function_clause_missing(&func_il.id, &def_il.span));
+            }
+            // Other definitions have no missing body warning
+            _ => {}
+        }
+    }
     // Annotate iterations with the variables they range over
     dimension::analyze_spec(&mut defs_il)?;
     Ok(defs_il)

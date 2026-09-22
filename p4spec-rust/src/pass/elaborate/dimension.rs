@@ -39,7 +39,7 @@ use crate::{
     runtime::{dim::Dim, envs::elab::VEnv},
 };
 
-use super::{ElabError, ElabErrorKind};
+use super::{ElabErrorKind, error::MigrationError as ElabError};
 
 // == Dimension inference
 

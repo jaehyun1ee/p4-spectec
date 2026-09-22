@@ -11,7 +11,9 @@
 
 use crate::{lang::common::source::Span, runtime::ops::typ::TypeError};
 
-use super::{ElabError, ElabErrorKind, context::Context, error::ElabTrace};
+use super::{
+    ElabErrorKind, context::Context, error::ElabTrace, error::MigrationError as ElabError,
+};
 
 /// A successful elaboration result or recoverable backtracking failure.
 pub(super) type Attempt<T> = Result<T, Backtrack>;
@@ -112,7 +114,7 @@ impl Backtrack {
             Self::best_error_in(trace, 0, &mut best);
         }
         // Fall back to a generic no-match error when no trace exists
-        best.map(|(_, _, _, error)| error.clone())
+        best.map(|(_, _, _, error)| error.selection())
             .unwrap_or_else(|| {
                 ElabError::new(
                     ElabErrorKind::NoMatchingAlternative,

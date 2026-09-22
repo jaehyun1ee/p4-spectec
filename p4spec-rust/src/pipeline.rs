@@ -25,7 +25,7 @@ pub enum Error {
     Frontend(#[from] FrontendError),
     /// Elaborating EL into IL failed.
     #[error(transparent)]
-    Elab(#[from] Box<ElabError>),
+    Elab(ElabError),
     /// Converting IL into AL failed.
     #[error(transparent)]
     Algo(#[from] AlgoError),
@@ -35,12 +35,6 @@ pub enum Error {
     /// Converting SL into PL failed.
     #[error(transparent)]
     Prose(#[from] ProseError),
-}
-
-impl From<ElabError> for Error {
-    fn from(error: ElabError) -> Self {
-        Self::Elab(Box::new(error))
-    }
 }
 
 // = Transformations
@@ -61,7 +55,7 @@ where
     P: AsRef<Path>,
 {
     let spec_el = parse(paths)?;
-    Ok(pass::elaborate::convert(spec_el)?)
+    pass::elaborate::convert(spec_el).map_err(Error::Elab)
 }
 
 /// Parses, elaborates, and converts specification paths into AL.
