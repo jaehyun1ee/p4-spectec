@@ -1,6 +1,6 @@
 //! Loaded PL definitions and per-call execution bindings
 //!
-//! `Global::load` retains annotated source and prepares callables once.
+//! `Global::load` prepares callables once for slot execution.
 //! A `Context` borrows global definitions and owns local bindings.
 //! Cloning preserves the local scope through copy-on-write value frames;
 //! `localize` starts a fresh scope over the same global definitions.
@@ -42,20 +42,18 @@ pub enum Scope {
     Local,
 }
 
-/// Stores loaded definitions alongside their original annotated source.
+/// Stores type definitions and prepared relation and function callables.
 #[derive(Debug)]
 pub struct Global {
-    source: source::Spec,
     tdenv: TDEnv,
     renv: REnv,
     fenv: FEnv,
 }
 
 impl Global {
-    /// Retains the source and prepares each callable for slot execution.
+    /// Loads type definitions and prepares each callable for slot execution.
     pub fn load(spec: source::Spec) -> Result<Self, Error> {
-        let mut loaded =
-            Self { source: Vec::new(), tdenv: TDEnv::new(), renv: REnv::new(), fenv: FEnv::new() };
+        let mut loaded = Self { tdenv: TDEnv::new(), renv: REnv::new(), fenv: FEnv::new() };
         // Borrow source definitions while building the execution environments
         for def in &spec {
             match &def.node.node {
@@ -117,14 +115,7 @@ impl Global {
                 }
             }
         }
-        // Keep the original annotated definitions without cloning the spec
-        loaded.source = spec;
         Ok(loaded)
-    }
-
-    /// The annotated PL specification in its original definition order.
-    pub fn source(&self) -> &source::Spec {
-        &self.source
     }
 }
 

@@ -342,7 +342,6 @@ fn prepared_expressions_keep_nested_hints_until_evaluation() {
     binding.exp_r.hints = hints.clone();
     let spec_pl = function(vec![instr_bind, returning(exp)]);
     let global = Global::load(spec_pl.clone()).unwrap();
-    assert_eq!(global.source(), &spec_pl);
 
     let ctx = Context::new(&global);
     let id = p4spec_rust::phrase!(node: "entry".to_owned(), span: Span::default());

@@ -79,8 +79,6 @@ fn prose_hints_do_not_change_function_results() {
             .iter()
             .any(|def| def.hints.prose_in.is_some())
     );
-    let global = Global::load(spec_annotated.clone()).unwrap();
-    assert_eq!(global.source(), &spec_annotated);
     for source in [plain, annotated] {
         let mut runner = runner(source);
         let value = runner.context().call_func("answer", &[], &[]).unwrap();
