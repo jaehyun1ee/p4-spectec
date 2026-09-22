@@ -26,7 +26,7 @@ use crate::{
         el::ast as el,
         hints::input,
         il::{ast as il, fresh as il_fresh, var as il_var},
-        traits::{free::FreeIds, print::Print},
+        traits::{at::At, free::FreeIds, print::Print},
     },
     note_phrase, phrase,
     runtime::{
@@ -2739,35 +2739,6 @@ fn elab_var_def(ctx: &mut Context, def: el::VarDef) -> Result<il::DefKind, ElabE
 
 // - Input hints
 
-/// Covers every source token that contributes to a relation notation.
-fn notation_span(not_typ_il: &il::NotTyp) -> Span {
-    fn collect(not_typ_il: &Mixfix<il::Typ>, spans: &mut Vec<Span>) {
-        match not_typ_il {
-            Mixfix::Arg(typ_il) => spans.push(typ_il.span.clone()),
-            Mixfix::Atom(atom) => spans.push(atom.span.clone()),
-            Mixfix::Brack(atom_l, not_typ_inner_il, atom_r) => {
-                spans.push(atom_l.span.clone());
-                collect(not_typ_inner_il, spans);
-                spans.push(atom_r.span.clone());
-            }
-            Mixfix::Infix(not_typ_l_il, atom, not_typ_r_il) => {
-                collect(not_typ_l_il, spans);
-                spans.push(atom.span.clone());
-                collect(not_typ_r_il, spans);
-            }
-            Mixfix::Seq(not_typs_il) => {
-                for not_typ_il in not_typs_il {
-                    collect(not_typ_il, spans);
-                }
-            }
-        }
-    }
-
-    let mut spans = Vec::new();
-    collect(&not_typ_il.node, &mut spans);
-    Span::over(&spans)
-}
-
 /// Reads a relation's `input` hint; by default every position is an input.
 fn fetch_input_hint(
     span: &Span,
@@ -2818,7 +2789,7 @@ fn fetch_input_hint(
                     idx,
                     arity,
                     span_idx,
-                    &notation_span(not_typ_il),
+                    &not_typ_il.node.at(),
                 )
             }
             input::InputError::InputCountMismatch {

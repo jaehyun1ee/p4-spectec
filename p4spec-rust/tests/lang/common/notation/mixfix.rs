@@ -7,7 +7,7 @@ use std::{
 use p4spec_rust::{
     lang::common::{
         notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
-        source::{NotePhrase, Position, Span},
+        source::{NotePhrase, Phrase, Position, Span},
     },
     note_phrase, phrase,
 };
@@ -114,4 +114,37 @@ fn test_eq_shape_borrows_nested_mixfixes_and_ignores_arguments() {
 
     assert!(left.eq_shape(&right));
     assert!(!left.eq_shape(&Mixfix::<&str>::Seq(vec![Mixfix::Arg("left")])));
+}
+
+#[test]
+fn test_at_distinguishes_outer_span_and_empty_notation_components() {
+    use p4spec_rust::lang::traits::at::At;
+    let mixfix: Mixfix<Phrase<usize>> = Mixfix::Brack(
+        phrase!(node: Atom::LParen, span: span(11)),
+        Box::new(Mixfix::Seq(vec![
+            Mixfix::Seq(vec![]),
+            Mixfix::Arg(phrase!(node: 0, span: span(13))),
+        ])),
+        phrase!(node: Atom::RParen, span: span(19)),
+    );
+    let not_typ = phrase!(node: mixfix, span: span(13));
+    assert_eq!(not_typ.at(), span(13));
+    assert_eq!(not_typ.node.at(), Span::new(span(11).left, span(19).right));
+    assert_eq!(Mixfix::<Phrase<usize>>::Seq(vec![]).at(), Span::default());
+}
+
+#[test]
+fn test_at_covers_notation_atoms_and_preserves_default_argument_spans() {
+    use p4spec_rust::lang::traits::at::At;
+    let mixfix: Mixfix<Phrase<usize>> = Mixfix::Infix(
+        Box::new(Mixfix::Seq(vec![
+            Mixfix::Atom(phrase!(node: Atom::Keyword("start".to_owned()), span: span(7))),
+            Mixfix::Arg(phrase!(node: 0, span: span(13))),
+        ])),
+        phrase!(node: Atom::Arrow, span: span(23)),
+        Box::new(Mixfix::Seq(vec![])),
+    );
+    assert_eq!(mixfix.at(), Span::new(span(7).left, span(23).right));
+    let mixfix = Mixfix::Seq(vec![mixfix, Mixfix::Arg(phrase!(node: 1, span: Span::default()))]);
+    assert_eq!(mixfix.at(), Span::new(Position::default(), span(23).right));
 }

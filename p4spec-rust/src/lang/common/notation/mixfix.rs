@@ -19,6 +19,7 @@ use std::{
 use crate::lang::{
     common::ds::set::IdSet,
     traits::{
+        at::At,
         cmp::SyntaxCmp,
         eq::SyntaxEq,
         free::FreeIds,
@@ -26,7 +27,10 @@ use crate::lang::{
     },
 };
 
-use super::{super::source::Phrase, atom::Atom};
+use super::{
+    super::source::{Phrase, Span},
+    atom::Atom,
+};
 
 // == Types
 
@@ -48,6 +52,40 @@ pub enum Mixfix<T> {
     Infix(Box<Self>, AtomPhrase, Box<Self>),
     /// Sequence of expressions.
     Seq(Vec<Self>),
+}
+
+// == Source locations
+
+impl<T: At> At for Mixfix<T> {
+    fn at(&self) -> Span {
+        // Collect actual occurrences so empty sequences add no default span
+        fn collect<T: At>(mixfix: &Mixfix<T>, spans: &mut Vec<Span>) {
+            match mixfix {
+                Mixfix::Arg(arg) => spans.push(arg.at()),
+                Mixfix::Atom(atom) => spans.push(atom.at()),
+                Mixfix::Brack(atom_l, mixfix_inner, atom_r) => {
+                    spans.push(atom_l.at());
+                    collect(mixfix_inner, spans);
+                    spans.push(atom_r.at());
+                }
+                Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
+                    collect(mixfix_l, spans);
+                    spans.push(atom.at());
+                    collect(mixfix_r, spans);
+                }
+                Mixfix::Seq(mixfixes) => {
+                    for mixfix in mixfixes {
+                        collect(mixfix, spans);
+                    }
+                }
+            }
+        }
+
+        // Cover the complete token set rather than only the argument positions
+        let mut spans = Vec::new();
+        collect(self, &mut spans);
+        spans.at()
+    }
 }
 
 // == Equality and comparison
