@@ -30,27 +30,9 @@ use super::{
     lexer::Token,
 };
 
-/// Wraps a lexeme stream for the parser.
-pub(crate) fn parser_tokens<I>(ctx: &Context, lexemes: I) -> ParserTokens<'_, I>
-where
-    I: Iterator,
-{
-    ParserTokens { ctx, lexemes, previous_right: None, previous_token: None, pending: None }
-}
+// = Helpers
 
-/// The adapted token stream.
-pub(crate) struct ParserTokens<'ctx, I: Iterator> {
-    /// Parser state: modes and position interning.
-    ctx: &'ctx Context,
-    /// The lexer.
-    lexemes: I,
-    /// Where the last emitted token ended, for a `Sequence` span.
-    previous_right: Option<Position>,
-    /// The last emitted token, to test `ends_sequence`.
-    previous_token: Option<Token>,
-    /// A lexeme held back while a `Sequence` is emitted first.
-    pending: Option<Phrase<Token>>,
-}
+// - Sequence boundaries
 
 /// Whether a token can begin a notation atom that follows another.
 fn starts_sequence(token: &Token) -> bool {
@@ -121,6 +103,22 @@ fn ends_sequence(token: &Token) -> bool {
     )
 }
 
+// = Token stream
+
+/// The adapted token stream.
+pub(crate) struct ParserTokens<'ctx, I: Iterator> {
+    /// Parser state: modes and position interning.
+    ctx: &'ctx Context,
+    /// The lexer.
+    lexemes: I,
+    /// Where the last emitted token ended, for a `Sequence` span.
+    previous_right: Option<Position>,
+    /// The last emitted token, to test `ends_sequence`.
+    previous_token: Option<Token>,
+    /// A lexeme held back while a `Sequence` is emitted first.
+    pending: Option<Phrase<Token>>,
+}
+
 impl<I> Iterator for ParserTokens<'_, I>
 where
     I: Iterator<Item = Result<Phrase<Token>, LexError>>,
@@ -133,7 +131,7 @@ where
             Some(lexeme) => lexeme,
             None => match self.lexemes.next()? {
                 Ok(lexeme) => lexeme,
-                Err(error) => return Some(Err(error.into())),
+                Err(error) => return Some(Err(error)),
             },
         };
 
@@ -163,4 +161,14 @@ where
         self.previous_token = Some(lexeme.node.clone());
         Some(Ok((loc_l, lexeme.node, loc_r)))
     }
+}
+
+// = Entry point
+
+/// Wraps a lexeme stream for the parser.
+pub(crate) fn parser_tokens<I>(ctx: &Context, lexemes: I) -> ParserTokens<'_, I>
+where
+    I: Iterator,
+{
+    ParserTokens { ctx, lexemes, previous_right: None, previous_token: None, pending: None }
 }

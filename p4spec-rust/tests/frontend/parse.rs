@@ -6,10 +6,7 @@ use std::{
 };
 
 use p4spec_rust::{
-    frontend::{
-        error::{FrontendError, SyntaxErrorKind},
-        parse::{parse_files, parse_mixop},
-    },
+    frontend::parse::{parse_files, parse_mixop},
     lang::{
         common::{
             notation::mixfix::Mixfix,
@@ -35,13 +32,49 @@ fn test_runtime_mixop_punctuation_preserves_string_source_positions() {
     let Mixfix::Atom(colon) = &items[1] else {
         panic!("expected colon");
     };
-    assert_eq!(colon.span, Span::new(Position::new("", 1, 2), Position::new("", 1, 5)));
+    assert_eq!(
+        colon.span,
+        Span::new(Position::new("<mixop>", 1, 2), Position::new("<mixop>", 1, 5))
+    );
 
     let Mixfix::Brack(atom_l, _, atom_r) = parse_mixop("`{ k `}").unwrap() else {
         panic!("expected bracket notation");
     };
-    assert_eq!(atom_l.span, Span::new(Position::new("", 1, 0), Position::new("", 1, 2)));
-    assert_eq!(atom_r.span, Span::new(Position::new("", 1, 5), Position::new("", 1, 7)));
+    assert_eq!(
+        atom_l.span,
+        Span::new(Position::new("<mixop>", 1, 0), Position::new("<mixop>", 1, 2))
+    );
+    assert_eq!(
+        atom_r.span,
+        Span::new(Position::new("<mixop>", 1, 5), Position::new("<mixop>", 1, 7))
+    );
+}
+
+#[test]
+fn test_runtime_mixop_errors_locate_tokens_and_eof_in_virtual_source() {
+    for (source, line, column_l, column_r) in [("", 1, 0, 0), ("(", 1, 1, 1), ("k\n)", 2, 0, 1)] {
+        let report = parse_mixop(source).unwrap_err();
+        assert_eq!(crate::cause(&report).code.as_deref(), Some("parse/mixfix-operator-invalid"));
+        assert_eq!(crate::cause(&report).labels.len(), 1, "{source:?}");
+        assert_eq!(
+            crate::cause(&report).labels[0].span,
+            Span::new(
+                Position::new("<mixop>", line, column_l),
+                Position::new("<mixop>", line, column_r),
+            ),
+            "{source:?}",
+        );
+    }
+}
+
+#[test]
+fn test_runtime_mixop_lexical_errors_keep_their_code_and_virtual_source() {
+    let report = parse_mixop(r#""\q""#).unwrap_err();
+    assert_eq!(crate::cause(&report).code.as_deref(), Some("parse/text-escape-invalid"));
+    assert_eq!(
+        crate::cause(&report).labels[0].span,
+        Span::new(Position::new("<mixop>", 1, 1), Position::new("<mixop>", 1, 3)),
+    );
 }
 
 struct TempDirectory {
@@ -165,28 +198,229 @@ fn test_parse_file_reports_invalid_utf8_at_the_invalid_byte() {
     fs::write(&path, b"var x : nat\n\xff").expect("write invalid UTF-8 file");
 
     let error = parse_files([&path]).expect_err("reject invalid UTF-8");
-    let FrontendError::InvalidUtf8(error) = error else { panic!("expected invalid UTF-8 error") };
+    assert_eq!(crate::cause(&error).code.as_deref(), Some("parse/source-encoding-invalid"));
 
-    assert_eq!(error.span.left, Position::new(path.to_string_lossy(), 2, 0));
-    assert_eq!(error.span.right, Position::new(path.to_string_lossy(), 2, 1));
+    assert_eq!(
+        crate::cause(&error).labels[0].span.left,
+        Position::new(path.to_string_lossy(), 2, 0)
+    );
+    assert_eq!(
+        crate::cause(&error).labels[0].span.right,
+        Position::new(path.to_string_lossy(), 2, 1)
+    );
 }
 
 #[test]
 fn test_parse_file_reports_io_and_syntax_failures_with_file_spans() {
     let directory = TempDirectory::new();
     let missing = directory.path("missing.watsup");
-    let FrontendError::Io(error) = parse_files([&missing]).expect_err("report missing file") else {
-        panic!("expected I/O error")
-    };
-    assert_eq!(error.span.left, Position::new(missing.to_string_lossy(), 0, 0));
+    let error = parse_files([&missing]).expect_err("report missing file");
+    assert_eq!(crate::cause(&error).code.as_deref(), Some("parse/file-read-failed"));
+    assert_eq!(
+        crate::cause(&error).labels[0].span.left,
+        Position::new(missing.to_string_lossy(), 0, 0)
+    );
 
     let invalid = directory.path("syntax.watsup");
     fs::write(&invalid, "def").expect("write invalid SpecTec file");
-    let FrontendError::Syntax(error) = parse_files([&invalid]).expect_err("report syntax error")
-    else {
-        panic!("expected syntax error")
-    };
-    assert_eq!(error.node, SyntaxErrorKind::UnexpectedToken);
-    assert_eq!(error.span.left, Position::new(invalid.to_string_lossy(), 1, 3));
-    assert_eq!(error.span.right, Position::new(invalid.to_string_lossy(), 1, 3));
+    let error = parse_files([&invalid]).expect_err("report syntax error");
+    assert_eq!(crate::cause(&error).code.as_deref(), Some("parse/input-incomplete"));
+    assert_eq!(
+        crate::cause(&error).labels[0].span.left,
+        Position::new(invalid.to_string_lossy(), 1, 3)
+    );
+    assert_eq!(
+        crate::cause(&error).labels[0].span.right,
+        Position::new(invalid.to_string_lossy(), 1, 3)
+    );
+}
+
+#[test]
+fn test_parse_bytes_distinguishes_nested_comments_from_comment_text() {
+    use p4spec_rust::frontend::parse::parse_utf8_bytes;
+    use std::rc::Rc;
+
+    let cases: &[(&[u8], &str, usize, usize)] = &[
+        (b"(; outer (; inner ;)\n\xff", "parse/comment-encoding-invalid", 2, 0),
+        (b"(; closed ;)\xff", "parse/source-encoding-invalid", 1, 12),
+        (b";; (; line comment\n\xff", "parse/source-encoding-invalid", 2, 0),
+        (b"\"(;\"\xff", "parse/source-encoding-invalid", 1, 4),
+        (b"(; \xc3\xa9\n\xff", "parse/comment-encoding-invalid", 2, 0),
+    ];
+    for (bytes, code, line, column) in cases {
+        let report = parse_utf8_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
+        assert_eq!(crate::cause(&report).code.as_deref(), Some(*code));
+        assert_eq!(
+            crate::cause(&report).labels[0].span.left,
+            Position::new("bytes.watsup", *line, *column)
+        );
+        assert_eq!(
+            crate::cause(&report).labels[0].span.right,
+            Position::new("bytes.watsup", *line, column + 1)
+        );
+    }
+}
+
+#[test]
+fn test_parse_bytes_uses_source_encoding_fallback_after_lexical_errors() {
+    use p4spec_rust::frontend::parse::parse_utf8_bytes;
+
+    for (bytes, column) in [(&b"@ (;\xff"[..], 4), (&b"\"\\q\" (;\xff"[..], 7)] {
+        let report = parse_utf8_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
+        assert_eq!(crate::cause(&report).code.as_deref(), Some("parse/source-encoding-invalid"));
+        assert_eq!(
+            crate::cause(&report).labels[0].span.left,
+            Position::new("bytes.watsup", 1, column)
+        );
+        assert_eq!(
+            crate::cause(&report).labels[0].span.right,
+            Position::new("bytes.watsup", 1, column + 1)
+        );
+        assert!(crate::cause(&report).labels[0].message.contains("0xFF"));
+    }
+}
+
+#[test]
+fn test_missing_path_fails_before_parsing_collected_files() {
+    let directory = TempDirectory::new();
+    let invalid = directory.path("invalid.watsup");
+    let missing = directory.path("missing.watsup");
+    fs::write(&invalid, "}").unwrap();
+
+    let report = parse_files([&invalid, &missing]).unwrap_err();
+    assert_eq!(crate::cause(&report).code.as_deref(), Some("parse/file-read-failed"));
+    assert_eq!(
+        crate::cause(&report).labels[0].span.left,
+        Position::new(missing.to_string_lossy(), 0, 0)
+    );
+}
+
+#[test]
+fn test_parser_diagnostics_preserve_actual_and_expected_tokens() {
+    use p4spec_rust::frontend::parse::parse_text;
+
+    let report = parse_text(Rc::from("syntax.watsup"), "var x :").unwrap_err();
+    let text = crate::cause(&report).labels[0].message.as_str();
+    assert!(text.contains("expected"), "{text}");
+    assert!(text.contains("nat"), "{text}");
+    assert!(text.contains("identifier"), "{text}");
+    assert!(!text.contains("UPID") && !text.contains("NL2"), "{text}");
+    for (source, actual) in [("var x : }", "}"), ("var : nat", ":"), ("var x : 123", "123")] {
+        let report = parse_text(Rc::from("syntax.watsup"), source).unwrap_err();
+        assert!(
+            crate::cause(&report).message.contains(actual),
+            "{}",
+            crate::cause(&report).message
+        );
+        assert!(crate::cause(&report).labels[0].message.contains("expected"));
+    }
+}
+
+#[test]
+fn test_source_utf8_errors_identify_invalid_and_truncated_bytes() {
+    use p4spec_rust::frontend::parse::parse_utf8_bytes;
+
+    for (bytes, code, hex, truncated) in [
+        (&b"\xff"[..], "parse/source-encoding-invalid", "0xFF", false),
+        (&b"(; \xe2\x82"[..], "parse/comment-encoding-invalid", "0xE2 0x82", true),
+    ] {
+        let report = parse_utf8_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
+        assert_eq!(crate::cause(&report).code.as_deref(), Some(code));
+        assert!(crate::cause(&report).labels[0].message.contains(hex));
+        assert_eq!(
+            crate::cause(&report).labels[0]
+                .message
+                .contains("truncated"),
+            truncated
+        );
+    }
+}
+
+#[test]
+fn test_missing_file_diagnostic_names_path_and_cause() {
+    let directory = TempDirectory::new();
+    let path = directory.path("missing.watsup");
+    let report = parse_files([&path]).unwrap_err();
+    assert!(crate::cause(&report).message.contains("cannot read"));
+    assert!(crate::cause(&report).message.contains("missing.watsup"));
+    assert!(
+        crate::cause(&report)
+            .message
+            .contains("file does not exist")
+    );
+    assert!(!crate::cause(&report).message.contains("entity"));
+}
+
+#[test]
+fn test_unexpected_token_spelling_preserves_payload_on_later_lines() {
+    use p4spec_rust::frontend::parse::parse_text;
+
+    for (source, actual) in [
+        ("var x : nat\n\nvar 0xFE : nat", "0xFE"),
+        ("var x : nat\n\nvar \"é\\n\" : nat", "é"),
+        ("var x : nat\n\nvar bad( : nat", "bad("),
+    ] {
+        let report = parse_text(Rc::from("syntax.watsup"), source).unwrap_err();
+        assert!(
+            crate::cause(&report).message.contains(actual),
+            "{}",
+            crate::cause(&report).message
+        );
+        assert!(!crate::cause(&report).message.contains('\n'));
+        assert_eq!(crate::cause(&report).labels[0].span.left.line, 3);
+    }
+}
+
+#[test]
+fn test_unexpected_layout_tokens_keep_their_identity_with_empty_spans() {
+    use p4spec_rust::frontend::parse::parse_text;
+
+    for (source, actual) in [
+        ("var x :\n\nvar y : nat", "blank line"),
+        ("var x :\n\n\nvar y : nat", "two blank lines"),
+        ("var x :\n| var y : nat", "newline followed by `|`"),
+    ] {
+        let report = parse_text(Rc::from("layout.watsup"), source).unwrap_err();
+        assert_eq!(crate::cause(&report).code.as_deref(), Some("parse/token-invalid"));
+        assert!(
+            crate::cause(&report).message.contains(actual),
+            "{}",
+            crate::cause(&report).message
+        );
+        assert_eq!(crate::cause(&report).message, format!("unexpected {actual}"));
+        assert!(crate::cause(&report).labels[0].message.contains("expected"));
+    }
+}
+
+#[test]
+fn test_expected_identifiers_include_contextually_bound_uppercase_names() {
+    use p4spec_rust::frontend::parse::parse_text;
+
+    parse_text(Rc::from("bindings.watsup"), "var X : nat\n\nvar y : X")
+        .expect("bound uppercase names are accepted as identifiers");
+    for source in ["var : nat", "var X : nat\n\nvar y : }"] {
+        let report = parse_text(Rc::from("bindings.watsup"), source).unwrap_err();
+        assert!(
+            crate::cause(&report).labels[0]
+                .message
+                .contains("an identifier")
+        );
+        assert!(
+            !crate::cause(&report).labels[0]
+                .message
+                .contains("lowercase")
+        );
+    }
+}
+
+#[test]
+fn test_plain_type_hints_are_rejected_in_both_definition_grammar_branches() {
+    for source in ["syntax foo = nat hint(blah)", "syntax foo = | nat hint(blah)"] {
+        let report = crate::spec_fixture::parse(source).unwrap_err();
+        assert_eq!(
+            crate::cause(&report).code.as_deref(),
+            Some("parse/plain-type-hint-unsupported"),
+            "{source}"
+        );
+    }
 }

@@ -1,10 +1,7 @@
 use std::cell::Cell;
 
 use p4spec_rust::{
-    frontend::{
-        error::LexErrorKind,
-        lexer::{Lexer, Token},
-    },
+    frontend::lexer::{Lexer, Token},
     lang::{common::prim::num::Natural, common::source::Position},
 };
 
@@ -167,9 +164,15 @@ fn test_byte_escapes_reject_non_utf8_text() {
         .expect("lexer result")
         .expect_err("byte-only text");
 
-    assert_eq!(error.node, LexErrorKind::InvalidTextEncoding);
-    assert_eq!(error.span.left, Position::new("unicode-policy.watsup", 1, 0));
-    assert_eq!(error.span.right, Position::new("unicode-policy.watsup", 1, source.len()));
+    assert_eq!(crate::cause(&error).code.as_deref().unwrap(), "parse/text-encoding-invalid");
+    assert_eq!(
+        crate::cause(&error).labels[0].span.left,
+        Position::new("unicode-policy.watsup", 1, 0)
+    );
+    assert_eq!(
+        crate::cause(&error).labels[0].span.right,
+        Position::new("unicode-policy.watsup", 1, source.len())
+    );
 }
 
 #[test]
@@ -179,9 +182,18 @@ fn test_unicode_escapes_reject_surrogates() {
         .expect("lexer result")
         .expect_err("surrogate escape");
 
-    assert_eq!(error.node, LexErrorKind::InvalidUnicodeEscape);
-    assert_eq!(error.span.left, Position::new("unicode-policy.watsup", 1, 0));
-    assert_eq!(error.span.right, Position::new("unicode-policy.watsup", 1, 9));
+    assert_eq!(
+        crate::cause(&error).code.as_deref().unwrap(),
+        "parse/text-escape-codepoint-invalid"
+    );
+    assert_eq!(
+        crate::cause(&error).labels[0].span.left,
+        Position::new("unicode-policy.watsup", 1, 1)
+    );
+    assert_eq!(
+        crate::cause(&error).labels[0].span.right,
+        Position::new("unicode-policy.watsup", 1, 9)
+    );
 }
 
 #[test]
@@ -276,18 +288,18 @@ fn test_uppercase_identifier_classification_is_lazy_and_contextual() {
 }
 
 #[test]
-fn test_lexical_failures_report_typed_kinds_and_precise_spans() {
+fn test_lexical_failures_report_codes_and_precise_spans() {
     let fixtures = [
-        ("\"unterminated", LexErrorKind::UnclosedTextLiteral, 0, 13),
-        ("\"abc\\", LexErrorKind::MalformedToken, 0, 1),
-        ("\"bad\\q\"", LexErrorKind::IllegalEscape, 6, 6),
-        ("\"bad\u{7}\"", LexErrorKind::IllegalControlCharacter, 0, 5),
-        ("\"unterminated\nnext", LexErrorKind::UnclosedTextLiteral, 0, 14),
-        ("(; unclosed", LexErrorKind::UnclosedComment, 0, 11),
-        ("@", LexErrorKind::MalformedToken, 0, 1),
-        ("é", LexErrorKind::MisplacedUnicodeCharacter, 0, 2),
-        ("\u{7}", LexErrorKind::MisplacedControlCharacter, 0, 1),
-        ("%999999999999999999999999", LexErrorKind::HoleNumberOutOfRange, 0, 25),
+        ("\"unterminated", "parse/text-literal-incomplete", 13, 13),
+        ("\"abc\\", "parse/text-literal-incomplete", 5, 5),
+        ("\"bad\\q\"", "parse/text-escape-invalid", 4, 6),
+        ("\"bad\u{7}\"", "parse/text-character-invalid", 4, 4),
+        ("\"unterminated\nnext", "parse/text-literal-incomplete", 13, 13),
+        ("(; unclosed", "parse/block-comment-incomplete", 11, 11),
+        ("@", "parse/character-invalid", 0, 1),
+        ("é", "parse/character-invalid", 0, 2),
+        ("\u{7}", "parse/character-invalid", 0, 1),
+        ("%999999999999999999999999", "parse/hole-index-out-of-bounds", 0, 25),
     ];
 
     for (source, kind, left_column, right_column) in fixtures {
@@ -296,12 +308,184 @@ fn test_lexical_failures_report_typed_kinds_and_precise_spans() {
             .expect("lexer result")
             .expect_err("invalid source");
 
-        assert_eq!(error.node, kind, "source: {source:?}");
-        assert_eq!(error.span.left, Position::new("error.watsup", 1, left_column));
+        assert_eq!(crate::cause(&error).code.as_deref().unwrap(), kind, "source: {source:?}");
         assert_eq!(
-            error.span.right,
+            crate::cause(&error).labels[0].span.left,
+            Position::new("error.watsup", 1, left_column)
+        );
+        assert_eq!(
+            crate::cause(&error).labels[0].span.right,
             Position::new("error.watsup", 1, right_column),
             "source: {source:?}"
         );
     }
+}
+
+#[test]
+fn test_trailing_backslash_reports_a_renderable_eof_span() {
+    use p4spec_rust::diagnostic::{RenderConfig, Renderer};
+
+    for (source, line, column) in [("\"abc\\", 1, 5), ("\n\"é\\", 2, 4)] {
+        let report = Lexer::new("escape.watsup", source, |_| false)
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(crate::cause(&report).code.as_deref(), Some("parse/text-literal-incomplete"));
+        let pos = Position::new("escape.watsup", line, column);
+        assert_eq!(crate::cause(&report).labels[0].span.left, pos);
+        assert_eq!(crate::cause(&report).labels[0].span.right, pos);
+
+        let mut renderer = Renderer::new(RenderConfig::default());
+        renderer.insert_source("escape.watsup", source);
+        let text = renderer
+            .render_to_string(&report)
+            .expect("valid EOF position");
+        assert!(text.contains("expected a closing quote"), "{text}");
+    }
+}
+
+#[test]
+fn test_escaped_newline_reports_a_renderable_multiline_span() {
+    use p4spec_rust::diagnostic::{RenderConfig, Renderer};
+
+    let source = "\"abc\\\n";
+    let report = Lexer::new("escape.watsup", source, |_| false)
+        .next()
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(crate::cause(&report).code.as_deref(), Some("parse/text-escape-invalid"));
+    assert_eq!(crate::cause(&report).labels[0].span.left, Position::new("escape.watsup", 1, 4));
+    assert_eq!(crate::cause(&report).labels[0].span.right, Position::new("escape.watsup", 2, 0));
+
+    let mut renderer = Renderer::new(RenderConfig::default());
+    renderer.insert_source("escape.watsup", source);
+    let text = renderer
+        .render_to_string(&report)
+        .expect("valid byte endpoints");
+    assert!(text.contains("invalid escape"));
+}
+
+#[test]
+fn test_unicode_escape_diagnostics_distinguish_invalid_scalar_values() {
+    for (digits, reason) in [
+        ("D800", "surrogate"),
+        ("DFFF", "surrogate"),
+        ("110000", "maximum"),
+        ("FFFFFFFFFFFFFFFF", "maximum"),
+    ] {
+        let source = format!("\"\\u{{{digits}}}\"");
+        let report = Lexer::new("escape.watsup", &source, |_| false)
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(
+            crate::cause(&report).code.as_deref(),
+            Some("parse/text-escape-codepoint-invalid")
+        );
+        assert!(
+            crate::cause(&report).message.contains(digits),
+            "{}",
+            crate::cause(&report).message
+        );
+        assert!(
+            crate::cause(&report).message.contains(reason),
+            "{}",
+            crate::cause(&report).message
+        );
+        assert!(
+            crate::cause(&report)
+                .notes
+                .iter()
+                .any(|text| text.contains("U+0000")
+                    && text.contains("U+D7FF")
+                    && text.contains("U+E000")
+                    && text.contains("U+10FFFF"))
+        );
+    }
+}
+
+#[test]
+fn test_invalid_characters_name_controls_without_emitting_them() {
+    for source in ["\u{b}", "\"\u{b}\""] {
+        let report = Lexer::new("control.watsup", source, |_| false)
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert!(crate::cause(&report).message.contains("U+000B"));
+        assert!(crate::cause(&report).message.contains("vertical tab"));
+        assert!(!crate::cause(&report).message.contains('\u{b}'));
+        if source.starts_with('"') {
+            assert!(
+                crate::cause(&report)
+                    .notes
+                    .iter()
+                    .any(|text| text.contains("\\u{B}"))
+            );
+        }
+    }
+}
+
+#[test]
+fn test_invalid_escape_names_escape_and_supported_forms() {
+    let report = Lexer::new("escape.watsup", r#""\q""#, |_| false)
+        .next()
+        .unwrap()
+        .unwrap_err();
+    assert!(crate::cause(&report).message.contains("\\q"));
+    assert!(
+        crate::cause(&report)
+            .notes
+            .iter()
+            .any(|text| text.contains("\\n") && text.contains("\\HH") && text.contains("\\u{HEX}"))
+    );
+}
+
+#[test]
+fn test_decoded_utf8_error_identifies_escaped_bytes_and_offset() {
+    let report = Lexer::new("escape.watsup", r#""a\FF""#, |_| false)
+        .next()
+        .unwrap()
+        .unwrap_err();
+    assert!(crate::cause(&report).message.contains("decoded bytes"));
+    assert!(crate::cause(&report).labels[0].message.contains("0xFF"));
+    assert!(crate::cause(&report).labels[0].message.contains("offset 1"));
+    assert!(
+        crate::cause(&report)
+            .notes
+            .iter()
+            .any(|text| text.contains("\\u{FF}"))
+    );
+}
+
+#[test]
+fn test_unclosed_comment_labels_only_still_open_delimiters() {
+    use p4spec_rust::diagnostic::LabelStyle;
+
+    for (source, columns) in [
+        ("(; outer (; inner", vec![0, 9]),
+        ("(; outer (; closed ;) (; inner", vec![0, 22]),
+        ("(; outer (; closed ;)", vec![0]),
+    ] {
+        let report = Lexer::new("comment.watsup", source, |_| false)
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(crate::cause(&report).labels[0].style, LabelStyle::Primary);
+        assert_eq!(crate::cause(&report).labels[0].span.left.column, source.len());
+        assert_eq!(crate::cause(&report).labels.len(), columns.len() + 1);
+        for (label, column) in crate::cause(&report).labels[1..].iter().zip(columns) {
+            assert_eq!(label.style, LabelStyle::Secondary);
+            assert_eq!(label.message, "comment opened here");
+            assert_eq!(label.span.left.column, column);
+            assert_eq!(label.span.right.column, column + 2);
+        }
+    }
+}
+
+#[test]
+fn test_unicode_escape_scalar_boundaries_remain_accepted() {
+    assert_eq!(
+        token_nodes(r#""\u{D7FF}\u{E000}\u{10FFFF}""#),
+        vec![Token::TextLiteral("\u{D7FF}\u{E000}\u{10FFFF}".to_owned()), Token::Eof]
+    );
 }

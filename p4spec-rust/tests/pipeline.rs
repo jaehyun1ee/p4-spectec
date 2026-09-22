@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use p4spec_rust::{Error, lang::traits::print::Print};
+use p4spec_rust::{Error, diagnostic::ReportKind, lang::traits::print::Print};
 
 fn fixture(path: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -33,8 +33,13 @@ fn transformations_preserve_input_order() {
 fn pipeline_errors_preserve_the_failing_stage_and_location() {
     let path = fixture("frontend/negative/malformed-token.watsup");
     let error = p4spec_rust::prosify([&path]).unwrap_err();
-    assert!(matches!(error, Error::Frontend(_)));
-    assert!(error.to_string().contains(path.to_str().unwrap()));
+    let Error::Frontend(report) = error else { panic!("expected frontend failure") };
+    let ReportKind::Cause(diagnostic) = &report.kind else { panic!("expected diagnostic cause") };
+    assert_eq!(diagnostic.code.as_deref(), Some("parse/character-invalid"));
+    assert_eq!(diagnostic.labels[0].span.left.file.as_ref(), path.to_str().unwrap());
+    assert_eq!(diagnostic.labels[0].span.left.line, 1);
+    assert_eq!(diagnostic.labels[0].span.left.column, 0);
+    assert_eq!(diagnostic.labels[0].span.right.column, 1);
 
     let path = fixture("elaboration/operator_not_defined.watsup");
     let error = p4spec_rust::prosify([&path]).unwrap_err();

@@ -9,12 +9,27 @@ use std::{path::PathBuf, process::ExitCode};
 use clap::{Args, Parser, Subcommand};
 
 use p4spec_rust::{
+    diagnostic::{RenderConfig, Renderer},
+    frontend::error::FrontendError,
     interface::p4::{error::P4Error, parse::parse_file},
     interp::shared::error::Error as InterpError,
     lang::{data::value::external::Encoding, traits::print::Print},
     runner::{self, BuiltinInterface, Interpreter, Runner},
     sim_plugin::{self, dummy::Dummy},
 };
+
+// = Helpers
+
+// - Diagnostic output
+
+/// Renders frontend reports while preserving their structured payloads.
+fn frontend_error(report: FrontendError) -> ExitCode {
+    let mut renderer = Renderer::new(RenderConfig::default());
+    if let Err(error) = renderer.render_to_stderr(&report) {
+        eprintln!("{report}\ndiagnostic rendering failed: {error}");
+    }
+    ExitCode::FAILURE
+}
 
 // = Errors
 
@@ -278,7 +293,9 @@ fn main() -> ExitCode {
     match run(Cli::parse()) {
         // Successful commands have already written their output
         Ok(()) => ExitCode::SUCCESS,
-        // Report every command failure once at the process boundary
+        // Render structured frontend failures from every specification pipeline
+        Err(CliError::Spec(p4spec_rust::Error::Frontend(report))) => frontend_error(report),
+        // Report other typed failures once at the process boundary
         Err(error) => {
             eprintln!("{error}");
             ExitCode::FAILURE

@@ -6,6 +6,7 @@
 //! with `interface` builtins and `sim_plugin` architectures;
 //! `lang`, `runtime`, `stf`, and `util` are the shared data and codecs.
 
+pub mod diagnostic;
 pub mod frontend;
 pub mod interface;
 pub mod interp;

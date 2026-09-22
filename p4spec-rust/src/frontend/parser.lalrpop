@@ -4,7 +4,7 @@
 
 use crate::frontend::{
     ctx::{Context, Location as Loc},
-    error::{FrontendError, SyntaxErrorKind},
+    error::{self, FrontendError},
     lexer::Token,
 };
 use crate::lang::{
@@ -174,10 +174,7 @@ DefKindRule: ast::Def = {
     <l:@L> "SYNTAX" <syntax_r:@R> <entries:CommaList<SynId>> <r:@R> =>? {
         if entries.is_empty() {
             Err(lalrpop_util::ParseError::User {
-                error: crate::phrase! {
-                    node: SyntaxErrorKind::EmptySyntaxDeclaration,
-                    span: ctx.span(l, syntax_r),
-                }.into(),
+                error: error::syntax_identifier_missing(ctx.span(l, syntax_r)),
             })
         } else {
             Ok(crate::phrase! {
@@ -191,10 +188,7 @@ DefKindRule: ast::Def = {
     <l:@L> "SYNTAX" <id:VarIdBind> <hints:Hints> <equal_r:DefTypEquals>
         <def_typ:DefTyp?> =>? {
         let def_typ = def_typ.ok_or_else(|| lalrpop_util::ParseError::User {
-            error: crate::phrase! {
-                node: SyntaxErrorKind::EmptyType,
-                span: ctx.span(equal_r, equal_r),
-            }.into(),
+            error: error::syntax_body_missing(ctx.span(equal_r, equal_r)),
         })?;
         let r = def_typ.span.right.clone();
         let hints = hints.into_iter().map(|hint| hint.node).collect();
@@ -216,10 +210,7 @@ DefKindRule: ast::Def = {
         <def_typ:DefTyp?> =>? {
             ctx.exit_scope();
             let def_typ = def_typ.ok_or_else(|| lalrpop_util::ParseError::User {
-                error: crate::phrase! {
-                    node: SyntaxErrorKind::EmptyType,
-                    span: ctx.span(equal_r, equal_r),
-                }.into(),
+                error: error::syntax_body_missing(ctx.span(equal_r, equal_r)),
             })?;
             let r = def_typ.span.right.clone();
             let hints = hints.into_iter().map(|hint| hint.node).collect();
@@ -1003,10 +994,7 @@ NotTyp: ast::NotTyp = {
     <l:@L> <typ:Typ> <r:@R> =>? match typ {
         Typ::Notation(not_typ) => Ok(not_typ),
         Typ::Plain(_) => Err(lalrpop_util::ParseError::User {
-            error: crate::phrase! {
-                node: SyntaxErrorKind::ExpectedNotationType,
-                span: ctx.span(l, r),
-            }.into(),
+            error: error::relation_signature_invalid(ctx.span(l, r)),
         }),
     },
 };
@@ -1019,19 +1007,18 @@ FieldTyp: ast::TypField = {
     },
 };
 
-CaseTyp: (Typ, Vec<ast::Hint>, Position) = {
+CaseTyp: (Typ, Vec<Phrase<ast::Hint>>, Position) = {
     // CaseTyp ::= Typ Hints
     <typ:Typ> <typ_r:@R> <hints:Hints> => {
         let r = hints
             .last()
             .map(|hint| hint.span.right.clone())
             .unwrap_or_else(|| ctx.position(typ_r));
-        let hints = hints.into_iter().map(|hint| hint.node).collect();
         (typ, hints, r)
     },
 };
 
-CaseTypList: (Vec<(Typ, Vec<ast::Hint>, Position)>, Option<Loc>) = {
+CaseTypList: (Vec<(Typ, Vec<Phrase<ast::Hint>>, Position)>, Option<Loc>) = {
     // CaseTypList ::= CaseTyp (Bar CaseTyp)* BarAt?
     <head:CaseTyp> <tail:(<Bar> <CaseTyp>)*> <trailing:BarAt?> => {
         let mut cases = Vec::with_capacity(tail.len() + 1);
@@ -1051,10 +1038,7 @@ DefTyp: ast::DefTyp = {
     <l:@L> "LBRACE" <fields:CommaList<FieldTyp>> "RBRACE" <r:@R> =>? {
         if fields.is_empty() {
             Err(lalrpop_util::ParseError::User {
-                error: crate::phrase! {
-                    node: SyntaxErrorKind::EmptyStructType,
-                    span: ctx.span(l, r),
-                }.into(),
+                error: error::struct_field_missing(ctx.span(l, r)),
             })
         } else {
             Ok(crate::phrase! {
@@ -1072,17 +1056,22 @@ DefTyp: ast::DefTyp = {
             .or_else(|| cases.last().map(|(_, _, r)| r.clone()))
             .unwrap_or_else(|| ctx.position(bar_r));
         let actual_r_location = ctx.location(actual_r.clone());
+        // CaseTyp preserves hint spans until plain-type validation completes
+        for (typ, hints, _) in &cases {
+            if let (Typ::Plain(_), Some(hint)) = (typ, hints.first()) {
+                return Err(lalrpop_util::ParseError::User {
+                    error: error::plain_type_hint_unsupported(hint.span.clone()),
+                });
+            }
+        }
         let cases: Vec<ast::TypCase> = cases
             .into_iter()
-            .map(|(typ, hints, _)| ast::TypCase { typ, hints })
+            .map(|(typ, hints, _)| ast::TypCase {
+                typ, hints: hints.into_iter().map(|hint| hint.node).collect(),
+            })
             .collect();
         let kind = if cases.is_empty() {
-            Err(SyntaxErrorKind::EmptyVariantType)
-        } else if cases
-            .iter()
-            .any(|ast::TypCase { typ, hints }| matches!(typ, Typ::Plain(_)) && !hints.is_empty())
-        {
-            Err(SyntaxErrorKind::HintsInPlainTypeDefinition)
+            Err(error::variant_case_missing(ctx.span(l, actual_r_location)))
         } else if let [ast::TypCase { typ: Typ::Plain(plain_typ), .. }] = cases.as_slice() {
             Ok(DefTypKind::Plain(plain_typ.clone()))
         } else {
@@ -1093,12 +1082,7 @@ DefTyp: ast::DefTyp = {
                 node: kind,
                 span: Span::new(ctx.position(l), actual_r),
             })
-            .map_err(|kind| lalrpop_util::ParseError::User {
-                error: crate::phrase! {
-                    node: kind,
-                    span: ctx.span(l, actual_r_location),
-                }.into(),
-            })
+            .map_err(|error| lalrpop_util::ParseError::User { error })
     },
 
     // DefTyp ::= CaseTypList
@@ -1108,34 +1092,31 @@ DefTyp: ast::DefTyp = {
             .map(|loc| ctx.position(loc))
             .or_else(|| cases.last().map(|(_, _, r)| r.clone()))
             .expect("a non-empty case type list has a closing position");
-        let actual_r_location = ctx.location(actual_r.clone());
+        // CaseTyp preserves hint spans until plain-type validation completes
+        for (typ, hints, _) in &cases {
+            if let (Typ::Plain(_), Some(hint)) = (typ, hints.first()) {
+                return Err(lalrpop_util::ParseError::User {
+                    error: error::plain_type_hint_unsupported(hint.span.clone()),
+                });
+            }
+        }
         let cases: Vec<ast::TypCase> = cases
             .into_iter()
-            .map(|(typ, hints, _)| ast::TypCase { typ, hints })
+            .map(|(typ, hints, _)| ast::TypCase {
+                typ, hints: hints.into_iter().map(|hint| hint.node).collect(),
+            })
             .collect();
-        let kind = if cases.is_empty() {
-            Err(SyntaxErrorKind::EmptyType)
-        } else if cases
-            .iter()
-            .any(|ast::TypCase { typ, hints }| matches!(typ, Typ::Plain(_)) && !hints.is_empty())
-        {
-            Err(SyntaxErrorKind::HintsInPlainTypeDefinition)
-        } else if let [ast::TypCase { typ: Typ::Plain(plain_typ), .. }] = cases.as_slice() {
-            Ok(DefTypKind::Plain(plain_typ.clone()))
+        // CaseTypList constructs its list from one mandatory head
+        assert!(!cases.is_empty());
+        let kind = if let [ast::TypCase { typ: Typ::Plain(plain_typ), .. }] = cases.as_slice() {
+            DefTypKind::Plain(plain_typ.clone())
         } else {
-            Ok(DefTypKind::Variant(cases))
+            DefTypKind::Variant(cases)
         };
-        kind
-            .map(|kind| crate::phrase! {
-                node: kind,
-                span: Span::new(ctx.position(l), actual_r),
-            })
-            .map_err(|kind| lalrpop_util::ParseError::User {
-                error: crate::phrase! {
-                    node: kind,
-                    span: ctx.span(l, actual_r_location),
-                }.into(),
-            })
+        Ok(crate::phrase! {
+            node: kind,
+            span: Span::new(ctx.position(l), actual_r),
+        })
     },
 };
 
