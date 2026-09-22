@@ -1,9 +1,10 @@
 //! EL syntax translated to semantic TeX documents
 //!
-//! `tex_of_*` builds a `Doc`; `render_*` retains `(Doc, Category)` for expressions.
+//! `tex_of_*` builds a `Doc`; `render_*` builds a `Term` for expressions.
+//! A `Term` pairs the document with its outermost operator category.
 //! For example, `render_exp(a + b)` retains `Category::Additive`,
 //! so nesting it under multiplication produces `(a + b) * c` with parentheses.
-//! `tex_of_exp(a + b)` discards the category when only the document is needed.
+//! `tex_of_exp(a + b)` extracts `term.doc` when only the document is needed.
 //!
 //! `tex_of_defs` groups consecutive function clauses; rule and function layouts
 //! resolve at width 80. `tex::serialize` turns the resulting `Doc` into text.
@@ -303,31 +304,46 @@ fn tex_of_varid(id: &Id) -> Doc {
 
 // == Expressions
 
+/// A rendered expression with the category needed to preserve operand grouping.
+struct Term {
+    doc: Doc,
+    category: Category,
+}
+
+impl Term {
+    fn new(doc: Doc, category: Category) -> Self {
+        Self { doc, category }
+    }
+}
+
 fn tex_of_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
-    let (doc, _) = render_exp(exp, anchors)?;
-    Ok(doc)
+    Ok(render_exp(exp, anchors)?.doc)
 }
 
 /// Renders an expression while retaining the category of its outermost operator.
-fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<(Doc, Category)> {
+fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
     use Category as C;
     match &exp.node {
-        ExpKind::Bool(value) => Ok((Doc::Styled(Style::Mathsf, value.to_string()), C::Atomic)),
-        ExpKind::Num(op, num) => Ok((tex_of_number(*op, num), C::Atomic)),
-        ExpKind::Text(text) => Ok((Doc::Styled(Style::Texttt, format!("\"{text}\"")), C::Atomic)),
-        ExpKind::Id(id) => Ok((tex_of_varid(id), C::Atomic)),
+        ExpKind::Bool(value) => {
+            Ok(Term::new(Doc::Styled(Style::Mathsf, value.to_string()), C::Atomic))
+        }
+        ExpKind::Num(op, num) => Ok(Term::new(tex_of_number(*op, num), C::Atomic)),
+        ExpKind::Text(text) => {
+            Ok(Term::new(Doc::Styled(Style::Texttt, format!("\"{text}\"")), C::Atomic))
+        }
+        ExpKind::Id(id) => Ok(Term::new(tex_of_varid(id), C::Atomic)),
         ExpKind::Un(op, exp) => {
-            let (tex, category) = render_exp(exp, anchors)?;
-            let tex_exp = tex_of_nested_exp((C::Unary, Assoc::Right), Side::Right, (tex, category));
-            Ok((doc::concat_spaced(vec![tex_of_unop(*op), tex_exp]), C::Unary))
+            let term = render_exp(exp, anchors)?;
+            let tex_exp = tex_of_nested_exp((C::Unary, Assoc::Right), Side::Right, term);
+            Ok(Term::new(doc::concat_spaced(vec![tex_of_unop(*op), tex_exp]), C::Unary))
         }
         ExpKind::Bin(exp_l, BinOp::Num(num::BinOp::Pow), exp_r) => {
-            let (tex_l, category_l) = render_exp(exp_l, anchors)?;
-            let (tex_r, category_r) = render_exp(exp_r, anchors)?;
+            let term_l = render_exp(exp_l, anchors)?;
+            let term_r = render_exp(exp_r, anchors)?;
             let prec = precedence::of_binop(BinOp::Num(num::BinOp::Pow));
-            let tex_l = tex_of_nested_exp(prec, Side::Left, (tex_l, category_l));
-            let tex_r = tex_of_nested_exp(prec, Side::Right, (tex_r, category_r));
-            Ok((Doc::Superscript(Box::new(tex_l), Box::new(tex_r)), C::Power))
+            let tex_l = tex_of_nested_exp(prec, Side::Left, term_l);
+            let tex_r = tex_of_nested_exp(prec, Side::Right, term_r);
+            Ok(Term::new(Doc::Superscript(Box::new(tex_l), Box::new(tex_r)), C::Power))
         }
         ExpKind::Bin(exp_l, op, exp_r) => {
             render_binary_exp(precedence::of_binop(*op), tex_of_binop(*op), exp_l, exp_r, anchors)
@@ -340,11 +356,11 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<(Doc, Category
             anchors,
         ),
         ExpKind::Arith(exp) => render_exp(exp, anchors),
-        ExpKind::Eps => Ok((Doc::Fixed(Symbol::Epsilon), C::Atomic)),
+        ExpKind::Eps => Ok(Term::new(Doc::Fixed(Symbol::Epsilon), C::Atomic)),
         ExpKind::List(exps) => {
             let docs = texs_of_exps(exps, anchors)?;
             let doc = doc::layout_group_soft_comma_separated(docs);
-            Ok((Doc::Delimited(Delimiter::Bracket, Box::new(doc)), C::Atomic))
+            Ok(Term::new(Doc::Delimited(Delimiter::Bracket, Box::new(doc)), C::Atomic))
         }
         ExpKind::Cons(exp_l, exp_r) => {
             let tex_op = Doc::Mathbin(Box::new(Doc::Fixed(Symbol::DoubleColon)));
@@ -368,7 +384,7 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<(Doc, Category
         }
         ExpKind::Len(exp) => {
             let tex_exp = tex_of_exp(exp, anchors)?;
-            Ok((Doc::Delimited(Delimiter::Bar, Box::new(tex_exp)), C::Unary))
+            Ok(Term::new(Doc::Delimited(Delimiter::Bar, Box::new(tex_exp)), C::Unary))
         }
         ExpKind::Mem(exp_l, exp_r) => render_binary_exp(
             (C::Comparison, Assoc::Right),
@@ -387,7 +403,7 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<(Doc, Category
                 })
                 .collect::<Result<Vec<_>>>()?;
             let doc = doc::layout_group_soft_comma_separated(docs);
-            Ok((Doc::Delimited(Delimiter::Brace, Box::new(doc)), C::Atomic))
+            Ok(Term::new(Doc::Delimited(Delimiter::Brace, Box::new(doc)), C::Atomic))
         }
         ExpKind::Dot(exp_base, atom) => {
             let tex_field = tex_of_atom(atom);
@@ -395,10 +411,9 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<(Doc, Category
             if doc::is_empty(&tex_field) {
                 return render_exp(exp_base, anchors);
             }
-            let (tex_base, category_base) = render_exp(exp_base, anchors)?;
-            let tex_base =
-                tex_of_nested_exp((C::Postfix, Assoc::Left), Side::Left, (tex_base, category_base));
-            Ok((Doc::Subscript(Box::new(tex_base), Box::new(tex_field)), C::Postfix))
+            let term_base = render_exp(exp_base, anchors)?;
+            let tex_base = tex_of_nested_exp((C::Postfix, Assoc::Left), Side::Left, term_base);
+            Ok(Term::new(Doc::Subscript(Box::new(tex_base), Box::new(tex_field)), C::Postfix))
         }
         ExpKind::Upd(exp_base, path, exp_field) => {
             let tex_path = tex_of_path(path, anchors)?;
@@ -409,43 +424,42 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<(Doc, Category
         }
         ExpKind::Paren(exp) => {
             let tex_exp = tex_of_exp(exp, anchors)?;
-            Ok((Doc::Delimited(Delimiter::Paren, Box::new(tex_exp)), C::Atomic))
+            Ok(Term::new(Doc::Delimited(Delimiter::Paren, Box::new(tex_exp)), C::Atomic))
         }
         ExpKind::Tuple(exps) => {
             let docs = texs_of_exps(exps, anchors)?;
             let doc = doc::layout_group_soft_comma_separated(docs);
-            Ok((Doc::Delimited(Delimiter::Paren, Box::new(doc)), C::Atomic))
+            Ok(Term::new(Doc::Delimited(Delimiter::Paren, Box::new(doc)), C::Atomic))
         }
         ExpKind::Call(id, targs, args) => {
             let anchor = anchors.and_then(|anchors| (anchors.func)(&id.node));
             let tex_name = tex_of_link(anchor.as_deref(), tex_of_defid(id))?;
             let tex_targs = tex_of_targs(targs);
             let tex_args = tex_of_args(args, anchors)?;
-            Ok((doc::concat(vec![tex_name, tex_targs, tex_args]), C::Atomic))
+            Ok(Term::new(doc::concat(vec![tex_name, tex_targs, tex_args]), C::Atomic))
         }
         ExpKind::Iter(exp, iter) => {
-            let (tex, category) = render_exp(exp, anchors)?;
-            let tex_base =
-                tex_of_nested_exp((C::Postfix, Assoc::Left), Side::Left, (tex, category));
+            let term = render_exp(exp, anchors)?;
+            let tex_base = tex_of_nested_exp((C::Postfix, Assoc::Left), Side::Left, term);
             let tex_iter = tex_of_iter(*iter);
-            Ok((Doc::Superscript(Box::new(tex_base), Box::new(tex_iter)), C::Postfix))
+            Ok(Term::new(Doc::Superscript(Box::new(tex_base), Box::new(tex_iter)), C::Postfix))
         }
         ExpKind::Sub(exp, plain_typ) => {
-            let (tex, category) = render_exp(exp, anchors)?;
-            let tex_l = tex_of_nested_exp((C::Colon, Assoc::Left), Side::Left, (tex, category));
+            let term = render_exp(exp, anchors)?;
+            let tex_l = tex_of_nested_exp((C::Colon, Assoc::Left), Side::Left, term);
             let tex_op = Doc::Mathrel(Box::new(doc::concat(vec![
                 Doc::Fixed(Symbol::Less),
                 Doc::Fixed(Symbol::Colon),
             ])));
             let tex_r = tex_of_plaintyp(plain_typ);
-            Ok((tex_of_breakable_infix(tex_l, tex_op, tex_r), C::Colon))
+            Ok(Term::new(tex_of_breakable_infix(tex_l, tex_op, tex_r), C::Colon))
         }
-        ExpKind::Atom(atom) => Ok((tex_of_atom(atom), C::Atomic)),
+        ExpKind::Atom(atom) => Ok(Term::new(tex_of_atom(atom), C::Atomic)),
         ExpKind::Seq(exps) => render_seq_exp(exps, anchors),
         ExpKind::Infix(exp_l, atom, exp_r) => render_infix_exp(exp_l, atom, exp_r, anchors),
         ExpKind::Brack(atom_l, exp, atom_r) => {
             let tex_body = tex_of_exp(exp, anchors)?;
-            Ok((tex_of_bracket(atom_l, tex_body, atom_r), C::Atomic))
+            Ok(Term::new(tex_of_bracket(atom_l, tex_body, atom_r), C::Atomic))
         }
         ExpKind::Hole(_) => Err(Error::Hole(exp.span.clone())),
         ExpKind::Fuse(_, _) => Err(Error::Fuse(exp.span.clone())),
@@ -461,11 +475,11 @@ fn texs_of_exps(exps: &[Exp], anchors: Option<&Anchors<'_>>) -> Result<Vec<Doc>>
 // - Operand precedence
 
 /// Parenthesizes a weaker operand or an equal-precedence associativity conflict.
-fn tex_of_nested_exp(prec: (Category, Assoc), side: Side, (tex, category): (Doc, Category)) -> Doc {
-    if precedence::needs_parentheses(prec.0, prec.1, side, category) {
-        Doc::Delimited(Delimiter::Paren, Box::new(tex))
+fn tex_of_nested_exp(prec: (Category, Assoc), side: Side, term: Term) -> Doc {
+    if precedence::needs_parentheses(prec.0, prec.1, side, term.category) {
+        Doc::Delimited(Delimiter::Paren, Box::new(term.doc))
     } else {
-        tex
+        term.doc
     }
 }
 
@@ -476,12 +490,12 @@ fn render_binary_exp(
     exp_l: &Exp,
     exp_r: &Exp,
     anchors: Option<&Anchors<'_>>,
-) -> Result<(Doc, Category)> {
-    let (tex_l, category_l) = render_exp(exp_l, anchors)?;
-    let (tex_r, category_r) = render_exp(exp_r, anchors)?;
-    let tex_l = tex_of_nested_exp(prec, Side::Left, (tex_l, category_l));
-    let tex_r = tex_of_nested_exp(prec, Side::Right, (tex_r, category_r));
-    Ok((tex_of_breakable_infix(tex_l, tex_op, tex_r), prec.0))
+) -> Result<Term> {
+    let term_l = render_exp(exp_l, anchors)?;
+    let term_r = render_exp(exp_r, anchors)?;
+    let tex_l = tex_of_nested_exp(prec, Side::Left, term_l);
+    let tex_r = tex_of_nested_exp(prec, Side::Right, term_r);
+    Ok(Term::new(tex_of_breakable_infix(tex_l, tex_op, tex_r), prec.0))
 }
 
 /// Parenthesizes a postfix base before attaching its rendered suffix.
@@ -489,23 +503,22 @@ fn render_postfix_exp(
     exp_base: &Exp,
     tex_suffix: Doc,
     anchors: Option<&Anchors<'_>>,
-) -> Result<(Doc, Category)> {
-    let (tex_base, category_base) = render_exp(exp_base, anchors)?;
-    let tex_base =
-        tex_of_nested_exp((Category::Postfix, Assoc::Left), Side::Left, (tex_base, category_base));
-    Ok((doc::concat(vec![tex_base, tex_suffix]), Category::Postfix))
+) -> Result<Term> {
+    let term_base = render_exp(exp_base, anchors)?;
+    let tex_base = tex_of_nested_exp((Category::Postfix, Assoc::Left), Side::Left, term_base);
+    Ok(Term::new(doc::concat(vec![tex_base, tex_suffix]), Category::Postfix))
 }
 
 /// Packs notation terms with thin spaces and right-operand parenthesization.
-fn render_seq_exp(exps: &[Exp], anchors: Option<&Anchors<'_>>) -> Result<(Doc, Category)> {
+fn render_seq_exp(exps: &[Exp], anchors: Option<&Anchors<'_>>) -> Result<Term> {
     let docs = exps
         .iter()
         .map(|exp| {
-            let (tex, category) = render_exp(exp, anchors)?;
-            Ok(tex_of_nested_exp((Category::Sequence, Assoc::Left), Side::Right, (tex, category)))
+            let term = render_exp(exp, anchors)?;
+            Ok(tex_of_nested_exp((Category::Sequence, Assoc::Left), Side::Right, term))
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok((doc::fill(0, Doc::ThinSpace, docs), Category::Sequence))
+    Ok(Term::new(doc::fill(0, Doc::ThinSpace, docs), Category::Sequence))
 }
 
 /// Renders arrow subscripts separately from the remaining right-hand expression.
@@ -514,41 +527,40 @@ fn render_infix_exp(
     atom: &Atom,
     exp_r: &Exp,
     anchors: Option<&Anchors<'_>>,
-) -> Result<(Doc, Category)> {
+) -> Result<Term> {
     let prec = precedence::of_infix(&atom.node);
-    let (tex_l, category_l) = render_exp(exp_l, anchors)?;
+    let term_l = render_exp(exp_l, anchors)?;
     let tex_op = tex_of_atom(atom);
 
     // Subscripted arrows consume the first right-hand term
-    let ((tex_r, category_r), tex_op) =
-        if matches!(atom.node, AtomKind::ArrowSub | AtomKind::DoubleArrowSub) {
-            match &exp_r.node {
-                // Preserve the sequence category even when its tail is empty
-                ExpKind::Seq(exps) => match exps.split_first() {
-                    Some((exp_sub, exps)) => {
-                        let (tex_r, category_r) = render_seq_exp(exps, anchors)?;
-                        let tex_sub = tex_of_exp(exp_sub, anchors)?;
-                        ((tex_r, category_r), Doc::Subscript(Box::new(tex_op), Box::new(tex_sub)))
-                    }
-                    None => ((Doc::Empty, Category::Atomic), tex_op),
-                },
-                // A singleton right operand becomes only a subscript
-                _ => {
-                    let tex_sub = tex_of_exp(exp_r, anchors)?;
-                    (
-                        (Doc::Empty, Category::Atomic),
-                        Doc::Subscript(Box::new(tex_op), Box::new(tex_sub)),
-                    )
+    let (term_r, tex_op) = if matches!(atom.node, AtomKind::ArrowSub | AtomKind::DoubleArrowSub) {
+        match &exp_r.node {
+            // Preserve the sequence category even when its tail is empty
+            ExpKind::Seq(exps) => match exps.split_first() {
+                Some((exp_sub, exps)) => {
+                    let term_r = render_seq_exp(exps, anchors)?;
+                    let tex_sub = tex_of_exp(exp_sub, anchors)?;
+                    (term_r, Doc::Subscript(Box::new(tex_op), Box::new(tex_sub)))
                 }
+                None => (Term::new(Doc::Empty, Category::Atomic), tex_op),
+            },
+            // A singleton right operand becomes only a subscript
+            _ => {
+                let tex_sub = tex_of_exp(exp_r, anchors)?;
+                (
+                    Term::new(Doc::Empty, Category::Atomic),
+                    Doc::Subscript(Box::new(tex_op), Box::new(tex_sub)),
+                )
             }
-        } else {
-            (render_exp(exp_r, anchors)?, tex_op)
-        };
+        }
+    } else {
+        (render_exp(exp_r, anchors)?, tex_op)
+    };
 
     // Apply the original operator precedence to the visible operands
-    let tex_l = tex_of_nested_exp(prec, Side::Left, (tex_l, category_l));
-    let tex_r = tex_of_nested_exp(prec, Side::Right, (tex_r, category_r));
-    Ok((tex_of_breakable_infix(tex_l, tex_op, tex_r), prec.0))
+    let tex_l = tex_of_nested_exp(prec, Side::Left, term_l);
+    let tex_r = tex_of_nested_exp(prec, Side::Right, term_r);
+    Ok(Term::new(tex_of_breakable_infix(tex_l, tex_op, tex_r), prec.0))
 }
 
 // - Operators
@@ -681,9 +693,8 @@ fn tex_of_prem(prem: &Prem, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
         }
         PremKind::RuleNot(RuleNotPrem { id, exp }) => {
             let anchor = anchors.and_then(|anchors| (anchors.rel)(&id.node));
-            let (tex, category) = render_exp(exp, anchors)?;
-            let tex_exp =
-                tex_of_nested_exp((Category::Unary, Assoc::Right), Side::Right, (tex, category));
+            let term = render_exp(exp, anchors)?;
+            let tex_exp = tex_of_nested_exp((Category::Unary, Assoc::Right), Side::Right, term);
             let tex_exp = tex_of_link(anchor.as_deref(), tex_exp)?;
             Ok(doc::concat_spaced(vec![Doc::Fixed(Symbol::Neg), tex_exp]))
         }
