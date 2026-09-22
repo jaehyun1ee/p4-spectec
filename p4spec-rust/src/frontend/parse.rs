@@ -37,31 +37,6 @@ use super::{
 
 // - Diagnostic input
 
-/// Uses the lexeme's source spelling, including payloads and punctuation.
-fn describe_token(source: &str, span: &Span, token: &Token) -> String {
-    // Layout and parser-inserted tokens can have zero-width source spans
-    match token {
-        Token::Sequence => return "adjacent token".to_owned(),
-        Token::Eof => return "end of input".to_owned(),
-        Token::NewlineBar => return "newline followed by `|`".to_owned(),
-        Token::Newline2 => return "blank line".to_owned(),
-        Token::Newline3 => return "two blank lines".to_owned(),
-        _ => {}
-    }
-
-    // Positions retain byte columns, so source spelling needs no decoding
-    let offset = |pos: &Position| {
-        source
-            .split_inclusive('\n')
-            .take(pos.line.saturating_sub(1))
-            .map(str::len)
-            .sum::<usize>()
-            + pos.column
-    };
-    let text = &source[offset(&span.left)..offset(&span.right)];
-    format!("token {text:?}")
-}
-
 /// Locates a UTF-8 error by counting newlines in the valid prefix.
 fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Span {
     let offset = error.valid_up_to();
@@ -100,12 +75,12 @@ fn parse_error(
         }
         ParseError::UnrecognizedToken { token: (loc_l, token, loc_r), expected } => {
             let span = ctx.span(loc_l, loc_r);
-            let actual = describe_token(source, &span, &token);
+            let actual = error::describe_token(source, &span, &token);
             error::token_invalid(span, Some(&actual), &expected)
         }
         ParseError::ExtraToken { token: (loc_l, token, loc_r) } => {
             let span = ctx.span(loc_l, loc_r);
-            let actual = describe_token(source, &span, &token);
+            let actual = error::describe_token(source, &span, &token);
             error::token_invalid(span, Some(&actual), &["EOF".to_owned()])
         }
         ParseError::User { error } => error,

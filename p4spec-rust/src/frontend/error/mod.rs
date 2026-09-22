@@ -1,12 +1,13 @@
 //! Diagnostic constructors for SpecTec source input failures
 //!
-//! The facade preserves constructor paths while grouping lexical, syntax,
-//! and input diagnostics in private modules.
+//! The facade groups lexical, grammar, token, and input diagnostics
+//! in private modules while preserving constructor paths.
 //! Error aliases and helpers shared across these groups live here.
 
 mod input;
 mod lex;
 mod syntax;
+mod token;
 
 use crate::diagnostic::{Label, Report, Severity};
 
@@ -51,7 +52,7 @@ fn make_report(code: &str, message: String, labels: Vec<Label>) -> FrontendError
     })
 }
 
-// = Diagnostic constructors
+// = Diagnostic helpers and constructors
 
 pub(crate) use input::{
     comment_encoding_invalid, file_read_failed, input_path_read_failed, mixfix_operator_invalid,
@@ -63,7 +64,7 @@ pub(crate) use lex::{
     text_literal_incomplete,
 };
 pub(crate) use syntax::{
-    input_incomplete, plain_type_hint_unsupported, relation_signature_invalid,
-    struct_field_missing, syntax_body_missing, syntax_identifier_missing, token_invalid,
-    variant_case_missing,
+    plain_type_hint_unsupported, relation_signature_invalid, struct_field_missing,
+    syntax_body_missing, syntax_identifier_missing, variant_case_missing,
 };
+pub(crate) use token::{describe_token, input_incomplete, token_invalid};

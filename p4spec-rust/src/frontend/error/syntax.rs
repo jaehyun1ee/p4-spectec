@@ -1,51 +1,12 @@
-//! Diagnostics for parser expectations and grammar constraints
+//! Diagnostics for grammar constraints
 //!
-//! Constructors retain the parser's responsible locations,
-//! using token vocabulary descriptions for expected alternatives.
+//! Constructors retain the parser's responsible locations
+//! for relation signatures, type definitions, and syntax declarations.
 
 use crate::diagnostic::{Label, LabelStyle};
-use crate::frontend::tokens::describe_expected;
 use crate::lang::common::source::Span;
 
 use super::{FrontendError, make_report};
-
-// = Token expectations
-
-const TOKEN_INVALID: &str = "parse/token-invalid";
-
-/// Reports an unexpected token.
-pub(crate) fn token_invalid(
-    span: Span,
-    actual: Option<&str>,
-    expected: &[String],
-) -> FrontendError {
-    make_report(
-        TOKEN_INVALID,
-        actual
-            .map_or_else(|| "unexpected token".to_owned(), |actual| format!("unexpected {actual}")),
-        vec![Label {
-            style: LabelStyle::Primary,
-            span,
-            message: describe_expected(expected).unwrap_or_else(|| "unexpected token".to_owned()),
-        }],
-    )
-}
-
-const INPUT_INCOMPLETE: &str = "parse/input-incomplete";
-
-/// Reports an unexpected end of input with the grammar's expected alternatives.
-pub(crate) fn input_incomplete(span: Span, expected: &[String]) -> FrontendError {
-    make_report(
-        INPUT_INCOMPLETE,
-        "unexpected end of input".to_owned(),
-        vec![Label {
-            style: LabelStyle::Primary,
-            span,
-            message: describe_expected(expected)
-                .unwrap_or_else(|| "expected more input".to_owned()),
-        }],
-    )
-}
 
 // = Relation signatures
 
