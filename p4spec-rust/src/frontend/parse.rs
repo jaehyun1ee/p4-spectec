@@ -35,7 +35,7 @@ use super::{
 
 // = Helpers
 
-// - Diagnostic input
+// - Source decoding
 
 /// Locates a UTF-8 error by counting newlines in the valid prefix.
 fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Span {
@@ -56,6 +56,27 @@ fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Spa
     let pos_r = Position::new(name, line, column + invalid_length);
     Span::new(pos_l, pos_r)
 }
+
+/// Decodes UTF-8 bytes or reports the invalid sequence in its lexical context.
+fn decode_utf8(name: Rc<str>, bytes: &[u8]) -> Result<&str, FrontendError> {
+    str::from_utf8(bytes).map_err(|error_utf8| {
+        let span = invalid_utf8_span(Rc::clone(&name), bytes, &error_utf8);
+        // Utf8Error guarantees that the prefix before valid_up_to is valid
+        let prefix = str::from_utf8(&bytes[..error_utf8.valid_up_to()])
+            .expect("UTF-8 decoder validated the prefix");
+        // Classify comment encoding only when lexing reaches the invalid bytes
+        let mut lexer = Lexer::new(Rc::clone(&name), prefix, |_| false);
+        while lexer.next().is_some_and(|token| token.is_ok()) {}
+        if lexer.in_block_comment() {
+            error::comment_encoding_invalid(span, bytes, &error_utf8)
+        } else {
+            // Earlier lexical errors leave the encoding context unknown
+            error::source_encoding_invalid(span, bytes, &error_utf8)
+        }
+    })
+}
+
+// - Parser diagnostics
 
 /// Maps LALRPOP control failures to reports at the responsible token.
 fn parse_error(
@@ -130,7 +151,7 @@ fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), FrontendErro
     Ok(())
 }
 
-// = Parsing with a context
+// = Parsing core
 
 /// Lexes and parses one source text into definitions.
 fn parse_text_with_context(
@@ -144,39 +165,6 @@ fn parse_text_with_context(
     result.map_err(|error| parse_error(ctx, source, error))
 }
 
-/// Validates UTF-8 bytes and parses them with the supplied context.
-fn parse_utf8_bytes_with_context(
-    name: Rc<str>,
-    bytes: &[u8],
-    ctx: &Context,
-) -> Result<Spec, FrontendError> {
-    let source = str::from_utf8(bytes).map_err(|error_utf8| {
-        let span = invalid_utf8_span(Rc::clone(&name), bytes, &error_utf8);
-        // Utf8Error guarantees that the prefix before valid_up_to is valid
-        let prefix = str::from_utf8(&bytes[..error_utf8.valid_up_to()])
-            .expect("UTF-8 decoder validated the prefix");
-        // Classify comment encoding only when lexing reaches the invalid bytes
-        let mut lexer = Lexer::new(Rc::clone(&name), prefix, |_| false);
-        while lexer.next().is_some_and(|token| token.is_ok()) {}
-        if lexer.in_block_comment() {
-            error::comment_encoding_invalid(span, bytes, &error_utf8)
-        } else {
-            // Earlier lexical errors leave the encoding context unknown
-            error::source_encoding_invalid(span, bytes, &error_utf8)
-        }
-    })?;
-    parse_text_with_context(name, source, ctx)
-}
-
-/// Reads a file and parses its bytes with shared variable bindings.
-fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, FrontendError> {
-    let name = Rc::<str>::from(path.to_string_lossy().into_owned());
-    let pos = Position::new(Rc::clone(&name), 0, 0);
-    let span = Span::new(pos.clone(), pos);
-    let bytes = fs::read(path).map_err(|error_io| error::file_read_failed(span, &error_io))?;
-    parse_utf8_bytes_with_context(name, &bytes, ctx)
-}
-
 // = Entry points
 
 // - In-memory input
@@ -188,7 +176,8 @@ pub fn parse_text(name: Rc<str>, source: &str) -> Result<Spec, FrontendError> {
 
 /// Validates UTF-8 bytes and parses them with fresh variable bindings.
 pub fn parse_utf8_bytes(name: Rc<str>, bytes: &[u8]) -> Result<Spec, FrontendError> {
-    parse_utf8_bytes_with_context(name, bytes, &Context::default())
+    let source = decode_utf8(Rc::clone(&name), bytes)?;
+    parse_text(name, source)
 }
 
 // - Filesystem input
@@ -211,8 +200,16 @@ where
     let bindings = Rc::new(Bindings::default());
     let mut spec = Vec::new();
     for file in files {
+        // Read bytes with a file-only location for I/O failures
+        let name = Rc::<str>::from(file.to_string_lossy().into_owned());
+        let pos = Position::new(Rc::clone(&name), 0, 0);
+        let span = Span::new(pos.clone(), pos);
+        let bytes = fs::read(&file).map_err(|error_io| error::file_read_failed(span, &error_io))?;
+
+        // Decode and parse each file with the shared variable bindings
+        let source = decode_utf8(Rc::clone(&name), &bytes)?;
         let ctx = Context::with_bindings(Rc::clone(&bindings));
-        let defs = parse_file_with_context(&file, &ctx)?;
+        let defs = parse_text_with_context(name, source, &ctx)?;
         spec.extend(defs);
     }
     Ok(spec)
