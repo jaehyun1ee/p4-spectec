@@ -1,9 +1,12 @@
 //! EL syntax translated to semantic TeX documents
 //!
-//! `tex_of_def` renders a single definition;
-//! `tex_of_defs` groups consecutive function clauses before rendering.
-//! Expressions retain their precedence until nested in a parent document.
-//! Definition layouts resolve at width 80 before serialization.
+//! `tex_of_*` builds a `Doc`; `render_*` retains `(Doc, Category)` for expressions.
+//! For example, `render_exp(a + b)` retains `Category::Additive`,
+//! so nesting it under multiplication produces `(a + b) * c` with parentheses.
+//! `tex_of_exp(a + b)` discards the category when only the document is needed.
+//!
+//! `tex_of_defs` groups consecutive function clauses; rule and function layouts
+//! resolve at width 80. `tex::serialize` turns the resulting `Doc` into text.
 
 use num_traits::Signed;
 
