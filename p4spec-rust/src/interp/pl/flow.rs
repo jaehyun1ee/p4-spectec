@@ -46,7 +46,7 @@ impl Flow {
 // = Sequential choice
 
 /// Keeps the most deeply nested failure, preferring the later one on ties.
-fn retain_deepest_errors(errors: &mut Vec<Error>, errors_post: Vec<Error>) {
+pub(super) fn retain_deepest_errors(errors: &mut Vec<Error>, errors_post: Vec<Error>) {
     if errors_post.iter().map(Error::depth).max().unwrap_or(0)
         >= errors.iter().map(Error::depth).max().unwrap_or(0)
     {

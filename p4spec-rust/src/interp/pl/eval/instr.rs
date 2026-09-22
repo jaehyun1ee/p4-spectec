@@ -3,7 +3,7 @@
 //! `eval_group_block` executes a rule group or function body;
 //! `eval_dispatch_block` selects relation groups through routing instructions.
 //! `eval_block` isolates bindings; `eval_alternatives` selects conclusions.
-//! Both delegate outcome selection to `pl::flow`.
+//! Blocks run sequentially; alternatives delegate selection to `pl::flow`.
 //! `eval_instr` dispatches instructions and attaches their evaluation traces.
 //! Expression and assignment adapters remove hints before shared evaluation.
 
@@ -37,7 +37,7 @@ use crate::{
 
 // = Block evaluation
 
-/// Runs instructions in one local scope, restoring bindings at its boundary.
+/// Runs instructions sequentially, restoring bindings at the block boundary.
 pub(super) fn eval_block<'global, 'instr, Tier: 'instr, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, PlInterp, Iface, Ext>,
     ctx: Context<'global>,
@@ -49,18 +49,23 @@ pub(super) fn eval_block<'global, 'instr, Tier: 'instr, Iface: Interface, Ext: E
     ) -> Backtrack<(Context<'global>, Flow)>,
 ) -> Backtrack<(Context<'global>, Flow)> {
     // Assignments extend this block, not its enclosing scope
-    let mut ctx_local = Some(ctx.clone());
-    // Transfer each instruction's bindings to the next without cloning frames
-    let flow = unwrap!(flow::choose_sequential(instrs, |instr| {
-        let ctx = ctx_local
-            .take()
-            .expect("continuing instructions restore local bindings");
-        let (ctx_post, flow) = unwrap!(evaluate(runner_ctx, ctx, instr));
-        ctx_local = Some(ctx_post);
-        ok!(flow)
-    }));
+    let mut ctx_local = ctx.clone();
+    let mut errors = Vec::new();
+    // Pass each instruction's bindings to the next
+    for instr in instrs {
+        let (ctx_post, flow) = unwrap!(evaluate(runner_ctx, ctx_local, instr));
+        ctx_local = ctx_post;
+        match flow {
+            // Continue with the most specific failure so far
+            Flow::Cont(errors_post) => {
+                flow::retain_deepest_errors(&mut errors, errors_post);
+            }
+            // A conclusion ends this execution path
+            flow => return ok!((ctx, flow)),
+        }
+    }
     // Leaving the block restores the enclosing bindings
-    ok!((ctx, flow))
+    ok!((ctx, Flow::Cont(errors)))
 }
 
 /// Runs a group body in its own local scope.
