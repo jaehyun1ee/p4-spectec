@@ -1,32 +1,38 @@
+//! Command-line specification transformation and execution
+//!
+//! Commands call the public transformation pipeline and runner APIs.
+//! `run` propagates typed failures to `main`,
+//! which prints one diagnostic and chooses the process exit code.
+
 use std::{path::PathBuf, process::ExitCode};
 
 use clap::{Args, Parser, Subcommand};
 
 use p4spec_rust::{
-    frontend::parse::parse_files,
-    interface::p4::parse::parse_file,
-    lang::{al, data::value::external::Encoding, il, sl, traits::print::Print},
-    pass::{algo, elaborate, prosify, structure},
+    interface::p4::{error::P4Error, parse::parse_file},
+    interp::shared::error::Error as InterpError,
+    lang::{data::value::external::Encoding, traits::print::Print},
     runner::{self, BuiltinInterface, Interpreter, Runner},
     sim_plugin::{self, dummy::Dummy},
 };
 
-// = Helpers
+// = Errors
 
-fn elab(paths: Vec<PathBuf>) -> Result<il::ast::Spec, ExitCode> {
-    let spec_el = parse_files(paths).map_err(command_error)?;
-    elaborate::convert(spec_el).map_err(command_error)
-}
-
-fn algo(paths: Vec<PathBuf>) -> Result<al::ast::Spec, ExitCode> {
-    let spec_il = elab(paths)?;
-    algo::convert(spec_il).map_err(command_error)
-}
-
-fn structure(paths: Vec<PathBuf>) -> Result<sl::ast::Spec, ExitCode> {
-    let spec_al = algo(paths)?;
-    let without_rule_groups = true;
-    structure::convert(spec_al, without_rule_groups).map_err(command_error)
+/// A command failure with its user-facing diagnostic category.
+#[derive(Debug, thiserror::Error)]
+enum CliError {
+    #[error(transparent)]
+    Spec(#[from] p4spec_rust::Error),
+    #[error(transparent)]
+    Runner(#[from] runner::BuildError),
+    #[error(transparent)]
+    Simulator(#[from] sim_plugin::BuildError),
+    #[error(transparent)]
+    Simulation(#[from] sim_plugin::runner::Error),
+    #[error("syntax error: {0}")]
+    Syntax(#[from] P4Error),
+    #[error("runtime error: {0}")]
+    Runtime(#[from] InterpError),
 }
 
 // = Elab command
@@ -38,13 +44,10 @@ struct ElabArgs {
     paths: Vec<PathBuf>,
 }
 
-fn elab_command(args: ElabArgs) -> ExitCode {
-    let spec_il = match elab(args.paths) {
-        Ok(spec) => spec,
-        Err(code) => return code,
-    };
+fn elab_command(args: ElabArgs) -> Result<(), CliError> {
+    let spec_il = p4spec_rust::elab(&args.paths)?;
     println!("{}", Print::to_string(&spec_il));
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 // = Algo command
@@ -56,13 +59,10 @@ struct AlgoArgs {
     paths: Vec<PathBuf>,
 }
 
-fn algo_command(args: AlgoArgs) -> ExitCode {
-    let spec_al = match algo(args.paths) {
-        Ok(spec) => spec,
-        Err(code) => return code,
-    };
+fn algo_command(args: AlgoArgs) -> Result<(), CliError> {
+    let spec_al = p4spec_rust::algo(&args.paths)?;
     println!("{}", Print::to_string(&spec_al));
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 // = Struct command
@@ -74,18 +74,10 @@ struct StructArgs {
     paths: Vec<PathBuf>,
 }
 
-fn struct_command(args: StructArgs) -> ExitCode {
-    let spec_sl = match structure(args.paths) {
-        Ok(spec) => spec,
-        Err(code) => return code,
-    };
+fn struct_command(args: StructArgs) -> Result<(), CliError> {
+    let spec_sl = p4spec_rust::structure(&args.paths, true)?;
     println!("{}", Print::to_string(&spec_sl));
-    ExitCode::SUCCESS
-}
-
-fn command_error(error: impl std::fmt::Display) -> ExitCode {
-    eprintln!("{error}");
-    ExitCode::FAILURE
+    Ok(())
 }
 
 // = Run command
@@ -105,22 +97,16 @@ struct InterpreterArgs {
 }
 
 fn interp_spec(
-    paths: Vec<PathBuf>,
+    paths: &[PathBuf],
     interpreter: &InterpreterArgs,
-) -> Result<runner::Spec, ExitCode> {
-    let spec_al = algo(paths)?;
+) -> Result<runner::Spec, p4spec_rust::Error> {
+    // Each pipeline stops at the language selected by the command
     if interpreter.al {
-        Ok(runner::Spec::Al(spec_al))
+        p4spec_rust::algo(paths).map(runner::Spec::Al)
     } else if interpreter.sl {
-        let without_rule_groups = true;
-        structure::convert(spec_al, without_rule_groups)
-            .map(runner::Spec::Sl)
-            .map_err(command_error)
+        p4spec_rust::structure(paths, true).map(runner::Spec::Sl)
     } else {
-        let spec_sl = structure::convert(spec_al, false).map_err(command_error)?;
-        prosify::convert(spec_sl)
-            .map(runner::Spec::Pl)
-            .map_err(command_error)
+        p4spec_rust::annotate(paths).map(runner::Spec::Pl)
     }
 }
 
@@ -151,32 +137,23 @@ struct RunArgs {
     guard: bool,
 }
 
-fn run_command(mut args: RunArgs) -> ExitCode {
-    let spec = match interp_spec(std::mem::take(&mut args.paths), &args.interpreter) {
-        Ok(spec) => spec,
-        Err(code) => return code,
-    };
+/// Builds the selected interpreter and runs the program entry relation.
+fn run_command(args: RunArgs) -> Result<(), CliError> {
+    // Convert the specification before assembling its runner
+    let spec = interp_spec(&args.paths, &args.interpreter)?;
     let config = runner::Config::new(!args.no_cache, args.det, args.guard);
+    // Each runner uses the same P4 frontend and dummy extern implementation
     match spec {
         runner::Spec::Al(spec) => {
-            let runner = match runner::build_al(spec, config, Dummy) {
-                Ok(runner) => runner,
-                Err(error) => return command_error(error),
-            };
+            let runner = runner::build_al(spec, config, Dummy)?;
             run_program(runner, &args)
         }
         runner::Spec::Sl(spec) => {
-            let runner = match runner::build_sl(spec, config, Dummy) {
-                Ok(runner) => runner,
-                Err(error) => return command_error(error),
-            };
+            let runner = runner::build_sl(spec, config, Dummy)?;
             run_program(runner, &args)
         }
         runner::Spec::Pl(spec) => {
-            let runner = match runner::build_pl(spec, config, Dummy) {
-                Ok(runner) => runner,
-                Err(error) => return command_error(error),
-            };
+            let runner = runner::build_pl(spec, config, Dummy)?;
             run_program(runner, &args)
         }
     }
@@ -185,28 +162,14 @@ fn run_command(mut args: RunArgs) -> ExitCode {
 fn run_program<Interp>(
     mut runner: Runner<Interp, BuiltinInterface, Dummy>,
     args: &RunArgs,
-) -> ExitCode
+) -> Result<(), CliError>
 where
-    Interp: Interpreter<BuiltinInterface, Dummy>,
-    Interp::Error: std::fmt::Display,
+    Interp: Interpreter<BuiltinInterface, Dummy, Error = InterpError>,
 {
-    let program = match parse_file(runner.arena_mut(), &args.includes, &args.program) {
-        Ok(program) => program,
-        Err(error) => {
-            eprintln!("syntax error: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
-    match runner.eval_program(&args.relation, program) {
-        Ok(_) => {
-            println!("passed");
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            eprintln!("runtime error: {error}");
-            ExitCode::FAILURE
-        }
-    }
+    let program = parse_file(runner.arena_mut(), &args.includes, &args.program)?;
+    runner.eval_program(&args.relation, program)?;
+    println!("passed");
+    Ok(())
 }
 
 // = Sim command
@@ -244,28 +207,19 @@ struct SimArgs {
     guard: bool,
 }
 
-fn sim_command(mut args: SimArgs) -> ExitCode {
-    let spec = match interp_spec(std::mem::take(&mut args.paths), &args.interpreter) {
-        Ok(spec) => spec,
-        Err(code) => return code,
-    };
+fn sim_command(args: SimArgs) -> Result<(), CliError> {
+    let spec = interp_spec(&args.paths, &args.interpreter)?;
     let config = runner::Config::new(!args.no_cache, args.det, args.guard);
-    let simulator = match sim_plugin::build(spec, &args.arch, config, args.plugin_encoding) {
-        Ok(simulator) => simulator,
-        Err(error) => return command_error(error),
-    };
+    let simulator = sim_plugin::build(spec, &args.arch, config, args.plugin_encoding)?;
     simulate(simulator, &args)
 }
 
-fn simulate(mut simulator: sim_plugin::Simulator, args: &SimArgs) -> ExitCode {
-    match simulator.run_stf_test(&args.includes, &args.program, &args.stf, |tx| {
+fn simulate(mut simulator: sim_plugin::Simulator, args: &SimArgs) -> Result<(), CliError> {
+    simulator.run_stf_test(&args.includes, &args.program, &args.stf, |tx| {
         println!("[PASS] Transmitted {tx}");
-    }) {
-        Ok(()) => {}
-        Err(error) => return command_error(error),
-    }
+    })?;
     println!("passed");
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 // = Entry point
@@ -292,13 +246,24 @@ enum Command {
     Sim(SimArgs),
 }
 
-fn main() -> ExitCode {
-    let cli = Cli::parse();
+fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Command::Elab(args) => elab_command(args),
         Command::Algo(args) => algo_command(args),
         Command::Struct(args) => struct_command(args),
         Command::Run(args) => run_command(args),
         Command::Sim(args) => sim_command(args),
+    }
+}
+
+fn main() -> ExitCode {
+    match run(Cli::parse()) {
+        // Successful commands have already written their output
+        Ok(()) => ExitCode::SUCCESS,
+        // Report every command failure once at the process boundary
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::FAILURE
+        }
     }
 }
