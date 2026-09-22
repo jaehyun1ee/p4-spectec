@@ -107,7 +107,7 @@ pub fn run(name: &str) -> Result<Box<Report>> {
         }
         // Directory traversal fails before file parsing starts
         "parse-directory-io-error" => return unreadable_directory(name),
-        // Mixfix parsing has its own public boundary and no source region
+        // Mixfix parsing locates errors within its virtual source
         "parse-malformed-mixop" => return rejected(name, parse_mixop("")),
         // OCaml decimal escape 011 denotes the vertical-tab byte
         "parse-illegal-control-in-text-literal" => b"\"\x0b",

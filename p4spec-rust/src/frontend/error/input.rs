@@ -94,12 +94,20 @@ pub(crate) fn input_path_read_failed(
 
 const MIXFIX_OPERATOR_INVALID: &str = "parse/mixfix-operator-invalid";
 
-/// Reports a malformed runtime mixfix shape without a source location.
-pub(crate) fn mixfix_operator_invalid(source: &str) -> FrontendError {
+/// Reports a malformed runtime mixfix shape at its token or EOF location.
+pub(crate) fn mixfix_operator_invalid(span: Span, source: &str) -> FrontendError {
     let message = if source.is_empty() {
         "mixfix operator must not be empty".to_owned()
     } else {
         format!("mixfix operator {source:?} is malformed")
     };
-    make_report(MIXFIX_OPERATOR_INVALID, message, Vec::new())
+    make_report(
+        MIXFIX_OPERATOR_INVALID,
+        message,
+        vec![Label {
+            style: LabelStyle::Primary,
+            span,
+            message: "invalid mixfix operator".to_owned(),
+        }],
+    )
 }

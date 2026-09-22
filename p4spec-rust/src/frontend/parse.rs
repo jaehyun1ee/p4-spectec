@@ -217,7 +217,7 @@ where
 
 // - Mixfix shapes
 
-/// Parses the notation shape syntax used by runtime case constructors.
+/// Parses runtime notation shapes with positions in the `<mixop>` virtual source.
 pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
     /// Replaces every type in a notation type with an argument hole.
     fn from_typ(typ: &ast::Typ) -> Mixop {
@@ -252,12 +252,19 @@ pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
 
     // Parse as a type with a throwaway context
     let ctx = Context::default();
-    let lexer = Lexer::new(Rc::from(""), source, |id| ctx.find_id(id));
+    let lexer = Lexer::new(Rc::from("<mixop>"), source, |id| ctx.find_id(id));
     let tokens = parser_tokens(&ctx, lexer);
     let result = parser::CheckTypParser::new().parse(&ctx, tokens);
     let typ = result.map_err(|error_parse| match error_parse {
         ParseError::User { error } => error,
-        _ => error::mixfix_operator_invalid(source),
+        ParseError::InvalidToken { location: loc }
+        | ParseError::UnrecognizedEof { location: loc, .. } => {
+            error::mixfix_operator_invalid(ctx.span(loc, loc), source)
+        }
+        ParseError::UnrecognizedToken { token: (loc_l, _, loc_r), .. }
+        | ParseError::ExtraToken { token: (loc_l, _, loc_r) } => {
+            error::mixfix_operator_invalid(ctx.span(loc_l, loc_r), source)
+        }
     })?;
     let mixop = from_typ(&typ);
     Ok(mixop)

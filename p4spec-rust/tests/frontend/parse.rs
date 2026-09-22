@@ -32,13 +32,49 @@ fn test_runtime_mixop_punctuation_preserves_string_source_positions() {
     let Mixfix::Atom(colon) = &items[1] else {
         panic!("expected colon");
     };
-    assert_eq!(colon.span, Span::new(Position::new("", 1, 2), Position::new("", 1, 5)));
+    assert_eq!(
+        colon.span,
+        Span::new(Position::new("<mixop>", 1, 2), Position::new("<mixop>", 1, 5))
+    );
 
     let Mixfix::Brack(atom_l, _, atom_r) = parse_mixop("`{ k `}").unwrap() else {
         panic!("expected bracket notation");
     };
-    assert_eq!(atom_l.span, Span::new(Position::new("", 1, 0), Position::new("", 1, 2)));
-    assert_eq!(atom_r.span, Span::new(Position::new("", 1, 5), Position::new("", 1, 7)));
+    assert_eq!(
+        atom_l.span,
+        Span::new(Position::new("<mixop>", 1, 0), Position::new("<mixop>", 1, 2))
+    );
+    assert_eq!(
+        atom_r.span,
+        Span::new(Position::new("<mixop>", 1, 5), Position::new("<mixop>", 1, 7))
+    );
+}
+
+#[test]
+fn test_runtime_mixop_errors_locate_tokens_and_eof_in_virtual_source() {
+    for (source, line, column_l, column_r) in [("", 1, 0, 0), ("(", 1, 1, 1), ("k\n)", 2, 0, 1)] {
+        let report = parse_mixop(source).unwrap_err();
+        assert_eq!(report.code.as_deref(), Some("parse/mixfix-operator-invalid"));
+        assert_eq!(report.labels.len(), 1, "{source:?}");
+        assert_eq!(
+            report.labels[0].span,
+            Span::new(
+                Position::new("<mixop>", line, column_l),
+                Position::new("<mixop>", line, column_r),
+            ),
+            "{source:?}",
+        );
+    }
+}
+
+#[test]
+fn test_runtime_mixop_lexical_errors_keep_their_code_and_virtual_source() {
+    let report = parse_mixop(r#""\q""#).unwrap_err();
+    assert_eq!(report.code.as_deref(), Some("parse/text-escape-invalid"));
+    assert_eq!(
+        report.labels[0].span,
+        Span::new(Position::new("<mixop>", 1, 1), Position::new("<mixop>", 1, 3)),
+    );
 }
 
 struct TempDirectory {
