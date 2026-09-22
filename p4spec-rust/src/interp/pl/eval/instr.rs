@@ -3,7 +3,7 @@
 //! `eval_group_block` executes a rule group or function body;
 //! `eval_dispatch_block` selects relation groups through routing instructions.
 //! `eval_block` isolates bindings; `eval_alternatives` selects conclusions.
-//! Expressions and assignments use the shared slot-based evaluation.
+//! Expression and assignment adapters remove hints before shared evaluation.
 
 use super::{
     assign::{assign_exp, assign_exps},
@@ -134,7 +134,7 @@ fn eval_guard<'g, Iface: Interface, Ext: Extern>(
         ),
         ast::Guard::Cmp(op, _typ_op, exp) => {
             let value_r = unwrap!(eval_exp(runner_ctx, &ctx, exp));
-            shared_eval::ops::cmpop(runner_ctx.arena(), &exp.span, op, value, value_r)
+            shared_eval::ops::cmpop(runner_ctx.arena(), &exp.node.span, op, value, value_r)
         }
         ast::Guard::Sub(_, check) | ast::Guard::CheckLetSub(_, check, _) => {
             shared_eval::ops::sub(runner_ctx.arena(), &ctx, &Span::default(), check, value)
@@ -144,7 +144,7 @@ fn eval_guard<'g, Iface: Interface, Ext: Extern>(
         }
         ast::Guard::Mem(exp) => {
             let value_list = unwrap!(eval_exp(runner_ctx, &ctx, exp));
-            shared_eval::ops::mem(runner_ctx.arena(), &exp.span, value, value_list)
+            shared_eval::ops::mem(runner_ctx.arena(), &exp.node.span, value, value_list)
         }
     };
     let matched = unwrap!(matched);
@@ -195,7 +195,10 @@ fn eval_common_instr<'g, Tier, Iface: Interface, Ext: Extern>(
                 &instr.iter_exps,
                 &mut |runner_ctx, ctx| {
                     let value = unwrap!(eval_exp(runner_ctx, ctx, &instr.exp));
-                    Backtrack::from_result(get::bool(runner_ctx.arena(), &value), &instr.exp.span)
+                    Backtrack::from_result(
+                        get::bool(runner_ctx.arena(), &value),
+                        &instr.exp.node.span,
+                    )
                 },
             ));
             if cond {
@@ -204,7 +207,7 @@ fn eval_common_instr<'g, Tier, Iface: Interface, Ext: Extern>(
                 ok!((
                     ctx,
                     Flow::cont(
-                        instr.exp.span.clone(),
+                        instr.exp.node.span.clone(),
                         PremErrorKind::ConditionNotMet { exp: Print::to_string(&instr.exp) }
                     )
                 ))
@@ -256,7 +259,7 @@ fn eval_common_instr<'g, Tier, Iface: Interface, Ext: Extern>(
             ok!((
                 ctx,
                 Flow::cont(
-                    instr.exp.span.clone(),
+                    instr.exp.node.span.clone(),
                     PremErrorKind::ConditionNotMet { exp: Print::to_string(&instr.exp) }
                 )
             ))
@@ -284,7 +287,7 @@ fn eval_common_instr<'g, Tier, Iface: Interface, Ext: Extern>(
             // Extract fields before mutating the arena during assignment
             let value = unwrap!(eval_exp(runner_ctx, &ctx, &instr.exp));
             let values =
-                unwrap_from_result!(get::case(runner_ctx.arena(), &value), &instr.exp.span)
+                unwrap_from_result!(get::case(runner_ctx.arena(), &value), &instr.exp.node.span)
                     .args()
                     .into_iter()
                     .copied()
@@ -303,7 +306,7 @@ fn eval_common_instr<'g, Tier, Iface: Interface, Ext: Extern>(
             let matches = unwrap!(shared_eval::ops::sub(
                 runner_ctx.arena(),
                 &ctx,
-                &instr.exp_r.span,
+                &instr.exp_r.node.span,
                 &instr.subcheck,
                 value
             ));
@@ -327,7 +330,7 @@ fn eval_common_instr<'g, Tier, Iface: Interface, Ext: Extern>(
                 ok!((
                     ctx,
                     Flow::cont(
-                        instr.exp_r.span.clone(),
+                        instr.exp_r.node.span.clone(),
                         PremErrorKind::ConditionNotMet {
                             exp: format!(
                                 "{} is not a subtype of {}",
@@ -352,7 +355,7 @@ fn eval_common_instr<'g, Tier, Iface: Interface, Ext: Extern>(
                 ok!((
                     ctx,
                     Flow::cont(
-                        instr.exp_r.span.clone(),
+                        instr.exp_r.node.span.clone(),
                         PremErrorKind::ConditionNotMet {
                             exp: format!(
                                 "{} does not match the expected pattern",
@@ -367,7 +370,7 @@ fn eval_common_instr<'g, Tier, Iface: Interface, Ext: Extern>(
             // Only a present option enters the nested block
             let value = unwrap!(eval_exp(runner_ctx, &ctx, &instr.exp_r));
             if let Some(value) =
-                unwrap_from_result!(get::opt(runner_ctx.arena(), &value), &instr.exp_r.span)
+                unwrap_from_result!(get::opt(runner_ctx.arena(), &value), &instr.exp_r.node.span)
             {
                 // The shorthand binding belongs to the nested block
                 let ctx_bound =
@@ -378,7 +381,7 @@ fn eval_common_instr<'g, Tier, Iface: Interface, Ext: Extern>(
                 ok!((
                     ctx,
                     Flow::cont(
-                        instr.exp_r.span.clone(),
+                        instr.exp_r.node.span.clone(),
                         PremErrorKind::ConditionNotMet {
                             exp: format!(
                                 "{} evaluated to an empty option",

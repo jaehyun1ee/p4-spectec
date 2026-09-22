@@ -1,5 +1,168 @@
-//! Shared expression evaluation
+//! PL expression evaluation through the shared evaluator
 //!
-//! Re-exports evaluation of prepared expressions; PL adds no expression forms.
+//! `eval_exp` removes prose hints from a prepared PL expression,
+//! then delegates to shared expression evaluation with the same slots.
+//! `strip_hints` also supplies the assignment adapter with shared patterns;
+//! types and spans survive while the annotated PL tree stays intact.
 
-pub(super) use crate::interp::shared::eval::expr::{eval_exp, eval_exps};
+use std::borrow::Borrow;
+
+use crate::{
+    interp::{
+        pl::{PlInterp, context::Context},
+        shared::{backtrack::Backtrack, eval::expr as shared, prepare::ast as shared_ast},
+    },
+    lang::{common::notation::mixfix::Mixfix, data::value::Value},
+    runner::{Extern, Interface, RunnerContext},
+    runtime::envs::interp::pl::ast_prepared as ast,
+};
+
+// = Expression evaluation
+
+/// Evaluates a PL expression after removing its prose hints.
+pub(super) fn eval_exp<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, PlInterp, Iface, Ext>,
+    ctx: &Context<'_>,
+    exp: &ast::Exp,
+) -> Backtrack<Value> {
+    let exp_shared = strip_hints(exp);
+    shared::eval_exp(runner_ctx, ctx, &exp_shared)
+}
+
+/// Evaluates PL expressions in order through the shared evaluator.
+pub(super) fn eval_exps<Iface: Interface, Ext: Extern, T: Borrow<ast::Exp>>(
+    runner_ctx: &mut RunnerContext<'_, PlInterp, Iface, Ext>,
+    ctx: &Context<'_>,
+    exps: &[T],
+) -> Backtrack<Vec<Value>> {
+    let exps_shared = exps
+        .iter()
+        .map(|exp| strip_hints(exp.borrow()))
+        .collect::<Vec<_>>();
+    shared::eval_exps(runner_ctx, ctx, &exps_shared)
+}
+
+// = Hint removal
+
+// - Notation
+
+fn strip_not_exp(mixfix: &ast::NotExp) -> shared_ast::NotExp {
+    match mixfix {
+        Mixfix::Arg(exp) => Mixfix::Arg(strip_hints(exp)),
+        Mixfix::Atom(atom) => Mixfix::Atom(atom.clone()),
+        Mixfix::Brack(atom_l, inner, atom_r) => {
+            Mixfix::Brack(atom_l.clone(), Box::new(strip_not_exp(inner)), atom_r.clone())
+        }
+        Mixfix::Infix(exp_l, atom, exp_r) => Mixfix::Infix(
+            Box::new(strip_not_exp(exp_l)),
+            atom.clone(),
+            Box::new(strip_not_exp(exp_r)),
+        ),
+        Mixfix::Seq(items) => Mixfix::Seq(items.iter().map(strip_not_exp).collect()),
+    }
+}
+
+// - Paths
+
+fn strip_path(path: &ast::Path) -> shared_ast::Path {
+    let node = match &path.node {
+        ast::PathKind::Root => shared_ast::PathKind::Root,
+        ast::PathKind::Idx(path, exp) => {
+            shared_ast::PathKind::Idx(Box::new(strip_path(path)), Box::new(strip_hints(exp)))
+        }
+        ast::PathKind::Slice(path, exp_idx, exp_len) => shared_ast::PathKind::Slice(
+            Box::new(strip_path(path)),
+            Box::new(strip_hints(exp_idx)),
+            Box::new(strip_hints(exp_len)),
+        ),
+        ast::PathKind::Dot(path, atom) => {
+            shared_ast::PathKind::Dot(Box::new(strip_path(path)), atom.clone())
+        }
+    };
+    crate::note_phrase!(node: node, note: path.note.clone(), span: path.span.clone())
+}
+
+// - Arguments
+
+fn strip_arg(arg: &ast::Arg) -> shared_ast::Arg {
+    let node = match &arg.node {
+        ast::ArgKind::Exp(exp) => shared_ast::ArgKind::Exp(Box::new(strip_hints(exp))),
+        ast::ArgKind::Def(id) => shared_ast::ArgKind::Def(id.clone()),
+    };
+    crate::phrase!(node: node, span: arg.span.clone())
+}
+
+// - Expressions
+
+/// Removes prose annotations while retaining executable syntax and source data.
+pub(super) fn strip_hints(exp: &ast::Exp) -> shared_ast::Exp {
+    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+        use ast::ExpKind as P;
+        use shared_ast::ExpKind as E;
+        let node = match &exp.node.node {
+            P::Bool(value) => E::Bool(*value),
+            P::Num(num) => E::Num(num.clone()),
+            P::Text(text) => E::Text(text.clone()),
+            P::Id(id) => E::Id(id.clone()),
+            P::Un(op, typ, exp) => E::Un(*op, *typ, Box::new(strip_hints(exp))),
+            P::Bin(op, typ, exp_l, exp_r) => {
+                E::Bin(*op, *typ, Box::new(strip_hints(exp_l)), Box::new(strip_hints(exp_r)))
+            }
+            P::Cmp(op, typ, exp_l, exp_r) => {
+                E::Cmp(*op, *typ, Box::new(strip_hints(exp_l)), Box::new(strip_hints(exp_r)))
+            }
+            P::UpCast(typ, exp) => E::UpCast(Box::new(typ.clone()), Box::new(strip_hints(exp))),
+            P::DownCast(typ, exp) => E::DownCast(Box::new(typ.clone()), Box::new(strip_hints(exp))),
+            P::Sub(exp, typ, check) => {
+                E::Sub(Box::new(strip_hints(exp)), Box::new(typ.clone()), check.clone())
+            }
+            P::Match(exp, pattern) => E::Match(Box::new(strip_hints(exp)), pattern.clone()),
+            P::Tuple(exps) => E::Tuple(exps.iter().map(strip_hints).collect()),
+            P::Case(not_exp) => E::Case(Box::new(strip_not_exp(not_exp))),
+            P::Str(fields) => E::Str(
+                fields
+                    .iter()
+                    .map(|(atom, exp)| shared_ast::ExpField {
+                        atom: atom.clone(),
+                        exp: strip_hints(exp),
+                    })
+                    .collect(),
+            ),
+            P::Opt(exp) => E::Opt(exp.as_ref().map(|exp| Box::new(strip_hints(exp)))),
+            P::List(exps) => E::List(exps.iter().map(strip_hints).collect()),
+            P::Cons(exp_head, exp_tail) => {
+                E::Cons(Box::new(strip_hints(exp_head)), Box::new(strip_hints(exp_tail)))
+            }
+            P::Cat(exp_l, exp_r) => {
+                E::Cat(Box::new(strip_hints(exp_l)), Box::new(strip_hints(exp_r)))
+            }
+            P::Mem(exp_elem, exp_list) => {
+                E::Mem(Box::new(strip_hints(exp_elem)), Box::new(strip_hints(exp_list)))
+            }
+            P::Len(exp) => E::Len(Box::new(strip_hints(exp))),
+            P::Dot(exp, atom) => E::Dot(Box::new(strip_hints(exp)), atom.clone()),
+            P::Idx(exp_base, exp_idx) => {
+                E::Idx(Box::new(strip_hints(exp_base)), Box::new(strip_hints(exp_idx)))
+            }
+            P::Slice(exp_base, exp_idx, exp_len) => E::Slice(
+                Box::new(strip_hints(exp_base)),
+                Box::new(strip_hints(exp_idx)),
+                Box::new(strip_hints(exp_len)),
+            ),
+            P::Upd(exp_base, path, exp_new) => E::Upd(
+                Box::new(strip_hints(exp_base)),
+                Box::new(strip_path(path)),
+                Box::new(strip_hints(exp_new)),
+            ),
+            P::Call(id, targs, args) => {
+                E::Call(id.clone(), targs.clone(), args.iter().map(strip_arg).collect())
+            }
+            P::Iter(exp, iter) => E::Iter(Box::new(strip_hints(exp)), iter.clone()),
+        };
+        crate::note_phrase! {
+            node: node,
+            note: exp.node.note.clone(),
+            span: exp.node.span.clone(),
+        }
+    })
+}

@@ -1,14 +1,34 @@
-//! PL control flow instantiated with shared executable expressions
+//! PL syntax instantiated with execution slots
 //!
-//! Preparation keeps prose annotations and fallthrough notes on instructions,
-//! while expressions and iterations resolve to the same slots as AL and SL.
+//! Preparation retains PL expression forms and every prose annotation.
+//! Identifiers and iterations resolve to the same slots as AL and SL;
+//! evaluation removes expression hints at the shared evaluator boundary.
 
 pub use crate::interp::shared::prepare::ast::*;
-use crate::lang::{data::var::VarSlot, pl::ast as source};
+use crate::lang::{
+    data::var::{IdSlot, VarSlot},
+    pl::ast as source,
+};
 
 pub use source::{Fallthrough, RelSignature, TierInstr};
 
 // == Prepared syntax
+
+// - Expressions
+
+pub type Exp = source::Exp<IdSlot, VarSlot>;
+pub type ExpKind = source::ExpKind<IdSlot, VarSlot>;
+pub type NotExp = source::NotExp<IdSlot, VarSlot>;
+
+// - Paths
+
+pub type Path = source::Path<IdSlot, VarSlot>;
+pub type PathKind = source::PathKind<IdSlot, VarSlot>;
+
+// - Arguments
+
+pub type Arg = source::Arg<IdSlot, VarSlot>;
+pub type ArgKind = source::ArgKind<IdSlot, VarSlot>;
 
 // - Parameters
 

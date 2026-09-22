@@ -16,13 +16,13 @@ use super::ast::*;
 
 // - Expressions
 
-impl Print for Exp {
+impl<I: Print, V: Print> Print for Exp<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node.node {
             ExpKind::Bool(value) => write!(printer, "{value}"),
             ExpKind::Num(value) => value.print(printer),
             ExpKind::Text(text) => write!(printer, "\"{}\"", escaped(text)),
-            ExpKind::Id(id) => printer.write_str(&id.node),
+            ExpKind::Id(id) => id.print(printer),
             ExpKind::Un(op, _, exp) => {
                 op.print(printer)?;
                 exp.print(printer)
@@ -166,7 +166,7 @@ impl Print for Exp {
     }
 }
 
-impl Print for NotExp {
+impl<I: Print, V: Print> Print for NotExp<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.print_with(printer, |exp, printer| exp.print(printer))
     }
@@ -174,7 +174,7 @@ impl Print for NotExp {
 
 // - Paths
 
-impl Print for Path {
+impl<I: Print, V: Print> Print for Path<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             PathKind::Root => Ok(()),
@@ -243,7 +243,7 @@ impl<E: Print> Print for [Param<E>] {
 
 // - Arguments
 
-impl Print for Arg {
+impl<I: Print, V: Print> Print for Arg<I, V> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ArgKind::Exp(exp) => exp.print(printer),
@@ -255,7 +255,7 @@ impl Print for Arg {
     }
 }
 
-impl Print for [Arg] {
+impl<I: Print, V: Print> Print for [Arg<I, V>] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         if self.is_empty() {
             return Ok(());

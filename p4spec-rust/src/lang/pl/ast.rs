@@ -6,7 +6,8 @@
 //! when they do not conclude.
 //! Instructions are generic over a `Tier`, the instruction kind it alone has:
 //! `DispatchInstr` selects a rule group, `GroupInstr` runs its body.
-//! `E` and `V` let execution substitute prepared expressions and variable slots.
+//! Expression parameters `I` and `V` resolve identifiers and variables to slots.
+//! Instruction parameter `E` selects the expression representation.
 
 use crate::lang::{
     common::{
@@ -74,41 +75,41 @@ pub type Subcheck = sl::ast::Subcheck;
 // Expressions
 
 /// A typed expression before annotation.
-pub type ExpNode = NotePhrase<ExpKind, TypKind>;
+pub type ExpNode<I = Id, V = Var> = NotePhrase<ExpKind<I, V>, TypKind>;
 /// A typed expression with prose hints.
-pub type Exp = annot::Annotated<ExpNode>;
+pub type Exp<I = Id, V = Var> = annot::Annotated<ExpNode<I, V>>;
 #[derive(Clone, Debug, PartialEq)]
 /// The forms of an expression, as in SL.
-pub enum ExpKind {
+pub enum ExpKind<I = Id, V = Var> {
     Bool(bool),
     Num(Num),
     Text(Text),
-    Id(Id),
-    Un(UnOp, OpTyp, Box<Exp>),
-    Bin(BinOp, OpTyp, Box<Exp>, Box<Exp>),
-    Cmp(CmpOp, OpTyp, Box<Exp>, Box<Exp>),
-    UpCast(Typ, Box<Exp>),
-    DownCast(Typ, Box<Exp>),
-    Sub(Box<Exp>, Typ, Box<Subcheck>),
-    Match(Box<Exp>, Pattern),
-    Tuple(Vec<Exp>),
-    Case(Box<NotExp>),
-    Str(Vec<(Atom, Exp)>),
-    Opt(Option<Box<Exp>>),
-    List(Vec<Exp>),
-    Cons(Box<Exp>, Box<Exp>),
-    Cat(Box<Exp>, Box<Exp>),
-    Mem(Box<Exp>, Box<Exp>),
-    Len(Box<Exp>),
-    Dot(Box<Exp>, Atom),
-    Idx(Box<Exp>, Box<Exp>),
-    Slice(Box<Exp>, Box<Exp>, Box<Exp>),
-    Upd(Box<Exp>, Box<Path>, Box<Exp>),
-    Call(Id, Vec<Targ>, Vec<Arg>),
-    Iter(Box<Exp>, ExpIter),
+    Id(I),
+    Un(UnOp, OpTyp, Box<Exp<I, V>>),
+    Bin(BinOp, OpTyp, Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Cmp(CmpOp, OpTyp, Box<Exp<I, V>>, Box<Exp<I, V>>),
+    UpCast(Typ, Box<Exp<I, V>>),
+    DownCast(Typ, Box<Exp<I, V>>),
+    Sub(Box<Exp<I, V>>, Typ, Box<Subcheck>),
+    Match(Box<Exp<I, V>>, Pattern),
+    Tuple(Vec<Exp<I, V>>),
+    Case(Box<NotExp<I, V>>),
+    Str(Vec<(Atom, Exp<I, V>)>),
+    Opt(Option<Box<Exp<I, V>>>),
+    List(Vec<Exp<I, V>>),
+    Cons(Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Cat(Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Mem(Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Len(Box<Exp<I, V>>),
+    Dot(Box<Exp<I, V>>, Atom),
+    Idx(Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Slice(Box<Exp<I, V>>, Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Upd(Box<Exp<I, V>>, Box<Path<I, V>>, Box<Exp<I, V>>),
+    Call(Id, Vec<Targ>, Vec<Arg<I, V>>),
+    Iter(Box<Exp<I, V>>, ExpIter<V>),
 }
 /// A notation expression: a mixfix skeleton with expressions as arguments.
-pub type NotExp = Mixfix<Exp>;
+pub type NotExp<I = Id, V = Var> = Mixfix<Exp<I, V>>;
 pub type ExpIter<V = Var> = sl::ast::ExpIter<V>;
 
 // Patterns
@@ -118,14 +119,14 @@ pub type Pattern = sl::ast::Pattern;
 // Path
 
 /// A typed path into a value, for updates.
-pub type Path = NotePhrase<PathKind, TypKind>;
+pub type Path<I = Id, V = Var> = NotePhrase<PathKind<I, V>, TypKind>;
 #[derive(Clone, Debug, PartialEq)]
 /// The steps of a path, from the root outward.
-pub enum PathKind {
+pub enum PathKind<I = Id, V = Var> {
     Root,
-    Idx(Box<Path>, Box<Exp>),
-    Slice(Box<Path>, Box<Exp>, Box<Exp>),
-    Dot(Box<Path>, Atom),
+    Idx(Box<Path<I, V>>, Box<Exp<I, V>>),
+    Slice(Box<Path<I, V>>, Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Dot(Box<Path<I, V>>, Atom),
 }
 
 // Type parameters
@@ -150,11 +151,11 @@ pub type Targ = sl::ast::Targ;
 // Arguments
 
 /// A call argument with its span.
-pub type Arg = Phrase<ArgKind>;
+pub type Arg<I = Id, V = Var> = Phrase<ArgKind<I, V>>;
 #[derive(Clone, Debug, PartialEq)]
 /// An argument: a value expression or a function name.
-pub enum ArgKind {
-    Exp(Box<Exp>),
+pub enum ArgKind<I = Id, V = Var> {
+    Exp(Box<Exp<I, V>>),
     Def(Id),
 }
 

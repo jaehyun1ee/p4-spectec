@@ -308,3 +308,63 @@ fn shorthand_bindings_keep_their_scope() {
         assert_eq!(outputs, vec!["1"; instrs.len()], "det={det}");
     }
 }
+
+#[test]
+fn prepared_expressions_keep_nested_hints_until_evaluation() {
+    use p4spec_rust::{
+        interp::pl::context::Context,
+        lang::{
+            hints::alter::{AlterationHint, Hole},
+            pl::annot::Hints,
+        },
+        runtime::envs::interp::pl::ast_prepared as prepared,
+    };
+
+    // An invalid prose hole would fail if execution tried to render the hint
+    let hints = Hints { prose: Some(AlterationHint::Hole(Hole::Num(999))), ..Hints::default() };
+    let mut exp_inner = variable("n");
+    exp_inner.hints = hints.clone();
+    let exp_list = annotated_note_phrase!(
+        node: ast::ExpKind::List(vec![exp_inner]),
+        note: typ::make::list(typ::make::nat()).node,
+        span: Span::default(),
+        hints: hints.clone(),
+    );
+    let exp = annotated_note_phrase!(
+        node: ast::ExpKind::Len(Box::new(exp_list)),
+        note: typ::make::nat().node,
+        span: Span::default(),
+        hints: hints.clone(),
+    );
+    let mut instr_bind = binding(7);
+    let ast::InstrKind::Let(binding) = &mut instr_bind.node.node else { unreachable!() };
+    binding.exp_l.hints = hints.clone();
+    binding.exp_r.hints = hints.clone();
+    let spec_pl = function(vec![instr_bind, returning(exp)]);
+    let global = Global::load(spec_pl.clone()).unwrap();
+    assert_eq!(global.source(), &spec_pl);
+
+    let ctx = Context::new(&global);
+    let id = p4spec_rust::phrase!(node: "entry".to_owned(), span: Span::default());
+    let (_, callable) = ctx.find_func_with_scope(&id).unwrap();
+    let prepared::MetaFuncDef::Defined(func) = &callable.def else { panic!("defined function") };
+    let prepared::InstrKind::Let(binding) = &func.block[0].node.node else { panic!("binding") };
+    assert_eq!(binding.exp_l.hints, hints);
+    assert_eq!(binding.exp_r.hints, hints);
+    let prepared::InstrKind::Tier(instr) = &func.block[1].node.node else { panic!("return") };
+    let prepared::GroupInstr::Return(instr) = &instr.tier else { panic!("return") };
+    assert_eq!(instr.exp.hints, hints);
+    let prepared::ExpKind::Len(exp_list) = &instr.exp.node.node else { panic!("length") };
+    assert_eq!(exp_list.hints, hints);
+    let prepared::ExpKind::List(exps) = &exp_list.node.node else { panic!("list") };
+    assert_eq!(exps[0].hints, hints);
+    let prepared::ExpKind::Id(id_inner) = &exps[0].node.node else { panic!("variable") };
+    let prepared::ExpKind::Id(id_bound) = &binding.exp_l.node.node else { panic!("variable") };
+    assert_eq!(id_inner.slot, id_bound.slot);
+
+    for det in [false, true] {
+        let mut runner = configured(spec_pl.clone(), det);
+        let value = runner.context().call_func("entry", &[], &[]).unwrap();
+        assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "1");
+    }
+}

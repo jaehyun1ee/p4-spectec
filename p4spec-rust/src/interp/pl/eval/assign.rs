@@ -1,27 +1,62 @@
 //! Expression and parameter assignment
 //!
-//! Re-exports shared expression assignment and binds prepared PL parameters.
+//! Expression patterns retain PL syntax until `assign_exp` removes hints.
+//! Shared assignment then binds their prepared slots.
 //! `assign_params` resolves function arguments in the caller's context.
 
+use std::borrow::Borrow;
+
+use super::expr::strip_hints;
 use crate::{
     interp::{
         pl::context::Context,
         shared::{
             backtrack::{Backtrack, ok, unwrap},
             error::{AssignErrorKind, ErrorKind},
+            eval::assign as shared,
         },
     },
-    lang::{common::source::Span, data::value::Value},
+    lang::{
+        common::source::Span,
+        data::value::{Value, ValueArena},
+    },
     runtime::envs::interp::pl::ast_prepared as ast,
 };
 
-pub(super) use crate::interp::shared::eval::assign::{assign_def, assign_exp, assign_exps};
+use shared::assign_def;
+
+// = Expression assignment
+
+/// Assigns a value to a PL pattern after removing its prose hints.
+pub(super) fn assign_exp<'g>(
+    arena: &mut ValueArena,
+    ctx: Context<'g>,
+    exp: &ast::Exp,
+    value: Value,
+) -> Backtrack<Context<'g>> {
+    let exp_shared = strip_hints(exp);
+    shared::assign_exp(arena, ctx, &exp_shared, value)
+}
+
+/// Assigns values pairwise to PL patterns through shared assignment.
+pub(super) fn assign_exps<'g, T: Borrow<ast::Exp>>(
+    arena: &mut ValueArena,
+    ctx: Context<'g>,
+    exps: &[T],
+    values: &[Value],
+) -> Backtrack<Context<'g>> {
+    let exps_shared = exps
+        .iter()
+        .map(|exp| strip_hints(exp.borrow()))
+        .collect::<Vec<_>>();
+    shared::assign_exps(arena, ctx, &exps_shared, values)
+}
 
 // = Parameter assignment
 
 /// Binds prepared parameter patterns and resolves caller function aliases.
 pub(super) fn assign_params<'g>(
-    arena: &mut crate::lang::data::value::ValueArena,
+    arena: &mut ValueArena,
     ctx_caller: &Context<'_>,
     mut ctx: Context<'g>,
     params: &[ast::Param],

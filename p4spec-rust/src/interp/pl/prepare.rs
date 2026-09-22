@@ -2,50 +2,56 @@
 //!
 //! Prosification produces annotated blocks with name-based expressions.
 //! This traversal borrows that source once to build executable blocks:
-//! expressions use shared slots, while instructions retain their prose notes.
+//! expressions retain PL syntax and hints while identifiers resolve to slots.
 //! Each callable collects its frame layout during the same traversal.
 
 use crate::{
-    interp::shared::prepare::{Prepare, ast as exec},
-    lang::{common::notation::mixfix::Mixfix, il, pl::ast as pl},
+    interp::shared::prepare::Prepare,
+    lang::{common::notation::mixfix::Mixfix, pl::ast as pl},
     runtime::envs::interp::{pl::ast_prepared as ast, shared::frame::FrameLayout},
 };
 
-// = Expression projection
+// = Slot preparation
 
 // - Notation
 
-fn lower_mixfix(mixfix: &pl::NotExp) -> il::ast::NotExp {
+fn prepare_not_exp(layout: &mut FrameLayout, mixfix: &pl::NotExp) -> ast::NotExp {
     match mixfix {
-        Mixfix::Arg(exp) => Mixfix::Arg(lower_exp(exp)),
+        Mixfix::Arg(exp) => Mixfix::Arg(prepare_exp(layout, exp)),
         Mixfix::Atom(atom) => Mixfix::Atom(atom.clone()),
         Mixfix::Brack(atom_l, inner, atom_r) => {
-            Mixfix::Brack(atom_l.clone(), Box::new(lower_mixfix(inner)), atom_r.clone())
+            Mixfix::Brack(atom_l.clone(), Box::new(prepare_not_exp(layout, inner)), atom_r.clone())
         }
         Mixfix::Infix(exp_l, atom, exp_r) => Mixfix::Infix(
-            Box::new(lower_mixfix(exp_l)),
+            Box::new(prepare_not_exp(layout, exp_l)),
             atom.clone(),
-            Box::new(lower_mixfix(exp_r)),
+            Box::new(prepare_not_exp(layout, exp_r)),
         ),
-        Mixfix::Seq(items) => Mixfix::Seq(items.iter().map(lower_mixfix).collect()),
+        Mixfix::Seq(mixfixes) => Mixfix::Seq(
+            mixfixes
+                .iter()
+                .map(|mixfix| prepare_not_exp(layout, mixfix))
+                .collect(),
+        ),
     }
 }
 
 // - Paths
 
-fn lower_path(path: &pl::Path) -> il::ast::Path {
+fn prepare_path(layout: &mut FrameLayout, path: &pl::Path) -> ast::Path {
     let node = match &path.node {
-        pl::PathKind::Root => il::ast::PathKind::Root,
-        pl::PathKind::Idx(path, exp) => {
-            il::ast::PathKind::Idx(Box::new(lower_path(path)), Box::new(lower_exp(exp)))
-        }
-        pl::PathKind::Slice(path, exp_idx, exp_len) => il::ast::PathKind::Slice(
-            Box::new(lower_path(path)),
-            Box::new(lower_exp(exp_idx)),
-            Box::new(lower_exp(exp_len)),
+        pl::PathKind::Root => ast::PathKind::Root,
+        pl::PathKind::Idx(path, exp) => ast::PathKind::Idx(
+            Box::new(prepare_path(layout, path)),
+            Box::new(prepare_exp(layout, exp)),
+        ),
+        pl::PathKind::Slice(path, exp_idx, exp_len) => ast::PathKind::Slice(
+            Box::new(prepare_path(layout, path)),
+            Box::new(prepare_exp(layout, exp_idx)),
+            Box::new(prepare_exp(layout, exp_len)),
         ),
         pl::PathKind::Dot(path, atom) => {
-            il::ast::PathKind::Dot(Box::new(lower_path(path)), atom.clone())
+            ast::PathKind::Dot(Box::new(prepare_path(layout, path)), atom.clone())
         }
     };
     crate::note_phrase!(node: node, note: path.note.clone(), span: path.span.clone())
@@ -53,102 +59,102 @@ fn lower_path(path: &pl::Path) -> il::ast::Path {
 
 // - Arguments
 
-fn lower_arg(arg: &pl::Arg) -> il::ast::Arg {
+fn prepare_arg(layout: &mut FrameLayout, arg: &pl::Arg) -> ast::Arg {
     let node = match &arg.node {
-        pl::ArgKind::Exp(exp) => il::ast::ArgKind::Exp(Box::new(lower_exp(exp))),
-        pl::ArgKind::Def(id) => il::ast::ArgKind::Def(id.clone()),
+        pl::ArgKind::Exp(exp) => ast::ArgKind::Exp(Box::new(prepare_exp(layout, exp))),
+        pl::ArgKind::Def(id) => ast::ArgKind::Def(id.clone()),
     };
     crate::phrase!(node: node, span: arg.span.clone())
 }
 
 // - Expressions
 
-/// Removes prose annotations while retaining executable syntax and source data.
-pub(crate) fn lower_exp(exp: &pl::Exp) -> il::ast::Exp {
+/// Resolves expression slots while retaining PL syntax and prose hints.
+fn prepare_exp(layout: &mut FrameLayout, exp: &pl::Exp) -> ast::Exp {
     stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        use il::ast::ExpKind as E;
+        use ast::ExpKind as E;
         use pl::ExpKind as P;
         let node = match &exp.node.node {
             P::Bool(value) => E::Bool(*value),
             P::Num(num) => E::Num(num.clone()),
             P::Text(text) => E::Text(text.clone()),
-            P::Id(id) => E::Id(id.clone()),
-            P::Un(op, typ, exp) => E::Un(*op, *typ, Box::new(lower_exp(exp))),
-            P::Bin(op, typ, exp_l, exp_r) => {
-                E::Bin(*op, *typ, Box::new(lower_exp(exp_l)), Box::new(lower_exp(exp_r)))
-            }
-            P::Cmp(op, typ, exp_l, exp_r) => {
-                E::Cmp(*op, *typ, Box::new(lower_exp(exp_l)), Box::new(lower_exp(exp_r)))
-            }
-            P::UpCast(typ, exp) => E::UpCast(Box::new(typ.clone()), Box::new(lower_exp(exp))),
-            P::DownCast(typ, exp) => E::DownCast(Box::new(typ.clone()), Box::new(lower_exp(exp))),
+            P::Id(id) => E::Id(id.clone().prepare(layout)),
+            P::Un(op, typ, exp) => E::Un(*op, *typ, Box::new(prepare_exp(layout, exp))),
+            P::Bin(op, typ, exp_l, exp_r) => E::Bin(
+                *op,
+                *typ,
+                Box::new(prepare_exp(layout, exp_l)),
+                Box::new(prepare_exp(layout, exp_r)),
+            ),
+            P::Cmp(op, typ, exp_l, exp_r) => E::Cmp(
+                *op,
+                *typ,
+                Box::new(prepare_exp(layout, exp_l)),
+                Box::new(prepare_exp(layout, exp_r)),
+            ),
+            P::UpCast(typ, exp) => E::UpCast(typ.clone(), Box::new(prepare_exp(layout, exp))),
+            P::DownCast(typ, exp) => E::DownCast(typ.clone(), Box::new(prepare_exp(layout, exp))),
             P::Sub(exp, typ, check) => {
-                E::Sub(Box::new(lower_exp(exp)), Box::new(typ.clone()), check.clone())
+                E::Sub(Box::new(prepare_exp(layout, exp)), typ.clone(), check.clone())
             }
-            P::Match(exp, pattern) => E::Match(Box::new(lower_exp(exp)), pattern.clone()),
-            P::Tuple(exps) => E::Tuple(exps.iter().map(lower_exp).collect()),
-            P::Case(not_exp) => E::Case(Box::new(lower_mixfix(not_exp))),
+            P::Match(exp, pattern) => E::Match(Box::new(prepare_exp(layout, exp)), pattern.clone()),
+            P::Tuple(exps) => E::Tuple(exps.iter().map(|exp| prepare_exp(layout, exp)).collect()),
+            P::Case(not_exp) => E::Case(Box::new(prepare_not_exp(layout, not_exp))),
             P::Str(fields) => E::Str(
                 fields
                     .iter()
-                    .map(|(atom, exp)| il::ast::ExpField {
-                        atom: atom.clone(),
-                        exp: lower_exp(exp),
-                    })
+                    .map(|(atom, exp)| (atom.clone(), prepare_exp(layout, exp)))
                     .collect(),
             ),
-            P::Opt(exp) => E::Opt(exp.as_ref().map(|exp| Box::new(lower_exp(exp)))),
-            P::List(exps) => E::List(exps.iter().map(lower_exp).collect()),
-            P::Cons(exp_head, exp_tail) => {
-                E::Cons(Box::new(lower_exp(exp_head)), Box::new(lower_exp(exp_tail)))
+            P::Opt(exp) => E::Opt(exp.as_ref().map(|exp| Box::new(prepare_exp(layout, exp)))),
+            P::List(exps) => E::List(exps.iter().map(|exp| prepare_exp(layout, exp)).collect()),
+            P::Cons(exp_head, exp_tail) => E::Cons(
+                Box::new(prepare_exp(layout, exp_head)),
+                Box::new(prepare_exp(layout, exp_tail)),
+            ),
+            P::Cat(exp_l, exp_r) => {
+                E::Cat(Box::new(prepare_exp(layout, exp_l)), Box::new(prepare_exp(layout, exp_r)))
             }
-            P::Cat(exp_l, exp_r) => E::Cat(Box::new(lower_exp(exp_l)), Box::new(lower_exp(exp_r))),
-            P::Mem(exp_elem, exp_list) => {
-                E::Mem(Box::new(lower_exp(exp_elem)), Box::new(lower_exp(exp_list)))
-            }
-            P::Len(exp) => E::Len(Box::new(lower_exp(exp))),
-            P::Dot(exp, atom) => E::Dot(Box::new(lower_exp(exp)), atom.clone()),
-            P::Idx(exp_base, exp_idx) => {
-                E::Idx(Box::new(lower_exp(exp_base)), Box::new(lower_exp(exp_idx)))
-            }
+            P::Mem(exp_elem, exp_list) => E::Mem(
+                Box::new(prepare_exp(layout, exp_elem)),
+                Box::new(prepare_exp(layout, exp_list)),
+            ),
+            P::Len(exp) => E::Len(Box::new(prepare_exp(layout, exp))),
+            P::Dot(exp, atom) => E::Dot(Box::new(prepare_exp(layout, exp)), atom.clone()),
+            P::Idx(exp_base, exp_idx) => E::Idx(
+                Box::new(prepare_exp(layout, exp_base)),
+                Box::new(prepare_exp(layout, exp_idx)),
+            ),
             P::Slice(exp_base, exp_idx, exp_len) => E::Slice(
-                Box::new(lower_exp(exp_base)),
-                Box::new(lower_exp(exp_idx)),
-                Box::new(lower_exp(exp_len)),
+                Box::new(prepare_exp(layout, exp_base)),
+                Box::new(prepare_exp(layout, exp_idx)),
+                Box::new(prepare_exp(layout, exp_len)),
             ),
             P::Upd(exp_base, path, exp_new) => E::Upd(
-                Box::new(lower_exp(exp_base)),
-                Box::new(lower_path(path)),
-                Box::new(lower_exp(exp_new)),
+                Box::new(prepare_exp(layout, exp_base)),
+                Box::new(prepare_path(layout, path)),
+                Box::new(prepare_exp(layout, exp_new)),
             ),
-            P::Call(id, targs, args) => {
-                E::Call(id.clone(), targs.clone(), args.iter().map(lower_arg).collect())
+            P::Call(id, targs, args) => E::Call(
+                id.clone(),
+                targs.clone(),
+                args.iter().map(|arg| prepare_arg(layout, arg)).collect(),
+            ),
+            P::Iter(exp, iter) => {
+                E::Iter(Box::new(prepare_exp(layout, exp)), iter.clone().prepare(layout))
             }
-            P::Iter(exp, iter) => E::Iter(Box::new(lower_exp(exp)), iter.clone()),
         };
-        crate::note_phrase! {
+        crate::annotated_note_phrase! {
             node: node,
             note: exp.node.note.clone(),
             span: exp.node.span.clone(),
+            hints: exp.hints.clone(),
         }
     })
 }
 
-// = Slot preparation
-
-// - Expressions
-
-/// Projects a source expression and resolves its slots once during loading.
-fn prepare_exp(layout: &mut FrameLayout, exp: &pl::Exp) -> exec::Exp {
-    lower_exp(exp).prepare(layout)
-}
-
-fn prepare_exps(layout: &mut FrameLayout, exps: &[pl::Exp]) -> Vec<exec::Exp> {
+fn prepare_exps(layout: &mut FrameLayout, exps: &[pl::Exp]) -> Vec<ast::Exp> {
     exps.iter().map(|exp| prepare_exp(layout, exp)).collect()
-}
-
-fn prepare_not_exp(layout: &mut FrameLayout, not_exp: &pl::NotExp) -> exec::NotExp {
-    lower_mixfix(not_exp).prepare(layout)
 }
 
 // - Parameters
