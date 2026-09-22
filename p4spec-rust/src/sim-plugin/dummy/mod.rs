@@ -1,3 +1,8 @@
+//! Dummy architecture with empty states and no packet pipeline
+//!
+//! Used when a program needs no target model;
+//! extern function and method calls are unsupported.
+
 use crate::{
     lang::data::value::Value,
     runner::{Interface, Interpreter, RunnerContext},
@@ -11,6 +16,7 @@ pub use pipe::Dummy;
 
 // == Extern calls
 
+/// Hands every extern hook to the pipeline module.
 impl external::Impl for Dummy {
     fn eval_extern_init<Interp, Iface>(
         &self,
