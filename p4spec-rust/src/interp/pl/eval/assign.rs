@@ -6,7 +6,7 @@
 
 use std::borrow::Borrow;
 
-use super::strip::strip_hints;
+use super::strip::strip_exp;
 use crate::{
     interp::{
         pl::context::Context,
@@ -34,7 +34,7 @@ pub(super) fn assign_exp<'g>(
     exp: &ast::Exp,
     value: Value,
 ) -> Backtrack<Context<'g>> {
-    let exp_shared = strip_hints(exp);
+    let exp_shared = strip_exp(exp);
     shared::assign_exp(arena, ctx, &exp_shared, value)
 }
 
@@ -47,7 +47,7 @@ pub(super) fn assign_exps<'g, T: Borrow<ast::Exp>>(
 ) -> Backtrack<Context<'g>> {
     let exps_shared = exps
         .iter()
-        .map(|exp| strip_hints(exp.borrow()))
+        .map(|exp| strip_exp(exp.borrow()))
         .collect::<Vec<_>>();
     shared::assign_exps(arena, ctx, &exps_shared, values)
 }
