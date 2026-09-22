@@ -20,4 +20,7 @@ pub mod sim_plugin;
 pub mod stf;
 pub mod util;
 
-pub use pipeline::{Error, algo, elab, parse, prosify, structure};
+pub use pipeline::{
+    Error, algo, algo_with_warnings, elab, elab_with_warnings, parse, prosify,
+    prosify_with_warnings, structure, structure_with_warnings,
+};

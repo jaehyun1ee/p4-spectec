@@ -746,34 +746,69 @@ fn test_elab_command_renders_declaration_locations() {
 }
 
 #[test]
-fn test_elab_command_keeps_warnings_on_success() {
+fn test_transformation_commands_keep_warnings_on_success() {
     let path =
         std::env::temp_dir().join(format!("p4spec-cli-warning-{}.watsup", std::process::id()));
     std::fs::write(&path, "dec $missing : nat\n").unwrap();
-    let output = binary().arg("elab").arg(&path).output().unwrap();
+    for command in ["elab", "algo", "struct", "prose"] {
+        let output = binary().arg(command).arg(&path).output().unwrap();
+        assert!(output.status.success());
+        assert!(!output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        assert_eq!(
+            text.matches("warning[elab/function-clause-missing]")
+                .count(),
+            1,
+            "{text}"
+        );
+    }
     std::fs::remove_file(path).unwrap();
-    assert!(output.status.success());
-    assert!(!output.stdout.is_empty());
-    let text = String::from_utf8(output.stderr).unwrap();
-    assert!(text.contains("warning[elab/function-clause-missing]"), "{text}");
 }
 
 #[test]
-fn test_elab_command_keeps_committed_warnings_before_failure() {
+fn test_transformation_commands_keep_committed_warnings_before_failure() {
     let path = std::env::temp_dir()
         .join(format!("p4spec-cli-warning-before-error-{}.watsup", std::process::id()));
     std::fs::write(&path, "relation R: nat |- nat\ndef $missing = 0\n").unwrap();
-    let output = binary().arg("elab").arg(&path).output().unwrap();
+    for command in ["elab", "algo", "struct", "prose"] {
+        let output = binary().arg(command).arg(&path).output().unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        let pos_warning = text
+            .find("warning[elab/relation-input-hint-missing]")
+            .expect("render the committed declaration warning");
+        let pos_error = text
+            .find("error[elab/function-declaration-required]")
+            .expect("render the later declaration failure");
+        assert!(pos_warning < pos_error, "{text}");
+        assert!(!text.contains("elab/relation-rule-missing"), "{text}");
+    }
     std::fs::remove_file(path).unwrap();
-    assert_eq!(output.status.code(), Some(1));
-    assert!(output.stdout.is_empty());
-    let text = String::from_utf8(output.stderr).unwrap();
-    let pos_warning = text
-        .find("warning[elab/relation-input-hint-missing]")
-        .expect("render the committed declaration warning");
-    let pos_error = text
-        .find("error[elab/function-declaration-required]")
-        .expect("render the later declaration failure");
-    assert!(pos_warning < pos_error, "{text}");
-    assert!(!text.contains("elab/relation-rule-missing"), "{text}");
+}
+
+#[test]
+fn test_transformation_commands_keep_warnings_before_algorithmic_failure() {
+    let path = std::env::temp_dir()
+        .join(format!("p4spec-cli-warning-algo-error-{}.watsup", std::process::id()));
+    std::fs::write(&path, "dec $missing : nat\n").unwrap();
+    for command in ["algo", "struct", "prose"] {
+        let output = binary()
+            .arg(command)
+            .arg(&path)
+            .arg(fixture("algorithmic/impure_else_premises.watsup"))
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(output.stdout.is_empty());
+        let text = String::from_utf8(output.stderr).unwrap();
+        let pos_warning = text
+            .find("warning[elab/function-clause-missing]")
+            .expect("render the elaboration warning");
+        let pos_error = text
+            .find("otherwise branch contains an impure premise")
+            .expect("render the algorithmic failure");
+        assert!(pos_warning < pos_error, "{text}");
+    }
+    std::fs::remove_file(path).unwrap();
 }

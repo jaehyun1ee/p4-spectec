@@ -1,7 +1,7 @@
 //! Command-line specification transformation and execution
 //!
-//! Commands render elaboration warnings before running downstream passes.
-//! `run` propagates typed failures to `main`,
+//! Commands render accumulated warnings before their result or error.
+//! [`run`] propagates typed failures to [`main`],
 //! which renders source reports and chooses the process exit code.
 
 use std::{path::PathBuf, process::ExitCode};
@@ -12,9 +12,7 @@ use p4spec_rust::{
     diagnostic::{RenderConfig, Renderer, Report},
     interface::p4::{error::P4Error, parse::parse_file},
     interp::shared::error::Error as InterpError,
-    lang::{al, il, pl, sl},
     lang::{data::value::external::Encoding, traits::print::Print},
-    pass,
     runner::{self, BuiltinInterface, Interpreter, Runner},
     sim_plugin::{self, dummy::Dummy},
 };
@@ -52,40 +50,14 @@ enum CliError {
 
 // = Specification loading
 
-/// Elaborates source paths and emits warnings before propagating a failure.
-fn elaborate(paths: &[PathBuf]) -> Result<il::ast::Spec, CliError> {
-    let spec_el = p4spec_rust::parse(paths)?;
-    let (result, warnings) = pass::elaborate::convert_with_warnings(spec_el);
+/// Renders accumulated warnings before returning the command result or error.
+fn report_warnings<Spec>(
+    (result, warnings): (Result<Spec, p4spec_rust::Error>, Vec<Report>),
+) -> Result<Spec, CliError> {
     for report in warnings {
         render_report(&report);
     }
-    result
-        .map_err(p4spec_rust::Error::Elab)
-        .map_err(CliError::from)
-}
-
-/// Converts source paths to AL after rendering elaboration warnings.
-fn algorithmic(paths: &[PathBuf]) -> Result<al::ast::Spec, CliError> {
-    let spec_il = elaborate(paths)?;
-    pass::algo::convert(spec_il)
-        .map_err(p4spec_rust::Error::Algo)
-        .map_err(CliError::from)
-}
-
-/// Converts source paths to SL after rendering elaboration warnings.
-fn structured(paths: &[PathBuf], without_rule_groups: bool) -> Result<sl::ast::Spec, CliError> {
-    let spec_al = algorithmic(paths)?;
-    pass::structure::convert(spec_al, without_rule_groups)
-        .map_err(p4spec_rust::Error::Structure)
-        .map_err(CliError::from)
-}
-
-/// Converts source paths to PL after rendering elaboration warnings.
-fn prose(paths: &[PathBuf]) -> Result<pl::ast::Spec, CliError> {
-    let spec_sl = structured(paths, false)?;
-    pass::prosify::convert(spec_sl)
-        .map_err(p4spec_rust::Error::Prose)
-        .map_err(CliError::from)
+    result.map_err(CliError::from)
 }
 
 // = Elab command
@@ -98,7 +70,7 @@ struct ElabArgs {
 }
 
 fn elab_command(args: ElabArgs) -> Result<(), CliError> {
-    let spec_il = elaborate(&args.paths)?;
+    let spec_il = report_warnings(p4spec_rust::elab_with_warnings(&args.paths))?;
     println!("{}", Print::to_string(&spec_il));
     Ok(())
 }
@@ -113,7 +85,7 @@ struct AlgoArgs {
 }
 
 fn algo_command(args: AlgoArgs) -> Result<(), CliError> {
-    let spec_al = algorithmic(&args.paths)?;
+    let spec_al = report_warnings(p4spec_rust::algo_with_warnings(&args.paths))?;
     println!("{}", Print::to_string(&spec_al));
     Ok(())
 }
@@ -128,7 +100,7 @@ struct StructArgs {
 }
 
 fn struct_command(args: StructArgs) -> Result<(), CliError> {
-    let spec_sl = structured(&args.paths, true)?;
+    let spec_sl = report_warnings(p4spec_rust::structure_with_warnings(&args.paths, true))?;
     println!("{}", Print::to_string(&spec_sl));
     Ok(())
 }
@@ -143,7 +115,7 @@ struct ProseArgs {
 }
 
 fn prose_command(args: ProseArgs) -> Result<(), CliError> {
-    let spec_pl = prose(&args.paths)?;
+    let spec_pl = report_warnings(p4spec_rust::prosify_with_warnings(&args.paths))?;
     println!("{}", Print::to_string(&spec_pl));
     Ok(())
 }
@@ -167,11 +139,11 @@ struct InterpreterArgs {
 fn interp_spec(paths: &[PathBuf], interpreter: &InterpreterArgs) -> Result<runner::Spec, CliError> {
     // Each pipeline stops at the language selected by the command
     if interpreter.al {
-        algorithmic(paths).map(runner::Spec::Al)
+        report_warnings(p4spec_rust::algo_with_warnings(paths)).map(runner::Spec::Al)
     } else if interpreter.sl {
-        structured(paths, true).map(runner::Spec::Sl)
+        report_warnings(p4spec_rust::structure_with_warnings(paths, true)).map(runner::Spec::Sl)
     } else {
-        prose(paths).map(runner::Spec::Pl)
+        report_warnings(p4spec_rust::prosify_with_warnings(paths)).map(runner::Spec::Pl)
     }
 }
 

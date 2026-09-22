@@ -5,12 +5,22 @@
 
 use std::path::{Path, PathBuf};
 
-use p4spec_rust::{Error, diagnostic::ReportKind, lang::traits::print::Print};
+use p4spec_rust::{
+    Error,
+    diagnostic::{Report, ReportKind},
+    lang::traits::print::Print,
+};
 
 fn fixture(path: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
         .join(path)
+}
+
+fn print_spec<Spec: Print>(
+    (result, warnings): (Result<Spec, Error>, Vec<Report>),
+) -> (Result<String, Error>, Vec<Report>) {
+    (result.map(|spec| Print::to_string(&spec)), warnings)
 }
 
 #[test]
@@ -75,4 +85,95 @@ fn structure_exposes_rule_group_preservation() {
     let output = Print::to_string(&spec_pl);
     assert!(output.contains("Group ret:"), "{output}");
     assert!(output.contains("Group else:"), "{output}");
+}
+
+#[test]
+fn transformations_return_ordered_warnings_on_success() {
+    let paths = [fixture("structure/definitions.watsup")];
+    let outputs = [
+        print_spec(p4spec_rust::elab_with_warnings(&paths)),
+        print_spec(p4spec_rust::algo_with_warnings(&paths)),
+        print_spec(p4spec_rust::structure_with_warnings(&paths, false)),
+        print_spec(p4spec_rust::structure_with_warnings(&paths, true)),
+        print_spec(p4spec_rust::prosify_with_warnings(&paths)),
+    ];
+    let texts_expect = [
+        Print::to_string(&p4spec_rust::elab(&paths).unwrap()),
+        Print::to_string(&p4spec_rust::algo(&paths).unwrap()),
+        Print::to_string(&p4spec_rust::structure(&paths, false).unwrap()),
+        Print::to_string(&p4spec_rust::structure(&paths, true).unwrap()),
+        Print::to_string(&p4spec_rust::prosify(&paths).unwrap()),
+    ];
+    for ((result, warnings), text_expect) in outputs.into_iter().zip(texts_expect) {
+        assert_eq!(result.unwrap(), text_expect);
+        let codes: Vec<_> = warnings
+            .iter()
+            .map(|report| {
+                let ReportKind::Cause(diagnostic) = &report.kind else {
+                    panic!("expected warning cause")
+                };
+                diagnostic.code.as_deref().unwrap()
+            })
+            .collect();
+        assert_eq!(codes, ["elab/relation-rule-missing", "elab/function-clause-missing"]);
+    }
+}
+
+#[test]
+fn transformations_keep_committed_warnings_on_elaboration_failure() {
+    let path = std::env::temp_dir()
+        .join(format!("p4spec-pipeline-warning-elab-error-{}.watsup", std::process::id()));
+    std::fs::write(&path, "relation R: nat |- nat\ndef $missing = 0\n").unwrap();
+    let outputs = [
+        print_spec(p4spec_rust::elab_with_warnings([&path])),
+        print_spec(p4spec_rust::algo_with_warnings([&path])),
+        print_spec(p4spec_rust::structure_with_warnings([&path], true)),
+        print_spec(p4spec_rust::prosify_with_warnings([&path])),
+    ];
+    std::fs::remove_file(path).unwrap();
+    for (result, warnings) in outputs {
+        assert!(matches!(result, Err(Error::Elab(_))));
+        assert_eq!(warnings.len(), 1);
+        let ReportKind::Cause(diagnostic) = &warnings[0].kind else {
+            panic!("expected committed warning cause")
+        };
+        assert_eq!(diagnostic.code.as_deref(), Some("elab/relation-input-hint-missing"));
+    }
+}
+
+#[test]
+fn transformations_keep_warnings_on_algorithmic_failure() {
+    let path = std::env::temp_dir()
+        .join(format!("p4spec-pipeline-warning-algo-error-{}.watsup", std::process::id()));
+    std::fs::write(&path, "dec $missing : nat\n").unwrap();
+    let paths = [path.clone(), fixture("algorithmic/impure_else_premises.watsup")];
+    let outputs = [
+        print_spec(p4spec_rust::algo_with_warnings(&paths)),
+        print_spec(p4spec_rust::structure_with_warnings(&paths, true)),
+        print_spec(p4spec_rust::prosify_with_warnings(&paths)),
+    ];
+    std::fs::remove_file(path).unwrap();
+    for (result, warnings) in outputs {
+        assert!(matches!(result, Err(Error::Algo(_))));
+        assert_eq!(warnings.len(), 1);
+        let ReportKind::Cause(diagnostic) = &warnings[0].kind else {
+            panic!("expected elaboration warning cause")
+        };
+        assert_eq!(diagnostic.code.as_deref(), Some("elab/function-clause-missing"));
+    }
+}
+
+#[test]
+fn transformations_return_no_warnings_on_frontend_failure() {
+    let paths = [fixture("frontend/negative/malformed-token.watsup")];
+    let outputs = [
+        print_spec(p4spec_rust::elab_with_warnings(&paths)),
+        print_spec(p4spec_rust::algo_with_warnings(&paths)),
+        print_spec(p4spec_rust::structure_with_warnings(&paths, true)),
+        print_spec(p4spec_rust::prosify_with_warnings(&paths)),
+    ];
+    for (result, warnings) in outputs {
+        assert!(matches!(result, Err(Error::Frontend(_))));
+        assert!(warnings.is_empty());
+    }
 }
