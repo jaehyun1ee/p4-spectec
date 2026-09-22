@@ -1,7 +1,6 @@
 //! Dummy externs initialize empty states and support compile-time assertions
 //!
 //! Runtime extern function and method calls remain unsupported.
-//! Runtime extern function and method calls remain unsupported
 
 use crate::{
     lang::{
