@@ -19,6 +19,25 @@ fn repo() -> std::path::PathBuf {
         .to_owned()
 }
 
+/// Validates the specification warning and returns subsequent CLI diagnostics.
+fn after_spec_warning(stderr: &[u8]) -> &str {
+    let text = std::str::from_utf8(stderr).unwrap();
+    let path = repo().join("spec/4-p4-ir/4.5-ir-to-surface.watsup");
+    let warning = format!(
+        concat!(
+            "warning[elab/function-clause-missing]: ",
+            "function `sink` has no clauses defined\n",
+            "  ┌─ {}:1:1\n",
+            "  │\n",
+            "1 │ dec $sink<T>() : T\n",
+            "  │ ^^^^^^^^^^^^^^^^^^\n\n",
+        ),
+        path.display(),
+    );
+    text.strip_prefix(&warning)
+        .unwrap_or_else(|| panic!("missing specification warning: {text}"))
+}
+
 #[test]
 fn test_elab_command_prints_the_intermediate_spec() {
     let output = binary()
@@ -347,7 +366,7 @@ fn test_run_al_initializes_dummy_extern_objects() {
 
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     assert_eq!(output.stdout, b"passed\n");
-    assert!(output.stderr.is_empty());
+    assert!(after_spec_warning(&output.stderr).is_empty());
 }
 
 #[test]
@@ -510,7 +529,7 @@ fn test_sim_sl_runs_all_native_architectures_and_plugin_encodings() {
                 .output()
                 .unwrap();
             assert!(output.status.success(), "{arch}: {}", String::from_utf8_lossy(&output.stderr));
-            assert!(output.stderr.is_empty());
+            assert!(after_spec_warning(&output.stderr).is_empty());
             let stdout = String::from_utf8(output.stdout).unwrap();
             let expected = std::fs::read_to_string(
                 repo().join(format!("p4spec/test/micro/micro_sim_{arch}_al.expected")),
@@ -661,7 +680,7 @@ fn test_sim_al_runs_all_native_architectures() {
                 .output()
                 .unwrap();
             assert!(output.status.success(), "{arch}: {}", String::from_utf8_lossy(&output.stderr));
-            assert!(output.stderr.is_empty());
+            assert!(after_spec_warning(&output.stderr).is_empty());
             let stdout = String::from_utf8(output.stdout).unwrap();
             let expected = std::fs::read_to_string(
                 repo().join(format!("p4spec/test/micro/micro_sim_{arch}_al.expected")),
@@ -719,7 +738,7 @@ fn test_sim_al_reports_stf_failures_and_preserves_prior_matches() {
         std::fs::remove_file(&path).unwrap();
         let output = output.unwrap();
         assert_eq!(output.status.code(), Some(1), "{name}");
-        let error = String::from_utf8(output.stderr).unwrap();
+        let error = after_spec_warning(&output.stderr);
         assert!(error.starts_with("runtime error:"), "{name}: {error}");
         assert!(error.contains(detail), "{name}: {error}");
         let stdout = String::from_utf8(output.stdout).unwrap();
