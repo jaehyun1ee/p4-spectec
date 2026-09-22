@@ -554,7 +554,7 @@ fn struct_rel_exps_input(
     let mut frees = IdSet::new();
     let mut exps_input = vec![];
     for idx in input_hint.indices() {
-        let typ = typs[*idx];
+        let typ = typs[idx.node];
         let (frees_next, exp_input) = fresh::exp_from_typ(true, &ctx.menv, &frees, typ);
         frees = frees_next;
         exps_input.push(exp_input);

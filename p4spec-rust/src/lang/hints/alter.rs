@@ -163,7 +163,11 @@ pub fn realign(hint: &AlterationHint, hint_input: &InputHint) -> AlterationHint 
     let mut indices_output = Vec::new();
     collect(hint, &mut indices_output);
     // Output holes are renumbered by their order among the output positions
-    let mut indices_all = hint_input.indices().to_vec();
+    let mut indices_all = hint_input
+        .indices()
+        .iter()
+        .map(|idx| idx.node)
+        .collect::<Vec<_>>();
     indices_all.extend(&indices_output);
     indices_all.sort_unstable();
     let mut idx_pairs = Vec::new();

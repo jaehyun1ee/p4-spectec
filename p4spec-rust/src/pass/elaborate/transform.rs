@@ -2765,26 +2765,25 @@ fn fetch_input_hint(
         return Err(match error_input {
             input::InputError::Empty => error::relation_input_hint_empty(&exp_hint.span),
             input::InputError::DuplicateIndex(idx) => {
-                let mut idxs_hint = input_hint.indices().iter().enumerate().filter_map(
-                    |(idx_hint, idx_candidate)| (*idx_candidate == idx).then_some(idx_hint),
-                );
+                let mut idxs_hint = input_hint
+                    .indices()
+                    .iter()
+                    .filter(|idx_hint| idx_hint.node == idx);
                 let idx_first = idxs_hint
                     .next()
                     .expect("duplicate input index has a first position");
                 let idx_repeated = idxs_hint
                     .next()
                     .expect("duplicate input index has a repeated position");
-                let span_previous = input_hint.span(idx_first).unwrap_or(&exp_hint.span);
-                let span_repeated = input_hint.span(idx_repeated).unwrap_or(&exp_hint.span);
-                error::relation_input_hint_index_repeated(idx, span_repeated, span_previous)
+                error::relation_input_hint_index_repeated(idx, &idx_repeated.span, &idx_first.span)
             }
             input::InputError::IndexOutOfBounds { index: idx, arity } => {
                 let idx_hint = input_hint
                     .indices()
                     .iter()
-                    .position(|idx_candidate| *idx_candidate == idx)
+                    .find(|idx_candidate| idx_candidate.node == idx)
                     .expect("out-of-bounds input index has a position");
-                let span_idx = input_hint.span(idx_hint).unwrap_or(&exp_hint.span);
+                let span_idx = &idx_hint.span;
                 error::relation_input_hint_index_out_of_bounds(
                     idx,
                     arity,

@@ -61,9 +61,20 @@ fn test_input_hint_preserves_element_spans_without_changing_equivalence() {
     exp_b.span = Span::new(Position::new("hint", 1, 14), Position::new("hint", 1, 16));
     let exp_hint = exp(ExpKind::Seq(vec![exp_a.clone(), exp_b.clone()]));
     let hint = input_impl::init(&exp_hint).unwrap();
-    assert_eq!(hint.span(0), Some(&exp_a.span));
-    assert_eq!(hint.span(1), Some(&exp_b.span));
-    assert_eq!(hint.span(2), None);
+    assert_eq!(hint.indices()[0].span, exp_a.span);
+    assert_eq!(hint.indices()[1].span, exp_b.span);
     assert_eq!(hint, InputHint::new(vec![2, 0]));
-    assert_eq!(InputHint::new(vec![2, 0]).span(0), None);
+    assert_eq!(InputHint::new(vec![2, 0]).indices()[0].span, Span::default());
+    assert_eq!(
+        hint.into_indices()
+            .iter()
+            .map(|idx| idx.node)
+            .collect::<Vec<_>>(),
+        vec![2, 0]
+    );
+
+    let mut exp_repeated = exp_a.clone();
+    exp_repeated.span = exp_b.span.clone();
+    let hint_repeated = input_impl::init(&exp(ExpKind::Seq(vec![exp_a, exp_repeated]))).unwrap();
+    assert_eq!(input_impl::validate(&hint_repeated, 3), Err(InputError::DuplicateIndex(2)));
 }

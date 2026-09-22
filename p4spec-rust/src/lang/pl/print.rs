@@ -811,13 +811,13 @@ fn write_relinput<E: Print>(
     exps_input: &[E],
 ) -> fmt::Result {
     let not_typ = &rel_signature.not_typ;
-    let input_indices = rel_signature.input_hint.indices();
-    assert_eq!(input_indices.len(), exps_input.len());
+    let idxs_input = rel_signature.input_hint.indices();
+    assert_eq!(idxs_input.len(), exps_input.len());
     // Each notation position takes its input, or `%`
     let args = (0..not_typ.node.arity()).map(|index| {
-        input_indices
+        idxs_input
             .iter()
-            .position(|input| *input == index)
+            .position(|idx_input| idx_input.node == index)
             .map(|position| &exps_input[position])
     });
     let mixfix =
@@ -835,10 +835,10 @@ fn write_reloutput<E: Print>(
     exps_output: &[E],
 ) -> fmt::Result {
     let not_typ = &rel_signature.not_typ;
-    let input_indices = rel_signature.input_hint.indices();
+    let idxs_input = rel_signature.input_hint.indices();
     // Outputs are the positions the hint leaves
     let outputs = (0..not_typ.node.arity())
-        .filter(|index| !input_indices.contains(index))
+        .filter(|index| !idxs_input.iter().any(|idx_input| idx_input.node == *index))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
     let args = (0..not_typ.node.arity()).map(|index| {
