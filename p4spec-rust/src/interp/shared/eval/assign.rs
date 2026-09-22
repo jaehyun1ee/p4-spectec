@@ -126,7 +126,7 @@ pub fn assign_exp<Ctx: WriteContext>(
 }
 
 /// Assigns values to patterns pairwise, requiring equal counts.
-pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp>>(
+pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp> + At>(
     arena: &mut ValueArena,
     mut ctx: Ctx,
     exps: &[T],
@@ -135,7 +135,7 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp>>(
     // Counts must match
     if exps.len() != values.len() {
         return err!(
-            Span::over_iter(exps.iter().map(|exp| exp.borrow().at())),
+            exps.at(),
             ErrorKind::Assign(AssignErrorKind::ExpressionArityMismatch {
                 expected: exps.len(),
                 actual: values.len(),
