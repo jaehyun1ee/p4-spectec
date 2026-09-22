@@ -8,3 +8,5 @@ pub(crate) mod layout;
 pub(crate) mod link;
 pub(crate) mod serialize;
 pub(crate) mod width;
+
+mod validate;
