@@ -17,6 +17,8 @@ use p4spec_rust::diagnostic::{ColorChoice, LabelStyle, RenderConfig, Renderer, R
 use crate::{Error, Result};
 use cases::{CASES, Case, Kind, Location, State};
 
+// = Suites
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 /// Selects a reference acceptance family.
 pub enum Suite {
@@ -40,6 +42,25 @@ impl Suite {
         }
     }
 }
+
+// = Location helpers
+
+impl Location {
+    /// Compares byte coordinates, independently of renderer display columns.
+    fn matches(&self, span: &p4spec_rust::lang::common::source::Span) -> bool {
+        Path::new(span.left.file.as_ref())
+            .file_name()
+            .and_then(|file| file.to_str())
+            == Some(self.file)
+            && span.left.file == span.right.file
+            && (span.left.line, span.left.column) == self.start
+            && self
+                .end
+                .is_none_or(|end| (span.right.line, span.right.column) == end)
+    }
+}
+
+// = Case validation
 
 impl Case {
     fn failure(&self, message: impl std::fmt::Display) -> Error {
@@ -100,20 +121,7 @@ impl Case {
     }
 }
 
-impl Location {
-    /// Compares byte coordinates, independently of renderer display columns.
-    fn matches(&self, span: &p4spec_rust::lang::common::source::Span) -> bool {
-        Path::new(span.left.file.as_ref())
-            .file_name()
-            .and_then(|file| file.to_str())
-            == Some(self.file)
-            && span.left.file == span.right.file
-            && (span.left.line, span.left.column) == self.start
-            && self
-                .end
-                .is_none_or(|end| (span.right.line, span.right.column) == end)
-    }
-}
+// = Acceptance runner
 
 /// Executes active suites while reporting pending and future-gate counts.
 pub fn run(suite: Option<Suite>) -> Result<()> {

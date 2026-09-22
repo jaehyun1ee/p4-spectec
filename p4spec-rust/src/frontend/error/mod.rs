@@ -10,20 +10,7 @@ mod syntax;
 
 use crate::diagnostic::{Label, Report, Severity};
 
-pub(crate) use input::{
-    comment_encoding_invalid, file_read_failed, input_path_read_failed, mixfix_operator_invalid,
-    source_encoding_invalid,
-};
-pub(crate) use lex::{
-    block_comment_incomplete, character_invalid, hole_index_out_of_bounds, text_character_invalid,
-    text_encoding_invalid, text_escape_codepoint_invalid, text_escape_invalid,
-    text_literal_incomplete,
-};
-pub(crate) use syntax::{
-    input_incomplete, plain_type_hint_unsupported, relation_signature_invalid,
-    struct_field_missing, syntax_body_missing, syntax_identifier_missing, token_invalid,
-    variant_case_missing,
-};
+// = Error aliases
 
 /// Names a structured frontend failure without adding a wrapper.
 pub type FrontendError = Box<Report>;
@@ -31,18 +18,7 @@ pub type FrontendError = Box<Report>;
 /// Names a lexical failure with the same representation as frontend failures.
 pub type LexError = FrontendError;
 
-/// Creates an error report authored by the SpecTec frontend.
-fn make_report(code: &str, message: String, labels: Vec<Label>) -> FrontendError {
-    Box::new(Report {
-        severity: Severity::Error,
-        code: Some(code.to_owned()),
-        message,
-        labels,
-        notes: Vec::new(),
-        source: "parse",
-        traces: Vec::new(),
-    })
-}
+// = Helpers
 
 /// Displays exactly the invalid sequence identified by the UTF-8 decoder.
 fn describe_utf8_error(bytes: &[u8], error: &std::str::Utf8Error) -> String {
@@ -61,3 +37,33 @@ fn describe_utf8_error(bytes: &[u8], error: &std::str::Utf8Error) -> String {
         format!("invalid UTF-8 bytes: {bytes}")
     }
 }
+
+/// Creates an error report authored by the SpecTec frontend.
+fn make_report(code: &str, message: String, labels: Vec<Label>) -> FrontendError {
+    Box::new(Report {
+        severity: Severity::Error,
+        code: Some(code.to_owned()),
+        message,
+        labels,
+        notes: Vec::new(),
+        source: "parse",
+        traces: Vec::new(),
+    })
+}
+
+// = Diagnostic constructors
+
+pub(crate) use input::{
+    comment_encoding_invalid, file_read_failed, input_path_read_failed, mixfix_operator_invalid,
+    source_encoding_invalid,
+};
+pub(crate) use lex::{
+    block_comment_incomplete, character_invalid, hole_index_out_of_bounds, text_character_invalid,
+    text_encoding_invalid, text_escape_codepoint_invalid, text_escape_invalid,
+    text_literal_incomplete,
+};
+pub(crate) use syntax::{
+    input_incomplete, plain_type_hint_unsupported, relation_signature_invalid,
+    struct_field_missing, syntax_body_missing, syntax_identifier_missing, token_invalid,
+    variant_case_missing,
+};

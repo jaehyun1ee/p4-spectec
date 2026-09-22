@@ -8,6 +8,29 @@ use crate::lang::common::source::Span;
 
 use super::{LexError, describe_utf8_error, make_report};
 
+// = Helpers
+
+/// Names control characters without putting them into diagnostic output.
+fn describe_character(character: char) -> String {
+    let name = match character {
+        '\0' => "null",
+        '\u{7}' => "bell",
+        '\u{8}' => "backspace",
+        '\t' => "horizontal tab",
+        '\n' => "line feed",
+        '\u{b}' => "vertical tab",
+        '\u{c}' => "form feed",
+        '\r' => "carriage return",
+        '\u{1b}' => "escape",
+        '\u{7f}' => "delete",
+        _ if character.is_control() => "control character",
+        _ => return format!("character {character:?} (U+{:04X})", u32::from(character)),
+    };
+    format!("U+{:04X} {name}", u32::from(character))
+}
+
+// = Text literals
+
 const TEXT_LITERAL_INCOMPLETE: &str = "parse/text-literal-incomplete";
 
 /// Reports an unclosed text literal.
@@ -103,6 +126,8 @@ pub(crate) fn text_escape_codepoint_invalid(span: Span, digits: &str) -> LexErro
     report
 }
 
+// = Numbered holes
+
 const HOLE_INDEX_OUT_OF_BOUNDS: &str = "parse/hole-index-out-of-bounds";
 
 /// Reports a numbered hole outside the supported index range.
@@ -121,6 +146,8 @@ pub(crate) fn hole_index_out_of_bounds(span: Span) -> LexError {
         .push("Use a smaller nonnegative decimal hole index.".to_owned());
     report
 }
+
+// = Block comments
 
 const BLOCK_COMMENT_INCOMPLETE: &str = "parse/block-comment-incomplete";
 
@@ -146,6 +173,8 @@ pub(crate) fn block_comment_incomplete(span: Span, spans_open: Vec<Span>) -> Lex
     report
 }
 
+// = Invalid characters
+
 const CHARACTER_INVALID: &str = "parse/character-invalid";
 
 /// Reports a character outside the token alphabet.
@@ -155,23 +184,4 @@ pub(crate) fn character_invalid(span: Span, character: char) -> LexError {
         format!("{} is not allowed here", describe_character(character)),
         vec![Label { style: LabelStyle::Primary, span, message: "invalid character".to_owned() }],
     )
-}
-
-/// Names control characters without putting them into diagnostic output.
-fn describe_character(character: char) -> String {
-    let name = match character {
-        '\0' => "null",
-        '\u{7}' => "bell",
-        '\u{8}' => "backspace",
-        '\t' => "horizontal tab",
-        '\n' => "line feed",
-        '\u{b}' => "vertical tab",
-        '\u{c}' => "form feed",
-        '\r' => "carriage return",
-        '\u{1b}' => "escape",
-        '\u{7f}' => "delete",
-        _ if character.is_control() => "control character",
-        _ => return format!("character {character:?} (U+{:04X})", u32::from(character)),
-    };
-    format!("U+{:04X} {name}", u32::from(character))
 }

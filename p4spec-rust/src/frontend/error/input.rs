@@ -8,6 +8,19 @@ use crate::lang::common::source::Span;
 
 use super::{FrontendError, describe_utf8_error, make_report};
 
+// = Helpers
+
+/// Describes a filesystem failure using frontend vocabulary.
+fn describe_io_error(error: &std::io::Error) -> String {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => "file does not exist".to_owned(),
+        std::io::ErrorKind::PermissionDenied => "permission denied".to_owned(),
+        _ => error.to_string(),
+    }
+}
+
+// = Source encoding
+
 const SOURCE_ENCODING_INVALID: &str = "parse/source-encoding-invalid";
 
 /// Reports source bytes that are not valid UTF-8.
@@ -46,6 +59,8 @@ pub(crate) fn comment_encoding_invalid(
     )
 }
 
+// = Filesystem input
+
 const FILE_READ_FAILED: &str = "parse/file-read-failed";
 
 /// Reports an unreadable source file at its file-only position.
@@ -75,6 +90,8 @@ pub(crate) fn input_path_read_failed(
     )
 }
 
+// = Mixfix shapes
+
 const MIXFIX_OPERATOR_INVALID: &str = "parse/mixfix-operator-invalid";
 
 /// Reports a malformed runtime mixfix shape without a source location.
@@ -85,12 +102,4 @@ pub(crate) fn mixfix_operator_invalid(source: &str) -> FrontendError {
         format!("mixfix operator {source:?} is malformed")
     };
     make_report(MIXFIX_OPERATOR_INVALID, message, Vec::new())
-}
-
-fn describe_io_error(error: &std::io::Error) -> String {
-    match error.kind() {
-        std::io::ErrorKind::NotFound => "file does not exist".to_owned(),
-        std::io::ErrorKind::PermissionDenied => "permission denied".to_owned(),
-        _ => error.to_string(),
-    }
 }

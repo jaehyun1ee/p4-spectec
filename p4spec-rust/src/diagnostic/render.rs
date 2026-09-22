@@ -21,6 +21,22 @@ use crate::lang::common::source::{Position, Span};
 
 use super::{ColorChoice, Label, LabelStyle, Report, Severity, SnippetConfig, Trace};
 
+// = Helpers
+
+/// Formats even invalid byte columns without overflowing their display offset.
+fn span_location(span: &Span) -> String {
+    let loc = |pos: &Position| {
+        format!("{}:{}:{}", pos.file.escape_debug(), pos.line, pos.column as u128 + 1)
+    };
+    if span.left == span.right {
+        loc(&span.left)
+    } else {
+        format!("{}-{}", loc(&span.left), loc(&span.right))
+    }
+}
+
+// = Configuration
+
 /// Configures snippet presentation and the visible trace budget.
 #[derive(Debug, Clone)]
 pub struct RenderConfig {
@@ -38,6 +54,8 @@ impl Default for RenderConfig {
     }
 }
 
+// = Rendering errors
+
 /// Distinguishes inconsistent source coordinates from output failures.
 #[derive(Debug, thiserror::Error)]
 pub enum RenderError {
@@ -54,17 +72,7 @@ pub enum RenderError {
     Output(#[from] files::Error),
 }
 
-/// Formats even invalid byte columns without overflowing their display offset.
-fn span_location(span: &Span) -> String {
-    let loc = |pos: &Position| {
-        format!("{}:{}:{}", pos.file.escape_debug(), pos.line, pos.column as u128 + 1)
-    };
-    if span.left == span.right {
-        loc(&span.left)
-    } else {
-        format!("{}-{}", loc(&span.left), loc(&span.right))
-    }
-}
+// = Source cache and renderer
 
 /// Records whether cached source text can be printed safely as a snippet.
 #[derive(Clone, Copy)]
@@ -81,34 +89,32 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    /// Constructs a renderer with an empty source cache.
-    pub fn new(config: RenderConfig) -> Self {
-        Self { config, files: SimpleFiles::new(), cache: HashMap::new() }
+    // - Helpers
+
+    fn invalid(span: &Span, reason: &'static str) -> RenderError {
+        RenderError::InvalidSpan { span: Box::new(span.clone()), reason }
     }
 
-    /// Supplies source text that takes precedence over disk contents.
-    pub fn insert_source(&mut self, file: impl Into<String>, text: impl Into<String>) {
-        let file = file.into();
-        let source = self.add_source(file.clone(), text.into());
-        self.cache.insert(file, Some(source));
+    /// Retains a label's role and location when a snippet cannot be produced.
+    fn fallback(
+        label: &Label,
+        loc: &str,
+        reason: Option<&str>,
+        diagnostic: &mut Diagnostic<usize>,
+    ) {
+        let role = match label.style {
+            LabelStyle::Primary => "at",
+            LabelStyle::Secondary => "related location at",
+        };
+        let message =
+            if label.message.is_empty() { String::new() } else { format!(": {}", label.message) };
+        let reason = reason.map_or_else(String::new, |reason| format!(" ({reason})"));
+        diagnostic
+            .notes
+            .push(format!("{role} {loc}{message}{reason}"));
     }
 
-    /// Renders a report without terminal color codes.
-    pub fn render_plain(&mut self, report: &Report) -> Result<String, RenderError> {
-        let mut buffer = Buffer::no_color();
-        self.render(&mut buffer, report)?;
-        // Codespan and trace headings write only UTF-8 text
-        Ok(String::from_utf8(buffer.into_inner()).expect("diagnostic output is UTF-8"))
-    }
-
-    /// Writes a complete diagnostic to stderr using the configured colors.
-    pub fn emit_stderr(&mut self, report: &Report) -> Result<(), RenderError> {
-        let writer = BufferWriter::stderr(self.config.color);
-        let mut buffer = writer.buffer();
-        self.render(&mut buffer, report)?;
-        writer.print(&buffer).map_err(files::Error::from)?;
-        Ok(())
-    }
+    // - Source cache
 
     /// Caches original bytes and suppresses snippets containing terminal controls.
     fn add_source(&mut self, file: String, text: String) -> Source {
@@ -144,9 +150,7 @@ impl Renderer {
         source
     }
 
-    fn invalid(span: &Span, reason: &'static str) -> RenderError {
-        RenderError::InvalidSpan { span: Box::new(span.clone()), reason }
-    }
+    // - Source coordinates
 
     /// Resolves a one-based line and byte column without clamping either.
     fn offset(&self, id: usize, pos: &Position, span: &Span) -> Result<usize, RenderError> {
@@ -173,6 +177,8 @@ impl Renderer {
         }
         Ok(offset)
     }
+
+    // - Diagnostics
 
     /// Converts a label or preserves its location as an explicit fallback note.
     fn label(
@@ -230,25 +236,6 @@ impl Renderer {
         Ok(())
     }
 
-    /// Retains a label's role and location when a snippet cannot be produced.
-    fn fallback(
-        label: &Label,
-        loc: &str,
-        reason: Option<&str>,
-        diagnostic: &mut Diagnostic<usize>,
-    ) {
-        let role = match label.style {
-            LabelStyle::Primary => "at",
-            LabelStyle::Secondary => "related location at",
-        };
-        let message =
-            if label.message.is_empty() { String::new() } else { format!(": {}", label.message) };
-        let reason = reason.map_or_else(String::new, |reason| format!(" ({reason})"));
-        diagnostic
-            .notes
-            .push(format!("{role} {loc}{message}{reason}"));
-    }
-
     /// Constructs a temporary codespan view without copying recursive causes.
     fn diagnostic(&mut self, report: &Report) -> Result<Diagnostic<usize>, RenderError> {
         let mut diagnostic = Diagnostic::new(report.severity);
@@ -265,6 +252,8 @@ impl Renderer {
         }
         Ok(diagnostic)
     }
+
+    // - Trace rendering
 
     /// Emits the root and traverses visible causes in depth-first branch order.
     fn render(&mut self, buffer: &mut Buffer, report: &Report) -> Result<(), RenderError> {
@@ -312,6 +301,39 @@ impl Renderer {
             term::emit_to_write_style(buffer, &self.config.snippet, &self.files, &diagnostic)?;
             pending.push((children.iter(), depth + 1));
         }
+        Ok(())
+    }
+
+    // - Construction and source overrides
+
+    /// Constructs a renderer with an empty source cache.
+    pub fn new(config: RenderConfig) -> Self {
+        Self { config, files: SimpleFiles::new(), cache: HashMap::new() }
+    }
+
+    /// Supplies source text that takes precedence over disk contents.
+    pub fn insert_source(&mut self, file: impl Into<String>, text: impl Into<String>) {
+        let file = file.into();
+        let source = self.add_source(file.clone(), text.into());
+        self.cache.insert(file, Some(source));
+    }
+
+    // - Output
+
+    /// Renders a report without terminal color codes.
+    pub fn render_plain(&mut self, report: &Report) -> Result<String, RenderError> {
+        let mut buffer = Buffer::no_color();
+        self.render(&mut buffer, report)?;
+        // Codespan and trace headings write only UTF-8 text
+        Ok(String::from_utf8(buffer.into_inner()).expect("diagnostic output is UTF-8"))
+    }
+
+    /// Writes a complete diagnostic to stderr using the configured colors.
+    pub fn emit_stderr(&mut self, report: &Report) -> Result<(), RenderError> {
+        let writer = BufferWriter::stderr(self.config.color);
+        let mut buffer = writer.buffer();
+        self.render(&mut buffer, report)?;
+        writer.print(&buffer).map_err(files::Error::from)?;
         Ok(())
     }
 }

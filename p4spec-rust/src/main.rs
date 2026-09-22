@@ -14,6 +14,25 @@ use p4spec_rust::{
 
 // = Helpers
 
+// - Diagnostic output
+
+/// Renders frontend reports while preserving their structured payloads.
+fn frontend_error(report: FrontendError) -> ExitCode {
+    let mut renderer = Renderer::new(RenderConfig::default());
+    if let Err(error) = renderer.emit_stderr(&report) {
+        eprintln!("{report}\ndiagnostic rendering failed: {error}");
+    }
+    ExitCode::FAILURE
+}
+
+/// Preserves legacy boundary output until D10 completes diagnostic transport.
+fn command_error(error: impl std::fmt::Display) -> ExitCode {
+    eprintln!("{error}");
+    ExitCode::FAILURE
+}
+
+// - Specification pipeline
+
 fn elab(paths: Vec<PathBuf>) -> Result<il::ast::Spec, ExitCode> {
     let spec_el = parse_files(paths).map_err(frontend_error)?;
     elaborate::convert(spec_el).map_err(command_error)
@@ -82,21 +101,6 @@ fn struct_command(args: StructArgs) -> ExitCode {
     };
     println!("{}", Print::to_string(&spec_sl));
     ExitCode::SUCCESS
-}
-
-/// Renders frontend reports while preserving their structured payloads.
-fn frontend_error(report: FrontendError) -> ExitCode {
-    let mut renderer = Renderer::new(RenderConfig::default());
-    if let Err(error) = renderer.emit_stderr(&report) {
-        eprintln!("{report}\ndiagnostic rendering failed: {error}");
-    }
-    ExitCode::FAILURE
-}
-
-/// Preserves legacy boundary output until D10 completes diagnostic transport.
-fn command_error(error: impl std::fmt::Display) -> ExitCode {
-    eprintln!("{error}");
-    ExitCode::FAILURE
 }
 
 // = Run command

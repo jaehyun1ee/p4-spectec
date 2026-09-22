@@ -11,6 +11,8 @@ use crate::lang::common::source::Span;
 
 use super::{LabelStyle, Severity};
 
+// = Labels
+
 /// Associates a source span with its role and explanation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Label {
@@ -21,6 +23,8 @@ pub struct Label {
     /// Explains why the span is relevant.
     pub message: String,
 }
+
+// = Reports
 
 /// Carries one diagnostic without source text or terminal policy.
 #[derive(Debug)]
@@ -62,6 +66,8 @@ impl fmt::Display for Report {
 }
 
 impl std::error::Error for Report {}
+
+// = Traces
 
 /// Preserves a context frame or an independently structured cause.
 pub enum Trace {

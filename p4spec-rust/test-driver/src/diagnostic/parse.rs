@@ -17,6 +17,18 @@ use p4spec_rust::{
 use super::cases::Case;
 use crate::Result;
 
+// = Helpers
+
+/// Requires the parser to reject a negative input.
+fn rejected<T>(case: &Case, result: std::result::Result<T, Box<Report>>) -> Result<Box<Report>> {
+    match result {
+        Ok(_) => Err(case.failure("parser unexpectedly accepted negative input")),
+        Err(report) => Ok(report),
+    }
+}
+
+// = Temporary directories
+
 /// Removes temporary resources and restores the driver's fixture directory.
 struct Directory {
     path: PathBuf,
@@ -50,6 +62,8 @@ impl Drop for Directory {
     }
 }
 
+// = Filesystem cases
+
 /// Rejects a directory only after proving that the process cannot read it.
 #[cfg(unix)]
 fn unreadable_directory(case: &Case) -> Result<Box<Report>> {
@@ -76,12 +90,7 @@ fn unreadable_directory(case: &Case) -> Result<Box<Report>> {
     Err(case.failure("directory permission case requires Unix permissions"))
 }
 
-fn rejected<T>(case: &Case, result: std::result::Result<T, Box<Report>>) -> Result<Box<Report>> {
-    match result {
-        Ok(_) => Err(case.failure("parser unexpectedly accepted negative input")),
-        Err(report) => Ok(report),
-    }
-}
+// = Entry point
 
 /// Runs the actual public parser before any diagnostic assertions or rendering.
 pub fn run(case: &Case) -> Result<Box<Report>> {

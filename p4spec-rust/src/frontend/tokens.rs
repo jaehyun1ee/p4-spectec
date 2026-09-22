@@ -30,185 +30,9 @@ use super::{
     lexer::Token,
 };
 
-/// Wraps a lexeme stream for the parser.
-pub(crate) fn parser_tokens<I>(ctx: &Context, lexemes: I) -> ParserTokens<'_, I>
-where
-    I: Iterator,
-{
-    ParserTokens { ctx, lexemes, previous_right: None, previous_token: None, pending: None }
-}
+// = Helpers
 
-/// The adapted token stream.
-pub(crate) struct ParserTokens<'ctx, I: Iterator> {
-    /// Parser state: modes and position interning.
-    ctx: &'ctx Context,
-    /// The lexer.
-    lexemes: I,
-    /// Where the last emitted token ended, for a `Sequence` span.
-    previous_right: Option<Position>,
-    /// The last emitted token, to test `ends_sequence`.
-    previous_token: Option<Token>,
-    /// A lexeme held back while a `Sequence` is emitted first.
-    pending: Option<Phrase<Token>>,
-}
-
-/// Whether a token can begin a notation atom that follows another.
-fn starts_sequence(token: &Token) -> bool {
-    matches!(
-        token,
-        Token::TagUpperId(_)
-            | Token::Operator(_)
-            | Token::TickLeftParen
-            | Token::TickLeftBracket
-            | Token::TickLeftBrace
-            | Token::TickLeftAngle
-            | Token::Dollar
-            | Token::DoubleHash
-            | Token::LeftParen
-            | Token::LeftBrace
-            | Token::Hole
-            | Token::NumberedHole(_)
-            | Token::MultipleHole
-            | Token::EmptyHole
-            | Token::Latex
-            | Token::Bool
-            | Token::Nat
-            | Token::Int
-            | Token::Text
-            | Token::Epsilon
-            | Token::BoolLiteral(_)
-            | Token::NaturalLiteral(_)
-            | Token::HexLiteral(_)
-            | Token::TextLiteral(_)
-            | Token::UpperId(_)
-            | Token::LowerId(_)
-            | Token::UpperIdLeftParen(_)
-    )
-}
-
-/// Whether a token can end a notation atom that another follows.
-fn ends_sequence(token: &Token) -> bool {
-    matches!(
-        token,
-        Token::TagUpperId(_)
-            | Token::Operator(_)
-            | Token::TickRightParen
-            | Token::TickRightBracket
-            | Token::TickRightBrace
-            | Token::TickRightAngle
-            | Token::RightParen
-            | Token::RightBracket
-            | Token::RightBrace
-            | Token::Question
-            | Token::Star
-            | Token::IterStar
-            | Token::Epsilon
-            | Token::Bool
-            | Token::Nat
-            | Token::Int
-            | Token::Text
-            | Token::BoolLiteral(_)
-            | Token::NaturalLiteral(_)
-            | Token::HexLiteral(_)
-            | Token::TextLiteral(_)
-            | Token::UpperId(_)
-            | Token::LowerId(_)
-            | Token::DotId(_)
-            | Token::Hole
-            | Token::NumberedHole(_)
-            | Token::MultipleHole
-            | Token::EmptyHole
-    )
-}
-
-impl<I> Iterator for ParserTokens<'_, I>
-where
-    I: Iterator<Item = Result<Phrase<Token>, LexError>>,
-{
-    type Item = Result<(Location, Token, Location), FrontendError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // A held-back lexeme comes before the next one from the lexer
-        let mut lexeme = match self.pending.take() {
-            Some(lexeme) => lexeme,
-            None => match self.lexemes.next()? {
-                Ok(lexeme) => lexeme,
-                Err(error) => return Some(Err(error)),
-            },
-        };
-
-        // `*` is iteration unless the parser is inside arithmetic
-        if lexeme.node == Token::Star && !self.ctx.in_arith() {
-            lexeme.node = Token::IterStar;
-        }
-
-        // Two adjacent atoms get a `Sequence` between them; the lexeme waits
-        if self.previous_token.as_ref().is_some_and(ends_sequence) && starts_sequence(&lexeme.node)
-        {
-            let pos_l = self
-                .previous_right
-                .clone()
-                .expect("previous token position");
-            let pos_r = lexeme.span.left.clone();
-            self.pending = Some(lexeme);
-            self.previous_token = Some(Token::Sequence);
-            self.previous_right = Some(pos_r.clone());
-            return Some(Ok((self.ctx.location(pos_l), Token::Sequence, self.ctx.location(pos_r))));
-        }
-
-        // Intern both ends and remember this token for the next call
-        let loc_l = self.ctx.location(lexeme.span.left);
-        self.previous_right = Some(lexeme.span.right.clone());
-        let loc_r = self.ctx.location(lexeme.span.right);
-        self.previous_token = Some(lexeme.node.clone());
-        Some(Ok((loc_l, lexeme.node, loc_r)))
-    }
-}
-
-/// Presents grammar terminals as source vocabulary, grouping long alternatives.
-pub(crate) fn describe_expected(expected: &[String]) -> Option<String> {
-    // Remove aliases that have the same visible spelling
-    let mut alternatives = Vec::new();
-    for terminal in expected {
-        let (category, text) = terminal_presentation(terminal.trim_matches('"'));
-        if !alternatives.contains(&(category, text)) {
-            alternatives.push((category, text));
-        }
-    }
-    if alternatives.is_empty() {
-        return None;
-    }
-
-    // Small sets retain every spelling; large sets show vocabulary categories
-    let texts = if alternatives.len() <= 8 {
-        alternatives
-            .into_iter()
-            .map(|(_, text)| text.to_owned())
-            .collect::<Vec<_>>()
-    } else {
-        let mut groups: Vec<(&str, Vec<&str>)> = Vec::new();
-        for (category, text) in alternatives {
-            if let Some((_, texts)) = groups.iter_mut().find(|(name, _)| *name == category) {
-                texts.push(text);
-            } else {
-                groups.push((category, vec![text]));
-            }
-        }
-        groups
-            .into_iter()
-            .map(|(category, texts)| {
-                if texts.len() == 1 {
-                    texts[0].to_owned()
-                } else if texts.len() <= 4 {
-                    format!("{category} ({})", texts.join(", "))
-                } else {
-                    format!("{category} (such as {})", texts[..3].join(", "))
-                }
-            })
-            .collect()
-    };
-    Some(format!("expected {}", texts.join(" or ")))
-}
+// - Diagnostic vocabulary
 
 /// Translates LALRPOP terminal names into the frontend's visible vocabulary.
 fn terminal_presentation(terminal: &str) -> (&str, &str) {
@@ -318,4 +142,190 @@ fn terminal_presentation(terminal: &str) -> (&str, &str) {
         "EOF" => ("end of input", "end of input"),
         _ => ("a token", "a token"),
     }
+}
+
+/// Presents grammar terminals as source vocabulary, grouping long alternatives.
+pub(crate) fn describe_expected(expected: &[String]) -> Option<String> {
+    // Remove aliases that have the same visible spelling
+    let mut alternatives = Vec::new();
+    for terminal in expected {
+        let (category, text) = terminal_presentation(terminal.trim_matches('"'));
+        if !alternatives.contains(&(category, text)) {
+            alternatives.push((category, text));
+        }
+    }
+    if alternatives.is_empty() {
+        return None;
+    }
+
+    // Small sets retain every spelling; large sets show vocabulary categories
+    let texts = if alternatives.len() <= 8 {
+        alternatives
+            .into_iter()
+            .map(|(_, text)| text.to_owned())
+            .collect::<Vec<_>>()
+    } else {
+        let mut groups: Vec<(&str, Vec<&str>)> = Vec::new();
+        for (category, text) in alternatives {
+            if let Some((_, texts)) = groups.iter_mut().find(|(name, _)| *name == category) {
+                texts.push(text);
+            } else {
+                groups.push((category, vec![text]));
+            }
+        }
+        groups
+            .into_iter()
+            .map(|(category, texts)| {
+                if texts.len() == 1 {
+                    texts[0].to_owned()
+                } else if texts.len() <= 4 {
+                    format!("{category} ({})", texts.join(", "))
+                } else {
+                    format!("{category} (such as {})", texts[..3].join(", "))
+                }
+            })
+            .collect()
+    };
+    Some(format!("expected {}", texts.join(" or ")))
+}
+
+// - Sequence boundaries
+
+/// Whether a token can begin a notation atom that follows another.
+fn starts_sequence(token: &Token) -> bool {
+    matches!(
+        token,
+        Token::TagUpperId(_)
+            | Token::Operator(_)
+            | Token::TickLeftParen
+            | Token::TickLeftBracket
+            | Token::TickLeftBrace
+            | Token::TickLeftAngle
+            | Token::Dollar
+            | Token::DoubleHash
+            | Token::LeftParen
+            | Token::LeftBrace
+            | Token::Hole
+            | Token::NumberedHole(_)
+            | Token::MultipleHole
+            | Token::EmptyHole
+            | Token::Latex
+            | Token::Bool
+            | Token::Nat
+            | Token::Int
+            | Token::Text
+            | Token::Epsilon
+            | Token::BoolLiteral(_)
+            | Token::NaturalLiteral(_)
+            | Token::HexLiteral(_)
+            | Token::TextLiteral(_)
+            | Token::UpperId(_)
+            | Token::LowerId(_)
+            | Token::UpperIdLeftParen(_)
+    )
+}
+
+/// Whether a token can end a notation atom that another follows.
+fn ends_sequence(token: &Token) -> bool {
+    matches!(
+        token,
+        Token::TagUpperId(_)
+            | Token::Operator(_)
+            | Token::TickRightParen
+            | Token::TickRightBracket
+            | Token::TickRightBrace
+            | Token::TickRightAngle
+            | Token::RightParen
+            | Token::RightBracket
+            | Token::RightBrace
+            | Token::Question
+            | Token::Star
+            | Token::IterStar
+            | Token::Epsilon
+            | Token::Bool
+            | Token::Nat
+            | Token::Int
+            | Token::Text
+            | Token::BoolLiteral(_)
+            | Token::NaturalLiteral(_)
+            | Token::HexLiteral(_)
+            | Token::TextLiteral(_)
+            | Token::UpperId(_)
+            | Token::LowerId(_)
+            | Token::DotId(_)
+            | Token::Hole
+            | Token::NumberedHole(_)
+            | Token::MultipleHole
+            | Token::EmptyHole
+    )
+}
+
+// = Token stream
+
+/// The adapted token stream.
+pub(crate) struct ParserTokens<'ctx, I: Iterator> {
+    /// Parser state: modes and position interning.
+    ctx: &'ctx Context,
+    /// The lexer.
+    lexemes: I,
+    /// Where the last emitted token ended, for a `Sequence` span.
+    previous_right: Option<Position>,
+    /// The last emitted token, to test `ends_sequence`.
+    previous_token: Option<Token>,
+    /// A lexeme held back while a `Sequence` is emitted first.
+    pending: Option<Phrase<Token>>,
+}
+
+impl<I> Iterator for ParserTokens<'_, I>
+where
+    I: Iterator<Item = Result<Phrase<Token>, LexError>>,
+{
+    type Item = Result<(Location, Token, Location), FrontendError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // A held-back lexeme comes before the next one from the lexer
+        let mut lexeme = match self.pending.take() {
+            Some(lexeme) => lexeme,
+            None => match self.lexemes.next()? {
+                Ok(lexeme) => lexeme,
+                Err(error) => return Some(Err(error)),
+            },
+        };
+
+        // `*` is iteration unless the parser is inside arithmetic
+        if lexeme.node == Token::Star && !self.ctx.in_arith() {
+            lexeme.node = Token::IterStar;
+        }
+
+        // Two adjacent atoms get a `Sequence` between them; the lexeme waits
+        if self.previous_token.as_ref().is_some_and(ends_sequence) && starts_sequence(&lexeme.node)
+        {
+            let pos_l = self
+                .previous_right
+                .clone()
+                .expect("previous token position");
+            let pos_r = lexeme.span.left.clone();
+            self.pending = Some(lexeme);
+            self.previous_token = Some(Token::Sequence);
+            self.previous_right = Some(pos_r.clone());
+            return Some(Ok((self.ctx.location(pos_l), Token::Sequence, self.ctx.location(pos_r))));
+        }
+
+        // Intern both ends and remember this token for the next call
+        let loc_l = self.ctx.location(lexeme.span.left);
+        self.previous_right = Some(lexeme.span.right.clone());
+        let loc_r = self.ctx.location(lexeme.span.right);
+        self.previous_token = Some(lexeme.node.clone());
+        Some(Ok((loc_l, lexeme.node, loc_r)))
+    }
+}
+
+// = Entry point
+
+/// Wraps a lexeme stream for the parser.
+pub(crate) fn parser_tokens<I>(ctx: &Context, lexemes: I) -> ParserTokens<'_, I>
+where
+    I: Iterator,
+{
+    ParserTokens { ctx, lexemes, previous_right: None, previous_token: None, pending: None }
 }
