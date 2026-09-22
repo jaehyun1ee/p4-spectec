@@ -22,7 +22,7 @@ pub(super) enum Backtrack<T> {
     Mismatch(Vec<Report>),
 }
 
-/// Builds `Backtrack::Success`.
+/// Builds [`Backtrack::Success`].
 macro_rules! success {
     ($($value:tt)*) => {
         $crate::pass::elaborate::attempt::Backtrack::Success($($value)*)
@@ -30,7 +30,7 @@ macro_rules! success {
 }
 pub(super) use success;
 
-/// Builds `Backtrack::Fatal` from a report list.
+/// Builds [`Backtrack::Fatal`] from a report list.
 macro_rules! fatal {
     (error: $error:expr $(,)?) => {
         $crate::pass::elaborate::attempt::Backtrack::Fatal(vec![*$error])
@@ -41,7 +41,7 @@ macro_rules! fatal {
 }
 pub(super) use fatal;
 
-/// Builds `Backtrack::Mismatch` from a report list.
+/// Builds [`Backtrack::Mismatch`] from a report list.
 macro_rules! mismatch {
     (error: $error:expr $(,)?) => {
         $crate::pass::elaborate::attempt::Backtrack::Mismatch(vec![*$error])

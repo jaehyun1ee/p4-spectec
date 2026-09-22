@@ -65,8 +65,8 @@ impl InputHint {
     }
 
     /// Borrows the source span of a parsed position, when available.
-    pub fn span(&self, position: usize) -> Option<&Span> {
-        self.spans.get(position)
+    pub fn span(&self, idx: usize) -> Option<&Span> {
+        self.spans.get(idx)
     }
 }
 
@@ -88,22 +88,22 @@ impl SyntaxEq for InputHint {
 
 /// Reads a hint from `%N` holes, one or a sequence; anything else is no hint.
 pub fn init(hint_exp: &Exp) -> Option<InputHint> {
-    let positions: Vec<_> = match &hint_exp.node {
+    let idxs_spanned: Vec<_> = match &hint_exp.node {
         // A sequence of `%N` holes, all of which must be holes
         ExpKind::Seq(hint_exps) => hint_exps
             .iter()
             .map(|hint_exp| match hint_exp.node {
-                ExpKind::Hole(Hole::Num(index)) => Some((index, hint_exp.span.clone())),
+                ExpKind::Hole(Hole::Num(idx)) => Some((idx, hint_exp.span.clone())),
                 _ => None,
             })
             .collect(),
         // A single hole
-        ExpKind::Hole(Hole::Num(index)) => Some(vec![(*index, hint_exp.span.clone())]),
+        ExpKind::Hole(Hole::Num(idx)) => Some(vec![(*idx, hint_exp.span.clone())]),
         // Anything else is not an input hint
         _ => None,
     }?;
-    let (indices, spans) = positions.into_iter().unzip();
-    Some(InputHint { indices, spans })
+    let (idxs, spans) = idxs_spanned.into_iter().unzip();
+    Some(InputHint { indices: idxs, spans })
 }
 
 // Validating hints

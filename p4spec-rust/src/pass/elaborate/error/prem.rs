@@ -70,7 +70,10 @@ pub(in crate::pass::elaborate) fn premise_negated_output_unsupported(
         PREMISE_NEGATED_OUTPUT_UNSUPPORTED,
         format!("negated rule premise for relation `{}` cannot use output positions", id.node),
         labels,
-        vec!["Rule premise negation is supported only for relations without outputs.".to_owned()],
+        vec![
+            concat!("Rule premise negation is supported only for relations without ", "outputs.",)
+                .to_owned(),
+        ],
     )
 }
 
@@ -114,7 +117,8 @@ pub(in crate::pass::elaborate) fn relation_rule_group_name_mismatch(
     cause(
         RELATION_RULE_GROUP_NAME_MISMATCH,
         format!(
-            "rule belongs to relation `{}`, but its enclosing rule group belongs to relation `{}`",
+            "rule belongs to relation `{}`, but its enclosing rule group \
+            belongs to relation `{}`",
             id_rule.node, id_group.node
         ),
         labels,
@@ -174,14 +178,14 @@ pub(in crate::pass::elaborate) fn relation_input_hint_empty(span: &Span) -> Elab
 
 /// Reports a repeated input-hint index and relates its first occurrence.
 pub(in crate::pass::elaborate) fn relation_input_hint_index_repeated(
-    index: usize,
+    idx: usize,
     span: &Span,
     span_previous: &Span,
 ) -> ElabError {
     let labels = vec![primary(span), related(span_previous, "first occurrence here")];
     cause(
         RELATION_INPUT_HINT_INDEX_REPEATED,
-        format!("input hint repeats index `%{index}`"),
+        format!("input hint repeats index `%{idx}`"),
         labels,
         Vec::new(),
     )
@@ -189,18 +193,21 @@ pub(in crate::pass::elaborate) fn relation_input_hint_index_repeated(
 
 /// Reports an input-hint index outside the relation notation arity.
 pub(in crate::pass::elaborate) fn relation_input_hint_index_out_of_bounds(
-    index: usize,
+    idx: usize,
     arity: usize,
     span: &Span,
     span_notation: &Span,
 ) -> ElabError {
-    let positions = if arity == 1 { "position" } else { "positions" };
-    let labels =
-        vec![primary(span), related(span_notation, format!("relation has {arity} {positions}"))];
+    let text_positions = if arity == 1 { "position" } else { "positions" };
+    let labels = vec![
+        primary(span),
+        related(span_notation, format!("relation has {arity} {text_positions}")),
+    ];
     cause(
         RELATION_INPUT_HINT_INDEX_OUT_OF_BOUNDS,
         format!(
-            "input hint index `%{index}` is out of bounds for a relation with {arity} {positions}"
+            "input hint index `%{idx}` is out of bounds for a relation \
+            with {arity} {text_positions}"
         ),
         labels,
         Vec::new(),
@@ -210,11 +217,14 @@ pub(in crate::pass::elaborate) fn relation_input_hint_index_out_of_bounds(
 /// Reports an input hint containing something other than indexed holes.
 pub(in crate::pass::elaborate) fn relation_input_hint_invalid(
     span: &Span,
-    actual: &str,
+    text_actual: &str,
 ) -> ElabError {
     cause(
         RELATION_INPUT_HINT_INVALID,
-        format!("input hint must be a sequence of indexed holes such as `%0`, but got `{actual}`"),
+        format!(
+            "input hint must be a sequence of indexed holes such as `%0`, \
+            but got `{text_actual}`"
+        ),
         vec![primary(span)],
         Vec::new(),
     )

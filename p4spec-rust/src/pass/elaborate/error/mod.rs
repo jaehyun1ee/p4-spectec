@@ -2,25 +2,25 @@
 //!
 //! Each constructor owns one stable `elab/...` code and preserves the source
 //! spans available at its semantic check. Attempt frames remain uncoded context;
-//! terminal causes keep their complete diagnostic payload in `Report`.
+//! terminal causes keep their complete diagnostic payload in [`Report`].
 
 use crate::{
     diagnostic::{Diagnostic, Label, LabelStyle, Report, ReportKind, Severity},
     lang::common::source::Span,
 };
 
-mod argument;
-mod declaration;
-mod dimension;
+mod arg;
+mod decl;
+mod dim;
 mod exp;
-mod premise;
+mod prem;
 mod typ;
 
-pub(super) use argument::*;
-pub(super) use declaration::*;
-pub(super) use dimension::*;
+pub(super) use arg::*;
+pub(super) use decl::*;
+pub(super) use dim::*;
 pub(super) use exp::*;
-pub(super) use premise::*;
+pub(super) use prem::*;
 pub(super) use typ::*;
 
 /// Names a structured elaboration failure without adding a wrapper.

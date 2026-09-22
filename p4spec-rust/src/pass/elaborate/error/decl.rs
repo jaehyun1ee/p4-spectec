@@ -157,7 +157,8 @@ const FUNCTION_DECLARATION_REQUIRED: &str = "elab/function-declaration-required"
 /// Requires a matching declaration before a function definition.
 pub(crate) fn function_declaration_required(id: &Id) -> ElabError {
     let message = format!(
-        "a definition of function `{}` requires a preceding matching `dec` declaration",
+        "a definition of function `{}` requires a preceding matching \
+        `dec` declaration",
         id.node
     );
     Box::new(
@@ -282,7 +283,8 @@ const TABLE_PARAMETER_UNSUPPORTED: &str = "elab/table-parameter-unsupported";
 /// Reports a table parameter that requires a function instead of a value.
 pub(crate) fn table_parameter_unsupported(id: &Id, span: &Span) -> ElabError {
     let message = format!(
-        "table parameter `{}` must be a value parameter, but it is a function parameter",
+        "table parameter `{}` must be a value parameter, but it is a \
+        function parameter",
         id.node
     );
     Box::new(make_diagnostic(TABLE_PARAMETER_UNSUPPORTED, message, vec![primary(span)]).into())
@@ -291,8 +293,9 @@ pub(crate) fn table_parameter_unsupported(id: &Id, span: &Span) -> ElabError {
 const TABLE_RETURN_TYPE_INVALID: &str = "elab/table-return-type-invalid";
 
 /// Reports the non-boolean return type of a table declaration.
-pub(crate) fn table_return_type_invalid(id: &Id, span: &Span, typ: &str) -> ElabError {
-    let message = format!("table `{}` must return `bool`, but its return type is `{typ}`", id.node);
+pub(crate) fn table_return_type_invalid(id: &Id, span: &Span, text_typ: &str) -> ElabError {
+    let message =
+        format!("table `{}` must return `bool`, but its return type is `{text_typ}`", id.node);
     Box::new(make_diagnostic(TABLE_RETURN_TYPE_INVALID, message, vec![primary(span)]).into())
 }
 

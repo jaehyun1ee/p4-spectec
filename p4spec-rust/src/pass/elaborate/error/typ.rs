@@ -27,20 +27,23 @@ const TYPE_OPERATION_INVALID: &str = "elab/type-operation-invalid";
 
 /// Maps a reusable runtime type failure at its elaboration operation.
 pub(in crate::pass::elaborate) fn type_operation_invalid(
-    operation: &str,
+    description_operation: &str,
     error: TypeError,
 ) -> ElabError {
-    let message = format!("{operation}: {}", error.kind);
+    let message = format!("{description_operation}: {}", error.kind);
     cause(TYPE_OPERATION_INVALID, message, vec![primary(&error.span)], Vec::new())
 }
 
 const TYPE_SHAPE_MISMATCH: &str = "elab/type-shape-mismatch";
 
 /// Reports that an expanded type has the wrong structural shape.
-pub(in crate::pass::elaborate) fn type_shape_mismatch(shape: &str, span: &Span) -> ElabError {
+pub(in crate::pass::elaborate) fn type_shape_mismatch(
+    description_shape: &str,
+    span: &Span,
+) -> ElabError {
     cause(
         TYPE_SHAPE_MISMATCH,
-        format!("cannot destruct type as {shape}"),
+        format!("cannot destruct type as {description_shape}"),
         vec![primary(span)],
         Vec::new(),
     )
@@ -51,19 +54,23 @@ const TYPE_ARGUMENT_ARITY_MISMATCH: &str = "elab/type-argument-arity-mismatch";
 /// Reports a named type application with the wrong number of arguments.
 pub(in crate::pass::elaborate) fn type_argument_arity_mismatch(
     id: &Id,
-    expected: usize,
-    actual: usize,
+    targs_len_expect: usize,
+    targs_len_actual: usize,
     span: &Span,
     span_declaration: Option<&Span>,
 ) -> ElabError {
-    let suffix = if expected == 1 { "" } else { "s" };
+    let text_suffix = if targs_len_expect == 1 { "" } else { "s" };
     let mut labels = vec![primary(span)];
     if let Some(span_declaration) = span_declaration {
         labels.push(related(span_declaration, "type declared here"));
     }
     cause(
         TYPE_ARGUMENT_ARITY_MISMATCH,
-        format!("type `{}` expects {expected} type argument{suffix}, but got {actual}", id.node),
+        format!(
+            "type `{}` expects {targs_len_expect} type \
+            argument{text_suffix}, but got {targs_len_actual}",
+            id.node
+        ),
         labels,
         Vec::new(),
     )
@@ -106,10 +113,10 @@ const TYPE_SYNTAX_IDENTIFIER_INVALID: &str = "elab/type-syntax-identifier-invali
 const TYPE_IDENTIFIER_INVALID: &str = "elab/type-identifier-invalid";
 const TYPE_PARAMETER_IDENTIFIER_INVALID: &str = "elab/type-parameter-identifier-invalid";
 
-fn invalid_identifier(code: &str, kind: &str, id: &Id) -> ElabError {
+fn invalid_identifier(code: &str, description_kind: &str, id: &Id) -> ElabError {
     cause(
         code,
-        format!("{kind} identifier `{}` must not have a suffix", id.node),
+        format!("{description_kind} identifier `{}` must not have a suffix", id.node),
         vec![primary(&id.span)],
         Vec::new(),
     )
@@ -143,19 +150,19 @@ const TYPE_EXTENSION_INCOMPLETE: &str = "elab/type-extension-incomplete";
 
 fn type_extension(
     code: &str,
-    kind: &str,
+    description_kind: &str,
     typ: &impl Print,
     span: &Span,
-    related_location: Option<(&Span, &str)>,
+    label_related: Option<(&Span, &str)>,
     note: &str,
 ) -> ElabError {
     let mut labels = vec![primary(span)];
-    if let Some((span_related, message)) = related_location {
+    if let Some((span_related, message)) = label_related {
         labels.push(related(span_related, message));
     }
     cause(
         code,
-        format!("extension is not allowed for {kind} `{}`", Print::to_string(typ)),
+        format!("extension is not allowed for {description_kind} `{}`", Print::to_string(typ)),
         labels,
         vec![note.to_owned()],
     )
@@ -173,7 +180,7 @@ pub(in crate::pass::elaborate) fn type_extension_struct_unsupported(
         typ,
         span,
         Some((span_definition, "originally defined here")),
-        "A case-line `| T` can extend a variant only with another variant's cases.",
+        concat!("A case-line `| T` can extend a variant only with another ", "variant's cases.",),
     )
 }
 
@@ -244,18 +251,24 @@ const VARIANT_CASE_SHAPE_REPEATED: &str = "elab/variant-case-shape-repeated";
 
 /// Reports two variant cases with the same mixfix shape.
 pub(in crate::pass::elaborate) fn variant_case_shape_repeated(
-    shape: &str,
+    description_shape: &str,
     span: &Span,
     span_previous: &Span,
 ) -> ElabError {
     let labels = vec![primary(span), related(span_previous, "earlier case with this shape")];
     cause(
         VARIANT_CASE_SHAPE_REPEATED,
-        format!("variant case shape `{shape}` conflicts with an earlier case"),
+        format!(
+            "variant case shape `{description_shape}` conflicts with an \
+            earlier case"
+        ),
         labels,
         vec![
-            "Variant cases must differ in literal tokens or argument positions; argument types do not distinguish cases."
-                .to_owned(),
+            concat!(
+                "Variant cases must differ in literal tokens or argument ",
+                "positions; argument types do not distinguish cases.",
+            )
+            .to_owned(),
         ],
     )
 }
@@ -295,8 +308,11 @@ pub(in crate::pass::elaborate) fn type_parameter_mismatch(
         ),
         labels,
         vec![
-            "A type definition must repeat the declared type parameters with the same names and order."
-                .to_owned(),
+            concat!(
+                "A type definition must repeat the declared type parameters ",
+                "with the same names and order.",
+            )
+            .to_owned(),
         ],
     )
 }
@@ -321,7 +337,7 @@ const TYPE_DEFINITION_MISSING: &str = "elab/type-definition-missing";
 
 /// Warns that a forward-declared type has no definition.
 pub(in crate::pass::elaborate) fn type_definition_missing(id: &Id, tparams: &[Id]) -> Report {
-    let suffix = if tparams.is_empty() {
+    let text_suffix = if tparams.is_empty() {
         String::new()
     } else {
         format!(
@@ -335,7 +351,7 @@ pub(in crate::pass::elaborate) fn type_definition_missing(id: &Id, tparams: &[Id
     };
     warning(
         TYPE_DEFINITION_MISSING,
-        format!("type `{}{suffix}` was declared but not defined", id.node),
+        format!("type `{}{text_suffix}` was declared but not defined", id.node),
         vec![primary(&id.span)],
         Vec::new(),
     )

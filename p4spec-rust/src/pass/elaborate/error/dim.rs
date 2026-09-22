@@ -21,16 +21,17 @@ pub(in crate::pass::elaborate) fn iteration_dimension_mismatch(
     dim_previous: &Dim,
     span_previous: &Span,
 ) -> ElabError {
-    let dim_actual = Print::to_string(dim);
-    let dim_expected = Print::to_string(dim_previous);
+    let text_dim_actual = Print::to_string(dim);
+    let text_dim_expect = Print::to_string(dim_previous);
     let labels = vec![
         primary(span),
-        related(span_previous, format!("other occurrence has dimension `{dim_expected}`")),
+        related(span_previous, format!("other occurrence has dimension `{text_dim_expect}`")),
     ];
     cause(
         ITERATION_DIMENSION_MISMATCH,
         format!(
-            "identifier `{}` has incompatible iteration dimensions: `{dim_expected}` and `{dim_actual}`",
+            "identifier `{}` has incompatible iteration dimensions: \
+            `{text_dim_expect}` and `{text_dim_actual}`",
             id.node
         ),
         labels,
@@ -49,7 +50,8 @@ pub(in crate::pass::elaborate) fn iteration_identifier_type_mismatch(
     cause(
         ITERATION_IDENTIFIER_TYPE_MISMATCH,
         format!(
-            "identifier `{}` has incompatible types `{}` and `{}` during dimension analysis",
+            "identifier `{}` has incompatible types `{}` and `{}` during \
+            dimension analysis",
             id.node,
             Print::to_string(typ),
             Print::to_string(typ_other)
@@ -64,11 +66,11 @@ const ITERATION_ANNOTATION_INVALID: &str = "elab/iteration-annotation-invalid";
 /// Reports IL that arrives at analysis with an existing iteration annotation.
 pub(in crate::pass::elaborate) fn iteration_annotation_invalid(
     span: &Span,
-    construct: &str,
+    description: &str,
 ) -> ElabError {
     cause(
         ITERATION_ANNOTATION_INVALID,
-        format!("iterated {construct} should initially have no annotations"),
+        format!("iterated {description} should initially have no annotations"),
         vec![primary(span)],
         Vec::new(),
     )
@@ -83,8 +85,11 @@ fn empty_iteration(code: &str, span: &Span) -> ElabError {
         "iteration has no variable to iterate over",
         vec![primary(span)],
         vec![
-            "Each iteration consumes one `*` or `?` from a variable inside it; no variable has an iteration left to consume."
-                .to_owned(),
+            concat!(
+                "Each iteration consumes one `*` or `?` from a variable inside ",
+                "it; no variable has an iteration left to consume.",
+            )
+            .to_owned(),
         ],
     )
 }

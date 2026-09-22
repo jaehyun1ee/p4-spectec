@@ -36,13 +36,17 @@ pub(in crate::pass::elaborate) fn function_argument_name_mismatch(
     cause(
         FUNCTION_ARGUMENT_NAME_MISMATCH,
         format!(
-            "function argument `{}` must have the same name as declared function parameter `{}`",
+            "function argument `{}` must have the same name as declared \
+            function parameter `{}`",
             id_arg.node, id_param.node
         ),
         labels,
         vec![
-            "A function argument in a definition clause binds the name declared by its function parameter."
-                .to_owned(),
+            concat!(
+                "A function argument in a definition clause binds the name ",
+                "declared by its function parameter.",
+            )
+            .to_owned(),
         ],
     )
 }
@@ -68,8 +72,12 @@ fn function_signature_labels(
 
 fn function_signature_note() -> Vec<String> {
     vec![
-        "A passed function must have the same number of type parameters, parameter types, and return type as its function parameter."
-            .to_owned(),
+        concat!(
+            "A passed function must have the same number of type ",
+            "parameters, parameter types, and return type as its function ",
+            "parameter.",
+        )
+        .to_owned(),
     ]
 }
 
@@ -77,16 +85,18 @@ fn function_signature_note() -> Vec<String> {
 pub(in crate::pass::elaborate) fn function_argument_type_parameter_arity_mismatch(
     id_param: &Id,
     id_arg: &Id,
-    expected: usize,
-    actual: usize,
+    tparams_len_expect: usize,
+    tparams_len_actual: usize,
     span: &Span,
     span_arg_declaration: Option<&Span>,
 ) -> ElabError {
-    let suffix = if expected == 1 { "" } else { "s" };
+    let text_suffix = if tparams_len_expect == 1 { "" } else { "s" };
     cause(
         FUNCTION_ARGUMENT_TYPE_PARAMETER_ARITY_MISMATCH,
         format!(
-            "function parameter `{}` has {expected} type parameter{suffix}, but passed function `{}` has {actual}",
+            "function parameter `{}` has {tparams_len_expect} type \
+            parameter{text_suffix}, but passed function `{}` has \
+            {tparams_len_actual}",
             id_param.node, id_arg.node
         ),
         function_signature_labels(id_param, span_arg_declaration, span),
@@ -98,16 +108,18 @@ pub(in crate::pass::elaborate) fn function_argument_type_parameter_arity_mismatc
 pub(in crate::pass::elaborate) fn function_argument_parameter_arity_mismatch(
     id_param: &Id,
     id_arg: &Id,
-    expected: usize,
-    actual: usize,
+    params_len_expect: usize,
+    params_len_actual: usize,
     span: &Span,
     span_arg_declaration: Option<&Span>,
 ) -> ElabError {
-    let suffix = if expected == 1 { "" } else { "s" };
+    let text_suffix = if params_len_expect == 1 { "" } else { "s" };
     cause(
         FUNCTION_ARGUMENT_PARAMETER_ARITY_MISMATCH,
         format!(
-            "function parameter `{}` has {expected} parameter{suffix}, but passed function `{}` has {actual}",
+            "function parameter `{}` has {params_len_expect} \
+            parameter{text_suffix}, but passed function `{}` has \
+            {params_len_actual}",
             id_param.node, id_arg.node
         ),
         function_signature_labels(id_param, span_arg_declaration, span),
@@ -125,7 +137,8 @@ pub(in crate::pass::elaborate) fn function_argument_signature_mismatch(
     cause(
         FUNCTION_ARGUMENT_SIGNATURE_MISMATCH,
         format!(
-            "passed function `{}` must have the same signature as function parameter `{}`",
+            "passed function `{}` must have the same signature as function \
+            parameter `{}`",
             id_arg.node, id_param.node
         ),
         function_signature_labels(id_param, span_arg_declaration, span),
@@ -137,15 +150,18 @@ const FUNCTION_ARGUMENT_KIND_MISMATCH: &str = "elab/function-argument-kind-misma
 
 /// Reports an expression/function argument-kind mismatch.
 pub(in crate::pass::elaborate) fn function_argument_kind_mismatch(
-    expected: &str,
-    actual: &str,
+    description_expect: &str,
+    description_actual: &str,
     span: &Span,
     span_param: &Span,
 ) -> ElabError {
     let labels = vec![primary(span), related(span_param, "parameter declared here")];
     cause(
         FUNCTION_ARGUMENT_KIND_MISMATCH,
-        format!("expected {expected} argument, but got {actual} argument"),
+        format!(
+            "expected {description_expect} argument, but got \
+            {description_actual} argument"
+        ),
         labels,
         Vec::new(),
     )
@@ -156,17 +172,24 @@ const FUNCTION_CALL_ARGUMENT_ARITY_MISMATCH: &str = "elab/function-call-argument
 /// Reports an argument list whose count differs from its parameter list.
 pub(in crate::pass::elaborate) fn function_call_argument_arity_mismatch(
     id: Option<&Id>,
-    expected: usize,
-    actual: usize,
+    args_len_expect: usize,
+    args_len_actual: usize,
     span: &Span,
     span_declaration: Option<&Span>,
 ) -> ElabError {
-    let suffix = if expected == 1 { "" } else { "s" };
+    let text_suffix = if args_len_expect == 1 { "" } else { "s" };
     let message = match id {
         Some(id) => {
-            format!("function `{}` expects {expected} argument{suffix}, but got {actual}", id.node)
+            format!(
+                "function `{}` expects {args_len_expect} \
+                argument{text_suffix}, but got {args_len_actual}",
+                id.node
+            )
         }
-        None => format!("expected {expected} argument{suffix}, but got {actual}"),
+        None => format!(
+            "expected {args_len_expect} argument{text_suffix}, but got \
+            {args_len_actual}"
+        ),
     };
     let mut labels = vec![primary(span)];
     if let Some(span_declaration) = span_declaration {
@@ -181,12 +204,12 @@ const FUNCTION_CALL_TYPE_ARGUMENT_ARITY_MISMATCH: &str =
 /// Reports a call with the wrong number of explicit type arguments.
 pub(in crate::pass::elaborate) fn function_call_type_argument_arity_mismatch(
     id: &Id,
-    expected: usize,
-    actual: usize,
+    targs_len_expect: usize,
+    targs_len_actual: usize,
     span: &Span,
     span_declaration: Option<&Span>,
 ) -> ElabError {
-    let suffix = if expected == 1 { "" } else { "s" };
+    let text_suffix = if targs_len_expect == 1 { "" } else { "s" };
     let mut labels = vec![primary(span)];
     if let Some(span_declaration) = span_declaration {
         labels.push(related(span_declaration, "function declared here"));
@@ -194,7 +217,8 @@ pub(in crate::pass::elaborate) fn function_call_type_argument_arity_mismatch(
     cause(
         FUNCTION_CALL_TYPE_ARGUMENT_ARITY_MISMATCH,
         format!(
-            "function `{}` expects {expected} type argument{suffix}, but got {actual}",
+            "function `{}` expects {targs_len_expect} type \
+            argument{text_suffix}, but got {targs_len_actual}",
             id.node
         ),
         labels,
@@ -208,17 +232,18 @@ const FUNCTION_CLAUSE_ARGUMENT_ARITY_MISMATCH: &str =
 /// Reports a function clause with the wrong number of arguments.
 pub(in crate::pass::elaborate) fn function_clause_argument_arity_mismatch(
     id: &Id,
-    expected: usize,
-    actual: usize,
+    args_len_expect: usize,
+    args_len_actual: usize,
     span: &Span,
     span_declaration: &Span,
 ) -> ElabError {
-    let suffix = if expected == 1 { "" } else { "s" };
+    let text_suffix = if args_len_expect == 1 { "" } else { "s" };
     let labels = vec![primary(span), related(span_declaration, "function declared here")];
     cause(
         FUNCTION_CLAUSE_ARGUMENT_ARITY_MISMATCH,
         format!(
-            "function `{}` was declared with {expected} parameter{suffix}, but this clause has {actual}",
+            "function `{}` was declared with {args_len_expect} \
+            parameter{text_suffix}, but this clause has {args_len_actual}",
             id.node
         ),
         labels,
@@ -232,8 +257,8 @@ const FUNCTION_CLAUSE_TYPE_PARAMETER_MISMATCH: &str =
 /// Reports a clause whose type parameters differ from its declaration.
 pub(in crate::pass::elaborate) fn function_clause_type_parameter_mismatch(
     id: &Id,
-    expected: &[Id],
-    actual: &[Id],
+    tparams_expect: &[Id],
+    tparams_actual: &[Id],
     span: &Span,
     span_declaration: &Span,
 ) -> ElabError {
@@ -256,15 +281,19 @@ pub(in crate::pass::elaborate) fn function_clause_type_parameter_mismatch(
     cause(
         FUNCTION_CLAUSE_TYPE_PARAMETER_MISMATCH,
         format!(
-            "function `{}` was declared with type parameters {}, but this clause has type parameters {}",
+            "function `{}` was declared with type parameters {}, but this \
+            clause has type parameters {}",
             id.node,
-            describe(expected),
-            describe(actual)
+            describe(tparams_expect),
+            describe(tparams_actual)
         ),
         labels,
         vec![
-            "A function clause must repeat the declared type parameters with the same names and order."
-                .to_owned(),
+            concat!(
+                "A function clause must repeat the declared type parameters ",
+                "with the same names and order.",
+            )
+            .to_owned(),
         ],
     )
 }

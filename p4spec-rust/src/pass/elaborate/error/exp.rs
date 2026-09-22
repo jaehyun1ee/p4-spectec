@@ -12,11 +12,11 @@ const EXPRESSION_INFERENCE_INVALID: &str = "elab/expression-inference-invalid";
 /// Reports a construct whose type cannot be inferred without context.
 pub(in crate::pass::elaborate) fn expression_inference_invalid(
     span: &Span,
-    construct: &str,
+    description: &str,
 ) -> ElabError {
     cause(
         EXPRESSION_INFERENCE_INVALID,
-        format!("cannot infer type of {construct}"),
+        format!("cannot infer type of {description}"),
         vec![primary(span)],
         Vec::new(),
     )
@@ -100,8 +100,11 @@ pub(in crate::pass::elaborate) fn hole_outside_hint_unsupported(span: &Span) -> 
         "hole is not allowed outside a hint",
         vec![primary(span)],
         vec![
-            "A `%`, `%N`, `%%`, or `!%` marks an argument slot inside a `hint(...)` expression."
-                .to_owned(),
+            concat!(
+                "A `%`, `%N`, `%%`, or `!%` marks an argument slot inside a ",
+                "`hint(...)` expression.",
+            )
+            .to_owned(),
         ],
     )
 }

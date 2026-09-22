@@ -56,27 +56,15 @@ fn valid_tid(id: &Id) -> bool {
     id.strip_suffix().node == id.node
 }
 
-/// Rejects duplicated type parameters.
-fn distinct_tparams(tparams: &[el::TParam]) -> Result<(), ElabError> {
-    let mut seen = IdMap::new();
-    for tparam in tparams {
-        if let Some(span_previous) = seen.get(tparam) {
-            return Err(error::type_parameter_repeated(tparam, span_previous));
-        }
-        seen.insert(tparam.clone(), tparam.span.clone());
-    }
-    Ok(())
-}
-
 /// Finds the first repeated parameter while retaining the earlier occurrence.
 fn find_repeated_tparam(tparams: &[el::TParam]) -> Option<(&Id, &Span)> {
-    let mut seen = IdMap::new();
+    let mut spans_seen = IdMap::new();
     for tparam in tparams {
         // Stop at the first duplicate in source order
-        if let Some(span_previous) = seen.get(tparam) {
+        if let Some(span_previous) = spans_seen.get(tparam) {
             return Some((tparam, *span_previous));
         }
-        seen.insert(tparam.clone(), &tparam.span);
+        spans_seen.insert(tparam.clone(), &tparam.span);
     }
     None
 }
@@ -390,9 +378,9 @@ fn elab_def_typ(
                 }
             }
             // Two cases with the same mixfix shape would be ambiguous
-            for (index, typ_case_il) in typ_cases_il.iter().enumerate() {
+            for (idx, typ_case_il) in typ_cases_il.iter().enumerate() {
                 let mixop = typ_case_il.not_typ.node.to_mixop();
-                if let Some(typ_case_previous_il) = typ_cases_il[..index]
+                if let Some(typ_case_previous_il) = typ_cases_il[..idx]
                     .iter()
                     .find(|typ_case_other_il| typ_case_other_il.not_typ.node.to_mixop() == mixop)
                 {
@@ -2218,27 +2206,29 @@ fn elab_prems(
     _span: &Span,
 ) -> Backtrack<(Vec<il::Prem>, bool)> {
     let mut prems_il = Vec::new();
-    let mut span_else_first = None;
-    let mut span_else_second = None;
+    let mut span_else_previous = None;
+    let mut span_else_repeated = None;
     for prem in prems {
         let prem_internal = unwrap!(elab_prem(ctx, prem));
         match prem_internal {
             PremInternal::Some(prem_il) => prems_il.push(prem_il),
             PremInternal::Var => {}
             PremInternal::Else => {
-                if span_else_first.is_none() {
-                    span_else_first = Some(&prem.span);
-                } else if span_else_second.is_none() {
-                    span_else_second = Some(&prem.span);
+                if span_else_previous.is_none() {
+                    span_else_previous = Some(&prem.span);
+                } else if span_else_repeated.is_none() {
+                    span_else_repeated = Some(&prem.span);
                 }
             }
         }
     }
     // At most one otherwise premise
-    if let (Some(span_else_first), Some(span_else_second)) = (span_else_first, span_else_second) {
-        return fatal!(error: error::premise_otherwise_repeated(span_else_second, span_else_first));
+    if let (Some(span_else_previous), Some(span_else_repeated)) =
+        (span_else_previous, span_else_repeated)
+    {
+        return fatal!(error: error::premise_otherwise_repeated(span_else_repeated, span_else_previous));
     }
-    success!((prems_il, span_else_first.is_some()))
+    success!((prems_il, span_else_previous.is_some()))
 }
 
 // - Variable premise elaboration
@@ -2458,7 +2448,9 @@ fn elab_clause(
         .map(|(id_declaration, _)| id_declaration.span.clone())
         .unwrap_or_else(|| def.id.span.clone());
     let span_tparams_declaration = match (tparams_expect_il.first(), tparams_expect_il.last()) {
-        (Some(first), Some(last)) => Span::new(first.span.left.clone(), last.span.right.clone()),
+        (Some(tparam_first), Some(tparam_last)) => {
+            Span::new(tparam_first.span.left.clone(), tparam_last.span.right.clone())
+        }
         _ => span_declaration.clone(),
     };
     // Type parameters must repeat the declaration exactly
@@ -2470,8 +2462,8 @@ fn elab_clause(
             .any(|(tparam, tparam_expect_il)| tparam.node != tparam_expect_il.node)
     {
         let span_tparams = match (def.tparams.first(), def.tparams.last()) {
-            (Some(first), Some(last)) => {
-                Span::new(first.span.left.clone(), last.span.right.clone())
+            (Some(tparam_first), Some(tparam_last)) => {
+                Span::new(tparam_first.span.left.clone(), tparam_last.span.right.clone())
             }
             _ => def.id.span.clone(),
         };
@@ -2635,7 +2627,9 @@ fn elab_extern_syntax_def(
 /// Forward-declares the types of a syntax block ahead of their bodies.
 fn elab_syntax_def(ctx: &mut Context, def: &el::SyntaxDef) -> Result<(), ElabError> {
     for entry in &def.entries {
-        distinct_tparams(&entry.tparams)?;
+        if let Some((tparam, span_previous)) = find_repeated_tparam(&entry.tparams) {
+            return Err(error::type_parameter_repeated(tparam, span_previous));
+        }
         if !valid_tid(&entry.id) {
             return Err(error::type_syntax_identifier_invalid(&entry.id));
         }
@@ -2654,11 +2648,11 @@ fn elab_syntax_def(ctx: &mut Context, def: &el::SyntaxDef) -> Result<(), ElabErr
 
 /// Elaborates a type body, completing a forward declaration or a new type.
 fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabError> {
-    let previous = ctx
+    let typdef_previous = ctx
         .tdenv
         .get_key_value(&def.id)
         .map(|(id, typdef)| (id.clone(), typdef.clone()));
-    let is_new = match previous {
+    let is_new = match typdef_previous {
         // A forward-declared type must repeat its parameters
         Some((id_previous, TypeDef::Defining(tparams))) => {
             let matches = tparams.len() == def.tparams.len()
@@ -2668,14 +2662,14 @@ fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabE
                     .all(|(id_l, id_r)| id_l.node == id_r.node);
             if !matches {
                 let span_tparams = match (def.tparams.first(), def.tparams.last()) {
-                    (Some(first), Some(last)) => {
-                        Span::new(first.span.left.clone(), last.span.right.clone())
+                    (Some(tparam_first), Some(tparam_last)) => {
+                        Span::new(tparam_first.span.left.clone(), tparam_last.span.right.clone())
                     }
                     _ => def.id.span.clone(),
                 };
                 let span_tparams_previous = match (tparams.first(), tparams.last()) {
-                    (Some(first), Some(last)) => {
-                        Span::new(first.span.left.clone(), last.span.right.clone())
+                    (Some(tparam_first), Some(tparam_last)) => {
+                        Span::new(tparam_first.span.left.clone(), tparam_last.span.right.clone())
                     }
                     _ => id_previous.span.clone(),
                 };
@@ -2708,7 +2702,9 @@ fn elab_typ_def(ctx: &mut Context, def: el::TypDef) -> Result<il::DefKind, ElabE
     if let Some(tparam) = def.tparams.iter().find(|tparam| !valid_tid(tparam)) {
         return Err(error::type_parameter_identifier_invalid(tparam));
     }
-    distinct_tparams(&def.tparams)?;
+    if let Some((tparam, span_previous)) = find_repeated_tparam(&def.tparams) {
+        return Err(error::type_parameter_repeated(tparam, span_previous));
+    }
     if is_new {
         ctx.add_typdef(def.id.clone(), TypeDef::Defining(def.tparams.clone()))?;
         if def.tparams.is_empty() {
@@ -2799,51 +2795,57 @@ fn fetch_input_hint(
         ));
     };
     // The hint must stay within the notation arity
-    if let Err(input_error) = input::validate(&input_hint, arity) {
-        return Err(match input_error {
+    if let Err(error_input) = input::validate(&input_hint, arity) {
+        return Err(match error_input {
             input::InputError::Empty => error::relation_input_hint_empty(&exp_hint.span),
-            input::InputError::DuplicateIndex(index) => {
-                let mut positions = input_hint
-                    .indices()
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(position, candidate)| (*candidate == index).then_some(position));
-                let first = positions
+            input::InputError::DuplicateIndex(idx) => {
+                let mut idxs_hint = input_hint.indices().iter().enumerate().filter_map(
+                    |(idx_hint, idx_candidate)| (*idx_candidate == idx).then_some(idx_hint),
+                );
+                let idx_first = idxs_hint
                     .next()
                     .expect("duplicate input index has a first position");
-                let duplicate = positions
+                let idx_repeated = idxs_hint
                     .next()
                     .expect("duplicate input index has a repeated position");
-                let span_first = input_hint.span(first).unwrap_or(&exp_hint.span);
-                let span_duplicate = input_hint.span(duplicate).unwrap_or(&exp_hint.span);
-                error::relation_input_hint_index_repeated(index, span_duplicate, span_first)
+                let span_previous = input_hint.span(idx_first).unwrap_or(&exp_hint.span);
+                let span_repeated = input_hint.span(idx_repeated).unwrap_or(&exp_hint.span);
+                error::relation_input_hint_index_repeated(idx, span_repeated, span_previous)
             }
-            input::InputError::IndexOutOfBounds { index, arity } => {
-                let position = input_hint
+            input::InputError::IndexOutOfBounds { index: idx, arity } => {
+                let idx_hint = input_hint
                     .indices()
                     .iter()
-                    .position(|candidate| *candidate == index)
+                    .position(|idx_candidate| *idx_candidate == idx)
                     .expect("out-of-bounds input index has a position");
-                let span_index = input_hint.span(position).unwrap_or(&exp_hint.span);
+                let span_idx = input_hint.span(idx_hint).unwrap_or(&exp_hint.span);
                 error::relation_input_hint_index_out_of_bounds(
-                    index,
+                    idx,
                     arity,
-                    span_index,
+                    span_idx,
                     &notation_span(not_typ_il),
                 )
             }
-            input::InputError::InputCountMismatch { expected, actual } => {
-                error::relation_input_hint_mismatch(
-                    &exp_hint.span,
-                    format!("input hint expects {expected} input items, but got {actual}"),
-                )
-            }
-            input::InputError::OutputCountMismatch { expected, actual } => {
-                error::relation_input_hint_mismatch(
-                    &exp_hint.span,
-                    format!("input hint expects {expected} output items, but got {actual}"),
-                )
-            }
+            input::InputError::InputCountMismatch {
+                expected: inputs_len_expect,
+                actual: inputs_len_actual,
+            } => error::relation_input_hint_mismatch(
+                &exp_hint.span,
+                format!(
+                    "input hint expects {inputs_len_expect} input items, \
+                        but got {inputs_len_actual}"
+                ),
+            ),
+            input::InputError::OutputCountMismatch {
+                expected: outputs_len_expect,
+                actual: outputs_len_actual,
+            } => error::relation_input_hint_mismatch(
+                &exp_hint.span,
+                format!(
+                    "input hint expects {outputs_len_expect} output items, \
+                        but got {outputs_len_actual}"
+                ),
+            ),
         });
     }
     Ok(input_hint)
@@ -3112,7 +3114,7 @@ fn populate_rel(ctx: &mut Context, rel_def_il: il::RelDef) -> il::RelDef {
     match rel_def_il {
         il::RelDef::Extern(_) => rel_def_il,
         il::RelDef::Defined(mut defined_rel_il) => {
-            // elab_rel_def constructs an empty declaration
+            // [elab_rel_def] constructs an empty declaration
             assert!(defined_rel_il.rule_groups.is_empty() && defined_rel_il.else_group.is_none());
 
             // The collected rule groups replace the empty declaration
@@ -3131,7 +3133,7 @@ fn populate_meta_func(ctx: &mut Context, meta_func_def_il: il::MetaFuncDef) -> i
         il::MetaFuncDef::Extern(_) => meta_func_def_il,
         il::MetaFuncDef::Builtin(_) => meta_func_def_il,
         il::MetaFuncDef::Table(mut table_func_il) => {
-            // elab_table_dec_def constructs an empty declaration
+            // [elab_table_dec_def] constructs an empty declaration
             assert!(table_func_il.rows.is_empty());
 
             // The collected rows replace the empty declaration
@@ -3140,7 +3142,7 @@ fn populate_meta_func(ctx: &mut Context, meta_func_def_il: il::MetaFuncDef) -> i
             il::MetaFuncDef::Table(table_func_il)
         }
         il::MetaFuncDef::Defined(mut defined_func_il) => {
-            // elab_func_dec_def constructs an empty declaration
+            // [elab_func_dec_def] constructs an empty declaration
             assert!(defined_func_il.clauses.is_empty() && defined_func_il.else_clause.is_none());
 
             // The collected clauses replace the empty declaration

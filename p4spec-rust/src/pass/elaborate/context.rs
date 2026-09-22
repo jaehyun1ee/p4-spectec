@@ -300,7 +300,7 @@ impl Context {
         relid: &Id,
         rule_group: ast::RuleGroup,
     ) -> Result<(), ElabError> {
-        // elab_rule_group has already admitted a defined relation
+        // [elab_rule_group] has already admitted a defined relation
         assert!(self.find_defined_rel_opt(relid).is_some());
         let groupid = &rule_group.node.id;
         if let Some(id_previous) = self.find_rule_group_id(relid, groupid) {
@@ -321,7 +321,7 @@ impl Context {
         relid: &Id,
         else_group: ast::ElseGroup,
     ) -> Result<(), ElabError> {
-        // elab_rule_group has already admitted a defined relation
+        // [elab_rule_group] has already admitted a defined relation
         assert!(self.find_defined_rel_opt(relid).is_some());
         let groupid = &else_group.node.id;
         if let Some(id_previous) = self.find_rule_group_id(relid, groupid) {
@@ -407,7 +407,7 @@ impl Context {
         id: &Id,
         table_rows: Vec<ast::TableRow>,
     ) -> Result<(), ElabError> {
-        // elab_table_def has already admitted the table before elaborating rows
+        // [elab_table_def] has already admitted the table before elaborating rows
         let table_func_il = self
             .find_table_func_opt(id)
             .expect("elaborated table declaration");
@@ -425,7 +425,7 @@ impl Context {
 
     /// Appends a clause to a declared function.
     pub(super) fn add_defined_func_clause(&mut self, id: &Id, clause: ast::Clause) {
-        // elab_clause has already admitted the matching function declaration
+        // [elab_clause] has already admitted the matching function declaration
         assert!(self.find_defined_func_opt(id).is_some());
         let ast::MetaFuncDef::Defined(defined_func_il) =
             self.fenv.get_mut(id).expect("defined function")
@@ -441,7 +441,7 @@ impl Context {
         id: &Id,
         else_clause: ast::ElseClause,
     ) -> Result<(), ElabError> {
-        // elab_clause has already admitted the matching function declaration
+        // [elab_clause] has already admitted the matching function declaration
         assert!(self.find_defined_func_opt(id).is_some());
         let ast::MetaFuncDef::Defined(defined_func_il) =
             self.fenv.get_mut(id).expect("defined function")
@@ -466,7 +466,7 @@ impl Context {
 
     /// Removes a defined relation and returns it with its rule groups.
     pub(super) fn take_defined_rel(&mut self, id: &Id) -> ast::DefinedRel {
-        // elab_def registered this declaration before populate_defs consumes it
+        // [elab_def] registers declarations before [populate_defs] consumes them
         let Some(ast::RelDef::Defined(defined_rel_il)) = self.renv.remove(id) else {
             unreachable!("registered declaration")
         };
@@ -477,7 +477,7 @@ impl Context {
 
     /// Removes a table function and returns it with its collected rows.
     pub(super) fn take_table_func(&mut self, id: &Id) -> ast::TableFunc {
-        // elab_def registered this declaration before populate_defs consumes it
+        // [elab_def] registers declarations before [populate_defs] consumes them
         let Some(ast::MetaFuncDef::Table(table_func_il)) = self.fenv.remove(id) else {
             unreachable!("registered declaration")
         };
@@ -486,7 +486,7 @@ impl Context {
 
     /// Removes a defined function and returns it with its collected clauses.
     pub(super) fn take_defined_func(&mut self, id: &Id) -> ast::DefinedFunc {
-        // elab_def registered this declaration before populate_defs consumes it
+        // [elab_def] registers declarations before [populate_defs] consumes them
         let Some(ast::MetaFuncDef::Defined(defined_func_il)) = self.fenv.remove(id) else {
             unreachable!("registered declaration")
         };
@@ -499,7 +499,7 @@ impl Context {
 
     /// Replaces the definition of an already-declared type.
     pub(super) fn update_typdef(&mut self, id: &Id, typdef: TypeDef) {
-        // elab_typ_def first admits an existing type binding
+        // [elab_typ_def] first admits an existing type binding
         let typdef_stored = self.tdenv.get_mut(id).expect("admitted type definition");
         *typdef_stored = typdef;
     }
