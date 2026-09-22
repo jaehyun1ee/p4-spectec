@@ -1,5 +1,7 @@
-//! Filesystem and notation-shape entry points for the SpecTec parser
+//! Text, byte, filesystem, and notation-shape parsing for SpecTec
 //!
+//! `parse_text` accepts a UTF-8 string with fresh variable bindings.
+//! `parse_utf8_bytes` validates raw bytes before parsing them.
 //! `parse_files` reads `.watsup` files in order,
 //! sharing variable bindings across them,
 //! and returns their definitions as one `Spec`.
@@ -156,7 +158,7 @@ fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), FrontendErro
 // = Parsing with a context
 
 /// Lexes and parses one source text into definitions.
-fn parse_source_with_context(
+fn parse_text_with_context(
     name: Rc<str>,
     source: &str,
     ctx: &Context,
@@ -167,8 +169,8 @@ fn parse_source_with_context(
     result.map_err(|error| parse_error(ctx, source, error))
 }
 
-/// Validates encoding before constructing the UTF-8 lexer.
-fn parse_bytes_with_context(
+/// Validates UTF-8 bytes and parses them with the supplied context.
+fn parse_utf8_bytes_with_context(
     name: Rc<str>,
     bytes: &[u8],
     ctx: &Context,
@@ -188,7 +190,7 @@ fn parse_bytes_with_context(
             error::source_encoding_invalid(span, bytes, &error_utf8)
         }
     })?;
-    parse_source_with_context(name, source, ctx)
+    parse_text_with_context(name, source, ctx)
 }
 
 /// Reads a file and parses its bytes with shared variable bindings.
@@ -197,7 +199,7 @@ fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, FrontendE
     let pos = Position::new(Rc::clone(&name), 0, 0);
     let span = Span::new(pos.clone(), pos);
     let bytes = fs::read(path).map_err(|error_io| error::file_read_failed(span, &error_io))?;
-    parse_bytes_with_context(name, &bytes, ctx)
+    parse_utf8_bytes_with_context(name, &bytes, ctx)
 }
 
 // = Entry points
@@ -205,13 +207,13 @@ fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, FrontendE
 // - In-memory input
 
 /// Parses a UTF-8 source string with fresh variable bindings.
-pub fn parse_source(name: Rc<str>, source: &str) -> Result<Spec, FrontendError> {
-    parse_source_with_context(name, source, &Context::default())
+pub fn parse_text(name: Rc<str>, source: &str) -> Result<Spec, FrontendError> {
+    parse_text_with_context(name, source, &Context::default())
 }
 
-/// Validates source bytes and parses them with fresh variable bindings.
-pub fn parse_bytes(name: Rc<str>, bytes: &[u8]) -> Result<Spec, FrontendError> {
-    parse_bytes_with_context(name, bytes, &Context::default())
+/// Validates UTF-8 bytes and parses them with fresh variable bindings.
+pub fn parse_utf8_bytes(name: Rc<str>, bytes: &[u8]) -> Result<Spec, FrontendError> {
+    parse_utf8_bytes_with_context(name, bytes, &Context::default())
 }
 
 // - Filesystem input

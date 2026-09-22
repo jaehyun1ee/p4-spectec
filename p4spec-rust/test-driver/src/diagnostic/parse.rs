@@ -11,7 +11,7 @@ use std::{io, os::unix::fs::PermissionsExt};
 
 use p4spec_rust::{
     diagnostic::Report,
-    frontend::parse::{parse_bytes, parse_files, parse_mixop},
+    frontend::parse::{parse_utf8_bytes, parse_files, parse_mixop},
 };
 
 use super::cases::Case;
@@ -122,5 +122,5 @@ pub fn run(case: &Case) -> Result<Box<Report>> {
         _ => return Err(case.failure("unknown constructed parser case")),
     };
 
-    rejected(case, parse_bytes(Rc::from("<string>"), bytes))
+    rejected(case, parse_utf8_bytes(Rc::from("<string>"), bytes))
 }

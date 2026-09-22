@@ -186,7 +186,7 @@ fn test_parse_file_reports_io_and_syntax_failures_with_file_spans() {
 
 #[test]
 fn test_parse_bytes_distinguishes_nested_comments_from_comment_text() {
-    use p4spec_rust::frontend::parse::parse_bytes;
+    use p4spec_rust::frontend::parse::parse_utf8_bytes;
     use std::rc::Rc;
 
     let cases: &[(&[u8], &str, usize, usize)] = &[
@@ -197,7 +197,7 @@ fn test_parse_bytes_distinguishes_nested_comments_from_comment_text() {
         (b"(; \xc3\xa9\n\xff", "parse/comment-encoding-invalid", 2, 0),
     ];
     for (bytes, code, line, column) in cases {
-        let report = parse_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
+        let report = parse_utf8_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
         assert_eq!(report.code.as_deref(), Some(*code));
         assert_eq!(report.labels[0].span.left, Position::new("bytes.watsup", *line, *column));
         assert_eq!(report.labels[0].span.right, Position::new("bytes.watsup", *line, column + 1));
@@ -206,10 +206,10 @@ fn test_parse_bytes_distinguishes_nested_comments_from_comment_text() {
 
 #[test]
 fn test_parse_bytes_uses_source_encoding_fallback_after_lexical_errors() {
-    use p4spec_rust::frontend::parse::parse_bytes;
+    use p4spec_rust::frontend::parse::parse_utf8_bytes;
 
     for (bytes, column) in [(&b"@ (;\xff"[..], 4), (&b"\"\\q\" (;\xff"[..], 7)] {
-        let report = parse_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
+        let report = parse_utf8_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
         assert_eq!(report.code.as_deref(), Some("parse/source-encoding-invalid"));
         assert_eq!(report.labels[0].span.left, Position::new("bytes.watsup", 1, column));
         assert_eq!(report.labels[0].span.right, Position::new("bytes.watsup", 1, column + 1));
@@ -231,16 +231,16 @@ fn test_missing_path_fails_before_parsing_collected_files() {
 
 #[test]
 fn test_parser_diagnostics_preserve_actual_and_expected_tokens() {
-    use p4spec_rust::frontend::parse::parse_source;
+    use p4spec_rust::frontend::parse::parse_text;
 
-    let report = parse_source(Rc::from("syntax.watsup"), "var x :").unwrap_err();
+    let report = parse_text(Rc::from("syntax.watsup"), "var x :").unwrap_err();
     let text = report.labels[0].message.as_str();
     assert!(text.contains("expected"), "{text}");
     assert!(text.contains("nat"), "{text}");
     assert!(text.contains("identifier"), "{text}");
     assert!(!text.contains("UPID") && !text.contains("NL2"), "{text}");
     for (source, actual) in [("var x : }", "}"), ("var : nat", ":"), ("var x : 123", "123")] {
-        let report = parse_source(Rc::from("syntax.watsup"), source).unwrap_err();
+        let report = parse_text(Rc::from("syntax.watsup"), source).unwrap_err();
         assert!(report.message.contains(actual), "{}", report.message);
         assert!(report.labels[0].message.contains("expected"));
     }
@@ -248,13 +248,13 @@ fn test_parser_diagnostics_preserve_actual_and_expected_tokens() {
 
 #[test]
 fn test_source_utf8_errors_identify_invalid_and_truncated_bytes() {
-    use p4spec_rust::frontend::parse::parse_bytes;
+    use p4spec_rust::frontend::parse::parse_utf8_bytes;
 
     for (bytes, code, hex, truncated) in [
         (&b"\xff"[..], "parse/source-encoding-invalid", "0xFF", false),
         (&b"(; \xe2\x82"[..], "parse/comment-encoding-invalid", "0xE2 0x82", true),
     ] {
-        let report = parse_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
+        let report = parse_utf8_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
         assert_eq!(report.code.as_deref(), Some(code));
         assert!(report.labels[0].message.contains(hex));
         assert_eq!(report.labels[0].message.contains("truncated"), truncated);
@@ -274,14 +274,14 @@ fn test_missing_file_diagnostic_names_path_and_cause() {
 
 #[test]
 fn test_unexpected_token_spelling_preserves_payload_on_later_lines() {
-    use p4spec_rust::frontend::parse::parse_source;
+    use p4spec_rust::frontend::parse::parse_text;
 
     for (source, actual) in [
         ("var x : nat\n\nvar 0xFE : nat", "0xFE"),
         ("var x : nat\n\nvar \"é\\n\" : nat", "é"),
         ("var x : nat\n\nvar bad( : nat", "bad("),
     ] {
-        let report = parse_source(Rc::from("syntax.watsup"), source).unwrap_err();
+        let report = parse_text(Rc::from("syntax.watsup"), source).unwrap_err();
         assert!(report.message.contains(actual), "{}", report.message);
         assert!(!report.message.contains('\n'));
         assert_eq!(report.labels[0].span.left.line, 3);
@@ -290,14 +290,14 @@ fn test_unexpected_token_spelling_preserves_payload_on_later_lines() {
 
 #[test]
 fn test_unexpected_layout_tokens_keep_their_identity_with_empty_spans() {
-    use p4spec_rust::frontend::parse::parse_source;
+    use p4spec_rust::frontend::parse::parse_text;
 
     for (source, actual) in [
         ("var x :\n\nvar y : nat", "blank line"),
         ("var x :\n\n\nvar y : nat", "two blank lines"),
         ("var x :\n| var y : nat", "newline followed by `|`"),
     ] {
-        let report = parse_source(Rc::from("layout.watsup"), source).unwrap_err();
+        let report = parse_text(Rc::from("layout.watsup"), source).unwrap_err();
         assert_eq!(report.code.as_deref(), Some("parse/token-invalid"));
         assert!(report.message.contains(actual), "{}", report.message);
         assert_eq!(report.message, format!("unexpected {actual}"));
@@ -307,12 +307,12 @@ fn test_unexpected_layout_tokens_keep_their_identity_with_empty_spans() {
 
 #[test]
 fn test_expected_identifiers_include_contextually_bound_uppercase_names() {
-    use p4spec_rust::frontend::parse::parse_source;
+    use p4spec_rust::frontend::parse::parse_text;
 
-    parse_source(Rc::from("bindings.watsup"), "var X : nat\n\nvar y : X")
+    parse_text(Rc::from("bindings.watsup"), "var X : nat\n\nvar y : X")
         .expect("bound uppercase names are accepted as identifiers");
     for source in ["var : nat", "var X : nat\n\nvar y : }"] {
-        let report = parse_source(Rc::from("bindings.watsup"), source).unwrap_err();
+        let report = parse_text(Rc::from("bindings.watsup"), source).unwrap_err();
         assert!(report.labels[0].message.contains("an identifier"));
         assert!(!report.labels[0].message.contains("lowercase"));
     }
