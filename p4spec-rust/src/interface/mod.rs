@@ -25,6 +25,7 @@ pub fn p4(spec: &Spec) -> BuiltinInterface {
     let unparser = match spec {
         Spec::Al(spec) => P4Unparser::from_al_spec(spec),
         Spec::Sl(spec) => P4Unparser::from_sl_spec(spec),
+        Spec::Pl(spec) => P4Unparser::from_pl_spec(spec),
     };
     p4_with_unparser(unparser)
 }

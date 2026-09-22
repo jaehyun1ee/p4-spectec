@@ -6,5 +6,6 @@
 //! expressions, assignment, iteration, value operations, contexts, and errors.
 
 pub mod al;
+pub mod pl;
 pub mod shared;
 pub mod sl;

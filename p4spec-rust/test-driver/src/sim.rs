@@ -3,9 +3,7 @@ use expect_test::{ExpectFile, expect_file};
 use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::sim_plugin::io::Tx;
 use p4spec_rust::{
-    frontend::parse::parse_files,
-    lang::{al, data::value::external::Encoding},
-    pass::{algo, elaborate, structure},
+    lang::data::value::external::Encoding,
     runner::{Config, Spec},
     sim_plugin,
 };
@@ -207,20 +205,32 @@ impl Results {
 }
 
 pub fn run(det: bool) -> Result<()> {
-    run_with(det, |spec_al| Ok(Spec::Al(spec_al.clone())))
+    run_with(det, || {
+        p4spec_rust::algo(["spec"])
+            .map(Spec::Al)
+            .map_err(|error| Error::Invalid(error.to_string()))
+    })
 }
 
 pub fn run_sl(det: bool) -> Result<()> {
-    run_with(det, |spec_al| {
-        structure::convert(spec_al.clone(), true)
+    run_with(det, || {
+        p4spec_rust::structure(["spec"], true)
             .map(Spec::Sl)
+            .map_err(|error| Error::Invalid(error.to_string()))
+    })
+}
+
+pub fn run_pl(det: bool) -> Result<()> {
+    run_with(det, || {
+        p4spec_rust::prosify(["spec"])
+            .map(Spec::Pl)
             .map_err(|error| Error::Invalid(error.to_string()))
     })
 }
 
 fn run_with<BuildSpec>(det: bool, build_spec: BuildSpec) -> Result<()>
 where
-    BuildSpec: Fn(&al::ast::Spec) -> Result<Spec>,
+    BuildSpec: Fn() -> Result<Spec>,
 {
     let start = Instant::now();
     let mut excludes = corpus::collect_excludes(Path::new("excludes/static"))?;
@@ -241,10 +251,6 @@ where
     eprintln!(
         "Simulation cache=on det={det}: collected={collected} excluded={excluded}; preparing specification"
     );
-    let spec_el =
-        parse_files([Path::new("spec")]).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_il = elaborate::convert(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
     let includes = vec![PathBuf::from("p4c/p4include")];
     let progress = ProgressBar::new(collected as u64).with_style(
         ProgressStyle::with_template("[{bar:24}] {pos}/{len} {elapsed_precise} {msg}")
@@ -270,7 +276,7 @@ where
             .count();
         let patched_arch = pairs_arch.filter(|pair| pair.patched).count();
         let mut simulator = sim_plugin::build(
-            build_spec(&spec_al)?,
+            build_spec()?,
             arch,
             Config::new(true, det, false),
             Encoding::default(),

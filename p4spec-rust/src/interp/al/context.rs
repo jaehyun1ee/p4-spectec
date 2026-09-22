@@ -295,6 +295,17 @@ impl ReadContext for Context<'_> {
 impl WriteContext for Context<'_> {
     // == Adders
 
+    // - Types
+
+    fn add_typdef_local(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
+        // A type parameter may shadow a global definition
+        if self.local.tdenv.contains_key(&id) {
+            return Err(Error::duplicate(EntityKind::Type, id.node, id.span));
+        }
+        self.local.tdenv.insert(id, typdef);
+        Ok(())
+    }
+
     // - Values
 
     fn add_value(&mut self, slot: SlotIdx, value: Value) {
