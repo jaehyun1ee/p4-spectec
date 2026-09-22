@@ -1,15 +1,95 @@
 //! TeX serialization through the shared printer
 //!
-//! `to_string` validates row structure before invoking `Print`;
-//! renderers write balanced TeX directly through `fmt::Write`.
-//! Mixed grids use link-free phantom copies to preserve their full width.
+//! `to_string` validates document and row structure before invoking `Print`.
+//! `render_doc` dispatches to text, mathematical, and row-layout writers;
+//! each writer preserves the canonical TeX spelling through `fmt::Write`.
+//! Mixed grids render visible content once;
+//! `render_grid_phantom` reserves its width with link-free invisible copies.
 
 use super::{doc::*, link};
 use crate::backend::latex::error::{Error, Result};
 use crate::lang::traits::print::{Print, Printer};
 use std::fmt::{self, Write};
 
-// == Escaping and styled runs
+// == Entry points
+
+/// Validates a document and renders it through its context-free printer.
+pub(crate) fn to_string(doc: &Doc) -> Result<String> {
+    validate(doc)?;
+    Ok(Print::to_string(doc))
+}
+
+impl Print for Doc {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        render_doc(printer, self)
+    }
+}
+
+// == Document dispatch
+
+/// Dispatches mathematical and layout nodes to balanced TeX output.
+fn render_doc(output: &mut dyn Write, doc: &Doc) -> fmt::Result {
+    match doc {
+        Doc::Empty | Doc::SoftBreak(Soft::SoftCut) => Ok(()),
+        Doc::Styled(style, text) => render_styled(output, *style, text),
+        Doc::Badge(text) => render_badge(output, text),
+        Doc::Decimal(num) => write!(output, "{num}"),
+        Doc::Hexadecimal(num) => write!(output, "\\mathtt{{{num:#x}}}"),
+        Doc::Fixed(symbol) => output.write_str(string_of_symbol(*symbol)),
+        Doc::Space | Doc::SoftBreak(Soft::SoftSpace) => output.write_str(" "),
+        Doc::ThinSpace => output.write_str(r"\,"),
+        Doc::Quad => output.write_str(r"\quad"),
+        Doc::Concat(docs) => render_docs(output, docs),
+        Doc::Group(doc) => render_enclosed(output, "{", "}", doc),
+        Doc::Mathbin(doc) => render_enclosed(output, r"\mathbin{", "}", doc),
+        Doc::Mathrel(doc) => render_enclosed(output, r"\mathrel{", "}", doc),
+        Doc::Displaystyle(doc) => render_enclosed(output, r"{\displaystyle ", "}", doc),
+        Doc::Delimited(delimiter, doc) => render_delimited(output, *delimiter, doc),
+        Doc::Subscript(doc_base, doc_sub) => {
+            render_enclosed(output, "{", "}_{", doc_base)?;
+            render_enclosed(output, "", "}", doc_sub)
+        }
+        Doc::Superscript(doc_base, doc_sup) => {
+            render_enclosed(output, "{", "}^{", doc_base)?;
+            render_enclosed(output, "", "}", doc_sup)
+        }
+        Doc::Subsup(doc_base, doc_sub, doc_sup) => {
+            render_enclosed(output, "{", "}_{", doc_base)?;
+            render_enclosed(output, "", "}^{", doc_sub)?;
+            render_enclosed(output, "", "}", doc_sup)
+        }
+        Doc::Fraction(doc_num, doc_den) => {
+            render_enclosed(output, r"\frac{", "}{", doc_num)?;
+            render_enclosed(output, "", "}", doc_den)
+        }
+        Doc::Link(target, doc) => {
+            write!(output, "\\href{{#{}}}{{", target.0)?;
+            render_enclosed(output, "", "}", doc)
+        }
+        Doc::LayoutGroup(doc) | Doc::Nest(_, doc) => render_doc(output, doc),
+        Doc::Fill(_, separator, docs) => render_docs(output, interspersed(separator, docs)),
+        Doc::Aligned(rows) => render_aligned(output, rows),
+        Doc::Grid(alignments, rows) => render_grid(output, alignments, rows),
+        Doc::Stacked(docs) => render_stacked(output, docs),
+        Doc::LeftStack(docs) => {
+            render_array(output, &[Alignment::Left], docs.iter().map(std::slice::from_ref))
+        }
+        Doc::Numbered(docs) => render_numbered(output, docs),
+        Doc::Gathered(blocks) => render_gathered(output, blocks),
+    }
+}
+
+/// Writes a borrowed document sequence without implicit separators.
+fn render_docs<'a>(output: &mut dyn Write, docs: impl IntoIterator<Item = &'a Doc>) -> fmt::Result {
+    for doc in docs {
+        render_doc(output, doc)?;
+    }
+    Ok(())
+}
+
+// == Text and mathematical atoms
+
+// - Escaping and styled runs
 
 /// Writes one character with escaping for the selected TeX context.
 fn escape_char(output: &mut dyn Write, char: char, math: bool) -> fmt::Result {
@@ -74,110 +154,13 @@ fn render_styled(output: &mut dyn Write, style: Style, text: &str) -> fmt::Resul
     }
 }
 
-// == Document dispatch
+// - Rule badges and fixed symbols
 
-impl Print for Doc {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        render_doc(printer, self)
-    }
-}
-
-/// Dispatches mathematical and layout nodes to balanced TeX output.
-fn render_doc(output: &mut dyn Write, doc: &Doc) -> fmt::Result {
-    match doc {
-        Doc::Empty | Doc::SoftBreak(Soft::SoftCut) => Ok(()),
-        Doc::Styled(style, text) => render_styled(output, *style, text),
-        Doc::Badge(text) => {
-            output.write_str(r"{\definecolor{ellatexrulelabelbg}{rgb}{0.94,0.94,0.92}\fcolorbox{black}{ellatexrulelabelbg}{\scriptsize ")?;
-            render_text(output, "texttt", text)?;
-            output.write_str("}}")
-        }
-        Doc::Decimal(num) => write!(output, "{num}"),
-        Doc::Hexadecimal(num) => write!(output, "\\mathtt{{{num:#x}}}"),
-        Doc::Fixed(symbol) => output.write_str(string_of_symbol(*symbol)),
-        Doc::Space | Doc::SoftBreak(Soft::SoftSpace) => output.write_str(" "),
-        Doc::ThinSpace => output.write_str(r"\,"),
-        Doc::Quad => output.write_str(r"\quad"),
-        Doc::Concat(docs) => {
-            for doc in docs {
-                render_doc(output, doc)?;
-            }
-            Ok(())
-        }
-        Doc::Group(doc) => render_enclosed(output, "{", "}", doc),
-        Doc::Mathbin(doc) => render_enclosed(output, r"\mathbin{", "}", doc),
-        Doc::Mathrel(doc) => render_enclosed(output, r"\mathrel{", "}", doc),
-        Doc::Displaystyle(doc) => render_enclosed(output, r"{\displaystyle ", "}", doc),
-        Doc::Delimited(delimiter, doc) => {
-            let (text_l, text_r) = match delimiter {
-                Delimiter::Paren => ("(", ")"),
-                Delimiter::Bracket => ("[", "]"),
-                Delimiter::Brace => (r"\{", r"\}"),
-                Delimiter::Angle => (r"\langle", r"\rangle"),
-                Delimiter::Bar => ("|", "|"),
-            };
-            write!(output, "\\left{text_l}")?;
-            render_doc(output, doc)?;
-            write!(output, "\\right{text_r}")
-        }
-        Doc::Subscript(doc_base, doc_sub) => {
-            render_enclosed(output, "{", "}_{", doc_base)?;
-            render_enclosed(output, "", "}", doc_sub)
-        }
-        Doc::Superscript(doc_base, doc_sup) => {
-            render_enclosed(output, "{", "}^{", doc_base)?;
-            render_enclosed(output, "", "}", doc_sup)
-        }
-        Doc::Subsup(doc_base, doc_sub, doc_sup) => {
-            render_enclosed(output, "{", "}_{", doc_base)?;
-            render_enclosed(output, "", "}^{", doc_sub)?;
-            render_enclosed(output, "", "}", doc_sup)
-        }
-        Doc::Fraction(doc_num, doc_den) => {
-            render_enclosed(output, r"\frac{", "}{", doc_num)?;
-            render_enclosed(output, "", "}", doc_den)
-        }
-        Doc::Link(target, doc) => {
-            write!(output, "\\href{{#{}}}{{", target.0)?;
-            render_enclosed(output, "", "}", doc)
-        }
-        Doc::LayoutGroup(doc) | Doc::Nest(_, doc) => render_doc(output, doc),
-        Doc::Fill(_, separator, docs) => {
-            for doc in interspersed(separator, docs) {
-                render_doc(output, doc)?;
-            }
-            Ok(())
-        }
-        Doc::Aligned(rows) => {
-            output.write_str("\\begin{aligned}\n")?;
-            render_array_rows(output, rows.iter().map(Vec::as_slice))?;
-            output.write_str("\n\\end{aligned}")
-        }
-        Doc::Grid(alignments, rows) => render_grid(output, alignments, rows),
-        Doc::Stacked(docs) => {
-            output.write_str("\\begin{aligned}\n")?;
-            for (idx, doc) in docs.iter().enumerate() {
-                if idx != 0 {
-                    output.write_str(" \\\\\n")?;
-                }
-                output.write_str("& ")?;
-                render_doc(output, doc)?;
-            }
-            output.write_str("\n\\end{aligned}")
-        }
-        Doc::LeftStack(docs) => {
-            render_array(output, &[Alignment::Left], docs.iter().map(std::slice::from_ref))
-        }
-        Doc::Numbered(docs) => render_numbered(output, docs),
-        Doc::Gathered(blocks) => render_gathered(output, blocks),
-    }
-}
-
-/// Writes balanced opening and closing syntax around one document.
-fn render_enclosed(output: &mut dyn Write, opening: &str, closing: &str, doc: &Doc) -> fmt::Result {
-    output.write_str(opening)?;
-    render_doc(output, doc)?;
-    output.write_str(closing)
+/// Writes a shaded rule-label box in small monospace text.
+fn render_badge(output: &mut dyn Write, text: &str) -> fmt::Result {
+    output.write_str(r"{\definecolor{ellatexrulelabelbg}{rgb}{0.94,0.94,0.92}\fcolorbox{black}{ellatexrulelabelbg}{\scriptsize ")?;
+    render_text(output, "texttt", text)?;
+    output.write_str("}}")
 }
 
 /// Selects the fixed TeX spelling of a mathematical symbol.
@@ -231,7 +214,32 @@ fn string_of_symbol(symbol: Symbol) -> &'static str {
     }
 }
 
-// == Arrays and grids
+// == Mathematical structure
+
+/// Writes balanced opening and closing syntax around one document.
+fn render_enclosed(output: &mut dyn Write, opening: &str, closing: &str, doc: &Doc) -> fmt::Result {
+    output.write_str(opening)?;
+    render_doc(output, doc)?;
+    output.write_str(closing)
+}
+
+/// Sizes both delimiters to the enclosed mathematical document.
+fn render_delimited(output: &mut dyn Write, delimiter: Delimiter, doc: &Doc) -> fmt::Result {
+    // Select both sides together so the delimiter pair stays balanced
+    let (text_l, text_r) = match delimiter {
+        Delimiter::Paren => ("(", ")"),
+        Delimiter::Bracket => ("[", "]"),
+        Delimiter::Brace => (r"\{", r"\}"),
+        Delimiter::Angle => (r"\langle", r"\rangle"),
+        Delimiter::Bar => ("|", "|"),
+    };
+    // Enclose the content with automatically sized delimiters
+    write!(output, "\\left{text_l}")?;
+    render_doc(output, doc)?;
+    write!(output, "\\right{text_r}")
+}
+
+// == Rows and arrays
 
 /// Writes cells in their original order with TeX alignment separators.
 fn render_cells(output: &mut dyn Write, docs: &[Doc]) -> fmt::Result {
@@ -288,6 +296,31 @@ fn render_array<'a>(
     output.write_str("\n\\end{array}")
 }
 
+/// Writes equation rows in a TeX aligned environment.
+fn render_aligned(output: &mut dyn Write, rows: &[Vec<Doc>]) -> fmt::Result {
+    output.write_str("\\begin{aligned}\n")?;
+    render_array_rows(output, rows.iter().map(Vec::as_slice))?;
+    output.write_str("\n\\end{aligned}")
+}
+
+/// Writes stacked documents after an empty alignment cell on each row.
+fn render_stacked(output: &mut dyn Write, docs: &[Doc]) -> fmt::Result {
+    output.write_str("\\begin{aligned}\n")?;
+    // Keep each document in the same aligned column
+    for (idx, doc) in docs.iter().enumerate() {
+        if idx != 0 {
+            output.write_str(" \\\\\n")?;
+        }
+        output.write_str("& ")?;
+        render_doc(output, doc)?;
+    }
+    output.write_str("\n\\end{aligned}")
+}
+
+// == Grids
+
+// - Spanning-row geometry
+
 /// Fills every column after a spanning cell with an empty alignment cell.
 fn render_grid_empty_cells(output: &mut dyn Write, columns: usize) -> fmt::Result {
     // Preserve the final separator's lack of a trailing space
@@ -320,6 +353,8 @@ fn render_grid_spanning_row(
     }
     render_grid_empty_cells(output, alignments.len())
 }
+
+// - Content rows
 
 /// Writes content rows and consumes a following gap as a row separator.
 fn render_grid_rows(
@@ -369,6 +404,8 @@ fn render_grid_array(
     output.write_str("\n\\end{array}")
 }
 
+// - Mixed-grid width reservation
+
 /// Gives mixed grids the maximum of their cell and spanning widths.
 fn render_grid(output: &mut dyn Write, alignments: &[Alignment], rows: &[GridRow]) -> fmt::Result {
     let rows_cell: Vec<_> = rows
@@ -395,12 +432,25 @@ fn render_grid(output: &mut dyn Write, alignments: &[Alignment], rows: &[GridRow
     // Emit visible content once, then reserve its complete geometry
     output.write_str(r"\mathrlap{\displaystyle ")?;
     render_grid_array(output, alignments, &rows_cell, rows)?;
-    output.write_str("}\\smash{\\hphantom{\\begin{array}{l}\n")?;
+    output.write_str("}")?;
+    render_grid_phantom(output, alignments, &rows_cell, &docs_spanning)
+}
+
+/// Reserves the maximum width of link-free cell and spanning documents.
+fn render_grid_phantom(
+    output: &mut dyn Write,
+    alignments: &[Alignment],
+    rows_cell: &[&[Doc]],
+    docs_spanning: &[&Doc],
+) -> fmt::Result {
+    output.write_str("\\smash{\\hphantom{\\begin{array}{l}\n")?;
+    // Remove links from the invisible copy of the ordinary rows
     let rows_cell: Vec<Vec<_>> = rows_cell
         .iter()
         .map(|docs| docs.iter().map(link::strip_links).collect())
         .collect();
     render_array(output, alignments, rows_cell.iter().map(Vec::as_slice))?;
+    // Spanning documents can be wider than the shared cell columns
     for doc in docs_spanning {
         output.write_str(" \\\\\n")?;
         let doc = link::strip_links(doc);
@@ -409,7 +459,7 @@ fn render_grid(output: &mut dyn Write, alignments: &[Alignment], rows: &[GridRow
     output.write_str("\n\\end{array}}}")
 }
 
-// == Numbered premises and gathered blocks
+// == Numbered premises
 
 /// Writes an optional premise label followed by its body cell.
 fn render_numbered_row(output: &mut dyn Write, num: Option<usize>, doc: &Doc) -> fmt::Result {
@@ -447,6 +497,8 @@ fn render_numbered(output: &mut dyn Write, docs: &[Doc]) -> fmt::Result {
     output.write_str("\n\\end{array}")
 }
 
+// == Gathered blocks
+
 /// Writes gathered blocks with ordinary or enlarged row separation.
 fn render_gathered(output: &mut dyn Write, blocks: &[Block]) -> fmt::Result {
     output.write_str("\\begin{gathered}\n")?;
@@ -469,15 +521,13 @@ fn render_gathered(output: &mut dyn Write, blocks: &[Block]) -> fmt::Result {
     output.write_str("\n\\end{gathered}")
 }
 
-// == Structural validation and output
+// == Structural validation
 
 /// Rejects row sequences that cannot be serialized as content and separators.
 fn validate(doc: &Doc) -> Result<()> {
     match doc {
         Doc::Concat(docs) | Doc::Stacked(docs) | Doc::LeftStack(docs) | Doc::Numbered(docs) => {
-            for doc in docs {
-                validate(doc)?;
-            }
+            validate_docs(docs)?;
         }
         Doc::Group(doc)
         | Doc::Mathbin(doc)
@@ -498,69 +548,70 @@ fn validate(doc: &Doc) -> Result<()> {
             validate(doc_sub)?;
             validate(doc_sup)?;
         }
-        Doc::Fill(_, separator, docs) => {
-            // Unused separators do not participate in serialization
-            for (idx, doc) in docs.iter().filter(|doc| !is_empty(doc)).enumerate() {
-                if idx != 0 {
-                    validate(separator)?;
-                }
-                validate(doc)?;
-            }
-        }
-        Doc::Aligned(rows) => {
-            for docs in rows {
-                for doc in docs {
-                    validate(doc)?;
-                }
-            }
-        }
-        Doc::Grid(_, rows) => {
-            let mut gap_allowed = false;
-            for row in rows {
-                match row {
-                    GridRow::Cells(docs) => {
-                        for doc in docs {
-                            validate(doc)?;
-                        }
-                        gap_allowed = true;
-                    }
-                    GridRow::Spanning(doc) => {
-                        validate(doc)?;
-                        gap_allowed = true;
-                    }
-                    GridRow::Gap => {
-                        if !gap_allowed {
-                            return Err(Error::MalformedGridGap);
-                        }
-                        gap_allowed = false;
-                    }
-                }
-            }
-        }
-        Doc::Gathered(blocks) => {
-            let mut gap_allowed = false;
-            for block in blocks {
-                match block {
-                    Block::Line(doc) => {
-                        validate(doc)?;
-                        gap_allowed = true;
-                    }
-                    Block::Gap => {
-                        if !gap_allowed {
-                            return Err(Error::MalformedGathered);
-                        }
-                        gap_allowed = false;
-                    }
-                }
-            }
-        }
+        Doc::Fill(_, separator, docs) => validate_docs(interspersed(separator, docs))?,
+        Doc::Aligned(rows) => validate_docs(rows.iter().flatten())?,
+        Doc::Grid(_, rows) => validate_grid_rows(rows)?,
+        Doc::Gathered(blocks) => validate_blocks(blocks)?,
         _ => {}
     }
     Ok(())
 }
 
-/// Validates a document and renders it through its context-free printer.
-pub(crate) fn to_string(doc: &Doc) -> Result<String> {
-    validate(doc)?;
-    Ok(Print::to_string(doc))
+/// Validates documents in serialization order, stopping at the first error.
+fn validate_docs<'a>(docs: impl IntoIterator<Item = &'a Doc>) -> Result<()> {
+    for doc in docs {
+        validate(doc)?;
+    }
+    Ok(())
+}
+
+/// Rejects leading or consecutive grid gaps and validates row content.
+fn validate_grid_rows(rows: &[GridRow]) -> Result<()> {
+    let mut gap_allowed = false;
+    // A content row permits at most one subsequent gap
+    for row in rows {
+        match row {
+            // Validate cells before accepting a separator after their row
+            GridRow::Cells(docs) => {
+                validate_docs(docs)?;
+                gap_allowed = true;
+            }
+            // Spanning content follows the same gap rule as ordinary cells
+            GridRow::Spanning(doc) => {
+                validate(doc)?;
+                gap_allowed = true;
+            }
+            // Leading and consecutive gaps have no preceding content row
+            GridRow::Gap => {
+                if !gap_allowed {
+                    return Err(Error::MalformedGridGap);
+                }
+                gap_allowed = false;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Rejects leading or consecutive gathered gaps and validates each line.
+fn validate_blocks(blocks: &[Block]) -> Result<()> {
+    let mut gap_allowed = false;
+    // A line permits at most one subsequent gap
+    for block in blocks {
+        match block {
+            // Validate the line before accepting its following separator
+            Block::Line(doc) => {
+                validate(doc)?;
+                gap_allowed = true;
+            }
+            // Leading and consecutive gaps have no preceding line
+            Block::Gap => {
+                if !gap_allowed {
+                    return Err(Error::MalformedGathered);
+                }
+                gap_allowed = false;
+            }
+        }
+    }
+    Ok(())
 }
