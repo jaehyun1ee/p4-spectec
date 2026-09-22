@@ -5,14 +5,12 @@ use crate::{
 use expect_test::expect_file;
 use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::{
-    frontend::parse::parse_files,
     interface::p4::{
         error::P4ErrorKind,
         parse::{parse_file, parse_string},
         unparse::P4Unparser,
     },
     lang::data::value::ValueArena,
-    pass::{algo, elaborate},
 };
 use std::{
     fs,
@@ -71,10 +69,7 @@ pub fn run() -> Result<()> {
     }
     let collected: usize = suites.iter().map(|(paths, _)| paths.len()).sum();
     eprintln!("P4 parser: collected={collected}, excluded=0; preparing print hints");
-    let spec_el =
-        parse_files([Path::new("spec")]).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_il = elaborate::convert(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
+    let spec_al = p4spec_rust::algo(["spec"]).map_err(|error| Error::Invalid(error.to_string()))?;
     let unparser = P4Unparser::from_al_spec(&spec_al);
     let includes = vec![PathBuf::from("p4c/p4include")];
     fs::read_dir(&includes[0])?;
