@@ -49,10 +49,22 @@ fn parser_failures_reach_cli_with_their_codes_and_spans() {
             "^^^",
         ),
     ];
+    let commands: &[&[&str]] = &[
+        &["elab"],
+        &["algo"],
+        &["struct"],
+        &["prose"],
+        &["run", "--al", "--rel", "Pass", "-p", "unused.p4"],
+        &["run", "--sl", "--rel", "Pass", "-p", "unused.p4"],
+        &["run", "--pl", "--rel", "Pass", "-p", "unused.p4"],
+        &["sim", "--al", "--arch", "ebpf", "-p", "unused.p4", "--stf", "unused.stf"],
+        &["sim", "--sl", "--arch", "ebpf", "-p", "unused.p4", "--stf", "unused.stf"],
+        &["sim", "--pl", "--arch", "ebpf", "-p", "unused.p4", "--stf", "unused.stf"],
+    ];
     for (file, code, loc, underline) in cases {
-        for command in ["elab", "algo", "struct"] {
+        for args in commands {
             let output = std::process::Command::new(env!("CARGO_BIN_EXE_p4spec-rust"))
-                .arg(command)
+                .args(*args)
                 .arg(fixtures.join(file))
                 .output()
                 .unwrap();

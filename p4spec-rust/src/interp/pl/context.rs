@@ -1,8 +1,8 @@
-//! SL adapters for shared execution contexts
+//! PL adapters for shared execution contexts
 //!
-//! `Global::load` prepares SL definitions into the shared environments.
+//! `Global::load` prepares PL definitions into the shared environments.
 //! `Context` retains the shared scope, binding, and iteration operations;
-//! `FuncSignature` extracts types from prepared SL function definitions.
+//! `FuncSignature` extracts types from prepared PL function definitions.
 
 use crate::{
     interp::shared::{
@@ -11,10 +11,10 @@ use crate::{
     },
     lang::{
         data::typ::{FuncTyp, make},
-        sl::ast as source,
+        pl::ast as source,
     },
     runtime::{
-        envs::interp::{shared::callable::Callable, sl::ast_prepared as ast},
+        envs::interp::{pl::ast_prepared as ast, shared::callable::Callable},
         typdef::TypeDef,
     },
 };
@@ -23,27 +23,27 @@ use crate::{
 
 pub use shared::Scope;
 
-/// Stores loaded SL definitions and prepared callables.
+/// Stores loaded PL definitions and prepared callables.
 pub type Global = shared::Global<ast::RelDef, ast::MetaFuncDef>;
 
-/// Holds local SL bindings over borrowed global definitions.
+/// Holds local PL bindings over borrowed global definitions.
 pub type Context<'global> = shared::Context<'global, ast::RelDef, ast::MetaFuncDef>;
 
 // = Loading
 
 impl Global {
-    /// Loads a specification and prepares its callables for slot execution.
+    /// Loads type definitions and prepares each callable for slot execution.
     pub fn load(spec: source::Spec) -> Result<Self, Error> {
         let mut loaded = Self::new();
-        // Prepare definitions before inserting them into their namespaces
+        // Move source definitions into the execution environments
         for def in spec {
-            match def.node {
+            match def.node.node {
                 source::DefKind::Typ(typdef) => {
                     // Types keep their definition body
                     let (id, typdef) = match typdef {
-                        ast::TypDef::Extern(typdef) => (typdef.id, TypeDef::Extern),
-                        ast::TypDef::Defined(typdef) => {
-                            let ast::DefinedTyp { id, tparams, def_typ, .. } = *typdef;
+                        source::TypDef::Extern(typdef) => (typdef.id, TypeDef::Extern),
+                        source::TypDef::Defined(typdef) => {
+                            let source::DefinedTyp { id, tparams, def_typ } = *typdef;
                             (id, TypeDef::Defined(tparams, Box::new(def_typ)))
                         }
                     };

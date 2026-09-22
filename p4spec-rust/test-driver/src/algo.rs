@@ -1,11 +1,7 @@
 use crate::{Error, Result, snapshot};
 use expect_test::expect_file;
 use indicatif::{ProgressBar, ProgressStyle};
-use p4spec_rust::{
-    frontend::parse::parse_files,
-    lang::traits::print::Print,
-    pass::{algo, elaborate},
-};
+use p4spec_rust::lang::traits::print::Print;
 use std::{path::Path, time::Instant};
 
 pub fn run() -> Result<()> {
@@ -15,10 +11,7 @@ pub fn run() -> Result<()> {
             .map_err(|error| Error::Invalid(error.to_string()))?,
     );
     progress.set_message("algo: full specification");
-    let spec_el =
-        parse_files([Path::new("spec")]).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_il = elaborate::convert(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
+    let spec_al = p4spec_rust::algo(["spec"]).map_err(|error| Error::Invalid(error.to_string()))?;
     let actual = Print::to_string(&spec_al) + "\n";
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("expected/algo.expected");
     snapshot::check(expect_file![path], &actual);

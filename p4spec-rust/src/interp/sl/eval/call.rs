@@ -14,6 +14,7 @@ use super::super::{
 };
 use super::{assign, instr};
 use crate::interp::shared::context::ReadContext;
+use crate::interp::shared::eval::assign::assign_tparams;
 use crate::lang::common::source::Span;
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
 use crate::runtime::envs::interp::sl::ast_prepared as ast;
@@ -25,7 +26,6 @@ use crate::{
     },
     lang::data::value::{Value, ValueArena, ValueKind},
     runner::{Extern, Interface, InterfaceError, RunnerContext},
-    runtime::typdef::TypeDef,
 };
 use std::{borrow::Cow, rc::Rc};
 
@@ -86,25 +86,8 @@ pub(in crate::interp::sl) fn check_func_inputs(
     values: &[Value],
 ) -> Backtrack<()> {
     let typ = unwrap_from_result!(ctx.find_func_typ(id), &id.span);
-    // Type argument count must match
-    unwrap!(Backtrack::check(
-        typ.tparams.len() == targs.len(),
-        id.span.clone(),
-        ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
-            expected: typ.tparams.len(),
-            actual: targs.len()
-        })
-    ));
-    // Bind each type parameter to its argument in a local scope
-    let mut ctx_local = ctx.localize();
-    for (tparam, targ) in typ.tparams.iter().zip(targs) {
-        let def_typ =
-            crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
-        unwrap_from_result!(
-            ctx_local.bind_tparam(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
-            &tparam.span
-        );
-    }
+    // Bind type arguments before checking parameter types
+    let ctx_local = unwrap!(assign_tparams(ctx.localize(), &typ.tparams, targs, &id.span));
     // Parameter types resolve against the bound type parameters
     check_values(
         arena,
@@ -563,25 +546,9 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
     targs: &[ast::Typ],
     values: &[Value],
 ) -> Backtrack<FuncResult> {
-    // Type argument count must match
-    unwrap!(Backtrack::check(
-        func.tparams.len() == targs.len(),
-        id.span.clone(),
-        ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
-            expected: func.tparams.len(),
-            actual: targs.len()
-        })
-    ));
-    // Bind each type parameter to its argument
-    let mut ctx_local = ctx.localize_with_layout(layout);
-    for (tparam, targ) in func.tparams.iter().zip(targs.iter()) {
-        let def_typ =
-            crate::phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
-        unwrap_from_result!(
-            ctx_local.bind_tparam(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
-            &tparam.span
-        );
-    }
+    // Bind type arguments in the callee frame
+    let ctx_local =
+        unwrap!(assign_tparams(ctx.localize_with_layout(layout), &func.tparams, targs, &id.span));
     // Parameters bind after the type parameters, so their types resolve
     let ctx_local = unwrap!(assign::assign_params(
         runner_ctx.arena_mut(),

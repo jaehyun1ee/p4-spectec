@@ -5,6 +5,10 @@
 //! the otherwise block, or failure.
 //! Only instructions that can fail, those that call or check something,
 //! receive a note.
+//!
+//! For example, in a relation whose dispatch tries group `A` then group `B`
+//! before an otherwise block, a fallible step in `A` is stamped `Group(B)`,
+//! one in `B` is stamped `Else`, and without an otherwise block it is `Fail`.
 
 use std::collections::HashMap;
 

@@ -52,6 +52,11 @@ enum Command {
         #[arg(long)]
         det: bool,
     },
+    /// Compare native PL outcomes with source-derived results (cache on)
+    RunPl {
+        #[arg(long)]
+        det: bool,
+    },
     /// Compare simulation outcomes and matched outputs (cache on)
     SimAl {
         #[arg(long)]
@@ -59,6 +64,11 @@ enum Command {
     },
     /// Compare native SL simulation outcomes and matched outputs (cache on)
     SimSl {
+        #[arg(long)]
+        det: bool,
+    },
+    /// Compare native PL simulation outcomes and matched outputs (cache on)
+    SimPl {
         #[arg(long)]
         det: bool,
     },
@@ -71,8 +81,10 @@ fn execute(command: Command) -> Result<()> {
             | Command::Structure
             | Command::RunAl
             | Command::RunSl { .. }
+            | Command::RunPl { .. }
             | Command::SimAl { .. }
             | Command::SimSl { .. }
+            | Command::SimPl { .. }
     ) && std::env::var_os("UPDATE_EXPECT").is_some()
     {
         return Err(Error::Invalid(
@@ -92,8 +104,10 @@ fn execute(command: Command) -> Result<()> {
         Command::Prose => prose::run(),
         Command::RunAl => run::run(),
         Command::RunSl { det } => run::run_sl(det),
+        Command::RunPl { det } => run::run_pl(det),
         Command::SimAl { det } => sim::run(det),
         Command::SimSl { det } => sim::run_sl(det),
+        Command::SimPl { det } => sim::run_pl(det),
     }
 }
 

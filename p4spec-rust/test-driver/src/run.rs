@@ -5,10 +5,7 @@ use crate::{
 use expect_test::expect_file;
 use indicatif::{ProgressBar, ProgressStyle};
 use p4spec_rust::{
-    frontend::parse::parse_files,
     interface::p4::{error::P4ErrorKind, parse::parse_file},
-    lang::al,
-    pass::{algo, elaborate, structure},
     runner::{self, BuiltinInterface, Config, Interpreter, Runner},
     sim_plugin::dummy::Dummy,
 };
@@ -49,7 +46,9 @@ pub fn run() -> Result<()> {
     ]
     .into_iter()
     .collect::<Result<Vec<_>>>()?;
-    run_with("AL cache=on det=false", suites, |spec_al| {
+    run_with("AL cache=on det=false", suites, || {
+        let spec_al =
+            p4spec_rust::algo(["spec"]).map_err(|error| Error::Invalid(error.to_string()))?;
         runner::build_al(spec_al, Config::new(true, false, false), Dummy)
             .map_err(|error| Error::Invalid(error.to_string()))
     })
@@ -64,10 +63,26 @@ pub fn run_sl(det: bool) -> Result<()> {
     ]
     .into_iter()
     .collect::<Result<Vec<_>>>()?;
-    run_with(&format!("SL cache=on det={det}"), suites, |spec_al| {
-        let spec_sl =
-            structure::convert(spec_al, true).map_err(|error| Error::Invalid(error.to_string()))?;
+    run_with(&format!("SL cache=on det={det}"), suites, || {
+        let spec_sl = p4spec_rust::structure(["spec"], true)
+            .map_err(|error| Error::Invalid(error.to_string()))?;
         runner::build_sl(spec_sl, Config::new(true, det, false), Dummy)
+            .map_err(|error| Error::Invalid(error.to_string()))
+    })
+}
+
+/// Runs the PL execution suites against source-derived expected results.
+pub fn run_pl(det: bool) -> Result<()> {
+    let suites = [
+        collect_suite("p4c/testdata/p4_16_samples", "Program_inst", "run-pos-al.expected", true),
+        collect_suite("p4c/testdata/p4_16_errors", "Program_ok", "run-neg-al.expected", true),
+    ]
+    .into_iter()
+    .collect::<Result<Vec<_>>>()?;
+    run_with(&format!("PL cache=on det={det}"), suites, || {
+        let spec_pl =
+            p4spec_rust::prosify(["spec"]).map_err(|error| Error::Invalid(error.to_string()))?;
+        runner::build_pl(spec_pl, Config::new(true, det, false), Dummy)
             .map_err(|error| Error::Invalid(error.to_string()))
     })
 }
@@ -79,7 +94,7 @@ fn run_with<Interp, Build>(
 ) -> Result<()>
 where
     Interp: Interpreter<BuiltinInterface, Dummy>,
-    Build: FnOnce(al::ast::Spec) -> Result<Runner<Interp, BuiltinInterface, Dummy>>,
+    Build: FnOnce() -> Result<Runner<Interp, BuiltinInterface, Dummy>>,
 {
     let start = Instant::now();
     let excludes = corpus::collect_excludes(Path::new("excludes/static"))?;
@@ -94,11 +109,7 @@ where
         "{text_mode}: collected={collected} excluded={excluded} to execute={}; preparing specification",
         collected - excluded
     );
-    let spec_el =
-        parse_files([Path::new("spec")]).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_il = elaborate::convert(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
-    let mut runner = build_runner(spec_al)?;
+    let mut runner = build_runner()?;
     let includes = vec![PathBuf::from("p4c/p4include")];
     fs::read_dir(&includes[0])?;
     let progress = ProgressBar::new(collected as u64).with_style(

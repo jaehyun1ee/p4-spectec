@@ -16,13 +16,14 @@ use crate::{
     interface as builtin,
     interp::{
         al::{AlInterp, Config as AlConfig, context::Global as AlGlobal},
+        pl::{Config as PlConfig, PlInterp, context::Global as PlGlobal},
         shared::error::Error as InterpError,
         sl::{Config as SlConfig, SlInterp, context::Global as SlGlobal},
     },
     lang::{
         al,
         data::value::{Value, ValueArena},
-        sl,
+        pl, sl,
     },
 };
 
@@ -39,6 +40,8 @@ pub enum Spec {
     Al(al::ast::Spec),
     /// An SL specification.
     Sl(sl::ast::Spec),
+    /// A PL specification.
+    Pl(pl::ast::Spec),
 }
 
 /// Interpreter options, the same for both languages.
@@ -96,6 +99,20 @@ pub fn build_sl<Ext: Extern>(
     let global = SlGlobal::load(spec)?;
     let config = SlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(global, SlInterp::new(config), interface, external))
+}
+
+/// Builds a PL runner from a specification, with the P4 builtins.
+pub fn build_pl<Ext: Extern>(
+    spec: pl::ast::Spec,
+    config: Config,
+    external: Ext,
+) -> Result<Runner<PlInterp, BuiltinInterface, Ext>, BuildError> {
+    let spec = Spec::Pl(spec);
+    let interface = builtin::p4(&spec);
+    let Spec::Pl(spec) = spec else { unreachable!() };
+    let global = PlGlobal::load(spec)?;
+    let config = PlConfig::new(config.cache, config.det, config.guard);
+    Ok(Runner::new(global, PlInterp::new(config), interface, external))
 }
 
 // == Runner assembly

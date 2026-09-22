@@ -16,7 +16,7 @@ use crate::{
         common::prim::num::Number,
         hints::alter::{self, AlterationHint, Renderer},
         il::ast::{DefTypKind, Hint, TypCase, TypKind},
-        sl,
+        pl, sl,
         traits::print::Print,
     },
     util::text::escape_text,
@@ -86,6 +86,21 @@ impl P4Unparser {
                 continue;
             };
             insert_case_hints(&mut hints, &defined_typ_sl.id.node, &defined_typ_sl.def_typ);
+        }
+        Self { hints }
+    }
+
+    /// Collects print hints from a PL specification.
+    pub fn from_pl_spec(spec_pl: &[pl::ast::Def]) -> Self {
+        let mut hints = HashMap::new();
+        for def_pl in spec_pl {
+            let pl::ast::DefKind::Typ(typdef_pl) = &def_pl.node.node else {
+                continue;
+            };
+            let pl::ast::TypDef::Defined(typdef_pl) = typdef_pl else {
+                continue;
+            };
+            insert_case_hints(&mut hints, &typdef_pl.id.node, &typdef_pl.def_typ);
         }
         Self { hints }
     }

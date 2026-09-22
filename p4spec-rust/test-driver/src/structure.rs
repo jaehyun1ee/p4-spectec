@@ -1,11 +1,7 @@
 use crate::{Error, Result, snapshot};
 use expect_test::expect_file;
 use indicatif::{ProgressBar, ProgressStyle};
-use p4spec_rust::{
-    frontend::parse::parse_files,
-    lang::traits::print::Print,
-    pass::{algo, elaborate, structure},
-};
+use p4spec_rust::lang::traits::print::Print;
 use std::{path::Path, time::Instant};
 
 pub fn run() -> Result<()> {
@@ -15,17 +11,14 @@ pub fn run() -> Result<()> {
             .map_err(|error| Error::Invalid(error.to_string()))?,
     );
     progress.set_message("structure: full specification");
-    let spec_el =
-        parse_files([Path::new("spec")]).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_il = elaborate::convert(spec_el).map_err(|error| Error::Invalid(error.to_string()))?;
-    let spec_al = algo::convert(spec_il).map_err(|error| Error::Invalid(error.to_string()))?;
-    let num_defs = spec_al.len();
-    for (spec_al, without_rule_groups, text_mode) in
-        [(spec_al.clone(), true, "without-rule-groups"), (spec_al, false, "with-rule-groups")]
+    let mut num_defs = 0;
+    for (without_rule_groups, text_mode) in
+        [(true, "without-rule-groups"), (false, "with-rule-groups")]
     {
         progress.set_message(format!("structure: {text_mode}"));
-        let spec_sl = structure::convert(spec_al, without_rule_groups)
+        let spec_sl = p4spec_rust::structure(["spec"], without_rule_groups)
             .map_err(|error| Error::Invalid(error.to_string()))?;
+        num_defs = spec_sl.len();
         let text_actual = Print::to_string(&spec_sl) + "\n";
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join(format!("expected/structure-{text_mode}.expected"));
