@@ -337,7 +337,9 @@ fn test_trailing_backslash_reports_a_renderable_eof_span() {
 
         let mut renderer = Renderer::new(RenderConfig::default());
         renderer.insert_source("escape.watsup", source);
-        let text = renderer.render_plain(&report).expect("valid EOF position");
+        let text = renderer
+            .render_to_string(&report)
+            .expect("valid EOF position");
         assert!(text.contains("expected a closing quote"), "{text}");
     }
 }
@@ -358,7 +360,7 @@ fn test_escaped_newline_reports_a_renderable_multiline_span() {
     let mut renderer = Renderer::new(RenderConfig::default());
     renderer.insert_source("escape.watsup", source);
     let text = renderer
-        .render_plain(&report)
+        .render_to_string(&report)
         .expect("valid byte endpoints");
     assert!(text.contains("invalid escape"));
 }

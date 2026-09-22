@@ -47,7 +47,7 @@ pub fn run(suite: Option<Suite>) -> Result<()> {
     for name in cases {
         let report = parse::run(name)?;
         let rendered = Renderer::new(RenderConfig::default())
-            .render_plain(&report)
+            .render_to_string(&report)
             .map_err(|error| failure(name, error))?;
         text.push_str(&format!("=== {name} ===\n{rendered}---\n"));
         progress.inc(1);

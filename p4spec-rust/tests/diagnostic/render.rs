@@ -45,7 +45,7 @@ fn two_files_keep_label_roles_messages_and_notes() {
         span: span("decl.watsup", 1, 4, 1, 7),
         message: "first declared here".to_owned(),
     });
-    let text = renderer.render_plain(&report).unwrap();
+    let text = renderer.render_to_string(&report).unwrap();
     for part in [
         "input.watsup:1:1",
         "decl.watsup:1:5",
@@ -63,12 +63,12 @@ fn overrides_and_successful_disk_reads_are_cached() {
     let file = File::new(b"disk\n");
     let report = report(span(file.name(), 1, 0, 1, 4));
     let mut renderer = Renderer::new(RenderConfig::default());
-    let text = renderer.render_plain(&report).unwrap();
+    let text = renderer.render_to_string(&report).unwrap();
     assert!(text.contains("disk"));
     fs::write(&file.0, b"changed\n").unwrap();
-    assert_eq!(renderer.render_plain(&report).unwrap(), text);
+    assert_eq!(renderer.render_to_string(&report).unwrap(), text);
     renderer.insert_source(file.name(), "override\n");
-    let text = renderer.render_plain(&report).unwrap();
+    let text = renderer.render_to_string(&report).unwrap();
     assert!(text.contains("override"));
     assert!(!text.contains("changed"));
 }
@@ -78,22 +78,22 @@ fn byte_columns_crlf_tabs_multiline_and_eof_resolve() {
     let mut renderer = Renderer::new(RenderConfig::default());
     renderer.insert_source("utf8", "é\tx\r\nnext\n");
     let text = renderer
-        .render_plain(&report(span("utf8", 1, 3, 1, 4)))
+        .render_to_string(&report(span("utf8", 1, 3, 1, 4)))
         .unwrap();
     assert!(text.contains("utf8:1:3"), "{text}");
     assert!(text.contains("^ invalid escape"), "{text}");
     let text = renderer
-        .render_plain(&report(span("utf8", 1, 3, 2, 4)))
+        .render_to_string(&report(span("utf8", 1, 3, 2, 4)))
         .unwrap();
     assert!(text.contains("next"), "{text}");
     let text = renderer
-        .render_plain(&report(span("utf8", 3, 0, 3, 0)))
+        .render_to_string(&report(span("utf8", 3, 0, 3, 0)))
         .unwrap();
     assert!(text.contains("utf8:3:1"), "{text}");
     renderer.insert_source("empty", "");
     assert!(
         renderer
-            .render_plain(&report(span("empty", 1, 0, 1, 0)))
+            .render_to_string(&report(span("empty", 1, 0, 1, 0)))
             .unwrap()
             .contains("empty:1:1")
     );
@@ -118,7 +118,7 @@ fn unavailable_sources_keep_the_responsible_location() {
             span: super::span("related", 1, 0, 1, 3),
             message: "related declaration".to_owned(),
         });
-        let text = renderer.render_plain(&report).unwrap();
+        let text = renderer.render_to_string(&report).unwrap();
         assert!(text.contains(loc), "{text}");
         assert!(text.contains("at "), "{text}");
         assert!(text.contains("invalid escape"), "{text}");
@@ -126,13 +126,13 @@ fn unavailable_sources_keep_the_responsible_location() {
     }
     fs::write(&file_missing.0, b"now present\n").unwrap();
     let text = renderer
-        .render_plain(&report(span(file_missing.name(), 2, 1, 2, 3)))
+        .render_to_string(&report(span(file_missing.name(), 2, 1, 2, 3)))
         .unwrap();
     assert!(text.contains("unavailable"), "{text}");
     renderer.insert_source(file_missing.name(), "one\ntwo\n");
     assert!(
         renderer
-            .render_plain(&report(span(file_missing.name(), 2, 1, 2, 3)))
+            .render_to_string(&report(span(file_missing.name(), 2, 1, 2, 3)))
             .unwrap()
             .contains("two")
     );
@@ -151,7 +151,7 @@ fn malformed_known_text_spans_fail_instead_of_being_clamped() {
         Span::new(super::span("known", 1, 0, 1, 1).left, super::span("other", 1, 0, 1, 1).right),
     ] {
         assert!(matches!(
-            renderer.render_plain(&report(span)),
+            renderer.render_to_string(&report(span)),
             Err(RenderError::InvalidSpan { .. })
         ));
     }
@@ -162,7 +162,7 @@ fn extreme_byte_columns_do_not_panic_while_reporting_bad_locations() {
     let mut renderer = Renderer::new(RenderConfig::default());
     renderer.insert_source("known", "abc");
     let error = renderer
-        .render_plain(&report(span("known", 1, usize::MAX, 1, usize::MAX)))
+        .render_to_string(&report(span("known", 1, usize::MAX, 1, usize::MAX)))
         .unwrap_err();
     assert!(
         error
@@ -172,7 +172,7 @@ fn extreme_byte_columns_do_not_panic_while_reporting_bad_locations() {
     let file = File::new(b"");
     fs::remove_file(&file.0).unwrap();
     let text = renderer
-        .render_plain(&report(span(file.name(), 1, usize::MAX, 1, usize::MAX)))
+        .render_to_string(&report(span(file.name(), 1, usize::MAX, 1, usize::MAX)))
         .unwrap();
     assert!(text.contains("source unavailable"));
 }
@@ -186,7 +186,7 @@ fn fallback_locations_use_readable_roles_and_colon_coordinates() {
         span: span("missing-decl", 4, 0, 4, 2),
         message: "declared here".to_owned(),
     });
-    let text = renderer.render_plain(&report).unwrap();
+    let text = renderer.render_to_string(&report).unwrap();
     assert!(text.contains("at missing-input:2:4-missing-input:2:6: invalid escape"), "{text}");
     assert!(
         text.contains("related location at missing-decl:4:1-missing-decl:4:3: declared here"),
@@ -194,7 +194,7 @@ fn fallback_locations_use_readable_roles_and_colon_coordinates() {
     );
     assert!(!text.contains("primary"), "{text}");
     let text = renderer
-        .render_plain(&super::report(span("missing-input", 0, 0, 0, 0)))
+        .render_to_string(&super::report(span("missing-input", 0, 0, 0, 0)))
         .unwrap();
     assert!(text.contains("at missing-input: invalid escape"), "{text}");
     assert!(!text.contains("no source range"), "{text}");
@@ -208,7 +208,7 @@ fn control_characters_in_source_never_reach_the_terminal() {
         let mut renderer = Renderer::new(RenderConfig::default());
         // Context lines must be safe even when the label itself is printable
         let report = report(span(file.name(), 1, 0, 1, 3));
-        let rendered = renderer.render_plain(&report).unwrap();
+        let rendered = renderer.render_to_string(&report).unwrap();
         assert!(!rendered.contains(control), "{rendered:?}");
         assert!(
             rendered.contains("snippet omitted: source contains control characters"),
@@ -219,12 +219,17 @@ fn control_characters_in_source_never_reach_the_terminal() {
             "{rendered}"
         );
         renderer.insert_source(file.name(), "safe\n");
-        assert!(renderer.render_plain(&report).unwrap().contains("safe"));
+        assert!(renderer.render_to_string(&report).unwrap().contains("safe"));
         renderer.insert_source(file.name(), text);
-        assert!(!renderer.render_plain(&report).unwrap().contains(control));
+        assert!(
+            !renderer
+                .render_to_string(&report)
+                .unwrap()
+                .contains(control)
+        );
         // Source suppression must not mask malformed producer coordinates
         assert!(matches!(
-            renderer.render_plain(&super::report(span(file.name(), 1, 0, 1, 99))),
+            renderer.render_to_string(&super::report(span(file.name(), 1, 0, 1, 99))),
             Err(RenderError::InvalidSpan { .. })
         ));
     }
@@ -239,13 +244,13 @@ fn source_names_escape_terminal_controls_without_changing_source_identity() {
         if available {
             renderer.insert_source(file, "x");
         }
-        let text = renderer.render_plain(&report).unwrap();
+        let text = renderer.render_to_string(&report).unwrap();
         assert!(!text.contains('\u{1b}'), "{text:?}");
         assert!(text.contains(&file.escape_debug().to_string()), "{text}");
         assert_eq!(super::cause(&report).labels[0].span.left.file.as_ref(), file);
     }
     let text = renderer
-        .render_plain(&super::report(span(file, 0, 0, 0, 0)))
+        .render_to_string(&super::report(span(file, 0, 0, 0, 0)))
         .unwrap();
     assert!(!text.contains('\u{1b}'), "{text:?}");
     assert!(text.contains(&file.escape_debug().to_string()), "{text}");

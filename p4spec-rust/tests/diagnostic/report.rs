@@ -57,7 +57,7 @@ fn deep_mixed_traces_render_and_drop_on_a_small_stack() {
             report.children.push(trace);
             let mut renderer =
                 Renderer::new(RenderConfig { trace_limit: 20_001, ..Default::default() });
-            let text = renderer.render_plain(&report).unwrap();
+            let text = renderer.render_to_string(&report).unwrap();
             assert!(text.contains("leaf"));
             assert!(format!("{report:?}").len() < 1_000);
             drop(report);
@@ -74,13 +74,13 @@ fn trace_limit_preserves_branches_and_the_underlying_reports() {
         report.children.push(frame(message, vec![]));
     }
     let mut renderer = Renderer::new(RenderConfig { trace_limit: 1, ..Default::default() });
-    let text = renderer.render_plain(&report).unwrap();
+    let text = renderer.render_to_string(&report).unwrap();
     assert!(text.contains("first branch"));
     assert!(!text.contains("second branch"));
     assert!(text.contains("truncated"));
     assert_eq!(report.children.len(), 2);
     let text = Renderer::new(RenderConfig::default())
-        .render_plain(&report)
+        .render_to_string(&report)
         .unwrap();
     assert!(text.find("first branch").unwrap() < text.find("second branch").unwrap());
 }
@@ -95,7 +95,7 @@ fn root_frames_and_mixed_branches_preserve_depth_and_order() {
         ],
     );
     let text = Renderer::new(RenderConfig::default())
-        .render_plain(&report)
+        .render_to_string(&report)
         .unwrap();
     assert_eq!(
         text,
@@ -130,7 +130,7 @@ fn cause_roots_preserve_nested_metadata_and_source_snippets() {
     renderer.insert_source("root", "root");
     renderer.insert_source("frame", "frame");
     renderer.insert_source("cause", "cause");
-    let text = renderer.render_plain(&report).unwrap();
+    let text = renderer.render_to_string(&report).unwrap();
     let sections = text.split("trace[").collect::<Vec<_>>();
     assert_eq!(sections.len(), 4, "{text}");
     for (section, heading, loc, source, underline) in [
@@ -159,7 +159,7 @@ fn cause_roots_preserve_nested_metadata_and_source_snippets() {
     assert_eq!(sections[3], "0]:\nnote: next candidate\n\n");
 
     // The same frame retains its snippet when promoted to the root
-    let text = renderer.render_plain(&report.children[0]).unwrap();
+    let text = renderer.render_to_string(&report.children[0]).unwrap();
     assert!(text.starts_with("note: trying candidate"), "{text}");
     assert!(text.contains("frame:1:1"), "{text}");
     assert!(text.contains("1 │ frame"), "{text}");
@@ -173,7 +173,7 @@ fn zero_trace_budget_keeps_either_root_kind_and_all_stored_children() {
         failure("root", vec![frame("child", vec![])]),
     ] {
         let text = Renderer::new(RenderConfig { trace_limit: 0, ..Default::default() })
-            .render_plain(&report)
+            .render_to_string(&report)
             .unwrap();
         assert!(text.starts_with(&report.to_string()), "{text}");
         assert!(text.contains("trace truncated after 0 nodes"), "{text}");
@@ -182,7 +182,7 @@ fn zero_trace_budget_keeps_either_root_kind_and_all_stored_children() {
     }
     let report = frame("root", vec![]);
     let text = Renderer::new(RenderConfig { trace_limit: 0, ..Default::default() })
-        .render_plain(&report)
+        .render_to_string(&report)
         .unwrap();
     assert_eq!(text, "note: root\n\n");
 }

@@ -91,35 +91,16 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    // - Helpers
+    // - invalid_*: span errors
 
-    fn invalid(span: &Span, reason: &'static str) -> RenderError {
+    fn invalid_span(span: &Span, reason: &'static str) -> RenderError {
         RenderError::InvalidSpan { span: Box::new(span.clone()), reason }
     }
 
-    /// Retains a label's role and location when a snippet cannot be produced.
-    fn fallback(
-        label: &Label,
-        loc: &str,
-        reason: Option<&str>,
-        diagnostic: &mut CodeDiagnostic<usize>,
-    ) {
-        let role = match label.style {
-            LabelStyle::Primary => "at",
-            LabelStyle::Secondary => "related location at",
-        };
-        let message =
-            if label.message.is_empty() { String::new() } else { format!(": {}", label.message) };
-        let reason = reason.map_or_else(String::new, |reason| format!(" ({reason})"));
-        diagnostic
-            .notes
-            .push(format!("{role} {loc}{message}{reason}"));
-    }
+    // - register_*: source storage
 
-    // - Source cache
-
-    /// Caches original bytes and suppresses snippets containing terminal controls.
-    fn add_source(&mut self, file: String, text: String) -> Source {
+    /// Registers source text and marks whether its snippet is safe to print.
+    fn register_source(&mut self, file: String, text: String) -> Source {
         // Codespan may print context lines outside the labelled range
         let mut chars = text.chars().peekable();
         let mut printable = true;
@@ -137,8 +118,10 @@ impl Renderer {
         Source { id: self.files.add(file.escape_debug().to_string(), text), printable }
     }
 
+    // - resolve_*: sources and offsets
+
     /// Caches both successful and unavailable reads under the original file name.
-    fn resolve(&mut self, file: &str) -> Option<Source> {
+    fn resolve_source(&mut self, file: &str) -> Option<Source> {
         // An explicit override or previous load always wins
         if let Some(source) = self.cache.get(file) {
             return *source;
@@ -147,20 +130,18 @@ impl Renderer {
         // Unreadable and non-UTF-8 files retain location-only diagnostics
         let source = fs::read_to_string(file)
             .ok()
-            .map(|text| self.add_source(file.to_owned(), text));
+            .map(|text| self.register_source(file.to_owned(), text));
         self.cache.insert(file.to_owned(), source);
         source
     }
 
-    // - Source coordinates
-
     /// Resolves a one-based line and byte column without clamping either.
-    fn offset(&self, id: usize, pos: &Position, span: &Span) -> Result<usize, RenderError> {
+    fn resolve_offset(&self, id: usize, pos: &Position, span: &Span) -> Result<usize, RenderError> {
         let text = self.files.source(id)?;
         // SimpleFiles permits an extra sentinel line; source spans do not
         let line_max = self.files.line_index(id, text.len())? + 1;
         if pos.line == 0 || pos.line > line_max {
-            return Err(Self::invalid(span, "line is outside the source"));
+            return Err(Self::invalid_span(span, "line is outside the source"));
         }
 
         // A newline starts the next line; CR remains an original source byte
@@ -169,21 +150,40 @@ impl Renderer {
             .strip_suffix('\n')
             .unwrap_or(&text[range.clone()]);
         if pos.column > line.len() {
-            return Err(Self::invalid(span, "byte column is outside the line"));
+            return Err(Self::invalid_span(span, "byte column is outside the line"));
         }
 
         // Coordinates must lie between complete UTF-8 characters
         let offset = range.start + pos.column;
         if !text.is_char_boundary(offset) {
-            return Err(Self::invalid(span, "byte column splits a UTF-8 character"));
+            return Err(Self::invalid_span(span, "byte column splits a UTF-8 character"));
         }
         Ok(offset)
     }
 
-    // - Diagnostics
+    // - append_*: labels and location notes
+
+    /// Retains a label's role and location when a snippet cannot be produced.
+    fn append_location_note(
+        label: &Label,
+        loc: &str,
+        reason: Option<&str>,
+        diagnostic: &mut CodeDiagnostic<usize>,
+    ) {
+        let role = match label.style {
+            LabelStyle::Primary => "at",
+            LabelStyle::Secondary => "related location at",
+        };
+        let message =
+            if label.message.is_empty() { String::new() } else { format!(": {}", label.message) };
+        let reason = reason.map_or_else(String::new, |reason| format!(" ({reason})"));
+        diagnostic
+            .notes
+            .push(format!("{role} {loc}{message}{reason}"));
+    }
 
     /// Converts a label or preserves its location as an explicit fallback note.
-    fn label(
+    fn append_label(
         &mut self,
         label: &Label,
         diagnostic: &mut CodeDiagnostic<usize>,
@@ -191,7 +191,7 @@ impl Renderer {
         let span = &label.span;
         // One codespan label cannot describe two source identities
         if span.left.file != span.right.file {
-            return Err(Self::invalid(span, "endpoints name different files"));
+            return Err(Self::invalid_span(span, "endpoints name different files"));
         }
 
         // Generated and file-only spans have no line to underline
@@ -202,24 +202,29 @@ impl Renderer {
             } else {
                 span.left.file.escape_debug().to_string()
             };
-            Self::fallback(label, &loc, None, diagnostic);
+            Self::append_location_note(label, &loc, None, diagnostic);
             return Ok(());
         }
 
         // Missing source must not hide a responsible location behind related labels
-        let Some(source) = self.resolve(&span.left.file) else {
-            Self::fallback(label, &span_location(span), Some("source unavailable"), diagnostic);
+        let Some(source) = self.resolve_source(&span.left.file) else {
+            Self::append_location_note(
+                label,
+                &span_location(span),
+                Some("source unavailable"),
+                diagnostic,
+            );
             return Ok(());
         };
-        let start = self.offset(source.id, &span.left, span)?;
-        let end = self.offset(source.id, &span.right, span)?;
+        let start = self.resolve_offset(source.id, &span.left, span)?;
+        let end = self.resolve_offset(source.id, &span.right, span)?;
         if start > end {
-            return Err(Self::invalid(span, "end precedes start"));
+            return Err(Self::invalid_span(span, "end precedes start"));
         }
 
         // Preserve coordinates without sending invisible controls to the terminal
         if !source.printable {
-            Self::fallback(
+            Self::append_location_note(
                 label,
                 &span_location(span),
                 Some("snippet omitted: source contains control characters"),
@@ -238,8 +243,13 @@ impl Renderer {
         Ok(())
     }
 
+    // - convert_*: codespan diagnostics
+
     /// Converts diagnostic data without inspecting the report tree.
-    fn cause(&mut self, diagnostic: &Diagnostic) -> Result<CodeDiagnostic<usize>, RenderError> {
+    fn convert_diagnostic(
+        &mut self,
+        diagnostic: &Diagnostic,
+    ) -> Result<CodeDiagnostic<usize>, RenderError> {
         let mut rendered = CodeDiagnostic::new(diagnostic.severity);
         rendered.code.clone_from(&diagnostic.code);
         rendered.message.clone_from(&diagnostic.message);
@@ -252,19 +262,22 @@ impl Renderer {
         }
         // Convert each label independently to retain cross-file relationships
         for label in &diagnostic.labels {
-            self.label(label, &mut rendered)?;
+            self.append_label(label, &mut rendered)?;
         }
         Ok(rendered)
     }
 
     /// Gives root and child nodes the same source-aware presentation.
-    fn diagnostic(&mut self, kind: &ReportKind) -> Result<CodeDiagnostic<usize>, RenderError> {
+    fn convert_report_kind(
+        &mut self,
+        kind: &ReportKind,
+    ) -> Result<CodeDiagnostic<usize>, RenderError> {
         match kind {
             // Render context as a note with its own source location
             ReportKind::Frame { span, message } => {
                 let mut rendered = CodeDiagnostic::new(Severity::Note).with_message(message);
                 if *span != Span::default() {
-                    self.label(
+                    self.append_label(
                         &Label {
                             style: LabelStyle::Secondary,
                             span: span.clone(),
@@ -276,15 +289,33 @@ impl Renderer {
                 Ok(rendered)
             }
             // Keep each cause's code, severity, labels, and notes
-            ReportKind::Cause(diagnostic) => self.cause(diagnostic),
+            ReportKind::Cause(diagnostic) => self.convert_diagnostic(diagnostic),
         }
     }
 
-    // - Trace rendering
+    // - Construction and source overrides
+
+    /// Constructs a renderer with an empty source cache.
+    pub fn new(config: RenderConfig) -> Self {
+        Self { config, files: SimpleFiles::new(), cache: HashMap::new() }
+    }
+
+    /// Supplies source text that takes precedence over disk contents.
+    pub fn insert_source(&mut self, file: impl Into<String>, text: impl Into<String>) {
+        let file = file.into();
+        let source = self.register_source(file.clone(), text.into());
+        self.cache.insert(file, Some(source));
+    }
+
+    // - render_to_*: output destinations
 
     /// Emits the root and traverses visible causes in depth-first branch order.
-    fn render(&mut self, buffer: &mut Buffer, report: &Report) -> Result<(), RenderError> {
-        let diagnostic = self.diagnostic(&report.kind)?;
+    fn render_to_buffer(
+        &mut self,
+        buffer: &mut Buffer,
+        report: &Report,
+    ) -> Result<(), RenderError> {
+        let diagnostic = self.convert_report_kind(&report.kind)?;
         term::emit_to_write_style(buffer, &self.config.snippet, &self.files, &diagnostic)?;
 
         // Store traversal cursors instead of recursing or cloning reports
@@ -305,42 +336,26 @@ impl Renderer {
             count += 1;
             writeln!(buffer, "trace[{depth}]:").map_err(files::Error::from)?;
 
-            let diagnostic = self.diagnostic(&child.kind)?;
+            let diagnostic = self.convert_report_kind(&child.kind)?;
             term::emit_to_write_style(buffer, &self.config.snippet, &self.files, &diagnostic)?;
             pending.push((child.children.iter(), depth + 1));
         }
         Ok(())
     }
 
-    // - Construction and source overrides
-
-    /// Constructs a renderer with an empty source cache.
-    pub fn new(config: RenderConfig) -> Self {
-        Self { config, files: SimpleFiles::new(), cache: HashMap::new() }
-    }
-
-    /// Supplies source text that takes precedence over disk contents.
-    pub fn insert_source(&mut self, file: impl Into<String>, text: impl Into<String>) {
-        let file = file.into();
-        let source = self.add_source(file.clone(), text.into());
-        self.cache.insert(file, Some(source));
-    }
-
-    // - Output
-
-    /// Renders a report without terminal color codes.
-    pub fn render_plain(&mut self, report: &Report) -> Result<String, RenderError> {
+    /// Renders a report to a string without terminal color codes.
+    pub fn render_to_string(&mut self, report: &Report) -> Result<String, RenderError> {
         let mut buffer = Buffer::no_color();
-        self.render(&mut buffer, report)?;
+        self.render_to_buffer(&mut buffer, report)?;
         // Codespan and trace headings write only UTF-8 text
         Ok(String::from_utf8(buffer.into_inner()).expect("diagnostic output is UTF-8"))
     }
 
-    /// Writes a complete diagnostic to stderr using the configured colors.
-    pub fn emit_stderr(&mut self, report: &Report) -> Result<(), RenderError> {
+    /// Renders a complete report to stderr using the configured colors.
+    pub fn render_to_stderr(&mut self, report: &Report) -> Result<(), RenderError> {
         let writer = BufferWriter::stderr(self.config.color);
         let mut buffer = writer.buffer();
-        self.render(&mut buffer, report)?;
+        self.render_to_buffer(&mut buffer, report)?;
         writer.print(&buffer).map_err(files::Error::from)?;
         Ok(())
     }

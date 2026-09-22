@@ -19,7 +19,7 @@ use p4spec_rust::{
 /// Renders frontend reports while preserving their structured payloads.
 fn frontend_error(report: FrontendError) -> ExitCode {
     let mut renderer = Renderer::new(RenderConfig::default());
-    if let Err(error) = renderer.emit_stderr(&report) {
+    if let Err(error) = renderer.render_to_stderr(&report) {
         eprintln!("{report}\ndiagnostic rendering failed: {error}");
     }
     ExitCode::FAILURE
