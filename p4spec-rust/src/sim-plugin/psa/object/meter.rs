@@ -1,3 +1,7 @@
+//! The PSA `Meter` extern, an indexed meter
+//!
+//! Metering is not modeled; `execute` always returns green.
+
 use crate::sim_plugin::spec::{args, pack, unpack};
 use crate::{
     lang::{
@@ -12,15 +16,22 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// A meter color (RFC 2698).
 pub enum Color {
+    /// Over the peak rate.
     Red,
+    /// Within the committed rate.
     Green,
+    /// Between the committed and peak rates.
     Yellow,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Meter array by `PSA_MeterType_t`; the state is never updated.
 pub enum Meter {
+    /// Meters packets regardless of size.
     Packets(Vec<Color>),
+    /// Meters bytes.
     Bytes(Vec<Color>),
 }
 
@@ -42,6 +53,7 @@ impl Meter {
         let value_type = args::find(&args, "type")?;
         let size = usize::try_from(&unpack::p4_fixed_bit(arena, &value_size)?.1)?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
+        // The type argument selects what is metered
         match (id_enum.as_str(), id_type.as_str()) {
             ("PSA_MeterType_t", "PACKETS") => Ok(Self::Packets(vec![Color::Green; size])),
             ("PSA_MeterType_t", "BYTES") => Ok(Self::Bytes(vec![Color::Green; size])),
@@ -68,7 +80,7 @@ impl Meter {
         Ext: Extern,
         Interp: Interpreter<Iface, Ext>,
     {
-        // NOTE: returning GREEN for now
+        // Metering is not modeled: always GREEN
         let value_color = pack::p4_enum(ctx.arena_mut(), "PSA_MeterColor_t", "GREEN")?;
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
@@ -103,7 +115,7 @@ impl Meter {
         Ext: Extern,
         Interp: Interpreter<Iface, Ext>,
     {
-        // NOTE: returning GREEN for now
+        // Color-blind update defers to the color-aware path, returning GREEN
         self.execute_color_aware(ctx, value_ctx, value_arch)
     }
 }

@@ -1,3 +1,10 @@
+//! v1model architecture with its scheduler, objects, and extern functions
+//!
+//! Extern calls record clone, resubmit, and recirculate requests
+//! in the architecture state;
+//! the scheduler in `pipe` acts on them once the control returns.
+//! Stateful objects live in `object`, extern functions in `func`.
+
 use crate::{
     lang::data::value::Value,
     runner::{Interface, Interpreter, RunnerContext},
@@ -17,6 +24,7 @@ pub use pipe::{V1Model, drive_pipe, init_pipe, transform_stf_stmt};
 
 // == Extern calls
 
+/// Hands every extern hook to the pipeline module.
 impl external::Impl for V1Model {
     fn eval_extern_init<Interp, Iface>(
         &self,

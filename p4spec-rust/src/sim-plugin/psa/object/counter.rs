@@ -1,3 +1,7 @@
+//! The PSA `Counter` extern, an indexed packet or byte counter
+//!
+//! Only the `PACKETS` counter type is supported by `count`.
+
 use crate::sim_plugin::spec::{args, func, unpack};
 use crate::{
     lang::{
@@ -14,9 +18,13 @@ use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Counter array by `PSA_CounterType_t`.
 pub enum Counter {
+    /// Packet counts.
     Packets(Vec<BigInt>),
+    /// Byte counts.
     Bytes(Vec<BigInt>),
+    /// Packet and byte counts.
     PacketsAndBytes(Vec<(BigInt, BigInt)>),
 }
 
@@ -39,6 +47,7 @@ impl Counter {
         let value_type = args::find(&args, "type")?;
         let size = usize::try_from(&unpack::p4_fixed_bit(arena, &value_size)?.1)?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
+        // The type argument selects what is counted
         match (id_enum.as_str(), id_type.as_str()) {
             ("PSA_CounterType_t", "PACKETS") => Ok(Self::Packets(vec![BigInt::zero(); size])),
             ("PSA_CounterType_t", "BYTES") => Ok(Self::Bytes(vec![BigInt::zero(); size])),
@@ -66,6 +75,7 @@ impl Counter {
         let value_idx = func::find_var_e_local(ctx, value_ctx, "index")?;
         let idx = usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value_idx)?.1)
             .map_err(ExternError::from)?;
+        // Only the `PACKETS` type is supported here
         let Self::Packets(counts) = &mut self else {
             return Err(ExternError::Failure(
                 "Only enum value PACKETS of PSA_CounterType_t is supported".to_owned(),
@@ -75,6 +85,7 @@ impl Counter {
         if let Some(count) = counts.get_mut(idx) {
             *count += BigInt::one();
         }
+        // Return without a value
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),

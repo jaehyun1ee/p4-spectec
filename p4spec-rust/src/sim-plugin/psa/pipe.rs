@@ -52,11 +52,14 @@ use serde_derive_state::{DeserializeState, SerializeState};
 // == Configuration
 
 #[derive(Default)]
+/// The PSA architecture, parameterized by its state encoding.
 pub struct Psa {
+    /// Encoding of architecture and object states as external values.
     encoding: Encoding,
 }
 
 impl Psa {
+    /// Creates the architecture with the given state encoding.
     pub fn new(encoding: Encoding) -> Self {
         Self { encoding }
     }
@@ -64,23 +67,31 @@ impl Psa {
 
 // == Extern objects
 
-/// Core and PSA-specific extern objects
+/// Core and PSA-specific extern objects.
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
 pub enum ObjectState {
+    /// A `packet_in` of the current pipeline.
     PacketIn(PacketIn),
+    /// A `packet_out` being emitted.
     PacketOut(PacketOut),
+    /// A `Counter` array.
     Counter(Counter),
+    /// A `Register` array.
     Register(#[serde(state)] Register),
+    /// A `Hash`.
     Hash(HashExtern),
+    /// An `InternetChecksum`.
     InternetChecksum(InternetChecksum),
+    /// A `Meter`.
     Meter(Meter),
 }
 
 impl ObjectState {
     // - Encoding
 
+    /// Encodes the object as the specification's `objectState` external value.
     pub fn to_value(
         &self,
         arena: &mut ValueArena,
@@ -97,6 +108,7 @@ impl ObjectState {
 
     // - Decoding
 
+    /// Decodes an object from an `objectState` external value.
     pub fn from_value(
         arena: &mut ValueArena,
         encoding: Encoding,
@@ -110,6 +122,7 @@ impl ObjectState {
 
 // == STF transformation
 
+/// Rewrites p4c register-STF block names to the specification's `ip.ig`.
 pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
     match &mut stmt {
         Statement::RegisterRead { name, .. }
@@ -124,6 +137,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
 
 // == Architectural state
 
+/// The initial architecture state: empty queue, tables, and groups.
 pub(super) fn init_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
 ) -> Result<Value, Interp::Error>
@@ -137,6 +151,7 @@ where
         .map_err(Into::into)
 }
 
+/// Decodes the architecture state stored in `value_arch`.
 pub fn find_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -150,6 +165,7 @@ where
     Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
 }
 
+/// Encodes `arch` back into `value_arch`.
 pub fn update_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -166,6 +182,7 @@ where
 
 // == Object state
 
+/// Decodes the object named `value_id` from `value_arch`.
 pub fn find_object_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -180,6 +197,7 @@ where
     Ok(ObjectState::from_value(ctx.arena_mut(), encoding, &value_object)?)
 }
 
+/// The ingress `packet_in` object.
 fn find_ingress_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -203,6 +221,7 @@ where
     }
 }
 
+/// The ingress `packet_out` object.
 fn find_ingress_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -226,6 +245,7 @@ where
     }
 }
 
+/// The egress `packet_in` object.
 fn find_egress_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -249,6 +269,7 @@ where
     }
 }
 
+/// The egress `packet_out` object.
 fn find_egress_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -272,6 +293,7 @@ where
     }
 }
 
+/// The `Register` object named `name`, whose id is the dotted path.
 fn find_register<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -298,6 +320,7 @@ where
     }
 }
 
+/// Writes the `Register` object named `name` back.
 fn update_register<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -328,6 +351,9 @@ where
 
 // - Initialization
 
+/// Constructs a PSA object from its constructor call.
+///
+/// Core objects and unknown names get an empty state.
 pub(super) fn eval_extern_init<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     values: &[Value],
@@ -365,10 +391,12 @@ where
             *value_ids,
             *value_args,
         )?)),
+        // Other externs carry no state of their own
         _ => None,
     };
     Ok(match object {
         Some(object) => object.to_value(ctx.arena_mut(), encoding)?,
+        // No state: encode the unit value
         None => {
             let payload = encode_with(ctx.arena(), encoding, &())
                 .map_err(|error| ExternError::Failure(error.to_string()))?;
@@ -384,6 +412,7 @@ where
 
 // - Function calls
 
+/// Dispatches an extern function call; only `verify` is supported.
 pub(super) fn eval_extern_func_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     values: &[Value],
@@ -403,6 +432,7 @@ where
         .map(|value| get::text(ctx.arena(), value).map(str::to_owned))
         .collect::<Result<Vec<_>, _>>()
         .map_err(ExternError::from)?;
+    // Anything but `verify` is unsupported
     if name != "verify" || names != ["check", "toSignal"] {
         return Err(ExternError::Failure(format!(
             "unsupported extern function call: {name}({})",
@@ -417,6 +447,9 @@ where
 
 // - Method calls
 
+/// Dispatches an extern method call on the object named `value_id`.
+///
+/// The object is decoded, updated by its method, and written back.
 pub(super) fn eval_extern_method_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     values: &[Value],
@@ -426,6 +459,7 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     let encoding = ctx.external().encoding;
+    // Context, state, object id, method name, parameter names
     let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
         return Err(ExternError::Failure(
             "unexpected number of arguments to extern method call".to_owned(),
@@ -443,6 +477,7 @@ where
         .collect::<Result<Vec<_>, _>>()
         .map_err(ExternError::from)?;
     let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
+    // Each arm hands the object to its method and wraps it again
     let (object, value_ctx, value_arch, value_call_result) =
         match (object, name.as_str(), names_ref.as_slice()) {
             (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
@@ -544,6 +579,7 @@ where
                     object.execute_color_blind(ctx, *value_ctx, *value_arch)?;
                 (ObjectState::Meter(object), value_ctx, value_arch, value_call_result)
             }
+            // Unknown method: name the object in the error
             _ => {
                 let ids = get::list(ctx.arena(), value_id)
                     .map_err(ExternError::from)?
@@ -559,6 +595,7 @@ where
                 .into());
             }
         };
+    // Write the updated object back
     let value_object = object.to_value(ctx.arena_mut(), encoding)?;
     let value_arch = func::update_object_state_e(ctx, value_arch, *value_id, value_object)?;
     Ok(vec![value_ctx, value_arch, value_call_result])
@@ -566,6 +603,7 @@ where
 
 // == Mirror session interface
 
+/// Maps clone session `session` to multicast group `group`.
 pub fn add_mirror_session_mc<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -583,6 +621,7 @@ where
 
 // == Multicast interface
 
+/// Creates multicast group `group`.
 pub fn mc_mgrp_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -597,6 +636,7 @@ where
     update_arch_state(ctx, value_arch, &arch)
 }
 
+/// Creates a multicast node with instance id `instance` on `ports`.
 pub fn mc_node_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -612,6 +652,7 @@ where
     update_arch_state(ctx, value_arch, &arch)
 }
 
+/// Adds node `handle` to multicast group `group`.
 pub fn mc_node_associate<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -629,6 +670,7 @@ where
 
 // == Register interface
 
+/// Reads register `name` at `idx`; the source simulator prints nothing.
 pub fn register_read<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -641,12 +683,14 @@ where
 {
     let reg = find_register(ctx, value_arch, name)?;
     // Evaluate the register read; printing is disabled in the source
+    // Out of range: evaluate the default and discard it
     if idx >= reg.values.len() {
         func::default(ctx, reg.value_typ)?;
     }
     Ok(value_arch)
 }
 
+/// Writes `int` to register `name` at `idx`; out of range is ignored.
 pub fn register_write<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -661,12 +705,14 @@ where
     let mut reg = find_register(ctx, value_arch, name)?;
     let value = pack::p4_arbitrary_int(ctx.arena_mut(), int)?;
     let value = func::cast_op(ctx, reg.value_typ, value)?;
+    // Out of range: ignored
     if let Some(value_reg) = reg.values.get_mut(idx) {
         *value_reg = value;
     }
     update_register(ctx, value_arch, name, reg)
 }
 
+/// Resets every element of register `name` to the default.
 pub fn register_reset<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     value_arch: Value,
@@ -684,6 +730,7 @@ where
 
 // == Packet state
 
+/// Makes `packet` current under the `packet_in` name of its entrypoint.
 fn insert_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -693,6 +740,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
+    // Ingress and egress keep separate `packet_in` objects
     let name = match packet.entrypoint {
         Entrypoint::Ingress => "ingress_packet_in",
         Entrypoint::Egress => "egress_packet_in",
@@ -717,6 +765,7 @@ where
     Ok(())
 }
 
+/// Rewinds the ingress `packet_in` cursor over the same bytes.
 fn remove_ingress_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -746,6 +795,7 @@ where
     Ok(())
 }
 
+/// Replaces the ingress `packet_out` with an empty one.
 fn remove_ingress_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -774,6 +824,7 @@ where
     Ok(())
 }
 
+/// Replaces the egress `packet_out` with an empty one.
 fn remove_egress_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -802,6 +853,7 @@ where
     Ok(())
 }
 
+/// Whether ingress requested a clone.
 fn is_ingress_clone<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -820,6 +872,7 @@ where
     Ok(unpack::p4_bool(ctx.arena(), &value)?)
 }
 
+/// Whether ingress requested a drop.
 fn is_ingress_drop<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -838,6 +891,7 @@ where
     Ok(unpack::p4_bool(ctx.arena(), &value)?)
 }
 
+/// Whether ingress requested a resubmit.
 fn is_ingress_resubmit<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -856,6 +910,7 @@ where
     Ok(unpack::p4_bool(ctx.arena(), &value)?)
 }
 
+/// The clone session id requested by ingress.
 fn get_ingress_clone_session_id<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -874,6 +929,7 @@ where
     Ok(usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)?)
 }
 
+/// The multicast group requested by ingress.
 fn get_multicast_group<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -892,6 +948,7 @@ where
     Ok(usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)?)
 }
 
+/// Whether egress requested a clone.
 fn is_egress_clone<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -910,6 +967,7 @@ where
     Ok(unpack::p4_bool(ctx.arena(), &value)?)
 }
 
+/// Whether egress requested a drop.
 fn is_egress_drop<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -928,6 +986,7 @@ where
     Ok(unpack::p4_bool(ctx.arena(), &value)?)
 }
 
+/// Whether the egress port is the recirculation port.
 fn is_egress_recirculate<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -944,9 +1003,11 @@ where
         "egress_port",
     )?;
     let (width_port, int_port) = unpack::p4_fixed_bit(ctx.arena(), &value_port)?;
+    // The recirculation port is the 32-bit value 0xfffffffa
     Ok(width_port == 32.into() && int_port == 0xffff_fffa_u32.into())
 }
 
+/// The clone session id requested by egress.
 fn get_egress_clone_session_id<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -967,6 +1028,7 @@ where
 
 // == Pipeline initializer
 
+/// Instantiates the program and returns the initial simulator state.
 pub fn init_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     program: Value,
@@ -981,6 +1043,7 @@ where
 
 // == Prepare context
 
+/// Sets up egress metadata for a normal unicast to the chosen port.
 fn prepare_unicast_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1009,6 +1072,7 @@ where
         )?;
         usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
+    // Fill egress input metadata for this replica
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
         state.value_ctx,
@@ -1021,6 +1085,7 @@ where
     Ok(())
 }
 
+/// Sets up egress metadata for a multicast replica.
 fn prepare_multicast_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1041,6 +1106,7 @@ where
         )?;
         usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
+    // Fill egress input metadata for this replica
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
         state.value_ctx,
@@ -1053,6 +1119,7 @@ where
     Ok(())
 }
 
+/// Sets up egress metadata for an ingress-to-egress clone.
 fn prepare_clone_i2e_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1073,6 +1140,7 @@ where
         )?;
         usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
+    // Fill egress input metadata for this replica
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
         state.value_ctx,
@@ -1085,6 +1153,7 @@ where
     Ok(())
 }
 
+/// Sets up egress metadata for an egress-to-egress clone.
 fn prepare_clone_e2e_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1105,6 +1174,7 @@ where
         )?;
         usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
+    // Fill egress input metadata for this replica
     state.value_ctx = rel::psa_egress_init_metadata(
         ctx,
         state.value_ctx,
@@ -1117,6 +1187,7 @@ where
     Ok(())
 }
 
+/// Sets up ingress metadata for a resubmit.
 fn prepare_resubmit_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1140,6 +1211,7 @@ where
     Ok(())
 }
 
+/// Sets up ingress metadata for a recirculation.
 fn prepare_recirculate_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1160,6 +1232,7 @@ where
 
 // == Schedule packet
 
+/// Queues the current packet to resume at `entrypoint`.
 pub fn schedule_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1169,6 +1242,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
+    // Ingress and egress read their own `packet_in`
     let packet_in = match entrypoint {
         Entrypoint::Ingress => find_ingress_packet_in(ctx, state.value_arch)?,
         Entrypoint::Egress => find_egress_packet_in(ctx, state.value_arch)?,
@@ -1180,6 +1254,7 @@ where
     Ok(())
 }
 
+/// Deparses the ingress packet and queues one egress copy.
 fn schedule_unicast<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1191,6 +1266,7 @@ where
     let packet = {
         let pkt_in = find_ingress_packet_in(ctx, state.value_arch)?;
         let pkt_out = find_ingress_packet_out(ctx, state.value_arch)?;
+        // Serialize the current packet to bytes
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
@@ -1214,6 +1290,7 @@ where
     schedule_packet(ctx, state, Entrypoint::Egress)
 }
 
+/// Queues one egress copy per node of multicast `group`.
 pub fn schedule_multicast<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1224,12 +1301,14 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     let arch = find_arch_state(ctx, state.value_arch)?;
+    // Unknown group: nothing is replicated
     let Some(handles) = arch.multicast.groups.get(&group).cloned() else {
         return Ok(());
     };
     let packet = {
         let pkt_in = find_ingress_packet_in(ctx, state.value_arch)?;
         let pkt_out = find_ingress_packet_out(ctx, state.value_arch)?;
+        // Serialize the current packet to bytes
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
@@ -1250,6 +1329,7 @@ where
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
     }?;
     let arch = find_arch_state(ctx, state.value_arch)?;
+    // One egress copy per (port, instance) node
     for handle in handles {
         if let Some(nodes) = arch.multicast.nodes.get(&handle) {
             for node in nodes {
@@ -1263,6 +1343,7 @@ where
     Ok(())
 }
 
+/// Queues ingress-to-egress clones for the session's group.
 fn schedule_clone_i2e<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1273,6 +1354,7 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     let arch = find_arch_state(ctx, state.value_arch)?;
+    // An unconfigured session makes no clone
     let Some(group) = arch.mirrortable.get(&session) else {
         return Ok(());
     };
@@ -1300,6 +1382,7 @@ where
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
     }?;
     let arch = find_arch_state(ctx, state.value_arch)?;
+    // One egress copy per (port, instance) node
     for handle in handles {
         if let Some(nodes) = arch.multicast.nodes.get(&handle) {
             for node in nodes {
@@ -1316,6 +1399,7 @@ where
     Ok(())
 }
 
+/// Queues egress-to-egress clones for the session's group.
 fn schedule_clone_e2e<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1326,6 +1410,7 @@ where
     Interp: Interpreter<Iface, Psa>,
 {
     let arch = find_arch_state(ctx, state.value_arch)?;
+    // An unconfigured session makes no clone
     let Some(group) = arch.mirrortable.get(&session) else {
         return Ok(());
     };
@@ -1337,6 +1422,7 @@ where
     let packet = {
         let pkt_in = find_egress_packet_in(ctx, state.value_arch)?;
         let pkt_out = find_egress_packet_out(ctx, state.value_arch)?;
+        // Serialize the current packet to bytes
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     let pkt = PacketIn::init(&packet)?;
@@ -1357,6 +1443,7 @@ where
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
     }?;
     let arch = find_arch_state(ctx, state.value_arch)?;
+    // One egress copy per (port, instance) node
     for handle in handles {
         if let Some(nodes) = arch.multicast.nodes.get(&handle) {
             for node in nodes {
@@ -1373,6 +1460,7 @@ where
     Ok(())
 }
 
+/// Rewinds the ingress input and queues it for ingress again.
 pub fn schedule_resubmit<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1386,6 +1474,7 @@ where
     schedule_packet(ctx, state, Entrypoint::Ingress)
 }
 
+/// Deparses the egress packet and queues it for ingress again.
 pub fn schedule_recirculate<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1397,6 +1486,7 @@ where
     let packet = {
         let pkt_in = find_egress_packet_in(ctx, state.value_arch)?;
         let pkt_out = find_egress_packet_out(ctx, state.value_arch)?;
+        // Serialize the current packet to bytes
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
@@ -1420,6 +1510,7 @@ where
     schedule_packet(ctx, state, Entrypoint::Ingress)
 }
 
+/// Emits the egress packet on its egress port.
 fn transfer_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1441,6 +1532,7 @@ where
     let packet = {
         let pkt_in = find_egress_packet_in(ctx, state.value_arch)?;
         let pkt_out = find_egress_packet_out(ctx, state.value_arch)?;
+        // Serialize the current packet to bytes
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
     state.txs.push(Tx { port, packet });
@@ -1449,6 +1541,7 @@ where
 
 // == Setup packets and globals
 
+/// Installs the received packet and metadata for both pipelines.
 fn setup_rx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1487,6 +1580,7 @@ where
 
 // == Ingress pipeline driver
 
+/// Runs the ingress parser; a rejection is recorded in `parser_error`.
 fn drive_ip<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1508,6 +1602,7 @@ where
         },
         _ => None,
     };
+    // A parser rejection is visible to the control
     if let Some(value_error) = value_error {
         state.value_ctx = rel::lvalue_write_dot_global(
             ctx,
@@ -1521,6 +1616,7 @@ where
     Ok(())
 }
 
+/// Runs the ingress control.
 fn drive_ig<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1535,6 +1631,7 @@ where
     Ok(value_result)
 }
 
+/// Runs the ingress deparser.
 fn drive_id<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1549,6 +1646,7 @@ where
     Ok(value_result)
 }
 
+/// Runs the ingress parser, control, and deparser in order.
 pub fn drive_ingress_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1565,6 +1663,7 @@ where
 
 // == Packet replication engine
 
+/// The packet replication engine: clone, drop, resubmit, multicast, or unicast.
 pub fn run_pre<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1577,18 +1676,22 @@ where
         let session = get_ingress_clone_session_id(ctx, state)?;
         schedule_clone_i2e(ctx, state, session)?;
     }
+    // A dropped packet goes nowhere, though its clone was scheduled
     if is_ingress_drop(ctx, state)? {
         return Ok(());
     }
+    // A resubmit replaces the packet's normal continuation
     if is_ingress_resubmit(ctx, state)? {
         return schedule_resubmit(ctx, state);
     }
     let group = get_multicast_group(ctx, state)?;
+    // A non-zero group multicasts; otherwise unicast
     if group != 0 { schedule_multicast(ctx, state, group) } else { schedule_unicast(ctx, state) }
 }
 
 // == Egress pipeline driver
 
+/// Runs the egress parser; a rejection is recorded in `parser_error`.
 fn drive_ep<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1610,6 +1713,7 @@ where
         },
         _ => None,
     };
+    // A parser rejection is visible to the control
     if let Some(value_error) = value_error {
         state.value_ctx = rel::lvalue_write_dot_global(
             ctx,
@@ -1623,6 +1727,7 @@ where
     Ok(())
 }
 
+/// Runs the egress control.
 fn drive_eg<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1637,6 +1742,7 @@ where
     Ok(value_result)
 }
 
+/// Runs the egress deparser.
 fn drive_ed<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1651,6 +1757,7 @@ where
     Ok(value_result)
 }
 
+/// Runs the egress parser, control, and deparser in order.
 pub fn drive_egress_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1667,6 +1774,7 @@ where
 
 // == Buffering queueing engine
 
+/// The buffering queueing engine: clone, drop, recirculate, or transmit.
 pub fn run_bqe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1679,9 +1787,11 @@ where
         let session = get_egress_clone_session_id(ctx, state)?;
         schedule_clone_e2e(ctx, state, session)?;
     }
+    // A dropped packet goes nowhere, though its clone was scheduled
     if is_egress_drop(ctx, state)? {
         return Ok(());
     }
+    // Recirculation returns the packet to ingress instead of transmitting
     if is_egress_recirculate(ctx, state)? {
         schedule_recirculate(ctx, state)
     } else {
@@ -1691,6 +1801,7 @@ where
 
 // == Scheduling packets
 
+/// Resumes a queued packet through its pipeline and replication engine.
 pub fn drive_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1714,6 +1825,7 @@ where
     }
 }
 
+/// Drains the packet queue, running each packet to its next stop.
 pub fn run_scheduler<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1724,6 +1836,7 @@ where
 {
     loop {
         let mut arch = find_arch_state(ctx, state.value_arch)?;
+        // Empty queue: the received packet is fully processed
         let Some(packet) = arch.queue.pop_front() else {
             return Ok(());
         };
@@ -1732,6 +1845,7 @@ where
     }
 }
 
+/// Processes one received packet through both pipelines and the scheduler.
 pub fn drive_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
@@ -1741,6 +1855,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
 {
+    // Outputs of the previous packet are gone
     state.txs.clear();
     setup_rx(ctx, state, rx)?;
     schedule_packet(ctx, state, Entrypoint::Ingress)?;

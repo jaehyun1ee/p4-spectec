@@ -48,11 +48,14 @@ use serde_derive_state::{DeserializeState, SerializeState};
 // == Configuration
 
 #[derive(Default)]
+/// The v1model architecture, parameterized by its state encoding.
 pub struct V1Model {
+    /// Encoding of architecture and object states as external values.
     encoding: Encoding,
 }
 
 impl V1Model {
+    /// Creates the architecture with the given state encoding.
     pub fn new(encoding: Encoding) -> Self {
         Self { encoding }
     }
@@ -60,22 +63,29 @@ impl V1Model {
 
 // == Extern objects
 
-/// Core and v1model-specific extern objects
+/// Core and v1model-specific extern objects.
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
 pub enum ObjectState {
+    /// The `packet_in` of the current packet.
     PacketIn(PacketIn),
+    /// The `packet_out` being emitted.
     PacketOut(PacketOut),
+    /// A `counter` array.
     Counter(Counter),
+    /// A `register` array.
     Register(#[serde(state)] Register),
+    /// A `direct_counter`.
     DirectCounter(DirectCounter),
+    /// A `direct_meter`.
     DirectMeter(DirectMeter),
 }
 
 impl ObjectState {
     // - Encoding
 
+    /// Encodes the object as the specification's `objectState` external value.
     pub fn to_value(
         &self,
         arena: &mut ValueArena,
@@ -92,6 +102,7 @@ impl ObjectState {
 
     // - Decoding
 
+    /// Decodes an object from an `objectState` external value.
     pub fn from_value(
         arena: &mut ValueArena,
         encoding: Encoding,
@@ -105,12 +116,17 @@ impl ObjectState {
 
 // == STF transformation
 
+/// Rewrites p4c block names in an STF statement to the specification's.
+///
+/// `ingress`/`preqos` become `main.ig`, `egress`/`postqos`/`c3` become
+/// `main.eg`, and `$valid$` in an `add` match becomes `isValid()`.
 pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
     fn transform_name(name: crate::stf::ast::Name) -> crate::stf::ast::Name {
         name.rewrite_substring(&["ingress", "preqos"], "main.ig")
             .rewrite_substring(&["egress", "postqos", "c3"], "main.eg")
     }
     match &mut stmt {
+        // Table, action, and every match of an add
         Statement::Add { table, matches, action, .. } => {
             *table = transform_name(table.clone());
             action.name = transform_name(action.name.clone());
@@ -118,6 +134,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
                 *mtch = mtch.clone().rewrite_valid();
             }
         }
+        // Table and action of a default
         Statement::SetDefault { table, action } => {
             *table = transform_name(table.clone());
             action.name = transform_name(action.name.clone());
@@ -129,6 +146,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
 
 // == Architectural state
 
+/// The initial architecture state: empty queue, tables, and requests.
 pub(super) fn init_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
 ) -> Result<Value, Interp::Error>
@@ -142,6 +160,7 @@ where
         .map_err(Into::into)
 }
 
+/// Decodes the architecture state stored in `value_arch`.
 pub fn find_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
@@ -155,6 +174,7 @@ where
     Ok(Arch::from_value(ctx.arena_mut(), encoding, &value_state)?)
 }
 
+/// Encodes `arch` back into `value_arch`.
 pub fn update_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
@@ -171,6 +191,7 @@ where
 
 // == Object state
 
+/// Decodes the object named `value_id` from `value_arch`.
 pub fn find_object_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
@@ -185,6 +206,7 @@ where
     Ok(ObjectState::from_value(ctx.arena_mut(), encoding, &value_object)?)
 }
 
+/// The `packet_in` object of the current packet.
 fn find_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
@@ -193,6 +215,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // The object id is the one-element path `packet_in`
     let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())
         .map_err(ExternError::from)?;
     let values_name = vec![value_name];
@@ -208,6 +231,7 @@ where
     }
 }
 
+/// The `packet_out` object of the current packet.
 fn find_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
@@ -216,6 +240,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // The object id is the one-element path `packet_out`
     let value_name = make::text(ctx.arena_mut(), "packet_out".to_owned(), Span::default())
         .map_err(ExternError::from)?;
     let values_name = vec![value_name];
@@ -235,6 +260,10 @@ where
 
 // - Initialization
 
+/// Constructs a v1model object from its constructor call.
+///
+/// `values` holds the object name, type arguments, parameter names,
+/// and parameter values; core objects and unknown names get an empty state.
 pub(super) fn eval_extern_init<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     values: &[Value],
@@ -271,10 +300,12 @@ where
             *value_ids,
             *value_args,
         )?)),
+        // Other externs carry no state of their own
         _ => None,
     };
     Ok(match object {
         Some(object) => object.to_value(ctx.arena_mut(), encoding)?,
+        // No state: encode the unit value
         None => {
             let payload = encode_with(ctx.arena(), encoding, &())
                 .map_err(|error| ExternError::Failure(error.to_string()))?;
@@ -290,6 +321,10 @@ where
 
 // - Function calls
 
+/// Dispatches an extern function call by name and parameter names.
+///
+/// `values` holds the context, the architecture state, the name,
+/// and the parameter names; the result adds the call result to the pair.
 pub(super) fn eval_extern_func_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     values: &[Value],
@@ -336,6 +371,7 @@ where
         }
         ("log_msg", ["msg"]) => v1model_func::log_msg(ctx, *value_ctx, *value_arch)?,
         ("log_msg", ["msg", "data"]) => v1model_func::log_msg_format(ctx, *value_ctx, *value_arch)?,
+        // The payload variants need the packet's unparsed bytes
         ("verify_checksum_with_payload", ["condition", "data", "checksum", "algo"]) => {
             let pkt = find_packet_in(ctx, *value_arch)?;
             v1model_func::verify_checksum_with_payload(ctx, *value_ctx, *value_arch, &pkt)?
@@ -344,6 +380,7 @@ where
             let pkt = find_packet_in(ctx, *value_arch)?;
             v1model_func::update_checksum_with_payload(ctx, *value_ctx, *value_arch, &pkt)?
         }
+        // Anything else, such as random or truncate, is unsupported
         _ => {
             return Err(ExternError::Failure(format!(
                 "unsupported extern function call: {name}({})",
@@ -357,6 +394,11 @@ where
 
 // - Method calls
 
+/// Dispatches an extern method call on the object named `value_id`.
+///
+/// The object is decoded, updated by its method, and written back;
+/// `values` holds the context, state, object id, method name,
+/// and parameter names.
 pub(super) fn eval_extern_method_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     values: &[Value],
@@ -366,6 +408,7 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     let encoding = ctx.external().encoding;
+    // Context, state, object id, method name, parameter names
     let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
         return Err(ExternError::Failure(
             "unexpected number of arguments to extern method call".to_owned(),
@@ -383,6 +426,7 @@ where
         .collect::<Result<Vec<_>, _>>()
         .map_err(ExternError::from)?;
     let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
+    // Each arm hands the object to its method and wraps it again
     let (object, value_ctx, value_arch, value_call_result) =
         match (object, name.as_str(), names_ref.as_slice()) {
             (ObjectState::PacketIn(object), "extract", ["hdr"]) => {
@@ -419,6 +463,7 @@ where
                     object.emit(ctx, *value_ctx, *value_arch)?;
                 (ObjectState::PacketOut(object), value_ctx, value_arch, value_call_result)
             }
+            // Counters and meters see the current packet
             (ObjectState::Counter(object), "count", ["index"]) => {
                 let pkt = find_packet_in(ctx, *value_arch)?;
                 let (object, value_ctx, value_arch, value_call_result) =
@@ -447,6 +492,7 @@ where
                     object.read(ctx, *value_ctx, *value_arch, &pkt)?;
                 (ObjectState::DirectMeter(object), value_ctx, value_arch, value_call_result)
             }
+            // Unknown method: name the object in the error
             _ => {
                 let ids = get::list(ctx.arena(), value_id)
                     .map_err(ExternError::from)?
@@ -462,6 +508,7 @@ where
                 .into());
             }
         };
+    // Write the updated object back
     let value_object = object.to_value(ctx.arena_mut(), encoding)?;
     let value_arch = func::update_object_state_e(ctx, value_arch, *value_id, value_object)?;
     Ok(vec![value_ctx, value_arch, value_call_result])
@@ -469,6 +516,7 @@ where
 
 // == Mirror table interface
 
+/// Configures mirror `session` to send clones to `port`.
 pub fn add_mirror_session<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
@@ -484,6 +532,7 @@ where
     update_arch_state(ctx, value_arch, &arch)
 }
 
+/// Multicast mirror sessions are not supported.
 pub fn add_mirror_session_mc<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     _value_arch: Value,
@@ -503,6 +552,7 @@ where
 
 // == Multicast interface
 
+/// Creates multicast group `group`.
 pub fn mc_mgrp_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
@@ -517,6 +567,7 @@ where
     update_arch_state(ctx, value_arch, &arch)
 }
 
+/// Creates a multicast node with replication id `instance` on `ports`.
 pub fn mc_node_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
@@ -532,6 +583,7 @@ where
     update_arch_state(ctx, value_arch, &arch)
 }
 
+/// Adds node `handle` to multicast group `group`.
 pub fn mc_node_associate<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     value_arch: Value,
@@ -549,6 +601,7 @@ where
 
 // == Register interface
 
+/// Control-plane register reads are not supported.
 pub fn register_read<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     _value_arch: Value,
@@ -566,6 +619,7 @@ where
     .into())
 }
 
+/// Control-plane register writes are not supported.
 pub fn register_write<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     _value_arch: Value,
@@ -584,6 +638,7 @@ where
     .into())
 }
 
+/// Control-plane register resets are not supported.
 pub fn register_reset<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     _value_arch: Value,
@@ -602,6 +657,8 @@ where
 
 // == Packet state
 
+/// Makes `packet` current: its input becomes the `packet_in` object
+/// and its context the state's context.
 fn insert_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -612,6 +669,7 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     state.value_arch = {
+        // The object id is the one-element path `packet_in`
         let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())
             .map_err(ExternError::from)?;
         let values_name = vec![value_name];
@@ -631,6 +689,7 @@ where
     Ok(())
 }
 
+/// Rewinds the `packet_in` cursor over the same bytes.
 fn remove_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -642,6 +701,7 @@ where
     let mut pkt = find_packet_in(ctx, state.value_arch)?;
     pkt.reset();
     state.value_arch = {
+        // The object id is the one-element path `packet_in`
         let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())
             .map_err(ExternError::from)?;
         let values_name = vec![value_name];
@@ -659,6 +719,7 @@ where
     Ok(())
 }
 
+/// Replaces `packet_out` with an empty one before deparsing.
 fn remove_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -668,6 +729,7 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     state.value_arch = {
+        // The object id is the one-element path `packet_out`
         let value_name = make::text(ctx.arena_mut(), "packet_out".to_owned(), Span::default())
             .map_err(ExternError::from)?;
         let values_name = vec![value_name];
@@ -686,6 +748,7 @@ where
     Ok(())
 }
 
+/// Whether `egress_spec` holds the 9-bit drop port 511.
 fn is_dropped<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &SimState,
@@ -705,6 +768,7 @@ where
     Ok(width == 9.into() && int == 511.into())
 }
 
+/// The multicast group requested in `standard_metadata.mcast_grp`.
 fn get_mcast_grp<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -728,6 +792,7 @@ where
 
 // == Pipeline initializer
 
+/// Instantiates the program and returns the initial simulator state.
 pub fn init_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     program: Value,
@@ -742,6 +807,8 @@ where
 
 // == Pipeline driver
 
+/// Installs the received packet as `packet_in`, an empty `packet_out`,
+/// and the standard metadata for `rx.port`.
 pub fn setup_rx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -769,6 +836,7 @@ where
 
 // == Parser + Verify
 
+/// Runs the parser; a rejection is recorded in `parser_error`.
 pub fn drive_p<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -780,6 +848,7 @@ where
     let (value_ctx, value_arch, value_call_result) =
         rel::v1model_parser(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
+    // A `REJECT` carries the error value
     let value_error = get::matches! { ctx.arena(), &value_call_result,
         "REJECT errorValue" => |values| match values.as_slice() {
             [value_error] => Some(**value_error),
@@ -790,6 +859,7 @@ where
         },
         _ => None,
     };
+    // Parser errors are visible to the controls
     if let Some(value_error) = value_error {
         state.value_ctx = rel::lvalue_write_dot_global(
             ctx,
@@ -803,6 +873,7 @@ where
     Ok(())
 }
 
+/// Runs the VerifyChecksum control.
 pub fn drive_vr<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -817,6 +888,7 @@ where
     Ok(value_result)
 }
 
+/// Front half of the pipeline: reset requests, rewind the input, parse, verify.
 pub fn drive_pipe_pre<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -826,6 +898,7 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     let mut arch = find_arch_state(ctx, state.value_arch)?;
+    // Forget the previous pass's requests
     arch.reset();
     state.value_arch = update_arch_state(ctx, state.value_arch, &arch)?;
     remove_packet_in(ctx, state)?;
@@ -835,6 +908,7 @@ where
 
 // == Checksum + Deparser
 
+/// Runs the ComputeChecksum control.
 pub fn drive_ck<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -849,6 +923,7 @@ where
     Ok(value_result)
 }
 
+/// Runs the deparser.
 pub fn drive_dep<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -863,6 +938,7 @@ where
     Ok(value_result)
 }
 
+/// Back half of the pipeline: checksum, deparse, and transmit on `egress_spec`.
 pub fn drive_pipe_post<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -874,6 +950,7 @@ where
     drive_ck(ctx, state)?;
     remove_packet_out(ctx, state)?;
     drive_dep(ctx, state)?;
+    // The output port is the final `egress_spec`
     let port = {
         let value = rel::lvalue_read_dot_global(
             ctx,
@@ -884,6 +961,7 @@ where
         )?;
         usize::try_from(&unpack::p4_fixed_bit(ctx.arena(), &value)?.1).map_err(ExternError::from)
     }?;
+    // Emitted headers followed by the unparsed payload
     let packet = {
         let pkt_in = find_packet_in(ctx, state.value_arch)?;
         let pkt_out = find_packet_out(ctx, state.value_arch)?;
@@ -895,6 +973,7 @@ where
 
 // == Prepare context for resubmit/clone/recirculate/multicast
 
+/// Marks the context as a resubmit preserving field list `idx`.
 fn prepare_resubmit_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -904,6 +983,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // Preserve the `@field_list(idx)` metadata fields
     let value_idx = pack::p4_fixed_bit(ctx.arena_mut(), 8.into(), idx.into())?;
     state.value_ctx = rel::v1model_setup_preserved_meta_fields(
         ctx,
@@ -924,6 +1004,7 @@ where
     Ok(())
 }
 
+/// Marks the context as a clone to `port` preserving field list `idx`.
 fn prepare_clone_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -935,6 +1016,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // Preserve the `@field_list(idx)` metadata fields
     let value_idx = pack::p4_fixed_bit(ctx.arena_mut(), 8.into(), idx.into())?;
     state.value_ctx = rel::v1model_setup_preserved_meta_fields(
         ctx,
@@ -942,6 +1024,7 @@ where
         state.value_arch,
         value_idx,
     )?;
+    // PKT_INSTANCE_TYPE_INGRESS_CLONE or PKT_INSTANCE_TYPE_EGRESS_CLONE
     let instance = match clone_type {
         CloneType::I2E => 1,
         CloneType::E2E => 2,
@@ -967,6 +1050,7 @@ where
     Ok(())
 }
 
+/// Marks the context as a recirculation preserving field list `idx`.
 fn prepare_recirculate_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -976,6 +1060,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // Preserve the `@field_list(idx)` metadata fields
     let value_idx = pack::p4_fixed_bit(ctx.arena_mut(), 8.into(), idx.into())?;
     state.value_ctx = rel::v1model_setup_preserved_meta_fields(
         ctx,
@@ -996,6 +1081,7 @@ where
     Ok(())
 }
 
+/// Marks the context as replica `rid` of a multicast to `port`.
 fn prepare_multicast_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1006,6 +1092,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // Each replica carries its node's replication id and port
     let value = pack::p4_fixed_bit(ctx.arena_mut(), 16.into(), rid.into())?;
     state.value_ctx = rel::lvalue_write_dot_global(
         ctx,
@@ -1039,6 +1126,7 @@ where
 
 // == Schedule resubmit/clone/recirculate/multicast if needed
 
+/// Queues the current packet to resume at `entrypoint`.
 pub fn schedule_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1051,6 +1139,7 @@ where
     let packet_in = find_packet_in(ctx, state.value_arch)?;
     let packet = Packet { value_ctx: state.value_ctx, packet_in, entrypoint };
     let mut arch = find_arch_state(ctx, state.value_arch)?;
+    // Ingress work runs before queued egress copies
     match entrypoint {
         Entrypoint::Ingress => arch.queue.push_front(packet),
         Entrypoint::Egress => arch.queue.push_back(packet),
@@ -1059,6 +1148,7 @@ where
     Ok(())
 }
 
+/// Acts on a resubmit request: parse the input again and queue it for ingress.
 pub fn schedule_resubmit<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1068,9 +1158,11 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // No resubmit requested
     let Some(idx) = arch.action.resubmit_opt else {
         return Ok(false);
     };
+    // The new packet gets its own context; this one continues unchanged
     let value_ctx_original = state.value_ctx;
     prepare_resubmit_ctx(ctx, state, idx)?;
     drive_pipe_pre(ctx, state)?;
@@ -1079,6 +1171,7 @@ where
     Ok(true)
 }
 
+/// Acts on a clone request: queue a copy for egress on the session's port.
 pub fn schedule_clone<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1088,14 +1181,18 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // No clone requested
     let Some(CloneInfo(clone_type, session, idx)) = arch.action.clone_opt else {
         return Ok(false);
     };
+    // An unconfigured session makes no clone
     let Some(&port) = arch.mirrortable.get(&session) else {
         return Ok(false);
     };
+    // The new packet gets its own context; this one continues unchanged
     let value_ctx_original = state.value_ctx;
     prepare_clone_ctx(ctx, state, clone_type, port, idx)?;
+    // I2E clones are parsed again; E2E clones keep the egress state
     if clone_type == CloneType::I2E {
         drive_pipe_pre(ctx, state)?;
     }
@@ -1104,6 +1201,7 @@ where
     Ok(true)
 }
 
+/// Acts on a recirculate request: deparse, then parse the output again.
 pub fn schedule_recirculate<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1113,22 +1211,27 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // No recirculate requested
     let Some(idx) = arch.action.recirculate_opt else {
         return Ok(false);
     };
+    // The new packet gets its own context; this one continues unchanged
     let value_ctx_original = state.value_ctx;
     prepare_recirculate_ctx(ctx, state, idx)?;
     // Run checksum and deparser before feeding the output back to the parser
     drive_ck(ctx, state)?;
     remove_packet_out(ctx, state)?;
     drive_dep(ctx, state)?;
+    // Emitted headers followed by the unparsed payload
     let packet = {
         let pkt_in = find_packet_in(ctx, state.value_arch)?;
         let pkt_out = find_packet_out(ctx, state.value_arch)?;
         core_packet::to_string(&pkt_in, &pkt_out)
     }?;
+    // The deparsed bytes become the new input
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
     state.value_arch = {
+        // The object id is the one-element path `packet_in`
         let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())
             .map_err(ExternError::from)?;
         let values_name = vec![value_name];
@@ -1150,6 +1253,7 @@ where
     Ok(true)
 }
 
+/// Queues one egress copy per node of multicast `group`.
 pub fn schedule_multicast<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1160,9 +1264,11 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // Unknown group: nothing is replicated
     let Some(handles) = arch.multicast.groups.get(&group) else {
         return Ok(false);
     };
+    // One egress copy per (port, rid) node, in association order
     for handle in handles {
         if let Some(nodes) = arch.multicast.nodes.get(handle) {
             for node in nodes {
@@ -1176,6 +1282,7 @@ where
 
 // == Ingress + Handle clone, resubmit, drop
 
+/// Runs ingress, then schedules the clone, resubmit, multicast, or unicast.
 pub fn drive_ig<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1188,11 +1295,14 @@ where
         rel::v1model_ingress(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     let arch = find_arch_state(ctx, state.value_arch)?;
+    // A clone request never stops the original
     schedule_clone(ctx, state, &arch)?;
+    // A resubmit replaces the packet's normal continuation
     if schedule_resubmit(ctx, state, &arch)? {
         return Ok(value_result);
     }
     let group = get_mcast_grp(ctx, state)?;
+    // Multicast wins over unicast; a dropped packet goes nowhere
     if group != 0 {
         schedule_multicast(ctx, state, &arch, group)?;
     } else if !is_dropped(ctx, state)? {
@@ -1201,6 +1311,7 @@ where
     Ok(value_result)
 }
 
+/// Copies `egress_spec` into `egress_port` for the egress control.
 fn prepare_egress_ctx<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1227,6 +1338,7 @@ where
     Ok(())
 }
 
+/// Runs egress; `None` when the packet was dropped or recirculated.
 pub fn drive_eg<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1240,16 +1352,20 @@ where
         rel::v1model_egress(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     let arch = find_arch_state(ctx, state.value_arch)?;
+    // A clone request never stops the original
     schedule_clone(ctx, state, &arch)?;
+    // Dropped in egress: nothing to transmit
     if is_dropped(ctx, state)? {
         return Ok(None);
     }
     let arch = find_arch_state(ctx, state.value_arch)?;
+    // Recirculation consumes the packet
     if schedule_recirculate(ctx, state, &arch)? { Ok(None) } else { Ok(Some(value_result)) }
 }
 
 // == Scheduling packets
 
+/// Resumes a queued packet at its entrypoint.
 pub fn drive_packet<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1262,10 +1378,12 @@ where
     let entrypoint = packet.entrypoint;
     insert_packet(ctx, state, packet)?;
     match entrypoint {
+        // Ingress schedules its own continuation
         Entrypoint::Ingress => {
             drive_ig(ctx, state)?;
             Ok(())
         }
+        // Egress deparses and transmits unless dropped or recirculated
         Entrypoint::Egress => match drive_eg(ctx, state)? {
             Some(_) => drive_pipe_post(ctx, state),
             None => Ok(()),
@@ -1273,6 +1391,7 @@ where
     }
 }
 
+/// Drains the packet queue, running each packet to its next stop.
 pub fn run_scheduler<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1283,15 +1402,18 @@ where
 {
     loop {
         let mut arch = find_arch_state(ctx, state.value_arch)?;
+        // Empty queue: the received packet is fully processed
         let Some(packet) = arch.queue.pop_front() else {
             return Ok(());
         };
+        // Each packet starts with no pending requests
         arch.reset();
         state.value_arch = update_arch_state(ctx, state.value_arch, &arch)?;
         drive_packet(ctx, state, packet)?;
     }
 }
 
+/// Processes one received packet through the pipeline and its scheduler.
 pub fn drive_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
@@ -1301,6 +1423,7 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
+    // Outputs of the previous packet are gone
     state.txs.clear();
     setup_rx(ctx, state, rx)?;
     drive_pipe_pre(ctx, state)?;

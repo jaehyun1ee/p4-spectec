@@ -41,11 +41,14 @@ use super::{
 // == Configuration
 
 #[derive(Default)]
+/// The eBPF architecture, parameterized by its state encoding.
 pub struct Ebpf {
+    /// Encoding of architecture and object states as external values.
     encoding: Encoding,
 }
 
 impl Ebpf {
+    /// Creates the architecture with the given state encoding.
     pub fn new(encoding: Encoding) -> Self {
         Self { encoding }
     }
@@ -56,14 +59,18 @@ impl Ebpf {
 #[derive(Clone, Debug, PartialEq, Eq, SerializeState, DeserializeState)]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
+/// Core and eBPF-specific extern objects.
 pub enum ExternObject {
+    /// The `packet_in` being parsed.
     PacketIn(PacketIn),
+    /// A `CounterArray`.
     CounterArray(CounterArray),
 }
 
 impl ExternObject {
     // - Encoding
 
+    /// Encodes the object as the specification's `objectState` external value.
     pub fn to_value(
         &self,
         arena: &mut ValueArena,
@@ -80,6 +87,7 @@ impl ExternObject {
 
     // - Decoding
 
+    /// Decodes an object from an `objectState` external value.
     pub fn from_value(
         arena: &mut ValueArena,
         encoding: Encoding,
@@ -93,6 +101,9 @@ impl ExternObject {
 
 // == STF transformation
 
+/// Rewrites p4c block names in an STF statement to the specification's.
+///
+/// `pipe` blocks become `main.filt`, `_NoAction` becomes `NoAction`.
 pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
     fn transform_name(name: Name) -> Name {
         name.replace_substring(&["pipe_c1_"], "main.filt.c1.")
@@ -100,6 +111,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
             .replace_substring(&["pipe"], "main.filt")
     }
     match &mut stmt {
+        // Table and action of an add or default
         Statement::Add { table, action, .. } | Statement::SetDefault { table, action } => {
             *table = transform_name(table.clone());
             *action = action
@@ -116,6 +128,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
 
 // == Architectural state
 
+/// The initial architecture state: an encoded unit value.
 pub(super) fn init_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
 ) -> Result<Value, Interp::Error>
@@ -138,6 +151,7 @@ where
 
 // - Initialization
 
+/// Constructs a `CounterArray`; any other object gets an empty state.
 pub(super) fn eval_extern_init<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
     values: &[Value],
@@ -150,6 +164,7 @@ where
     let (value_name, _value_targs, value_ids, value_args) =
         get::four(values).map_err(ExternError::from)?;
     let name = get::text(ctx.arena(), value_name).map_err(ExternError::from)?;
+    // Only `CounterArray` carries state
     Ok(if name == "CounterArray" {
         let counter = CounterArray::init(ctx.arena(), *value_ids, *value_args)?;
         ExternObject::CounterArray(counter).to_value(ctx.arena_mut(), encoding)?
@@ -167,6 +182,7 @@ where
 
 // - Function calls
 
+/// Dispatches an extern function call; only `verify` is supported.
 pub(super) fn eval_extern_func_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
     values: &[Value],
@@ -187,6 +203,7 @@ where
         .collect::<Result<Vec<_>, _>>()
         .map_err(ExternError::from)?;
     let (value_ctx, value_arch, value_call_result) =
+        // Only `verify` is supported
         if name == "verify" && names == ["check", "toSignal"] {
             core_func::verify(ctx, *value_ctx, *value_arch)?
         } else {
@@ -201,6 +218,7 @@ where
 
 // - Method calls
 
+/// Builds the error naming an unsupported method call.
 fn unsupported_method(
     arena: &ValueArena,
     value_id: Value,
@@ -220,6 +238,9 @@ fn unsupported_method(
     )))
 }
 
+/// Dispatches an extern method call on the object named `value_id`.
+///
+/// The object is decoded, updated by its method, and written back.
 pub(super) fn eval_extern_method_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
     values: &[Value],
@@ -229,6 +250,7 @@ where
     Interp: Interpreter<Iface, Ebpf>,
 {
     let encoding = ctx.external().encoding;
+    // Context, state, object id, method name, parameter names
     let [value_ctx, value_arch, value_id, value_name, value_names] = values else {
         return Err(ExternError::Failure(
             "unexpected number of arguments to extern method call".to_owned(),
@@ -296,6 +318,7 @@ where
 
 // - Initialization
 
+/// Instantiates the program and returns the initial simulator state.
 pub fn init_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
     program: Value,
@@ -310,6 +333,9 @@ where
 
 // - Execution
 
+/// Processes one received packet: parse, filter, and forward if accepted.
+///
+/// A parser reject or false `accept` drops the packet; no deparser runs.
 pub fn drive_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
     state: &mut SimState,
@@ -337,6 +363,7 @@ where
         "REJECT errorValue" => |_values| true,
         _ => false,
     };
+    // A rejected packet is dropped
     if rejected {
         return Ok(());
     }
@@ -346,6 +373,7 @@ where
     // Check if packet is accepted
     let value_accept =
         rel::lvalue_read_var_global(ctx, state.value_ctx, state.value_arch, "accept")?;
+    // Forward only when the filter accepted the packet
     if unpack::p4_bool(ctx.arena(), &value_accept)? {
         state
             .txs

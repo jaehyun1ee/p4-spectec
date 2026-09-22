@@ -18,6 +18,7 @@ use super::error::{StfError, StfErrorKind};
 // == Tokens
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+/// An STF token from either lexing mode.
 pub enum Token {
     End,
     Add,
@@ -32,7 +33,9 @@ pub enum Token {
     Remove,
     SetDefault,
     Wait,
+    /// A `*` nibble in packet data.
     PacketWildcard,
+    /// A run of `?` ternary nibbles in packet data.
     DataTernary,
     MirroringAdd,
     MirroringAddMc,
@@ -43,6 +46,7 @@ pub enum Token {
     RegisterRead,
     RegisterWrite,
     RegisterReset,
+    /// A quoted or bare identifier.
     Id(String),
     Colon,
     Comma,
@@ -59,30 +63,41 @@ pub enum Token {
     Ne,
     LeftBracket,
     RightBracket,
+    /// A decimal integer literal.
     IntDecimal(String),
+    /// A hexadecimal integer literal.
     IntHex(String),
+    /// A binary integer literal.
     IntBinary(String),
+    /// A hexadecimal literal with `*` wildcards.
     TernaryHex(String),
+    /// Packet data of decimal digits only.
     DataDecimal(String),
+    /// Packet data with hexadecimal digits.
     DataHex(String),
 }
 
 // == Lexer modes
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Which vocabulary the lexer is reading.
 enum Mode {
+    /// Keywords, identifiers, numbers, and punctuation.
     Command,
+    /// Hex nibbles and wildcards until newline or `$`.
     PacketData,
 }
 
 // == Lexer
 
+/// A hand-written STF lexer with a mode-switching cursor.
 pub struct Lexer<'source> {
     source: &'source str,
     file: Rc<str>,
     index: usize,
     line: usize,
     column: usize,
+    /// The current lexing mode.
     mode: Mode,
     finished: bool,
 }
@@ -90,6 +105,7 @@ pub struct Lexer<'source> {
 impl<'source> Lexer<'source> {
     // - Construction
 
+    /// Starts a lexer over `source` in command mode.
     pub fn new(file: impl Into<Rc<str>>, source: &'source str) -> Self {
         Self {
             source,
@@ -104,14 +120,17 @@ impl<'source> Lexer<'source> {
 
     // - Source cursor
 
+    /// The current source position.
     fn source_position(&self) -> Position {
         Position::new(Rc::clone(&self.file), self.line, self.column)
     }
 
+    /// The span from `pos_l` to the cursor.
     fn span_from(&self, pos_l: Position) -> Span {
         Span::new(pos_l, self.source_position())
     }
 
+    /// Consumes the next character, tracking line and column.
     fn bump(&mut self) -> Option<char> {
         let character = self.source[self.index..].chars().next()?;
         self.index += character.len_utf8();
@@ -124,10 +143,12 @@ impl<'source> Lexer<'source> {
         Some(character)
     }
 
+    /// The next character without consuming it.
     fn peek(&self) -> Option<char> {
         self.source[self.index..].chars().next()
     }
 
+    /// Consumes characters while `predicate` holds and returns them.
     fn take_while(&mut self, mut predicate: impl FnMut(char) -> bool) -> &'source str {
         let start = self.index;
         while let Some(character) = self.peek() {
@@ -139,6 +160,7 @@ impl<'source> Lexer<'source> {
         &self.source[start..self.index]
     }
 
+    /// Builds an error spanning from `pos_l` to the cursor.
     fn error(&self, kind: StfErrorKind, pos_l: Position) -> StfError {
         let span = self.span_from(pos_l);
         StfError::new(kind, span)
@@ -146,6 +168,7 @@ impl<'source> Lexer<'source> {
 
     // - Layout
 
+    /// Skips layout; a newline in packet-data mode returns to command mode.
     fn skip_layout(&mut self) {
         loop {
             match self.mode {
@@ -153,6 +176,7 @@ impl<'source> Lexer<'source> {
                     self.skip_command_layout();
                     return;
                 }
+                // A newline ends packet data and returns to command mode
                 Mode::PacketData => {
                     self.take_while(|character| matches!(character, ' ' | '\t' | '\r'));
                     if self.peek() != Some('\n') {
@@ -165,6 +189,7 @@ impl<'source> Lexer<'source> {
         }
     }
 
+    /// Skips whitespace and `#` comments in command mode.
     fn skip_command_layout(&mut self) {
         loop {
             self.take_while(|character| matches!(character, ' ' | '\t' | '\r' | '\n'));
@@ -177,6 +202,7 @@ impl<'source> Lexer<'source> {
 
     // - Command tokens
 
+    /// Lexes one command-mode token.
     fn lex_command(&mut self) -> Result<Token, StfError> {
         let pos_l = self.source_position();
         let Some(character) = self.peek() else {
@@ -188,6 +214,7 @@ impl<'source> Lexer<'source> {
             return Ok(token);
         }
 
+        // Operators, quotes, digits, and identifiers each have a scanner
         if matches!(character, '=' | '!' | '<' | '>') {
             let token = self.lex_operator(character, pos_l)?;
             return Ok(token);
@@ -213,6 +240,7 @@ impl<'source> Lexer<'source> {
         Err(self.error(error, pos_l))
     }
 
+    /// Lexes a single punctuation token, if any.
     fn lex_punctuation(&mut self) -> Option<Token> {
         let token = match self.peek()? {
             ':' => Token::Colon,
@@ -229,6 +257,7 @@ impl<'source> Lexer<'source> {
         Some(token)
     }
 
+    /// Lexes a comparison or assignment operator, pairing a trailing `=`.
     fn lex_operator(&mut self, character: char, pos_l: Position) -> Result<Token, StfError> {
         self.bump();
         let paired = self.peek() == Some('=');
@@ -250,6 +279,7 @@ impl<'source> Lexer<'source> {
         }
     }
 
+    /// Lexes a double-quoted identifier.
     fn lex_quoted_identifier(&mut self, pos_l: Position) -> Result<Token, StfError> {
         self.bump();
         let start = self.index;
@@ -263,10 +293,12 @@ impl<'source> Lexer<'source> {
         Ok(Token::Id(id))
     }
 
+    /// Lexes a decimal, hex, binary, or ternary-hex number.
     fn lex_number(&mut self, pos_l: Position) -> Result<Token, StfError> {
         let spelling =
             self.take_while(|character| character.is_ascii_alphanumeric() || character == '*');
         let digits = spelling.get(2..).unwrap_or_default();
+        // The radix prefix decides which digits are allowed
         let valid = if spelling.starts_with("0x") || spelling.starts_with("0X") {
             !digits.is_empty()
                 && digits
@@ -282,6 +314,7 @@ impl<'source> Lexer<'source> {
             return Err(self.error(error, pos_l));
         }
 
+        // A hex spelling with `*` is ternary, otherwise plain hex
         let token = if spelling.starts_with("0x") || spelling.starts_with("0X") {
             if spelling.contains('*') {
                 Token::TernaryHex(spelling.to_owned())
@@ -296,6 +329,7 @@ impl<'source> Lexer<'source> {
         Ok(token)
     }
 
+    /// Lexes an identifier and classifies it as a keyword or name.
     fn lex_identifier(&mut self) -> Token {
         let id = self.take_while(|character| {
             character == '$' || character == '_' || character.is_ascii_alphanumeric()
@@ -303,6 +337,7 @@ impl<'source> Lexer<'source> {
         self.classify_identifier(id)
     }
 
+    /// Maps a keyword to its token; `packet`/`expect` enter packet-data mode.
     fn classify_identifier(&mut self, id: &str) -> Token {
         match id {
             "add" => Token::Add,
@@ -337,6 +372,7 @@ impl<'source> Lexer<'source> {
 
     // - Packet-data tokens
 
+    /// Lexes one packet-data token: `$`, `*`, `?`, or hex nibbles.
     fn lex_packet_data(&mut self) -> Result<Token, StfError> {
         let pos_l = self.source_position();
         let Some(character) = self.peek() else {
@@ -344,6 +380,7 @@ impl<'source> Lexer<'source> {
             self.finished = true;
             return Ok(Token::End);
         };
+        // `$` ends packet data and returns to command mode
         if character == '$' {
             self.bump();
             self.mode = Mode::Command;

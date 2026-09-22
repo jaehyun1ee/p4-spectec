@@ -12,6 +12,7 @@ use super::ast::{Action, Condition, CounterKind, CounterTarget, MatchKind, Progr
 
 // == Lexical helpers
 
+/// Writes a double-quoted string.
 fn write_quoted(printer: &mut Printer<'_>, value: &str) -> fmt::Result {
     printer.write_fmt(format_args!("\"{value}\""))
 }

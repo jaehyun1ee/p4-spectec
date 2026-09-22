@@ -1,3 +1,8 @@
+//! eBPF architecture that parses, filters, and forwards accepted packets
+//!
+//! Extern calls reach the pipeline module;
+//! the only stateful object is a counter array.
+
 use crate::{
     lang::data::value::Value,
     runner::{Interface, Interpreter, RunnerContext},
@@ -12,6 +17,7 @@ pub use pipe::{Ebpf, drive_pipe, init_pipe, transform_stf_stmt};
 
 // == Extern calls
 
+/// Hands every extern hook to the pipeline module.
 impl external::Impl for Ebpf {
     fn eval_extern_init<Interp, Iface>(
         &self,

@@ -1,5 +1,6 @@
 //! Dummy externs initialize empty states and support compile-time assertions
-//! Runtime extern function and method calls remain unsupported
+//!
+//! Runtime extern function and method calls remain unsupported.
 
 use crate::{
     lang::{
@@ -14,10 +15,12 @@ use crate::{
 
 // == Configuration
 
+/// The dummy architecture, holding no state.
 pub struct Dummy;
 
 // == Architectural state
 
+/// The initial architecture state: an encoded unit value.
 pub(super) fn init_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
 ) -> Result<Value, Interp::Error>
@@ -39,6 +42,7 @@ where
 
 // - Initialization
 
+/// Every object starts as an encoded unit value.
 pub(super) fn eval_extern_init<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
     _values: &[Value],
@@ -59,6 +63,7 @@ where
 
 // - Function calls
 
+/// Extern function calls are unsupported.
 pub(super) fn eval_extern_func_call<Interp, Iface>(
     _ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
     _values: &[Value],
@@ -73,6 +78,7 @@ where
 
 // - Method calls
 
+/// Extern method calls are unsupported.
 pub(super) fn eval_extern_method_call<Interp, Iface>(
     _ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
     _values: &[Value],
