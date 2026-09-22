@@ -1,3 +1,8 @@
+//! The `direct_counter` extern, a counter attached to a table
+//!
+//! The simulator keeps one count per object,
+//! bumped only when `count()` is called.
+
 use crate::sim_plugin::{
     core::object::PacketIn,
     spec::{args, unpack},
@@ -17,17 +22,21 @@ use num_traits::{One, Zero};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Direct counter by `CounterType`.
 pub enum DirectCounter {
+    /// Packet count.
     Packets(BigInt),
+    /// Byte count.
     Bytes(BigInt),
+    /// Packet and byte counts.
     PacketsAndBytes((BigInt, BigInt)),
 }
 
 impl DirectCounter {
     /// A direct_counter object is created by calling its constructor.
     /// You must provide a choice of whether to maintain only a packet
-    /// count (CounterType.packets), only a byte count
-    /// (CounterType.bytes), or both (CounterType.packets_and_bytes).
+    /// count (`CounterType.packets`), only a byte count
+    /// (`CounterType.bytes`), or both (`CounterType.packets_and_bytes`).
     /// After constructing the object, you can associate it with at
     /// most one table, by adding the following table property to the
     /// definition of that table:
@@ -41,7 +50,7 @@ impl DirectCounter {
     /// both read and written from the P4 program, consider using a
     /// register.
     ///
-    /// direct_counter(CounterType type);
+    /// `direct_counter(CounterType type);`
     pub fn init(
         arena: &ValueArena,
         _value_targs: Value,
@@ -51,6 +60,7 @@ impl DirectCounter {
         let args = args::assoc(arena, value_ids, value_args)?;
         let value_type = args::find(&args, "type")?;
         let (id_enum, id_type) = unpack::p4_enum(arena, &value_type)?;
+        // The type argument selects what is counted
         match (id_enum.as_str(), id_type.as_str()) {
             ("CounterType", "packets") => Ok(Self::Packets(BigInt::zero())),
             ("CounterType", "bytes") => Ok(Self::Bytes(BigInt::zero())),
@@ -63,17 +73,17 @@ impl DirectCounter {
         }
     }
 
-    /// The count() method is actually unnecessary in the v1model
+    /// The `count()` method is actually unnecessary in the v1model
     /// architecture.  This is because after a direct_counter object
     /// has been associated with a table as described in the
     /// documentation for the direct_counter constructor, every time
     /// the table is applied and a table entry is matched, the counter
     /// state associated with the matching entry is read, modified, and
     /// written back, atomically relative to the processing of other
-    /// packets, regardless of whether the count() method is called in
+    /// packets, regardless of whether the `count()` method is called in
     /// the body of that action.
     ///
-    /// void count();
+    /// `void count();`
     pub fn count<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
@@ -94,6 +104,7 @@ impl DirectCounter {
                 *count_bytes += BigInt::from(packet_in.len);
             }
         }
+        // Return without a value
         let typ = typ::make::opt(typ::make::var(
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
