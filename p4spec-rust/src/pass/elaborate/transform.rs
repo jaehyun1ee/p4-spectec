@@ -2865,6 +2865,38 @@ fn populate_defs(mut ctx: Context, defs_il: il::Spec) -> il::Spec {
         .collect()
 }
 
+// - Missing definition warnings
+
+/// Collects missing-body warnings for relations before functions.
+fn warn_undef_defs(defs_il: &[il::Def], warnings: &mut Vec<Report>) {
+    // Report missing relation bodies before missing function bodies
+    for def_il in defs_il {
+        if let il::DefKind::Rel(il::RelDef::Defined(rel_il)) = &def_il.node
+            && rel_il.rule_groups.is_empty()
+            && rel_il.else_group.is_none()
+        {
+            warnings.push(error::relation_rule_missing(&rel_il.id, &def_il.span));
+        }
+    }
+    // Report missing table rows and function clauses in declaration order
+    for def_il in defs_il {
+        match &def_il.node {
+            // Empty tables remain valid declarations
+            il::DefKind::MetaFunc(il::MetaFuncDef::Table(func_il)) if func_il.rows.is_empty() => {
+                warnings.push(error::table_row_missing(&func_il.id, &def_il.span));
+            }
+            // An otherwise clause is a body even without regular clauses
+            il::DefKind::MetaFunc(il::MetaFuncDef::Defined(func_il))
+                if func_il.clauses.is_empty() && func_il.else_clause.is_none() =>
+            {
+                warnings.push(error::function_clause_missing(&func_il.id, &def_il.span));
+            }
+            // Other definitions have no missing body warning
+            _ => {}
+        }
+    }
+}
+
 // - Entry point
 
 /// Elaborates a specification: definitions, population, dimension analysis.
@@ -2882,32 +2914,8 @@ pub(super) fn elab_spec(
     }
     // Attach the collected bodies to their declarations
     let mut defs_il = populate_defs(ctx, defs_il);
-    // Report missing relation bodies before missing function bodies
-    for def_il in &defs_il {
-        if let il::DefKind::Rel(il::RelDef::Defined(rel_il)) = &def_il.node
-            && rel_il.rule_groups.is_empty()
-            && rel_il.else_group.is_none()
-        {
-            warnings.push(error::relation_rule_missing(&rel_il.id, &def_il.span));
-        }
-    }
-    // Population warnings remain committed if dimension analysis later fails
-    for def_il in &defs_il {
-        match &def_il.node {
-            // Empty tables remain valid declarations
-            il::DefKind::MetaFunc(il::MetaFuncDef::Table(func_il)) if func_il.rows.is_empty() => {
-                warnings.push(error::table_row_missing(&func_il.id, &def_il.span));
-            }
-            // An otherwise clause is a body even without regular clauses
-            il::DefKind::MetaFunc(il::MetaFuncDef::Defined(func_il))
-                if func_il.clauses.is_empty() && func_il.else_clause.is_none() =>
-            {
-                warnings.push(error::function_clause_missing(&func_il.id, &def_il.span));
-            }
-            // Other definitions have no missing body warning
-            _ => {}
-        }
-    }
+    // Retain missing-body warnings even if dimension analysis fails
+    warn_undef_defs(&defs_il, warnings);
     // Annotate iterations with the variables they range over
     dimension::analyze_spec(&mut defs_il)?;
     Ok(defs_il)
