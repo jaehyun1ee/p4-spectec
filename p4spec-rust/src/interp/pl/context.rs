@@ -74,41 +74,39 @@ impl Global {
                 }
                 // Meta-variables carry no runtime state
                 source::DefKind::Var(_) => {}
-                source::DefKind::Rel(def) => {
-                    // Relations are prepared once with their frame layout
-                    let id = match &def {
-                        source::RelDef::Extern(def) => &def.id,
-                        source::RelDef::Defined(def) => &def.id,
-                    }
-                    .clone();
-                    if loaded.renv.contains_key(&id) {
+                source::DefKind::Rel(rel) => {
+                    // Relations are prepared into callables with a frame layout
+                    let rel = Callable::prepare(rel);
+                    let id = match &rel.def {
+                        ast::RelDef::Extern(rel) => &rel.id,
+                        ast::RelDef::Defined(rel) => &rel.id,
+                    };
+                    if loaded.renv.contains_key(id) {
                         return Err(Error::duplicate(
                             EntityKind::Relation,
                             id.node.clone(),
                             id.span.clone(),
                         ));
                     }
-                    let callable = Callable::prepare(def);
-                    loaded.renv.insert(id, callable);
+                    loaded.renv.insert(id.clone(), rel);
                 }
-                source::DefKind::MetaFunc(def) => {
-                    // Function values share their prepared callable through Rc
-                    let id = match &def {
-                        source::MetaFuncDef::Extern(def) => &def.id,
-                        source::MetaFuncDef::Builtin(def) => &def.id,
-                        source::MetaFuncDef::Table(def) => &def.id,
-                        source::MetaFuncDef::Defined(def) => &def.id,
-                    }
-                    .clone();
-                    if loaded.fenv.contains_key(&id) {
+                source::DefKind::MetaFunc(func) => {
+                    // So are functions, shared through `Rc` for function values
+                    let func = Callable::prepare(func);
+                    let id = match &func.def {
+                        ast::MetaFuncDef::Extern(func) => &func.id,
+                        ast::MetaFuncDef::Builtin(func) => &func.id,
+                        ast::MetaFuncDef::Table(func) => &func.id,
+                        ast::MetaFuncDef::Defined(func) => &func.id,
+                    };
+                    if loaded.fenv.contains_key(id) {
                         return Err(Error::duplicate(
                             EntityKind::Function,
                             id.node.clone(),
                             id.span.clone(),
                         ));
                     }
-                    let callable = Callable::prepare(def);
-                    loaded.fenv.insert(id, Rc::new(callable));
+                    loaded.fenv.insert(id.clone(), Rc::new(func));
                 }
             }
         }
