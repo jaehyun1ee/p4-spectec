@@ -11,6 +11,7 @@ use super::super::context::{ReadContext, WriteContext};
 use crate::interp::shared::prepare::ast;
 use crate::interp::shared::util::iterate_vars;
 use crate::lang::data::var::IdSlot;
+use crate::runtime::typdef::TypeDef;
 
 use std::{borrow::Borrow, rc::Rc};
 
@@ -30,9 +31,38 @@ use crate::{
 
 use crate::interp::shared::{
     backtrack::{Backtrack, err, ok, unwrap, unwrap_from_result},
-    error::{EntityKind, Error, ErrorKind},
+    error::{CallErrorKind, EntityKind, Error, ErrorKind},
     util::find_var,
 };
+
+// = Type parameter assignment
+
+/// Binds type arguments in a local scope, requiring equal counts.
+pub fn assign_tparams<Ctx: WriteContext>(
+    mut ctx: Ctx,
+    tparams: &[ast::TParam],
+    targs: &[ast::Typ],
+    span: &Span,
+) -> Backtrack<Ctx> {
+    // Check arity before binding any type parameter
+    unwrap!(Backtrack::check(
+        tparams.len() == targs.len(),
+        span.clone(),
+        ErrorKind::Call(CallErrorKind::TypeArgumentArityMismatch {
+            expected: tparams.len(),
+            actual: targs.len(),
+        })
+    ));
+    // Type arguments shadow global definitions in the callee scope
+    for (tparam, targ) in tparams.iter().zip(targs) {
+        let def_typ = phrase!(node: ast::DefTypKind::Plain(targ.clone()), span: targ.span.clone());
+        unwrap_from_result!(
+            ctx.bind_tparam(tparam.clone(), TypeDef::Defined(vec![], Box::new(def_typ))),
+            &tparam.span
+        );
+    }
+    ok!(ctx)
+}
 
 // = Expression assignment
 

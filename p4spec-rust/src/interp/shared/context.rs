@@ -3,7 +3,7 @@
 //! `ReadContext` looks values up by frame slot and types and functions by id;
 //! `WriteContext` adds bindings;
 //! `IterContext` batches values across iterated variables for `eval::iter`.
-//! AL and SL each implement them on their own context type.
+//! AL, SL, and PL each implement them on their own context type.
 
 use crate::interp::shared::prepare::ast;
 use crate::lang::data::var::{SlotIdx, VarSlot};
@@ -45,8 +45,13 @@ pub trait ReadContext {
     fn find_func_typ(&self, id: &ast::Id) -> Result<ast::FuncTyp, Error>;
 }
 
-/// Write access to value and function bindings.
+/// Write access to type, value, and function bindings.
 pub trait WriteContext: ReadContext + Clone {
+    // == Types
+
+    /// Binds a type parameter, rejecting duplicates only in the local scope.
+    fn bind_tparam(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error>;
+
     // == Values
 
     /// Binds a value to a slot.

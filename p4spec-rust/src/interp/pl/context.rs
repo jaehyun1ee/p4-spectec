@@ -202,19 +202,6 @@ impl<'global> Context<'global> {
         self.find_func_opt(id)
             .ok_or_else(|| Error::undefined(EntityKind::Function, id.node.clone(), id.span.clone()))
     }
-
-    // == Adders
-
-    // - Types
-
-    /// Binds a type parameter; the id must be new in the local scope.
-    pub(crate) fn bind_tparam(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
-        if self.local.tdenv.contains_key(&id) {
-            return Err(Error::duplicate(EntityKind::Type, id.node, id.span));
-        }
-        self.local.tdenv.insert(id, typdef);
-        Ok(())
-    }
 }
 
 // = Read access
@@ -287,6 +274,17 @@ impl ReadContext for Context<'_> {
 
 impl WriteContext for Context<'_> {
     // == Adders
+
+    // - Types
+
+    fn bind_tparam(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
+        // A type parameter may shadow a global definition
+        if self.local.tdenv.contains_key(&id) {
+            return Err(Error::duplicate(EntityKind::Type, id.node, id.span));
+        }
+        self.local.tdenv.insert(id, typdef);
+        Ok(())
+    }
 
     // - Values
 

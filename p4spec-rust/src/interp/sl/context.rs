@@ -206,15 +206,6 @@ impl<'global> Context<'global> {
 
     // - Types
 
-    /// Binds a type parameter locally; the id must be new in the local scope.
-    pub(crate) fn bind_tparam(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
-        if self.local.tdenv.contains_key(&id) {
-            return Err(Error::duplicate(EntityKind::Type, id.node, id.span));
-        }
-        self.local.tdenv.insert(id, typdef);
-        Ok(())
-    }
-
     /// Binds a type locally; the id must be new in both scopes.
     pub fn add_typdef(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
         if self.find_typdef_opt(&id).is_some() {
@@ -303,6 +294,17 @@ impl ReadContext for Context<'_> {
 
 impl WriteContext for Context<'_> {
     // == Adders
+
+    // - Types
+
+    fn bind_tparam(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
+        // A type parameter may shadow a global definition
+        if self.local.tdenv.contains_key(&id) {
+            return Err(Error::duplicate(EntityKind::Type, id.node, id.span));
+        }
+        self.local.tdenv.insert(id, typdef);
+        Ok(())
+    }
 
     // - Values
 
