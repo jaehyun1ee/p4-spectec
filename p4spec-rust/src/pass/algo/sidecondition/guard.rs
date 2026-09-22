@@ -13,8 +13,7 @@ use crate::{
     lang::{
         al::{self, ast},
         common::prim,
-        common::source::Span,
-        traits::{eq::SyntaxEq, free::FreeIds},
+        traits::{at::At, eq::SyntaxEq, free::FreeIds},
     },
     note_phrase, phrase,
 };
@@ -357,7 +356,7 @@ fn gen_exp_len(iter: ast::Iter, var: &ast::Var) -> ast::Exp {
 
 /// Pairs two guards: `<=>` for options, `=` for lists.
 fn gen_exp_pair(iter: ast::Iter, exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast::Exp {
-    let span = Span::over(&[exp_l_al.span.clone(), exp_r_al.span.clone()]);
+    let span = [&exp_l_al, &exp_r_al].at();
     let exp_kind = match iter {
         ast::Iter::Opt => ast::ExpKind::Bin(
             ast::BinOp::Bool(prim::bool::BinOp::Equiv),
@@ -376,7 +375,7 @@ fn gen_exp_pair(iter: ast::Iter, exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast:
 }
 
 fn gen_exp_and(exp_l_al: ast::Exp, exp_r_al: ast::Exp) -> ast::Exp {
-    let span = Span::over(&[exp_l_al.span.clone(), exp_r_al.span.clone()]);
+    let span = [&exp_l_al, &exp_r_al].at();
     note_phrase! {
         node: ast::ExpKind::Bin(
             ast::BinOp::Bool(prim::bool::BinOp::And),

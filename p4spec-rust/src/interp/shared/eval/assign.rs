@@ -11,6 +11,7 @@ use super::super::context::{ReadContext, WriteContext};
 use crate::interp::shared::prepare::ast;
 use crate::interp::shared::util::iterate_vars;
 use crate::lang::data::var::IdSlot;
+use crate::lang::traits::at::At;
 use crate::runtime::typdef::TypeDef;
 
 use std::{borrow::Borrow, rc::Rc};
@@ -134,12 +135,7 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp>>(
     // Counts must match
     if exps.len() != values.len() {
         return err!(
-            Span::over(
-                &exps
-                    .iter()
-                    .map(|exp| exp.borrow().span.clone())
-                    .collect::<Vec<_>>(),
-            ),
+            Span::over_iter(exps.iter().map(|exp| exp.borrow().at())),
             ErrorKind::Assign(AssignErrorKind::ExpressionArityMismatch {
                 expected: exps.len(),
                 actual: values.len(),
@@ -379,7 +375,7 @@ pub fn assign_args<Ctx: WriteContext>(
     // Counts must match
     if args.len() != values.len() {
         return err!(
-            Span::over(&args.iter().map(|arg| arg.span.clone()).collect::<Vec<_>>()),
+            args.at(),
             ErrorKind::Assign(AssignErrorKind::ArgumentArityMismatch {
                 expected: args.len(),
                 actual: values.len(),

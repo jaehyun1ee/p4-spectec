@@ -12,7 +12,7 @@ use crate::lang::{
         source::Span,
     },
     il,
-    traits::{eq::SyntaxEq, free::FreeIds},
+    traits::{at::At, eq::SyntaxEq, free::FreeIds},
 };
 
 use super::{StructureError, StructureErrorKind};
@@ -133,7 +133,7 @@ fn populate_exps_templates<'a>(
 
 /// Builds `let exp = template`.
 fn populate_id_exp_template(exp_template: &Exp, exp: &Exp) -> Prem {
-    let span = Span::over(&[exp.span.clone(), exp_template.span.clone()]);
+    let span = [&exp, &exp_template].at();
     let prem = LetPrem { exp_l: exp.clone(), exp_r: exp_template.clone() };
     let prem_kind = PremKind::Let(prem);
     crate::phrase! {node: prem_kind, span: span}
@@ -352,8 +352,7 @@ fn antiunify_exps_across_matches(
         return Ok((UEnv::default(), vec![]));
     };
     for exps in exps_tail {
-        let spans = exps.iter().map(|exp| exp.span.clone()).collect::<Vec<_>>();
-        let span = Span::over(&spans);
+        let span = exps.at();
         check_arity(exps_head.len(), exps.len(), &span)?;
     }
     let mut uenv_acc = UEnv::default();
@@ -494,15 +493,13 @@ pub(super) fn antiunify_rule_matches(
     let prems_by_rule_group = exps_by_rule_group
         .iter()
         .map(|exps| {
-            let spans = exps.iter().map(|exp| exp.span.clone()).collect::<Vec<_>>();
-            let span = Span::over(&spans);
+            let span = exps.at();
             populate_exps_templates(&uenv, exps_template.iter(), exps.iter(), &span)
         })
         .collect::<Result<_, _>>()?;
     let prems_else = exps_else
         .map(|exps| {
-            let spans = exps.iter().map(|exp| exp.span.clone()).collect::<Vec<_>>();
-            let span = Span::over(&spans);
+            let span = exps.at();
             populate_exps_templates(&uenv, exps_template.iter(), exps.iter(), &span)
         })
         .transpose()?;
