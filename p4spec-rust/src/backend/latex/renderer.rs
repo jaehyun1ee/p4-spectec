@@ -34,6 +34,8 @@ const WIDTH_LAYOUT: usize = 80;
 
 // == Lexical rendering
 
+// - Identifiers
+
 fn tex_of_typid(id: &Id) -> Doc {
     Doc::Styled(Style::Mathsf, id.node.clone())
 }
@@ -41,6 +43,8 @@ fn tex_of_typid(id: &Id) -> Doc {
 fn tex_of_defid(id: &Id) -> Doc {
     Doc::Styled(Style::Mathrm, id.node.clone())
 }
+
+// - Numbers
 
 /// Keeps signed integers visibly distinct from natural literals.
 fn tex_of_number(op: NumOp, num: &Num) -> Doc {
@@ -57,6 +61,8 @@ fn tex_of_number(op: NumOp, num: &Num) -> Doc {
     };
     doc::concat(vec![tex_sign, tex_abs])
 }
+
+// - Atoms
 
 fn tex_of_atom(atom: &Atom) -> Doc {
     use AtomKind as A;
@@ -104,6 +110,8 @@ fn tex_of_atom(atom: &Atom) -> Doc {
     }
 }
 
+// - Brackets
+
 /// Pairs recognized bracket atoms and otherwise retains their literal notation.
 fn tex_of_bracket(atom_l: &Atom, tex_body: Doc, atom_r: &Atom) -> Doc {
     let delimiter = match (&atom_l.node, &atom_r.node) {
@@ -116,6 +124,8 @@ fn tex_of_bracket(atom_l: &Atom, tex_body: Doc, atom_r: &Atom) -> Doc {
     Doc::Delimited(delimiter, Box::new(tex_body))
 }
 
+// - Iterations
+
 fn tex_of_iter(iter: Iter) -> Doc {
     Doc::Fixed(match iter {
         Iter::Opt => Symbol::Question,
@@ -123,7 +133,49 @@ fn tex_of_iter(iter: Iter) -> Doc {
     })
 }
 
+// - Unary operators
+
+fn tex_of_unop(op: UnOp) -> Doc {
+    Doc::Fixed(match op {
+        UnOp::Bool(bool::UnOp::Not) => Symbol::Neg,
+        UnOp::Num(num::UnOp::Plus) => Symbol::Plus,
+        UnOp::Num(num::UnOp::Minus) => Symbol::Minus,
+    })
+}
+
+// - Binary operators
+
+fn tex_of_binop(op: BinOp) -> Doc {
+    Doc::Fixed(match op {
+        BinOp::Bool(bool::BinOp::And) => Symbol::Land,
+        BinOp::Bool(bool::BinOp::Or) => Symbol::Lor,
+        BinOp::Bool(bool::BinOp::Impl) => Symbol::Rightarrow,
+        BinOp::Bool(bool::BinOp::Equiv) => Symbol::Leftrightarrow,
+        BinOp::Num(num::BinOp::Add) => Symbol::Plus,
+        BinOp::Num(num::BinOp::Sub) => Symbol::Minus,
+        BinOp::Num(num::BinOp::Mul) => Symbol::Cdot,
+        BinOp::Num(num::BinOp::Div) => Symbol::Slash,
+        BinOp::Num(num::BinOp::Mod) => Symbol::Bmod,
+        BinOp::Num(num::BinOp::Pow) => unreachable!("power uses superscript rendering"),
+    })
+}
+
+// - Comparison operators
+
+fn tex_of_cmpop(op: CmpOp) -> Doc {
+    Doc::Fixed(match op {
+        CmpOp::Bool(bool::CmpOp::Eq) => Symbol::Equal,
+        CmpOp::Bool(bool::CmpOp::Ne) => Symbol::NotEqual,
+        CmpOp::Num(num::CmpOp::Lt) => Symbol::Less,
+        CmpOp::Num(num::CmpOp::Gt) => Symbol::Greater,
+        CmpOp::Num(num::CmpOp::Le) => Symbol::LessEqual,
+        CmpOp::Num(num::CmpOp::Ge) => Symbol::GreaterEqual,
+    })
+}
+
 // == Layout and links
+
+// - Infix layout
 
 /// Offers an indented break before an operator only when all terms are visible.
 fn tex_of_breakable_infix(tex_l: Doc, tex_op: Doc, tex_r: Doc) -> Doc {
@@ -139,6 +191,8 @@ fn tex_of_breakable_infix(tex_l: Doc, tex_op: Doc, tex_r: Doc) -> Doc {
     doc::layout_group(doc::concat(vec![tex_l, tex_continuation]))
 }
 
+// - References
+
 fn tex_of_link(anchor: Option<&str>, doc: Doc) -> Result<Doc> {
     match anchor {
         None => Ok(doc),
@@ -149,11 +203,15 @@ fn tex_of_link(anchor: Option<&str>, doc: Doc) -> Result<Doc> {
     }
 }
 
+// - Annotations
+
 fn annotate(doc: Doc, text: &str) -> Doc {
     doc::concat_spaced(vec![doc, Doc::Quad, Doc::Styled(Style::Text, text.to_owned())])
 }
 
 // == Types
+
+// - Type
 
 fn tex_of_typ(typ: &Typ) -> Doc {
     match typ {
@@ -161,6 +219,12 @@ fn tex_of_typ(typ: &Typ) -> Doc {
         Typ::Notation(not_typ) => tex_of_nottyp(not_typ),
     }
 }
+
+fn tex_of_typs(typs: &[Typ]) -> Doc {
+    doc::concat_juxtaposed(typs.iter().map(tex_of_typ).collect())
+}
+
+// - Plain type
 
 fn tex_of_plaintyp(plain_typ: &PlainTyp) -> Doc {
     match &plain_typ.node {
@@ -183,6 +247,8 @@ fn tex_of_plaintyp(plain_typ: &PlainTyp) -> Doc {
     }
 }
 
+// - Notation type
+
 fn tex_of_nottyp(not_typ: &NotTyp) -> Doc {
     match &not_typ.node {
         NotTypKind::Atom(atom) => tex_of_atom(atom),
@@ -192,9 +258,7 @@ fn tex_of_nottyp(not_typ: &NotTyp) -> Doc {
     }
 }
 
-fn tex_of_typs(typs: &[Typ]) -> Doc {
-    doc::concat_juxtaposed(typs.iter().map(tex_of_typ).collect())
-}
+// - Infix type
 
 /// Consumes the first right-hand type as an arrow subscript when present.
 fn tex_of_infix_typ(typ_l: &Typ, atom: &Atom, typ_r: &Typ) -> Doc {
@@ -222,14 +286,7 @@ fn tex_of_infix_typ(typ_l: &Typ, atom: &Atom, typ_r: &Typ) -> Doc {
     doc::concat_spaced(vec![tex_l, tex_op, tex_r])
 }
 
-fn tex_of_targs(targs: &[Targ]) -> Doc {
-    if targs.is_empty() {
-        return Doc::Empty;
-    }
-    let docs = targs.iter().map(tex_of_plaintyp).collect();
-    let doc = doc::layout_group_soft_comma_separated(docs);
-    Doc::Delimited(Delimiter::Angle, Box::new(doc))
-}
+// - Definition type
 
 fn tex_of_deftyp(def_typ: &DefTyp) -> Doc {
     match &def_typ.node {
@@ -256,33 +313,9 @@ fn tex_of_deftyp(def_typ: &DefTyp) -> Doc {
     }
 }
 
-// - Type definitions
-
-/// Aligns variant alternatives beneath their production operator.
-fn tex_of_typ_def(id: &Id, tparams: &[TParam], def_typ: &DefTyp) -> Doc {
-    let tex_l = doc::concat(vec![tex_of_typid(id), tex_of_tparams(tparams)]);
-    let tex_production = Doc::Mathrel(Box::new(Doc::Fixed(Symbol::Production)));
-
-    // Non-variant definitions keep their body on the production line
-    let DefTypKind::Variant(typ_cases) = &def_typ.node else {
-        return doc::concat_spaced(vec![tex_l, tex_production, tex_of_deftyp(def_typ)]);
-    };
-
-    // An empty variant denotes the empty set
-    let Some((typ_case, typ_cases)) = typ_cases.split_first() else {
-        return doc::concat_spaced(vec![tex_l, tex_production, Doc::Fixed(Symbol::EmptySet)]);
-    };
-
-    // Continue each alternative in the operator and body columns
-    let mut rows = vec![vec![tex_l, tex_production, tex_of_typ(&typ_case.typ)]];
-    for typ_case in typ_cases {
-        let tex_alternative = Doc::Mathrel(Box::new(Doc::Fixed(Symbol::VerticalBar)));
-        rows.push(vec![Doc::Empty, tex_alternative, tex_of_typ(&typ_case.typ)]);
-    }
-    Doc::Aligned(rows)
-}
-
 // == Meta-variables
+
+// - Variable identifier
 
 /// Renders underscore-prefixed variables as `_` and `TC_0` as a subscript.
 fn tex_of_varid(id: &Id) -> Doc {
@@ -304,6 +337,8 @@ fn tex_of_varid(id: &Id) -> Doc {
 
 // == Expressions
 
+// - Rendered terms
+
 /// A rendered expression with the category needed to preserve operand grouping.
 struct Term {
     doc: Doc,
@@ -315,6 +350,8 @@ impl Term {
         Self { doc, category }
     }
 }
+
+// - Expression
 
 fn tex_of_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
     Ok(render_exp(exp, anchors)?.doc)
@@ -483,6 +520,8 @@ fn tex_of_nested_exp(prec: (Category, Assoc), side: Side, term: Term) -> Doc {
     }
 }
 
+// - Binary expression
+
 /// Preserves operand grouping and adds a break before the infix operator.
 fn render_binary_exp(
     prec: (Category, Assoc),
@@ -498,6 +537,8 @@ fn render_binary_exp(
     Ok(Term::new(tex_of_breakable_infix(tex_l, tex_op, tex_r), prec.0))
 }
 
+// - Postfix expression
+
 /// Parenthesizes a postfix base before attaching its rendered suffix.
 fn render_postfix_exp(
     exp_base: &Exp,
@@ -508,6 +549,8 @@ fn render_postfix_exp(
     let tex_base = tex_of_nested_exp((Category::Postfix, Assoc::Left), Side::Left, term_base);
     Ok(Term::new(doc::concat(vec![tex_base, tex_suffix]), Category::Postfix))
 }
+
+// - Sequence expression
 
 /// Packs notation terms with thin spaces and right-operand parenthesization.
 fn render_seq_exp(exps: &[Exp], anchors: Option<&Anchors<'_>>) -> Result<Term> {
@@ -520,6 +563,8 @@ fn render_seq_exp(exps: &[Exp], anchors: Option<&Anchors<'_>>) -> Result<Term> {
         .collect::<Result<Vec<_>>>()?;
     Ok(Term::new(doc::fill(0, Doc::ThinSpace, docs), Category::Sequence))
 }
+
+// - Infix expression
 
 /// Renders arrow subscripts separately from the remaining right-hand expression.
 fn render_infix_exp(
@@ -563,43 +608,9 @@ fn render_infix_exp(
     Ok(Term::new(tex_of_breakable_infix(tex_l, tex_op, tex_r), prec.0))
 }
 
-// - Operators
-
-fn tex_of_unop(op: UnOp) -> Doc {
-    Doc::Fixed(match op {
-        UnOp::Bool(bool::UnOp::Not) => Symbol::Neg,
-        UnOp::Num(num::UnOp::Plus) => Symbol::Plus,
-        UnOp::Num(num::UnOp::Minus) => Symbol::Minus,
-    })
-}
-
-fn tex_of_binop(op: BinOp) -> Doc {
-    Doc::Fixed(match op {
-        BinOp::Bool(bool::BinOp::And) => Symbol::Land,
-        BinOp::Bool(bool::BinOp::Or) => Symbol::Lor,
-        BinOp::Bool(bool::BinOp::Impl) => Symbol::Rightarrow,
-        BinOp::Bool(bool::BinOp::Equiv) => Symbol::Leftrightarrow,
-        BinOp::Num(num::BinOp::Add) => Symbol::Plus,
-        BinOp::Num(num::BinOp::Sub) => Symbol::Minus,
-        BinOp::Num(num::BinOp::Mul) => Symbol::Cdot,
-        BinOp::Num(num::BinOp::Div) => Symbol::Slash,
-        BinOp::Num(num::BinOp::Mod) => Symbol::Bmod,
-        BinOp::Num(num::BinOp::Pow) => unreachable!("power uses superscript rendering"),
-    })
-}
-
-fn tex_of_cmpop(op: CmpOp) -> Doc {
-    Doc::Fixed(match op {
-        CmpOp::Bool(bool::CmpOp::Eq) => Symbol::Equal,
-        CmpOp::Bool(bool::CmpOp::Ne) => Symbol::NotEqual,
-        CmpOp::Num(num::CmpOp::Lt) => Symbol::Less,
-        CmpOp::Num(num::CmpOp::Gt) => Symbol::Greater,
-        CmpOp::Num(num::CmpOp::Le) => Symbol::LessEqual,
-        CmpOp::Num(num::CmpOp::Ge) => Symbol::GreaterEqual,
-    })
-}
-
 // == Paths
+
+// - Path
 
 /// Renders update paths, omitting the dot before a root field.
 fn tex_of_path(path: &Path, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
@@ -637,6 +648,8 @@ fn tex_of_path(path: &Path, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
 
 // == Parameters and arguments
 
+// - Type parameters
+
 fn tex_of_tparams(tparams: &[TParam]) -> Doc {
     if tparams.is_empty() {
         return Doc::Empty;
@@ -645,6 +658,36 @@ fn tex_of_tparams(tparams: &[TParam]) -> Doc {
     let doc = doc::layout_group_soft_comma_separated(docs);
     Doc::Delimited(Delimiter::Angle, Box::new(doc))
 }
+
+// - Type arguments
+
+fn tex_of_targs(targs: &[Targ]) -> Doc {
+    if targs.is_empty() {
+        return Doc::Empty;
+    }
+    let docs = targs.iter().map(tex_of_plaintyp).collect();
+    let doc = doc::layout_group_soft_comma_separated(docs);
+    Doc::Delimited(Delimiter::Angle, Box::new(doc))
+}
+
+// - Parameter
+
+fn tex_of_param(param: &Param) -> Doc {
+    match &param.node {
+        ParamKind::Exp(plain_typ) => tex_of_plaintyp(plain_typ),
+        ParamKind::Def(id, tparams, params, plain_typ) => {
+            tex_of_func_signature(id, tparams, params, plain_typ, None)
+        }
+    }
+}
+
+fn tex_of_params(params: &[Param]) -> Doc {
+    let docs = params.iter().map(tex_of_param).collect();
+    let doc = doc::layout_group_soft_comma_separated(docs);
+    Doc::Delimited(Delimiter::Paren, Box::new(doc))
+}
+
+// - Argument
 
 fn tex_of_arg(arg: &Arg, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
     match &arg.node {
@@ -662,22 +705,9 @@ fn tex_of_args(args: &[Arg], anchors: Option<&Anchors<'_>>) -> Result<Doc> {
     Ok(Doc::Delimited(Delimiter::Paren, Box::new(doc)))
 }
 
-fn tex_of_param(param: &Param) -> Doc {
-    match &param.node {
-        ParamKind::Exp(plain_typ) => tex_of_plaintyp(plain_typ),
-        ParamKind::Def(id, tparams, params, plain_typ) => {
-            tex_of_func_signature(id, tparams, params, plain_typ, None)
-        }
-    }
-}
-
-fn tex_of_params(params: &[Param]) -> Doc {
-    let docs = params.iter().map(tex_of_param).collect();
-    let doc = doc::layout_group_soft_comma_separated(docs);
-    Doc::Delimited(Delimiter::Paren, Box::new(doc))
-}
-
 // == Premises
+
+// - Premise
 
 fn tex_of_prem(prem: &Prem, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
     match &prem.node {
@@ -724,7 +754,35 @@ fn texs_of_prems(prems: &[Prem], anchors: Option<&Anchors<'_>>) -> Result<Vec<Do
     Ok(docs.into_iter().filter(|doc| !doc::is_empty(doc)).collect())
 }
 
+// == Type definitions
+
+/// Aligns variant alternatives beneath their production operator.
+fn tex_of_typ_def(id: &Id, tparams: &[TParam], def_typ: &DefTyp) -> Doc {
+    let tex_l = doc::concat(vec![tex_of_typid(id), tex_of_tparams(tparams)]);
+    let tex_production = Doc::Mathrel(Box::new(Doc::Fixed(Symbol::Production)));
+
+    // Non-variant definitions keep their body on the production line
+    let DefTypKind::Variant(typ_cases) = &def_typ.node else {
+        return doc::concat_spaced(vec![tex_l, tex_production, tex_of_deftyp(def_typ)]);
+    };
+
+    // An empty variant denotes the empty set
+    let Some((typ_case, typ_cases)) = typ_cases.split_first() else {
+        return doc::concat_spaced(vec![tex_l, tex_production, Doc::Fixed(Symbol::EmptySet)]);
+    };
+
+    // Continue each alternative in the operator and body columns
+    let mut rows = vec![vec![tex_l, tex_production, tex_of_typ(&typ_case.typ)]];
+    for typ_case in typ_cases {
+        let tex_alternative = Doc::Mathrel(Box::new(Doc::Fixed(Symbol::VerticalBar)));
+        rows.push(vec![Doc::Empty, tex_alternative, tex_of_typ(&typ_case.typ)]);
+    }
+    Doc::Aligned(rows)
+}
+
 // == Relations
+
+// - Signature
 
 fn tex_of_rel_signature(id: &Id, not_typ: &NotTyp, annotation: Option<&str>) -> Doc {
     let tex = doc::concat_spaced(vec![
@@ -737,6 +795,8 @@ fn tex_of_rel_signature(id: &Id, not_typ: &NotTyp, annotation: Option<&str>) -> 
         Some(text) => annotate(tex, text),
     }
 }
+
+// - Rule
 
 /// Places a rule label above its inference fraction and numbers multiple premises.
 fn tex_of_rule(rule: &Rule, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
@@ -759,6 +819,8 @@ fn tex_of_rule(rule: &Rule, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
     let tex_badge = doc::badge(text);
     Ok(doc::left_stack(vec![tex_badge, tex_fraction]))
 }
+
+// - Rule group
 
 /// Separates multiple inference rules while retaining empty-group annotations.
 fn tex_of_rulegroup(
@@ -801,6 +863,8 @@ fn tex_of_rulegroup(
 
 // == Meta-functions
 
+// - Signature
+
 fn tex_of_func_signature(
     id: &Id,
     tparams: &[TParam],
@@ -817,6 +881,8 @@ fn tex_of_func_signature(
         Some(text) => annotate(tex, text),
     }
 }
+
+// - Clauses
 
 /// Aligns equations together, with wide conditions spanning beneath each clause.
 fn tex_of_funcs(defs: &[&FuncDef], anchors: Option<&Anchors<'_>>) -> Result<Doc> {
@@ -901,6 +967,8 @@ fn layout_func(def: &FuncDef, anchors: Option<&Anchors<'_>>) -> Result<(Vec<Doc>
     Ok((docs, Some(tex_condition)))
 }
 
+// - Table
+
 /// Renders table patterns and results in aligned mapsto rows.
 fn tex_of_table(id: &Id, rows: &[TableRow], anchors: Option<&Anchors<'_>>) -> Result<Doc> {
     // Empty tables retain their name and declaration category
@@ -928,6 +996,8 @@ fn tex_of_table(id: &Id, rows: &[TableRow], anchors: Option<&Anchors<'_>>) -> Re
 }
 
 // == Definitions
+
+// - Definition
 
 /// Renders one definition, ignoring presentation hints in canonical output.
 pub(super) fn tex_of_def(def: &Def, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
@@ -981,6 +1051,8 @@ pub(super) fn tex_of_def(def: &Def, anchors: Option<&Anchors<'_>>) -> Result<Doc
         DefKind::Sep => Ok(Doc::Empty),
     }
 }
+
+// == Entry point
 
 /// Groups only adjacent clauses of the same function, preserving separators.
 pub(super) fn tex_of_defs(mut defs: &[Def], anchors: Option<&Anchors<'_>>) -> Result<Doc> {

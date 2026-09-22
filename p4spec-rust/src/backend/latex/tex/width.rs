@@ -11,7 +11,48 @@ pub(super) const INTERCOLUMN_SPACING: usize = 2;
 pub(super) const DELIMITER_MARGIN: usize = 2;
 pub(super) const FRACTION_MARGIN: usize = 2;
 
-// == Flat widths
+// == Measurement helpers
+
+// - Scripts
+
+/// Measures a script at half size, rounded upward.
+pub(super) fn flat_script_width(doc: &Doc) -> usize {
+    flat(doc).div_ceil(2)
+}
+
+// - Columns
+
+/// Measures columns including the gaps between adjacent columns.
+pub(super) fn flat_columns(widths: &[usize]) -> usize {
+    widths.iter().sum::<usize>() + INTERCOLUMN_SPACING * widths.len().saturating_sub(1)
+}
+
+/// Finds the maximum width of each existing column across ragged rows.
+pub(super) fn flat_column_widths<'a>(rows: impl IntoIterator<Item = &'a [Doc]>) -> Vec<usize> {
+    let mut widths = Vec::new();
+    // Merge each row without discarding columns absent from a shorter row
+    for docs in rows {
+        for (idx, doc) in docs.iter().enumerate() {
+            if idx == widths.len() {
+                widths.push(flat(doc));
+            } else {
+                widths[idx] = widths[idx].max(flat(doc));
+            }
+        }
+    }
+    widths
+}
+
+// - Numbered gutters
+
+/// Reserves the numeric label, parentheses, and intercolumn spacing.
+pub(super) fn flat_numbered_gutter(count: usize) -> usize {
+    count.to_string().len() + 2 + INTERCOLUMN_SPACING
+}
+
+// == Documents
+
+// - Document
 
 /// Measures the approximate width of one unresolved line.
 pub(crate) fn flat(doc: &Doc) -> usize {
@@ -20,7 +61,7 @@ pub(crate) fn flat(doc: &Doc) -> usize {
         Doc::Styled(_, text) | Doc::Badge(text) => text.len(),
         Doc::Decimal(num) => num.to_string().len(),
         Doc::Hexadecimal(num) => format!("{num:#x}").len(),
-        Doc::Fixed(symbol) => string_of_symbol(*symbol).len().max(1),
+        Doc::Fixed(symbol) => flat_fixed_doc(*symbol),
         Doc::Space | Doc::ThinSpace => 1,
         Doc::Quad => 2,
         Doc::Concat(docs) => docs.iter().map(flat).sum(),
@@ -43,21 +84,7 @@ pub(crate) fn flat(doc: &Doc) -> usize {
         Doc::SoftBreak(Soft::SoftSpace) => 1,
         Doc::Fill(_, separator, docs) => interspersed(separator, docs).map(flat).sum(),
         Doc::Aligned(rows) => flat_columns(&flat_column_widths(rows.iter().map(Vec::as_slice))),
-        Doc::Grid(_, rows) => {
-            let rows_cell = rows.iter().filter_map(|row| match row {
-                GridRow::Cells(docs) => Some(docs.as_slice()),
-                _ => None,
-            });
-            let width_spanning = rows
-                .iter()
-                .filter_map(|row| match row {
-                    GridRow::Spanning(doc) => Some(flat(doc)),
-                    _ => None,
-                })
-                .max()
-                .unwrap_or(0);
-            flat_columns(&flat_column_widths(rows_cell)).max(width_spanning)
-        }
+        Doc::Grid(_, rows) => flat_grid_doc(rows),
         Doc::Stacked(docs) | Doc::LeftStack(docs) => docs.iter().map(flat).max().unwrap_or(0),
         Doc::Numbered(docs) => {
             flat_numbered_gutter(docs.len()) + docs.iter().map(flat).max().unwrap_or(0)
@@ -73,9 +100,11 @@ pub(crate) fn flat(doc: &Doc) -> usize {
     }
 }
 
-/// Selects the approximate textual spelling used to measure a symbol.
-fn string_of_symbol(symbol: Symbol) -> &'static str {
-    match symbol {
+// - Fixed document
+
+/// Measures a fixed symbol using its approximate textual spelling.
+fn flat_fixed_doc(symbol: Symbol) -> usize {
+    let text = match symbol {
         Symbol::Equal => "=",
         Symbol::NotEqual => "=/=",
         Symbol::Less => "<",
@@ -121,36 +150,27 @@ fn string_of_symbol(symbol: Symbol) -> &'static str {
         Symbol::RightBracket => "]",
         Symbol::LeftBrace => "{",
         Symbol::RightBrace => "}",
-    }
+    };
+    text.len().max(1)
 }
 
-/// Measures a script at half size, rounded upward.
-pub(super) fn flat_script_width(doc: &Doc) -> usize {
-    flat(doc).div_ceil(2)
-}
+// - Grid document
 
-/// Measures columns including the gaps between adjacent columns.
-pub(super) fn flat_columns(widths: &[usize]) -> usize {
-    widths.iter().sum::<usize>() + INTERCOLUMN_SPACING * widths.len().saturating_sub(1)
-}
-
-/// Finds the maximum width of each existing column across ragged rows.
-pub(super) fn flat_column_widths<'a>(rows: impl IntoIterator<Item = &'a [Doc]>) -> Vec<usize> {
-    let mut widths = Vec::new();
-    // Merge each row without discarding columns absent from a shorter row
-    for docs in rows {
-        for (idx, doc) in docs.iter().enumerate() {
-            if idx == widths.len() {
-                widths.push(flat(doc));
-            } else {
-                widths[idx] = widths[idx].max(flat(doc));
-            }
-        }
-    }
-    widths
-}
-
-/// Reserves the numeric label, parentheses, and intercolumn spacing.
-pub(super) fn flat_numbered_gutter(count: usize) -> usize {
-    count.to_string().len() + 2 + INTERCOLUMN_SPACING
+/// Measures the wider of shared columns and spanning rows.
+fn flat_grid_doc(rows: &[GridRow]) -> usize {
+    // Measure shared columns independently of spanning content
+    let rows_cell = rows.iter().filter_map(|row| match row {
+        GridRow::Cells(docs) => Some(docs.as_slice()),
+        _ => None,
+    });
+    // Retain the widest span even when there are no cell rows
+    let width_spanning = rows
+        .iter()
+        .filter_map(|row| match row {
+            GridRow::Spanning(doc) => Some(flat(doc)),
+            _ => None,
+        })
+        .max()
+        .unwrap_or(0);
+    flat_columns(&flat_column_widths(rows_cell)).max(width_spanning)
 }

@@ -7,6 +7,8 @@
 use super::{doc::*, link, width as measure};
 use crate::backend::latex::error::{Error, Result};
 
+// == Resolution mode
+
 /// Chooses how soft breaks render within one layout group.
 #[derive(Clone, Copy)]
 enum Mode {
@@ -16,7 +18,9 @@ enum Mode {
     Broken,
 }
 
-// == Resolved lines
+// == Helpers
+
+// - Resolved lines
 
 /// Builds continuation indentation from quads and an optional space.
 fn doc_of_indent(column_next: usize) -> Doc {
@@ -70,7 +74,7 @@ fn column_after_lines(column: usize, lines: &[Doc]) -> usize {
     }
 }
 
-// == Suffix widths
+// - Suffix widths
 
 /// Finds the same-mode prefix width and whether a soft break ends it.
 fn width_before_break(doc: &Doc) -> (usize, bool) {
@@ -113,15 +117,91 @@ fn width_suffix_of_docs(mode: Mode, width_suffix: usize, docs: &[Doc]) -> usize 
     }
 }
 
-// == Document resolution
+// - Script budgets
 
-/// Resolves a document at a strictly positive line width.
-pub(crate) fn resolve(width: usize, doc: &Doc) -> Result<Doc> {
-    if width == 0 {
-        return Err(Error::InvalidLayoutWidth);
-    }
-    Ok(resolve_doc(width, 0, 0, 0, doc))
+/// Converts remaining normal-size columns into a positive script budget.
+fn width_script_budget(width: usize, column: usize, width_suffix: usize, doc_base: &Doc) -> usize {
+    (2 * width.saturating_sub(column + width_suffix + measure::flat(doc_base))).max(1)
 }
+
+// - Shared rows and cells
+
+/// Stabilizes shared widths and retains the narrowest candidate on a cycle.
+fn resolve_rows<'a>(
+    width: usize,
+    alignments: Option<&[Alignment]>,
+    rows: impl Iterator<Item = &'a [Doc]> + Clone,
+) -> Vec<Vec<Doc>> {
+    let mut column_widths = measure::flat_column_widths(rows.clone());
+    let mut seen = vec![column_widths.clone()];
+    let mut best: Option<(Vec<usize>, Vec<Vec<Doc>>)> = None;
+    // Always resolve the original rows at the current candidate widths
+    loop {
+        let rows_resolved: Vec<_> = rows
+            .clone()
+            .map(|docs| resolve_cells(width, &column_widths, alignments, docs))
+            .collect();
+        let column_widths_resolved =
+            measure::flat_column_widths(rows_resolved.iter().map(Vec::as_slice));
+        if best.as_ref().is_none_or(|(widths_best, _)| {
+            measure::flat_columns(&column_widths_resolved) < measure::flat_columns(widths_best)
+        }) {
+            best = Some((column_widths_resolved.clone(), rows_resolved.clone()));
+        }
+        // A fixed point wins even if an earlier candidate was narrower
+        if column_widths_resolved == column_widths {
+            return rows_resolved;
+        }
+        if seen.contains(&column_widths_resolved) {
+            return best.unwrap().1;
+        }
+        seen.push(column_widths_resolved.clone());
+        column_widths = column_widths_resolved;
+    }
+}
+
+/// Resolves each cell with space reserved for the other columns.
+fn resolve_cells(
+    width: usize,
+    column_widths: &[usize],
+    alignments: Option<&[Alignment]>,
+    docs: &[Doc],
+) -> Vec<Doc> {
+    let mut column = 0;
+    let mut docs_resolved = Vec::new();
+    // Candidate widths determine both alignment padding and remaining space
+    for (idx, doc) in docs.iter().enumerate() {
+        let width_cell = column_widths
+            .get(idx)
+            .copied()
+            .unwrap_or_else(|| measure::flat(doc));
+        let widths_remaining = column_widths.get(idx + 1..);
+        let width_remaining = match widths_remaining {
+            // Shared columns include one gap each after the current cell
+            Some(widths) => {
+                widths.iter().sum::<usize>() + measure::INTERCOLUMN_SPACING * widths.len()
+            }
+            // A ragged row can introduce columns absent from the candidate
+            None => {
+                docs[idx + 1..].iter().map(measure::flat).sum::<usize>()
+                    + measure::INTERCOLUMN_SPACING * (docs.len() - idx - 1)
+            }
+        };
+        let padding = match alignments.and_then(|alignments| alignments.get(idx)) {
+            Some(Alignment::Center) => width_cell.saturating_sub(measure::flat(doc)) / 2,
+            Some(Alignment::Right) => width_cell.saturating_sub(measure::flat(doc)),
+            _ => 0,
+        };
+        let width_local = width.saturating_sub(column + width_remaining).max(1);
+        docs_resolved.push(resolve_doc(width_local, padding, 0, 0, doc));
+        column += width_cell + measure::INTERCOLUMN_SPACING;
+    }
+    docs_resolved
+}
+
+// == Documents
+
+// - Document
 
 /// Resolves children at their current column and reserved suffix width.
 fn resolve_doc(
@@ -252,10 +332,7 @@ fn resolve_doc(
     }
 }
 
-/// Converts remaining normal-size columns into a positive script budget.
-fn width_script_budget(width: usize, column: usize, width_suffix: usize, doc_base: &Doc) -> usize {
-    (2 * width.saturating_sub(column + width_suffix + measure::flat(doc_base))).max(1)
-}
+// - Layout group document
 
 /// Chooses a flat or broken mode including the pending suffix width.
 fn resolve_layout_group(
@@ -271,7 +348,7 @@ fn resolve_layout_group(
     doc_of_lines(lines)
 }
 
-// == Greedy fills
+// - Fill document
 
 /// Packs subsequent items while reserving the enclosing suffix for the last.
 fn resolve_fill(
@@ -312,80 +389,7 @@ fn resolve_fill(
     doc_of_lines(lines)
 }
 
-// == Shared grid columns
-
-/// Resolves each cell with space reserved for the other columns.
-fn resolve_cells(
-    width: usize,
-    column_widths: &[usize],
-    alignments: Option<&[Alignment]>,
-    docs: &[Doc],
-) -> Vec<Doc> {
-    let mut column = 0;
-    let mut docs_resolved = Vec::new();
-    // Candidate widths determine both alignment padding and remaining space
-    for (idx, doc) in docs.iter().enumerate() {
-        let width_cell = column_widths
-            .get(idx)
-            .copied()
-            .unwrap_or_else(|| measure::flat(doc));
-        let widths_remaining = column_widths.get(idx + 1..);
-        let width_remaining = match widths_remaining {
-            // Shared columns include one gap each after the current cell
-            Some(widths) => {
-                widths.iter().sum::<usize>() + measure::INTERCOLUMN_SPACING * widths.len()
-            }
-            // A ragged row can introduce columns absent from the candidate
-            None => {
-                docs[idx + 1..].iter().map(measure::flat).sum::<usize>()
-                    + measure::INTERCOLUMN_SPACING * (docs.len() - idx - 1)
-            }
-        };
-        let padding = match alignments.and_then(|alignments| alignments.get(idx)) {
-            Some(Alignment::Center) => width_cell.saturating_sub(measure::flat(doc)) / 2,
-            Some(Alignment::Right) => width_cell.saturating_sub(measure::flat(doc)),
-            _ => 0,
-        };
-        let width_local = width.saturating_sub(column + width_remaining).max(1);
-        docs_resolved.push(resolve_doc(width_local, padding, 0, 0, doc));
-        column += width_cell + measure::INTERCOLUMN_SPACING;
-    }
-    docs_resolved
-}
-
-/// Stabilizes shared widths and retains the narrowest candidate on a cycle.
-fn resolve_rows<'a>(
-    width: usize,
-    alignments: Option<&[Alignment]>,
-    rows: impl Iterator<Item = &'a [Doc]> + Clone,
-) -> Vec<Vec<Doc>> {
-    let mut column_widths = measure::flat_column_widths(rows.clone());
-    let mut seen = vec![column_widths.clone()];
-    let mut best: Option<(Vec<usize>, Vec<Vec<Doc>>)> = None;
-    // Always resolve the original rows at the current candidate widths
-    loop {
-        let rows_resolved: Vec<_> = rows
-            .clone()
-            .map(|docs| resolve_cells(width, &column_widths, alignments, docs))
-            .collect();
-        let column_widths_resolved =
-            measure::flat_column_widths(rows_resolved.iter().map(Vec::as_slice));
-        if best.as_ref().is_none_or(|(widths_best, _)| {
-            measure::flat_columns(&column_widths_resolved) < measure::flat_columns(widths_best)
-        }) {
-            best = Some((column_widths_resolved.clone(), rows_resolved.clone()));
-        }
-        // A fixed point wins even if an earlier candidate was narrower
-        if column_widths_resolved == column_widths {
-            return rows_resolved;
-        }
-        if seen.contains(&column_widths_resolved) {
-            return best.unwrap().1;
-        }
-        seen.push(column_widths_resolved.clone());
-        column_widths = column_widths_resolved;
-    }
-}
+// - Grid document
 
 /// Replaces cell rows in order and independently resolves spanning rows.
 fn resolve_grid(width: usize, alignments: &[Alignment], rows: &[GridRow]) -> Doc {
@@ -412,6 +416,8 @@ fn resolve_grid(width: usize, alignments: &[Alignment], rows: &[GridRow]) -> Doc
 }
 
 // == Mode-specific resolution
+
+// - Document
 
 /// Propagates one mode through wrappers while nested groups choose afresh.
 fn resolve_in_mode(
@@ -533,4 +539,14 @@ fn resolve_in_mode(
         }
         doc => vec![resolve_doc(width, column, column_next, width_suffix, doc)],
     }
+}
+
+// == Entry point
+
+/// Resolves a document at a strictly positive line width.
+pub(crate) fn resolve(width: usize, doc: &Doc) -> Result<Doc> {
+    if width == 0 {
+        return Err(Error::InvalidLayoutWidth);
+    }
+    Ok(resolve_doc(width, 0, 0, 0, doc))
 }

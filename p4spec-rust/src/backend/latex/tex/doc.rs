@@ -253,7 +253,9 @@ pub(crate) enum Block {
     Gap,
 }
 
-// == Emptiness
+// == Inspection and traversal
+
+// - Emptiness
 
 /// Tests semantic emptiness without discarding explicit TeX groups.
 pub(crate) fn is_empty(doc: &Doc) -> bool {
@@ -269,7 +271,7 @@ pub(crate) fn is_empty(doc: &Doc) -> bool {
     }
 }
 
-// == Normalizing composition
+// - Nonempty sequences
 
 /// Borrows nonempty documents with a separator between adjacent documents.
 pub(super) fn interspersed<'a>(
@@ -285,6 +287,10 @@ pub(super) fn interspersed<'a>(
             separator.into_iter().chain(std::iter::once(doc))
         })
 }
+
+// == Concatenation
+
+// - Flattening
 
 /// Flattens concatenation and removes empty atomic documents.
 pub(crate) fn concat(docs: Vec<Doc>) -> Doc {
@@ -308,6 +314,8 @@ pub(crate) fn concat(docs: Vec<Doc>) -> Doc {
         _ => Doc::Concat(docs_flat),
     }
 }
+
+// - Separators
 
 /// Inserts separators only between semantically nonempty documents.
 pub(crate) fn concat_intersperse(separator: Doc, docs: Vec<Doc>) -> Doc {
@@ -338,37 +346,46 @@ pub(crate) fn concat_juxtaposed(docs: Vec<Doc>) -> Doc {
     concat_intersperse(Doc::ThinSpace, docs)
 }
 
-/// Groups a comma-separated list with breakable spaces.
-pub(crate) fn layout_group_soft_comma_separated(docs: Vec<Doc>) -> Doc {
-    let separator = concat(vec![Doc::Fixed(Symbol::Comma), Doc::SoftBreak(Soft::SoftSpace)]);
-    let doc = concat_intersperse(separator, docs);
-    layout_group(doc)
-}
+// == Wrappers
+
+// - Badges
 
 /// Omits a badge whose label is empty.
 pub(crate) fn badge(text: String) -> Doc {
     if text.is_empty() { Doc::Empty } else { Doc::Badge(text) }
 }
 
+// - Display style
+
 /// Omits display style around an empty document.
 pub(crate) fn displaystyle(doc: Doc) -> Doc {
     if is_empty(&doc) { Doc::Empty } else { Doc::Displaystyle(Box::new(doc)) }
 }
+
+// - Links
 
 /// Omits a link around an empty document.
 pub(crate) fn link(target: Target, doc: Doc) -> Doc {
     if is_empty(&doc) { Doc::Empty } else { Doc::Link(target, Box::new(doc)) }
 }
 
+// == Layout composition
+
+// - Groups
+
 /// Omits a layout group around an empty document.
 pub(crate) fn layout_group(doc: Doc) -> Doc {
     if is_empty(&doc) { Doc::Empty } else { Doc::LayoutGroup(Box::new(doc)) }
 }
 
+// - Indentation
+
 /// Omits ineffective continuation indentation.
 pub(crate) fn nest(indent: usize, doc: Doc) -> Doc {
     if indent == 0 || is_empty(&doc) { doc } else { Doc::Nest(indent, Box::new(doc)) }
 }
+
+// - Fills
 
 /// Retains a fill only when multiple nonempty documents need packing.
 pub(crate) fn fill(indent: usize, separator: Doc, docs: Vec<Doc>) -> Doc {
@@ -380,7 +397,18 @@ pub(crate) fn fill(indent: usize, separator: Doc, docs: Vec<Doc>) -> Doc {
     }
 }
 
+// - Breakable lists
+
+/// Groups a comma-separated list with breakable spaces.
+pub(crate) fn layout_group_soft_comma_separated(docs: Vec<Doc>) -> Doc {
+    let separator = concat(vec![Doc::Fixed(Symbol::Comma), Doc::SoftBreak(Soft::SoftSpace)]);
+    let doc = concat_intersperse(separator, docs);
+    layout_group(doc)
+}
+
 // == Multi-row composition
+
+// - Grids
 
 /// Validates grid arity and removes empty content rows.
 pub(crate) fn grid(alignments: Vec<Alignment>, rows: Vec<GridRow>) -> Result<Doc> {
@@ -407,6 +435,8 @@ pub(crate) fn grid(alignments: Vec<Alignment>, rows: Vec<GridRow>) -> Result<Doc
     if rows.is_empty() { Ok(Doc::Empty) } else { Ok(Doc::Grid(alignments, rows)) }
 }
 
+// - Stacks
+
 /// Removes empty documents from a centered stack.
 #[allow(dead_code)]
 pub(crate) fn stacked(docs: Vec<Doc>) -> Doc {
@@ -424,11 +454,15 @@ pub(crate) fn left_stack(docs: Vec<Doc>) -> Doc {
     }
 }
 
+// - Numbered premises
+
 /// Numbers only nonempty premise documents.
 pub(crate) fn numbered(docs: Vec<Doc>) -> Doc {
     let docs: Vec<_> = docs.into_iter().filter(|doc| !is_empty(doc)).collect();
     if docs.is_empty() { Doc::Empty } else { Doc::Numbered(docs) }
 }
+
+// - Gathered blocks
 
 /// Removes outer gaps and coalesces gaps between nonempty lines.
 pub(crate) fn gathered(blocks: Vec<Block>) -> Doc {

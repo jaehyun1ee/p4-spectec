@@ -24,6 +24,8 @@ pub(crate) fn target_of_string(text: &str) -> Result<Target> {
 
 // == Ownership analysis
 
+// - Explicit links
+
 /// Detects existing links in a document.
 fn has_link_doc(doc: &Doc) -> bool {
     match doc {
@@ -59,6 +61,8 @@ fn has_link_doc(doc: &Doc) -> bool {
         _ => false,
     }
 }
+
+// - Ownership boundaries
 
 /// Detects regions that cannot share one enclosing fallback link.
 fn has_boundary_doc(doc: &Doc) -> bool {
@@ -98,6 +102,8 @@ fn has_boundary_doc(doc: &Doc) -> bool {
 }
 
 // == Fallback insertion
+
+// - Document
 
 /// Links unowned regions while retaining explicit targets and fill separators.
 pub(crate) fn link_unowned_doc(target: &Target, doc: Doc) -> Doc {
@@ -191,6 +197,8 @@ pub(crate) fn link_unowned_doc(target: &Target, doc: Doc) -> Doc {
     }
 }
 
+// - Concatenation
+
 /// Coalesces adjacent boundary-free children into one fallback region.
 fn link_unowned_concat(target: &Target, docs: Vec<Doc>) -> Doc {
     let mut docs_unowned = Vec::new();
@@ -214,6 +222,8 @@ fn link_unowned_concat(target: &Target, docs: Vec<Doc>) -> Doc {
     }
     concat(docs_linked)
 }
+
+// - Grid row
 
 /// Assigns fallback ownership independently to each visible grid cell.
 fn link_unowned_row(target: &Target, row: GridRow) -> GridRow {

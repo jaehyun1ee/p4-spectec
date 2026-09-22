@@ -12,6 +12,8 @@ use crate::lang::{
     el::ast::BinOp,
 };
 
+// == Precedence model
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum Category {
     Implication,
@@ -48,20 +50,9 @@ pub(super) enum Side {
     Right,
 }
 
-/// Determines whether an operand needs parentheses under its parent operator.
-pub(super) fn needs_parentheses(
-    category_parent: Category,
-    assoc: Assoc,
-    side: Side,
-    category_child: Category,
-) -> bool {
-    category_child < category_parent
-        || category_child == category_parent
-            && matches!(
-                (assoc, side),
-                (Assoc::Left, Side::Right) | (Assoc::Right, Side::Left) | (Assoc::Non, _)
-            )
-}
+// == Operator categories
+
+// - Notation atoms
 
 /// Returns the binding category and associativity of a notation atom.
 pub(super) fn of_infix(atom: &Atom) -> (Category, Assoc) {
@@ -91,6 +82,8 @@ pub(super) fn of_infix(atom: &Atom) -> (Category, Assoc) {
     }
 }
 
+// - Binary operators
+
 /// Returns the binding category and associativity of a binary operator.
 pub(super) fn of_binop(op: BinOp) -> (Category, Assoc) {
     use Assoc as A;
@@ -105,4 +98,21 @@ pub(super) fn of_binop(op: BinOp) -> (Category, Assoc) {
         }
         BinOp::Num(num::BinOp::Pow) => (C::Power, A::Left),
     }
+}
+
+// == Parenthesization
+
+/// Determines whether an operand needs parentheses under its parent operator.
+pub(super) fn needs_parentheses(
+    category_parent: Category,
+    assoc: Assoc,
+    side: Side,
+    category_child: Category,
+) -> bool {
+    category_child < category_parent
+        || category_child == category_parent
+            && matches!(
+                (assoc, side),
+                (Assoc::Left, Side::Right) | (Assoc::Right, Side::Left) | (Assoc::Non, _)
+            )
 }
