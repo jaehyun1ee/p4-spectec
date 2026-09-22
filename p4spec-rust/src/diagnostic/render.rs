@@ -25,9 +25,10 @@ use super::{
 
 // = Helpers
 
-/// Formats even invalid byte columns without overflowing their display offset.
+/// Formats a span as file:line:column with one-based display columns.
 fn span_location(span: &Span) -> String {
     let loc = |pos: &Position| {
+        // Widen before adding one so even usize::MAX can be displayed
         format!("{}:{}:{}", pos.file.escape_debug(), pos.line, pos.column as u128 + 1)
     };
     if span.left == span.right {
