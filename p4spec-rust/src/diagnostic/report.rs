@@ -81,14 +81,14 @@ pub enum Trace {
         children: Vec<Trace>,
     },
     /// Retains a cause with its own code, severity, labels, and notes.
-    Diagnostic(Box<Report>),
+    Cause(Box<Report>),
 }
 
 impl Trace {
     fn children_mut(&mut self) -> &mut Vec<Self> {
         match self {
             Self::Frame { children, .. } => children,
-            Self::Diagnostic(report) => &mut report.traces,
+            Self::Cause(report) => &mut report.traces,
         }
     }
 }
@@ -112,8 +112,8 @@ impl fmt::Debug for Trace {
                 .field("message", message)
                 .field("children", &children.len())
                 .finish(),
-            Self::Diagnostic(report) => fmt
-                .debug_struct("Diagnostic")
+            Self::Cause(report) => fmt
+                .debug_struct("Cause")
                 .field("summary", &format_args!("{report}"))
                 .field("children", &report.traces.len())
                 .finish(),

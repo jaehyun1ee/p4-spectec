@@ -9,12 +9,12 @@ fn summary_does_not_flatten_trace_diagnostics() {
     let mut report = report(span("absent.watsup", 2, 1, 2, 3));
     report
         .traces
-        .push(Trace::Diagnostic(Box::new(super::report(Span::default()))));
+        .push(Trace::Cause(Box::new(super::report(Span::default()))));
     let summary = report.to_string();
     assert!(summary.contains("parse/text-escape-invalid"));
     assert!(summary.contains("invalid escape in text literal"));
     assert!(!summary.contains("use a supported escape"));
-    let Trace::Diagnostic(cause) = &report.traces[0] else { panic!("diagnostic preserved") };
+    let Trace::Cause(cause) = &report.traces[0] else { panic!("diagnostic preserved") };
     assert_eq!(cause.source, "parse");
     assert_eq!(cause.notes, ["use a supported escape"]);
 }
@@ -33,7 +33,7 @@ fn deep_mixed_traces_render_and_drop_on_a_small_stack() {
                 trace = if idx % 2 == 0 {
                     let mut cause = report(Span::default());
                     cause.traces.push(trace);
-                    Trace::Diagnostic(Box::new(cause))
+                    Trace::Cause(Box::new(cause))
                 } else {
                     Trace::Frame {
                         span: Span::default(),

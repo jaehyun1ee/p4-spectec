@@ -296,7 +296,7 @@ impl Renderer {
                     (diagnostic, children)
                 }
                 // Keep each nested diagnostic's code and severity
-                Trace::Diagnostic(report) => (self.diagnostic(report)?, &report.traces),
+                Trace::Cause(report) => (self.diagnostic(report)?, &report.traces),
             };
             term::emit_to_write_style(buffer, &self.config.snippet, &self.files, &diagnostic)?;
             pending.push((children.iter(), depth + 1));
