@@ -1,7 +1,8 @@
 //! Dummy architecture with empty states and no packet pipeline
 //!
-//! Used when a program needs no target model;
-//! extern function and method calls are unsupported.
+//! Used when a program needs no target model.
+//! Compile-time assertions such as `static_assert` are supported;
+//! runtime extern function and method calls are not.
 
 use crate::{
     lang::data::value::Value,
