@@ -5,8 +5,10 @@ use std::cmp::Ordering;
 use serde_json::Number;
 
 #[allow(non_camel_case_types)]
+/// A serde JSON value.
 pub type json = serde_json::Value;
 
+/// A rank ordering the JSON kinds.
 fn rank(json: &json) -> u8 {
     match json {
         json::Null => 0,
@@ -18,6 +20,7 @@ fn rank(json: &json) -> u8 {
     }
 }
 
+/// Orders two JSON numbers, integers before floats.
 fn compare_num(num_l: &Number, num_r: &Number) -> Ordering {
     let int = |num: &Number| {
         num.as_i64()
@@ -36,6 +39,7 @@ fn compare_num(num_l: &Number, num_r: &Number) -> Ordering {
     }
 }
 
+/// Orders two JSON values structurally, independent of object key order.
 pub(crate) fn compare(json_l: &json, json_r: &json) -> Ordering {
     match (json_l, json_r) {
         (json::Null, json::Null) => Ordering::Equal,
@@ -49,7 +53,7 @@ pub(crate) fn compare(json_l: &json, json_r: &json) -> Ordering {
             .find(|order| !order.is_eq())
             .unwrap_or_else(|| jsons_l.len().cmp(&jsons_r.len())),
         (json::Object(fields_l), json::Object(fields_r)) => {
-            // Also preserve key-order independence if serde's preserve_order is enabled
+            // Preserve key-order independence when serde's preserve_order is on
             let mut fields_l = fields_l.iter().collect::<Vec<_>>();
             let mut fields_r = fields_r.iter().collect::<Vec<_>>();
             fields_l.sort_unstable_by_key(|(name, _)| *name);
