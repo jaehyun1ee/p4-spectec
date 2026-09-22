@@ -1,6 +1,6 @@
 //! Source inputs for diagnostic snapshot acceptance
 //!
-//! Fixture names and constructed cases run in the pinned reference order.
+//! Reference fixtures keep their pinned order; Rust notation regressions follow.
 //! Rendered output is compared with the matching diagnostic expected file.
 
 /// Pins the OCaml inputs represented by the diagnostic cases.
@@ -30,7 +30,7 @@ pub const PARSE: &[&str] = &[
     "parse-directory-io-error",
 ];
 
-/// Lists elaboration fixtures in pinned reference order.
+/// Lists reference elaboration fixtures followed by notation regressions.
 pub const ELAB: &[&str] = &[
     "ctx-builtin-dec-redefined.watsup",
     "ctx-builtin-dec-tparam-duplicate.watsup",
@@ -110,4 +110,33 @@ pub const ELAB: &[&str] = &[
     "type-unparen-outside-hint.watsup",
     "type-variant-mixop-collision.watsup",
     "type-vart-targ-arity-mismatch.watsup",
+    "notation-argument-type.watsup",
+    "notation-shape.watsup",
+    "notation-negative-valid.watsup",
+    "notation-implication-shape.watsup",
+    "notation-token.watsup",
+    "notation-argument-third.watsup",
+    "notation-argument-inner.watsup",
+    "notation-argument-operator.watsup",
+    "notation-parenthesized-valid.watsup",
+    "notation-sequence-token.watsup",
+    "notation-sequence-arity.watsup",
+    "notation-bracket-token.watsup",
+    "notation-variant-type.watsup",
+    "notation-variant-fallback-valid.watsup",
+    "notation-negated-type.watsup",
+    "notation-conclusion-type.watsup",
+    "notation-alias-inner.watsup",
+    "notation-iteration-inner.watsup",
+    "notation-iteration-type.watsup",
+    "notation-list-inner.watsup",
+    "notation-bracket-shape.watsup",
+    "notation-singleton-variant-inner.watsup",
+    "notation-singleton-valid.watsup",
+    "notation-list-valid.watsup",
+    "notation-empty-valid.watsup",
+    "notation-singleton-tuple-inner.watsup",
+    "notation-sequence-type.watsup",
+    "notation-option-list-inner.watsup",
+    "notation-alias-list-inner.watsup",
 ];

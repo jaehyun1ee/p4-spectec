@@ -7,7 +7,7 @@ use p4spec_rust::{
 };
 
 #[test]
-fn test_backtracking_failure_displays_its_elaboration_trace() {
+fn test_unmatched_variant_displays_its_notation_declaration() {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/elaboration/unmatched_variant.watsup");
     let spec = parse_files([fixture]).expect("parse unmatched variant fixture");
@@ -17,8 +17,9 @@ fn test_backtracking_failure_displays_its_elaboration_trace() {
         .render_to_string(&error)
         .unwrap();
 
-    assert!(diagnostic.contains("expression elaboration failed"));
-    assert!(diagnostic.contains("expression does not match any variant case"));
+    assert!(diagnostic.contains("expected 'YES', but found 'NO'"));
+    assert!(diagnostic.contains("expected notation: YES"));
+    assert!(!diagnostic.contains("trace["));
 }
 
 #[test]

@@ -10,6 +10,7 @@ mod arg;
 mod decl;
 mod dim;
 mod exp;
+mod notation;
 mod prem;
 mod typ;
 
@@ -17,6 +18,7 @@ pub(super) use arg::*;
 pub(super) use decl::*;
 pub(super) use dim::*;
 pub(super) use exp::*;
+pub(super) use notation::*;
 pub(super) use prem::*;
 pub(super) use typ::*;
 

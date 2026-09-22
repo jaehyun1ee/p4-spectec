@@ -117,3 +117,31 @@ fn test_function_argument_signatures_are_alpha_equivalent() {
     let (result, _warnings) = elaborate::convert_with_warnings(spec_el);
     assert!(result.is_ok(), "{result:?}");
 }
+
+#[test]
+fn test_relation_negative_argument_keeps_unary_inference_and_upcast() {
+    let spec_el = crate::spec_fixture::parse(
+        "relation F: nat |- int : int\n\
+         hint(input %0 %1 %2)\n\
+         rule F/base: 1 |- 0 : -1",
+    )
+    .expect("parse negative notation argument");
+    let spec_il = elaborate::convert(spec_el).expect("accept unary minus at int");
+    let text = p4spec_rust::lang::traits::print::Print::to_string(&spec_il);
+    assert!(text.contains("1 |- 0 as int : -1 as int"), "{text}");
+}
+
+#[test]
+fn test_notation_type_mismatch_retries_the_next_variant() {
+    let spec_el = crate::spec_fixture::parse(
+        "syntax choice =\n\
+         | TAG nat BAD\n\
+         | TAG bool GOOD\n\
+         dec $take(choice) : bool\n\
+         def $take(TAG true GOOD) = true",
+    )
+    .expect("parse recoverable type mismatch");
+    let spec_il = elaborate::convert(spec_el).expect("try the later boolean candidate");
+    let text = p4spec_rust::lang::traits::print::Print::to_string(&spec_il);
+    assert!(text.contains("TAG true GOOD"), "{text}");
+}
