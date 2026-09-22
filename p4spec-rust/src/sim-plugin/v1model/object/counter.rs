@@ -33,9 +33,21 @@ pub enum Counter {
 }
 
 impl Counter {
-    /// Creates `size` zeroed counters of the requested `CounterType`.
+    /// A counter object is created by calling its constructor.  This
+    /// creates an array of counter states, with the number of counter
+    /// states specified by the size parameter.  The array indices are
+    /// in the range [0, size-1].
     ///
-    /// Counters are updated by the program and read by the control plane.
+    /// You must provide a choice of whether to maintain only a packet
+    /// count (`CounterType.packets`), only a byte count
+    /// (`CounterType.bytes`), or both (`CounterType.packets_and_bytes`).
+    ///
+    /// Counters can be updated from your P4 program, but can only be
+    /// read from the control plane.  If you need something that can be
+    /// both read and written from the P4 program, consider using a
+    /// register.
+    ///
+    /// `counter(bit<32> size, CounterType type);`
     pub fn init(
         arena: &ValueArena,
         _value_targs: Value,
@@ -60,9 +72,18 @@ impl Counter {
         }
     }
 
-    /// Adds one packet, the packet's bytes, or both to the counter at `index`.
+    /// `count()` causes the counter state with the specified index to be
+    ///  read, modified, and written back, atomically relative to the
+    ///  processing of other packets, updating the packet count, byte
+    ///  count, or both, depending upon the CounterType of the counter
+    ///  instance used when it was constructed.
     ///
-    /// `index >= size` updates nothing.
+    ///  @param index The index of the counter state in the array to be
+    ///               updated, normally a value in the range [0,
+    ///               size-1].  If index >= size, no counter state will be
+    ///               updated.
+    ///
+    /// `void count(in bit<32> index);`
     pub fn count<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,

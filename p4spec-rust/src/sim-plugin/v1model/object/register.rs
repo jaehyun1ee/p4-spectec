@@ -32,10 +32,18 @@ pub struct Register {
 }
 
 impl Register {
-    /// Creates `size` elements of type `T`, each at `T`'s default value.
+    /// A register object is created by calling its constructor.  This
+    /// creates an array of 'size' identical elements, each with type
+    /// T.  The array indices are in the range [0, size-1].  For
+    /// example, this constructor call:
     ///
-    /// For example, `register<bit<32>>(512) my_reg;`
-    /// allocates 512 values of type `bit<32>`.
+    /// ```text
+    ///     register<bit<32>>(512) my_reg;
+    ///
+    /// ```
+    /// allocates storage for 512 values, each with type `bit<32>`.
+    ///
+    /// `register(bit<32> size);`
     pub fn init<Interp, Iface, Ext>(
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
         value_targs: Value,
@@ -66,10 +74,20 @@ impl Register {
         Ok(Self { value_typ, values: vec![value_initial; size] })
     }
 
-    /// Writes the element at `index` to `result`.
+    /// `read()` reads the state of the register array stored at the
+    /// specified index, and returns it as the value written to the
+    /// result parameter.
     ///
-    /// Only `bit<W>` element types are supported by `v1model.p4`;
-    /// an out-of-range index yields the element type's default.
+    /// @param index The index of the register array element to be
+    ///              read, normally a value in the range [0, size-1].
+    /// @param result Only types T that are `bit<W>` are currently
+    ///              supported.  When index is in range, the value of
+    ///              result becomes the value read from the register
+    ///              array element.  When index >= size, the final
+    ///              value of result is not specified, and should be
+    ///              ignored by the caller.
+    ///
+    /// `void read(out T result, in bit<32> index);`
     pub fn read<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
@@ -108,10 +126,27 @@ impl Register {
         Ok((self, value_ctx, value_arch, value_call_result))
     }
 
-    /// Stores `value` at `index`.
+    /// `write()` writes the state of the register array at the specified
+    /// index, with the value provided by the value parameter.
     ///
-    /// An out-of-range index changes nothing;
-    /// atomicity of a read-modify-write is the program's concern via `@atomic`.
+    /// If you wish to perform a `read()` followed later by a `write()` to
+    /// the same register array element, and you wish the
+    /// read-modify-write sequence to be atomic relative to other
+    /// processed packets, then there may be parallel implementations
+    /// of the v1model architecture for which you must execute them in
+    /// a P4_16 block annotated with an `@atomic` annotation.  See the
+    /// P4_16 language specification description of the `@atomic`
+    /// annotation for more details.
+    ///
+    /// @param index The index of the register array element to be
+    ///              written, normally a value in the range [0,
+    ///              size-1].  If index >= size, no register state will
+    ///              be updated.
+    /// @param value Only types T that are `bit<W>` are currently
+    ///              supported.  When index is in range, this
+    ///              parameter's value is written into the register
+    ///              array element specified by index.
+    /// `void write(in bit<32> index, in T value);`
     pub fn write<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,

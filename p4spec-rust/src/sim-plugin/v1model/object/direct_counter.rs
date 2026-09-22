@@ -33,9 +33,24 @@ pub enum DirectCounter {
 }
 
 impl DirectCounter {
-    /// Creates a zeroed direct counter of the requested `CounterType`.
+    /// A direct_counter object is created by calling its constructor.
+    /// You must provide a choice of whether to maintain only a packet
+    /// count (`CounterType.packets`), only a byte count
+    /// (`CounterType.bytes`), or both (`CounterType.packets_and_bytes`).
+    /// After constructing the object, you can associate it with at
+    /// most one table, by adding the following table property to the
+    /// definition of that table:
     ///
-    /// The object is attached to a table by its `counters` property.
+    /// ```text
+    ///     counters = <object_name>;
+    ///
+    /// ```
+    /// Counters can be updated from your P4 program, but can only be
+    /// read from the control plane.  If you need something that can be
+    /// both read and written from the P4 program, consider using a
+    /// register.
+    ///
+    /// `direct_counter(CounterType type);`
     pub fn init(
         arena: &ValueArena,
         _value_targs: Value,
@@ -58,10 +73,17 @@ impl DirectCounter {
         }
     }
 
-    /// Adds one packet, the packet's bytes, or both to the counter.
+    /// The `count()` method is actually unnecessary in the v1model
+    /// architecture.  This is because after a direct_counter object
+    /// has been associated with a table as described in the
+    /// documentation for the direct_counter constructor, every time
+    /// the table is applied and a table entry is matched, the counter
+    /// state associated with the matching entry is read, modified, and
+    /// written back, atomically relative to the processing of other
+    /// packets, regardless of whether the `count()` method is called in
+    /// the body of that action.
     ///
-    /// `v1model.p4` counts on every table match;
-    /// here only an explicit call counts.
+    /// `void count();`
     pub fn count<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
