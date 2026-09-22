@@ -1,10 +1,8 @@
-//! Backtracking state for elaboration alternatives
+//! Three-state results for elaboration alternatives
 //!
-//! Many constructs have several readings,
-//! such as `a ++ b` being a list or a text concatenation.
-//! `choose_sequential` isolates each branch's context and commits only a winner.
-//! Failed branches retain complete reports while flat local metadata selects
-//! the most informative summary without inspecting diagnostic presentation.
+//! A mismatch permits another candidate to run on the original context.
+//! A fatal failure stops the search immediately.
+//! Both failure states retain complete reports in source candidate order.
 
 use crate::{
     diagnostic::{LabelStyle, Report, ReportKind},
@@ -13,166 +11,182 @@ use crate::{
 
 use super::{context::Context, error, error::ElabError};
 
-/// A successful elaboration result or recoverable backtracking failure.
-pub(super) type Attempt<T> = Result<T, Backtrack>;
-
-/// Distinguishes broad no-match context from a concrete failed check.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) enum Specificity {
-    Generic,
-    Specific,
-}
-
-/// Summary used only to select the final attempt frame.
+/// A successful elaboration, fatal failure, or recoverable mismatch.
 #[derive(Debug)]
-struct Selection {
-    span: Span,
-    message: String,
-    located: bool,
-    specificity: Specificity,
-    depth: usize,
+pub(super) enum Backtrack<T> {
+    /// The operation produced a value.
+    Success(T),
+    /// The operation failed and no alternative may be tried.
+    Fatal(Vec<Report>),
+    /// The candidate did not apply and another candidate may be tried.
+    Mismatch(Vec<Report>),
 }
 
-impl Selection {
-    /// Builds local selection metadata without consulting diagnostic presentation.
-    fn new(span: Span, message: String, specificity: Specificity) -> Self {
-        let located = span != Span::default();
-        Self { span, message, located, specificity, depth: 0 }
+/// Builds `Backtrack::Success`.
+macro_rules! success {
+    ($($value:tt)*) => {
+        $crate::pass::elaborate::attempt::Backtrack::Success($($value)*)
+    };
+}
+pub(super) use success;
+
+/// Builds `Backtrack::Fatal` from a report list.
+macro_rules! fatal {
+    (error: $error:expr $(,)?) => {
+        $crate::pass::elaborate::attempt::Backtrack::Fatal(vec![*$error])
+    };
+    ($($reports:tt)*) => {
+        $crate::pass::elaborate::attempt::Backtrack::Fatal($($reports)*)
+    };
+}
+pub(super) use fatal;
+
+/// Builds `Backtrack::Mismatch` from a report list.
+macro_rules! mismatch {
+    (error: $error:expr $(,)?) => {
+        $crate::pass::elaborate::attempt::Backtrack::Mismatch(vec![*$error])
+    };
+    (report: $report:expr $(,)?) => {
+        $crate::pass::elaborate::attempt::Backtrack::Mismatch(vec![$report])
+    };
+    ($($reports:tt)*) => {
+        $crate::pass::elaborate::attempt::Backtrack::Mismatch($($reports)*)
+    };
+}
+pub(super) use mismatch;
+
+/// Returns early while preserving fatal and mismatch states.
+macro_rules! unwrap {
+    ($result:expr) => {
+        match $result {
+            $crate::pass::elaborate::attempt::success!(value) => value,
+            $crate::pass::elaborate::attempt::fatal!(reports) => {
+                return $crate::pass::elaborate::attempt::fatal!(reports)
+            }
+            $crate::pass::elaborate::attempt::mismatch!(reports) => {
+                return $crate::pass::elaborate::attempt::mismatch!(reports)
+            }
+        }
+    };
+}
+pub(super) use unwrap;
+
+/// Promotes a plain elaboration result to fatal and returns its value.
+macro_rules! unwrap_from_result {
+    ($result:expr) => {
+        match $result {
+            Ok(value) => value,
+            Err(error) => return $crate::pass::elaborate::attempt::fatal!(vec![*error]),
+        }
+    };
+}
+pub(super) use unwrap_from_result;
+
+// == Propagation and context
+
+impl<T> Backtrack<T> {
+    /// Maps a successful value while preserving either failure state.
+    pub(super) fn map<U>(self, map: impl FnOnce(T) -> U) -> Backtrack<U> {
+        match self {
+            success!(value) => success!(map(value)),
+            fatal!(reports) => fatal!(reports),
+            mismatch!(reports) => mismatch!(reports),
+        }
     }
 
-    /// Orders candidates by location, specificity, then nesting depth.
-    fn outranks(&self, other: &Self) -> bool {
-        (self.located, self.specificity, self.depth)
-            > (other.located, other.specificity, other.depth)
+    /// Promotes a mismatch to fatal at a non-backtracking boundary.
+    pub(super) fn promote_mismatch(self) -> Self {
+        match self {
+            mismatch!(reports) => fatal!(reports),
+            result => result,
+        }
+    }
+
+    /// Wraps a recoverable mismatch under operation context.
+    ///
+    /// Fatal reports pass through unchanged so their direct cause is retained.
+    pub(super) fn nest(self, span: Span, message: impl Into<String>) -> Self {
+        match self {
+            mismatch!(children) => mismatch!(vec![Report {
+                kind: ReportKind::Frame { span, message: message.into() },
+                children,
+            }]),
+            result => result,
+        }
     }
 }
 
-// == Attempt helpers
+// == Choice and finishing
 
-/// Fails an attempt with a concrete structured cause.
-pub(super) fn fail<T>(error: ElabError) -> Attempt<T> {
-    Err(error.into())
-}
-
-/// Fails an attempt with broad no-match context.
-pub(super) fn fail_generic<T>(report: Report) -> Attempt<T> {
-    Err(Backtrack::from_report(report, Specificity::Generic))
-}
-
-/// Fails an attempt without a report, for alternatives that never apply.
-pub(super) fn fail_silent<T>() -> Attempt<T> {
-    Err(Backtrack::default())
-}
-
-/// Tries the first alternative and falls back to the second on failure.
+/// Tries the second alternative only when the first mismatches.
 ///
-/// Only the context of the successful alternative is kept;
-/// the reports of both failures are merged when neither succeeds.
+/// Each candidate starts from the original context;
+/// only the successful candidate is committed.
 pub(super) fn choose_sequential<T>(
     ctx: &mut Context,
-    first: impl FnOnce(&mut Context) -> Attempt<T>,
-    second: impl FnOnce(&mut Context) -> Attempt<T>,
-) -> Attempt<T> {
+    first: impl FnOnce(&mut Context) -> Backtrack<T>,
+    second: impl FnOnce(&mut Context) -> Backtrack<T>,
+) -> Backtrack<T> {
     // Run the first alternative on a copy of the context
     let mut ctx_first = ctx.clone();
     match first(&mut ctx_first) {
         // Commit the context of the successful alternative
-        Ok(value) => {
+        success!(value) => {
             *ctx = ctx_first;
-            Ok(value)
+            success!(value)
         }
-        Err(failure) => {
-            // Retry with the second alternative and merge both failures
+        // Stop without committing the failed candidate
+        fatal!(reports) => fatal!(reports),
+        mismatch!(reports) => {
+            // Retry the second alternative from the original context
             let mut ctx_second = ctx.clone();
             match second(&mut ctx_second) {
-                Ok(value) => {
+                success!(value) => {
                     *ctx = ctx_second;
-                    Ok(value)
+                    success!(value)
                 }
-                Err(failure_second) => Err(failure.merge(failure_second)),
+                fatal!(reports) => fatal!(reports),
+                mismatch!(mut reports_second) => {
+                    let mut reports = reports;
+                    reports.append(&mut reports_second);
+                    mismatch!(reports)
+                }
             }
         }
     }
 }
 
-/// Converts a finished attempt into a plain elaboration result.
-pub(super) fn finish<T>(attempt: Attempt<T>) -> Result<T, ElabError> {
-    attempt.map_err(Backtrack::into_error)
+/// Converts a completed backtrack into a plain elaboration result.
+pub(super) fn finish<T>(result: Backtrack<T>) -> Result<T, ElabError> {
+    match result {
+        success!(value) => Ok(value),
+        fatal!(reports) | mismatch!(reports) => Err(finish_reports(reports)),
+    }
 }
 
-/// Backtracking state with a report forest and flat selection metadata.
-#[derive(Debug, Default)]
-pub(super) struct Backtrack {
-    reports: Vec<Report>,
-    selection: Option<Selection>,
-}
-
-impl Backtrack {
-    /// Creates a failure while preserving the incoming report unchanged.
-    pub(super) fn from_report(report: Report, specificity: Specificity) -> Self {
-        let (span, message) = match &report.kind {
-            ReportKind::Frame { span, message } => (span.clone(), message.clone()),
-            ReportKind::Cause(diagnostic) => {
-                let span = diagnostic
-                    .labels
-                    .iter()
-                    .find(|label| label.style == LabelStyle::Primary)
-                    .map(|label| label.span.clone())
-                    .unwrap_or_default();
-                (span, diagnostic.message.clone())
-            }
-        };
-        Self { reports: vec![report], selection: Some(Selection::new(span, message, specificity)) }
-    }
-
-    /// Wraps the collected reports under a new attempt-context frame.
-    pub(super) fn nest(mut self, span: Span, message: impl Into<String>) -> Self {
-        if let Some(selection) = &mut self.selection {
-            selection.depth += 1;
-        }
-        let message = message.into();
-        let selection_parent = Selection::new(span.clone(), message.clone(), Specificity::Generic);
-        if self
-            .selection
-            .as_ref()
-            .is_none_or(|selection| selection_parent.outranks(selection))
-        {
-            self.selection = Some(selection_parent);
-        }
-        self.reports =
-            vec![Report { kind: ReportKind::Frame { span, message }, children: self.reports }];
-        self
-    }
-
-    /// Appends the reports of another failed alternative.
-    pub(super) fn merge(mut self, mut other: Self) -> Self {
-        if let Some(selection_other) = other.selection.take()
-            && self
-                .selection
-                .as_ref()
-                .is_none_or(|selection| selection_other.outranks(selection))
-        {
-            self.selection = Some(selection_other);
-        }
-        self.reports.append(&mut other.reports);
-        self
-    }
-
-    /// Selects the best summary and attaches every full report beneath it.
-    pub(super) fn into_error(self) -> ElabError {
-        match self.selection {
-            Some(selection) => {
-                let mut report = error::frame(&selection.span, selection.message);
-                report.children = self.reports;
-                Box::new(report)
-            }
-            None => error::elaboration_alternative_missing(),
+/// Preserves one report unchanged and groups multiple alternative reports.
+fn finish_reports(mut reports: Vec<Report>) -> ElabError {
+    match reports.len() {
+        0 => error::elaboration_alternative_missing(),
+        1 => Box::new(reports.pop().expect("one report remains")),
+        _ => {
+            let span = reports.iter().find_map(report_span).unwrap_or_default();
+            let mut report = error::frame(&span, "elaboration alternatives failed");
+            report.children = reports;
+            Box::new(report)
         }
     }
 }
 
-impl From<ElabError> for Backtrack {
-    fn from(error: ElabError) -> Self {
-        Self::from_report(*error, Specificity::Specific)
-    }
+/// Finds the first located root span without inspecting report presentation.
+fn report_span(report: &Report) -> Option<Span> {
+    let span = match &report.kind {
+        ReportKind::Frame { span, .. } => span,
+        ReportKind::Cause(diagnostic) => diagnostic
+            .labels
+            .iter()
+            .find(|label| label.style == LabelStyle::Primary)
+            .map(|label| &label.span)?,
+    };
+    (*span != Span::default()).then(|| span.clone())
 }

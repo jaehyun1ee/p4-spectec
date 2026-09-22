@@ -39,7 +39,9 @@ use crate::{
 };
 
 use super::{
-    attempt::{Attempt, Backtrack, choose_sequential, fail, fail_generic, fail_silent, finish},
+    attempt::{
+        Backtrack, choose_sequential, fatal, finish, mismatch, success, unwrap, unwrap_from_result,
+    },
     context::Context,
     dimension,
     error::{self, ElabError},
@@ -84,73 +86,75 @@ fn find_repeated_tparam(tparams: &[el::TParam]) -> Option<(&Id, &Span)> {
 // - Type destructuring
 
 /// Requires the expanded type to be `text`.
-fn as_text_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<()> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il).map_err(|error| {
-        Backtrack::from(error::type_operation_invalid("cannot expand type", error))
-    })?;
+fn as_text_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<()> {
+    let typ_il = unwrap_from_result!(
+        expand_typ(&ctx.tdenv, typ_il)
+            .map_err(|error| { error::type_operation_invalid("cannot expand type", error) })
+    );
     match &typ_il.node {
-        il::TypKind::Text => Ok(()),
-        _ => fail(error::type_shape_mismatch("text", &typ_il.span)),
+        il::TypKind::Text => success!(()),
+        _ => mismatch!(error: error::type_shape_mismatch("text", &typ_il.span)),
     }
 }
 
 /// Destructs the expanded type into its element type and iteration.
-fn as_iter_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<(il::Typ, il::Iter)> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)
-        .map_err(|error| {
-            Backtrack::from(error::type_operation_invalid("cannot expand type", error))
-        })?
-        .into_owned();
+fn as_iter_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(il::Typ, il::Iter)> {
+    let typ_il = unwrap_from_result!(
+        expand_typ(&ctx.tdenv, typ_il)
+            .map_err(|error| { error::type_operation_invalid("cannot expand type", error) })
+    )
+    .into_owned();
     let span = typ_il.span;
     let il::TypKind::Iter(typ_inner_il, iter_il) = typ_il.node else {
-        return fail(error::type_shape_mismatch("an iteration", &span));
+        return mismatch!(error: error::type_shape_mismatch("an iteration", &span));
     };
-    Ok((*typ_inner_il, iter_il))
+    success!((*typ_inner_il, iter_il))
 }
 
 /// Destructs the expanded type into its tuple component types.
-fn as_tuple_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<Vec<il::Typ>> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)
-        .map_err(|error| {
-            Backtrack::from(error::type_operation_invalid("cannot expand type", error))
-        })?
-        .into_owned();
+fn as_tuple_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<Vec<il::Typ>> {
+    let typ_il = unwrap_from_result!(
+        expand_typ(&ctx.tdenv, typ_il)
+            .map_err(|error| { error::type_operation_invalid("cannot expand type", error) })
+    )
+    .into_owned();
     let span = typ_il.span;
     let il::TypKind::Tuple(typs_il) = typ_il.node else {
-        return fail(error::type_shape_mismatch("a tuple", &span));
+        return mismatch!(error: error::type_shape_mismatch("a tuple", &span));
     };
-    Ok(typs_il)
+    success!(typs_il)
 }
 
 /// Destructs the expanded type into the element type of a list.
-fn as_list_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<il::Typ> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il)
-        .map_err(|error| {
-            Backtrack::from(error::type_operation_invalid("cannot expand type", error))
-        })?
-        .into_owned();
+fn as_list_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<il::Typ> {
+    let typ_il = unwrap_from_result!(
+        expand_typ(&ctx.tdenv, typ_il)
+            .map_err(|error| { error::type_operation_invalid("cannot expand type", error) })
+    )
+    .into_owned();
     let span = typ_il.span;
     let il::TypKind::Iter(typ_inner_il, il::Iter::List) = typ_il.node else {
-        return fail(error::type_shape_mismatch("a list", &span));
+        return mismatch!(error: error::type_shape_mismatch("a list", &span));
     };
-    Ok(*typ_inner_il)
+    success!(*typ_inner_il)
 }
 
 /// Destructs the expanded type into the fields of the struct type it names.
-fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Attempt<Vec<il::TypField>> {
-    let typ_il = expand_typ(&ctx.tdenv, typ_il).map_err(|error| {
-        Backtrack::from(error::type_operation_invalid("cannot expand type", error))
-    })?;
+fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<Vec<il::TypField>> {
+    let typ_il = unwrap_from_result!(
+        expand_typ(&ctx.tdenv, typ_il)
+            .map_err(|error| { error::type_operation_invalid("cannot expand type", error) })
+    );
     // Struct types are always named types with a definition
     let il::TypKind::Var(id, _) = &typ_il.node else {
-        return fail(error::type_shape_mismatch("a struct", &typ_il.span));
+        return mismatch!(error: error::type_shape_mismatch("a struct", &typ_il.span));
     };
     let Some(TypeDef::Defined(_, def_typ_il)) = ctx.find_typdef_opt(id) else {
-        return fail(error::type_shape_mismatch("a struct", &typ_il.span));
+        return mismatch!(error: error::type_shape_mismatch("a struct", &typ_il.span));
     };
     match &def_typ_il.node {
-        il::DefTypKind::Struct(typ_fields_il) => Ok(typ_fields_il.clone()),
-        _ => fail(error::type_shape_mismatch("a struct", &typ_il.span)),
+        il::DefTypKind::Struct(typ_fields_il) => success!(typ_fields_il.clone()),
+        _ => mismatch!(error: error::type_shape_mismatch("a struct", &typ_il.span)),
     }
 }
 
@@ -419,15 +423,15 @@ fn typ_at(typ_kind_il: il::TypKind, span: &Span) -> il::Typ {
 // - Expression type inference
 
 /// Fails inference of a construct whose type cannot be synthesized.
-fn fail_infer<T>(span: &Span, construct: &str) -> Attempt<T> {
-    fail(error::expression_inference_invalid(span, construct))
+fn fail_infer<T>(span: &Span, construct: &str) -> Backtrack<T> {
+    mismatch!(error: error::expression_inference_invalid(span, construct))
 }
 
 /// Synthesizes the type of an expression bottom-up.
 ///
 /// Constructs such as `eps`, structs, and notation
 /// only elaborate against an expected type and fail here.
-fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Attempt<il::Exp> {
+fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Backtrack<il::Exp> {
     match &exp.node {
         // Inferable constructs dispatch to their rule
         el::ExpKind::Bool(value) => infer_bool_exp(ctx, &exp.span, *value),
@@ -465,80 +469,82 @@ fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Attempt<il::Exp> {
         el::ExpKind::Seq(_) => fail_infer(&exp.span, "sequence expression"),
         el::ExpKind::Infix(_, _, _) => fail_infer(&exp.span, "infix expression"),
         el::ExpKind::Brack(_, _, _) => fail_infer(&exp.span, "bracket expression"),
-        el::ExpKind::Hole(_) => fail(error::hole_outside_hint_unsupported(&exp.span)),
-        el::ExpKind::Fuse(_, span, _) => fail(error::fuse_outside_hint_unsupported(span)),
-        el::ExpKind::Unparen(_) => fail(error::unparen_outside_hint_unsupported(&exp.span)),
-        el::ExpKind::Latex(_) => fail(error::latex_outside_hint_unsupported(&exp.span)),
+        el::ExpKind::Hole(_) => fatal!(error: error::hole_outside_hint_unsupported(&exp.span)),
+        el::ExpKind::Fuse(_, span, _) => fatal!(error: error::fuse_outside_hint_unsupported(span)),
+        el::ExpKind::Unparen(_) => {
+            fatal!(error: error::unparen_outside_hint_unsupported(&exp.span))
+        }
+        el::ExpKind::Latex(_) => fatal!(error: error::latex_outside_hint_unsupported(&exp.span)),
     }
 }
 
-fn infer_exps(ctx: &mut Context, exps: &[el::Exp]) -> Attempt<Vec<il::Exp>> {
+fn infer_exps(ctx: &mut Context, exps: &[el::Exp]) -> Backtrack<Vec<il::Exp>> {
     let mut exps_il = Vec::with_capacity(exps.len());
     for exp in exps {
-        let exp_il = infer_exp(ctx, exp)?;
+        let exp_il = unwrap!(infer_exp(ctx, exp));
         exps_il.push(exp_il);
     }
-    Ok(exps_il)
+    success!(exps_il)
 }
 
 // - Boolean expression inference
 
-fn infer_bool_exp(_ctx: &mut Context, span: &Span, value: bool) -> Attempt<il::Exp> {
+fn infer_bool_exp(_ctx: &mut Context, span: &Span, value: bool) -> Backtrack<il::Exp> {
     let exp_il = note_phrase! {
         node: il::ExpKind::Bool(value),
         note: il::TypKind::Bool,
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Number expression inference
 
-fn infer_num_exp(_ctx: &mut Context, span: &Span, value: &el::Num) -> Attempt<il::Exp> {
+fn infer_num_exp(_ctx: &mut Context, span: &Span, value: &el::Num) -> Backtrack<il::Exp> {
     let exp_il = note_phrase! {
         node: il::ExpKind::Num(value.clone()),
         note: il::TypKind::Num(prim::num::to_typ(value)),
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Text expression inference
 
-fn infer_text_exp(_ctx: &mut Context, span: &Span, value: &el::Text) -> Attempt<il::Exp> {
+fn infer_text_exp(_ctx: &mut Context, span: &Span, value: &el::Text) -> Backtrack<il::Exp> {
     let exp_il = note_phrase! {
         node: il::ExpKind::Text(value.clone()),
         note: il::TypKind::Text,
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Identifier expression inference
 
 /// Looks up the type of a variable through its meta-variable.
-fn infer_id_exp(ctx: &mut Context, span: &Span, id: &Id) -> Attempt<il::Exp> {
+fn infer_id_exp(ctx: &mut Context, span: &Span, id: &Id) -> Backtrack<il::Exp> {
     // The suffix is dropped to find the governing meta-variable
     let tid = id.strip_suffix();
     let Some(typ_il) = ctx.find_metavar_opt(&tid) else {
         return fail_infer(&id.span, "variable");
     };
     let exp_il = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id.clone()), note: typ_il.node.clone(), span: span.clone());
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Operator inference failures
 
-fn operator_error<T>(span: Span) -> Attempt<T> {
-    fail(error::operator_operand_type_mismatch(&span))
+fn operator_error<T>(span: Span) -> Backtrack<T> {
+    mismatch!(error: error::operator_operand_type_mismatch(&span))
 }
 
 // - Unary expression inference
 
 /// Infers a unary expression by trying each operand type the operator accepts.
-fn infer_un_exp(ctx: &mut Context, span: &Span, op: el::UnOp, exp: &el::Exp) -> Attempt<il::Exp> {
+fn infer_un_exp(ctx: &mut Context, span: &Span, op: el::UnOp, exp: &el::Exp) -> Backtrack<il::Exp> {
     // Infer the type of the operand
-    let exp_il = infer_exp(ctx, exp)?;
+    let exp_il = unwrap!(infer_exp(ctx, exp));
     // Candidates of (operator type, operand type, result type)
     let candidates_il = match op {
         el::UnOp::Bool(_) => vec![(il::OpTyp::Bool, il::TypKind::Bool, il::TypKind::Bool)],
@@ -559,13 +565,17 @@ fn infer_un_exp(ctx: &mut Context, span: &Span, op: el::UnOp, exp: &el::Exp) -> 
     for (op_typ_il, typ_operand_il, typ_result_il) in candidates_il {
         // Check if the operand can be cast to the expected type
         let typ_expect_il = typ_at(typ_operand_il, &exp_il.span);
-        if let Ok(exp_il) = cast_exp(ctx, &typ_expect_il, exp_il.clone()) {
-            let exp_il = note_phrase! {
-                node: il::ExpKind::Un(op, op_typ_il, Box::new(exp_il)),
-                note: typ_result_il,
-                span: span.clone(),
-            };
-            return Ok(exp_il);
+        match cast_exp(ctx, &typ_expect_il, exp_il.clone()) {
+            success!(exp_il) => {
+                let exp_il = note_phrase! {
+                    node: il::ExpKind::Un(op, op_typ_il, Box::new(exp_il)),
+                    note: typ_result_il,
+                    span: span.clone(),
+                };
+                return success!(exp_il);
+            }
+            fatal!(reports) => return fatal!(reports),
+            mismatch!(_) => {}
         }
     }
     operator_error(span.clone())
@@ -580,10 +590,10 @@ fn infer_bin_exp(
     exp_l: &el::Exp,
     op: el::BinOp,
     exp_r: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     // Infer the types of both operands
-    let exp_l_il = infer_exp(ctx, exp_l)?;
-    let exp_r_il = infer_exp(ctx, exp_r)?;
+    let exp_l_il = unwrap!(infer_exp(ctx, exp_l));
+    let exp_r_il = unwrap!(infer_exp(ctx, exp_r));
     // Candidates of (operator type, left type, right type, result type)
     let candidates_il = match op {
         el::BinOp::Bool(_) => {
@@ -623,18 +633,22 @@ fn infer_bin_exp(
     for (op_typ_il, typ_expect_l_il, typ_expect_r_il, typ_result_il) in candidates_il {
         let typ_expect_l_il = typ_at(typ_expect_l_il, &exp_l_il.span);
         let typ_expect_r_il = typ_at(typ_expect_r_il, &exp_r_il.span);
-        let Ok(exp_l_il) = cast_exp(ctx, &typ_expect_l_il, exp_l_il.clone()) else {
-            continue;
+        let exp_l_il = match cast_exp(ctx, &typ_expect_l_il, exp_l_il.clone()) {
+            success!(exp_l_il) => exp_l_il,
+            fatal!(reports) => return fatal!(reports),
+            mismatch!(_) => continue,
         };
-        let Ok(exp_r_il) = cast_exp(ctx, &typ_expect_r_il, exp_r_il.clone()) else {
-            continue;
+        let exp_r_il = match cast_exp(ctx, &typ_expect_r_il, exp_r_il.clone()) {
+            success!(exp_r_il) => exp_r_il,
+            fatal!(reports) => return fatal!(reports),
+            mismatch!(_) => continue,
         };
         let exp_il = note_phrase! {
             node: il::ExpKind::Bin(op, op_typ_il, Box::new(exp_l_il), Box::new(exp_r_il)),
             note: typ_result_il,
             span: span.clone(),
         };
-        return Ok(exp_il);
+        return success!(exp_il);
     }
     operator_error(span.clone())
 }
@@ -651,60 +665,64 @@ fn infer_cmp_exp(
     exp_l: &el::Exp,
     op: el::CmpOp,
     exp_r: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     match op {
         // Equality: infer one side and check the other against it
         el::CmpOp::Bool(_) => choose_sequential(
             ctx,
             // Infer the right side, check the left against it
             |ctx| {
-                let exp_r_il = infer_exp(ctx, exp_r)?;
+                let exp_r_il = unwrap!(infer_exp(ctx, exp_r));
                 let typ_expect_l_il =
                     phrase!(node: exp_r_il.note.as_ref().clone(), span: exp_r_il.span.clone());
-                let exp_l_il = elab_exp(ctx, &typ_expect_l_il, exp_l)?;
+                let exp_l_il = unwrap!(elab_exp(ctx, &typ_expect_l_il, exp_l));
                 let exp_il = note_phrase! {
                     node: il::ExpKind::Cmp(op, il::OpTyp::Bool, Box::new(exp_l_il), Box::new(exp_r_il)),
                     note: il::TypKind::Bool,
                     span: span.clone(),
                 };
-                Ok(exp_il)
+                success!(exp_il)
             },
             // Infer the left side, check the right against it
             |ctx| {
-                let exp_l_il = infer_exp(ctx, exp_l)?;
+                let exp_l_il = unwrap!(infer_exp(ctx, exp_l));
                 let typ_expect_r_il =
                     phrase!(node: exp_l_il.note.as_ref().clone(), span: exp_l_il.span.clone());
-                let exp_r_il = elab_exp(ctx, &typ_expect_r_il, exp_r)?;
+                let exp_r_il = unwrap!(elab_exp(ctx, &typ_expect_r_il, exp_r));
                 let exp_il = note_phrase! {
                     node: il::ExpKind::Cmp(op, il::OpTyp::Bool, Box::new(exp_l_il), Box::new(exp_r_il)),
                     note: il::TypKind::Bool,
                     span: span.clone(),
                 };
-                Ok(exp_il)
+                success!(exp_il)
             },
         ),
         // Ordering: both sides must cast to the same numeric type
         el::CmpOp::Num(_) => {
-            let exp_l_il = infer_exp(ctx, exp_l)?;
-            let exp_r_il = infer_exp(ctx, exp_r)?;
+            let exp_l_il = unwrap!(infer_exp(ctx, exp_l));
+            let exp_r_il = unwrap!(infer_exp(ctx, exp_r));
             for (op_typ_il, typ_expect_kind_il) in [
                 (il::OpTyp::Nat, il::TypKind::Num(prim::num::Typ::Nat)),
                 (il::OpTyp::Int, il::TypKind::Num(prim::num::Typ::Int)),
             ] {
                 let typ_expect_l_il = typ_at(typ_expect_kind_il.clone(), &exp_l_il.span);
                 let typ_expect_r_il = typ_at(typ_expect_kind_il, &exp_r_il.span);
-                let Ok(exp_l_il) = cast_exp(ctx, &typ_expect_l_il, exp_l_il.clone()) else {
-                    continue;
+                let exp_l_il = match cast_exp(ctx, &typ_expect_l_il, exp_l_il.clone()) {
+                    success!(exp_l_il) => exp_l_il,
+                    fatal!(reports) => return fatal!(reports),
+                    mismatch!(_) => continue,
                 };
-                let Ok(exp_r_il) = cast_exp(ctx, &typ_expect_r_il, exp_r_il.clone()) else {
-                    continue;
+                let exp_r_il = match cast_exp(ctx, &typ_expect_r_il, exp_r_il.clone()) {
+                    success!(exp_r_il) => exp_r_il,
+                    fatal!(reports) => return fatal!(reports),
+                    mismatch!(_) => continue,
                 };
                 let exp_il = note_phrase! {
                     node: il::ExpKind::Cmp(op, op_typ_il, Box::new(exp_l_il), Box::new(exp_r_il)),
                     note: il::TypKind::Bool,
                     span: span.clone(),
                 };
-                return Ok(exp_il);
+                return success!(exp_il);
             }
             operator_error(span.clone())
         }
@@ -714,33 +732,31 @@ fn infer_cmp_exp(
 // - Arithmetic expression inference
 
 /// Infers the inner expression and widens its span to the arithmetic brackets.
-fn infer_arith_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::Exp> {
-    let mut exp_il = infer_exp(ctx, exp)?;
+fn infer_arith_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Backtrack<il::Exp> {
+    let mut exp_il = unwrap!(infer_exp(ctx, exp));
     exp_il.span = span.clone();
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - List expression inference
 
 /// Infers a non-empty list from its first element; the rest must agree.
-fn infer_list_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Attempt<il::Exp> {
+fn infer_list_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Backtrack<il::Exp> {
     let Some((exp_first, exps_rest)) = exps.split_first() else {
         return fail_infer(span, "empty list");
     };
     // The element type comes from the first element
-    let exp_first_il = infer_exp(ctx, exp_first)?;
+    let exp_first_il = unwrap!(infer_exp(ctx, exp_first));
     let typ_first_il =
         phrase!(node: exp_first_il.note.as_ref().clone(), span: exp_first_il.span.clone());
-    let mut exps_rest_il = infer_exps(ctx, exps_rest)?;
+    let mut exps_rest_il = unwrap!(infer_exps(ctx, exps_rest));
     // Remaining elements must have an equivalent type
     for exp_il in &exps_rest_il {
         let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
-        let equivalent = equiv_typ(&ctx.tdenv, &typ_first_il, &typ_il).map_err(|error| {
-            Backtrack::from(error::type_operation_invalid(
-                "cannot compare list element types",
-                error,
-            ))
-        })?;
+        let equivalent =
+            unwrap_from_result!(equiv_typ(&ctx.tdenv, &typ_first_il, &typ_il).map_err(|error| {
+                error::type_operation_invalid("cannot compare list element types", error)
+            }));
         if !equivalent {
             return fail_infer(span, "list with heterogeneous elements");
         }
@@ -752,7 +768,7 @@ fn infer_list_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Attempt<i
         note: il::TypKind::Iter(Box::new(typ_first_il), il::Iter::List),
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Cons expression inference
@@ -763,20 +779,20 @@ fn infer_cons_exp(
     span: &Span,
     exp_head: &el::Exp,
     exp_tail: &el::Exp,
-) -> Attempt<il::Exp> {
-    let exp_head_il = infer_exp(ctx, exp_head)?;
+) -> Backtrack<il::Exp> {
+    let exp_head_il = unwrap!(infer_exp(ctx, exp_head));
     let typ_head_il =
         phrase!(node: exp_head_il.note.as_ref().clone(), span: exp_head_il.span.clone());
     // The tail must be a list of the head's type
     let typ_list_kind_il = il::TypKind::Iter(Box::new(typ_head_il), il::Iter::List);
     let typ_list_il = phrase!(node: typ_list_kind_il, span: exp_head_il.span.clone());
-    let exp_tail_il = elab_exp(ctx, &typ_list_il, exp_tail)?;
+    let exp_tail_il = unwrap!(elab_exp(ctx, &typ_list_il, exp_tail));
     let exp_il = note_phrase! {
         node: il::ExpKind::Cons(Box::new(exp_head_il), Box::new(exp_tail_il)),
         note: typ_list_il.node,
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Concatenation expression inference
@@ -787,37 +803,37 @@ fn infer_cat_exp(
     span: &Span,
     exp_l: &el::Exp,
     exp_r: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     choose_sequential(
         ctx,
         // Lists: the right side must match the list type of the left
         |ctx| {
-            let exp_l_il = infer_exp(ctx, exp_l)?;
+            let exp_l_il = unwrap!(infer_exp(ctx, exp_l));
             let typ_l_il =
                 phrase!(node: exp_l_il.note.as_ref().clone(), span: exp_l_il.span.clone());
-            let typ_base_il = as_list_typ(ctx, &typ_l_il)?;
+            let typ_base_il = unwrap!(as_list_typ(ctx, &typ_l_il));
             let typ_list_kind_il = il::TypKind::Iter(Box::new(typ_base_il.clone()), il::Iter::List);
             let typ_list_il = phrase!(node: typ_list_kind_il, span: typ_base_il.span);
-            let exp_r_il = elab_exp(ctx, &typ_list_il, exp_r)?;
+            let exp_r_il = unwrap!(elab_exp(ctx, &typ_list_il, exp_r));
             let exp_il = note_phrase! {
                 node: il::ExpKind::Cat(Box::new(exp_l_il), Box::new(exp_r_il)),
                 note: typ_list_il.node,
                 span: span.clone(),
             };
-            Ok(exp_il)
+            success!(exp_il)
         },
         // Texts: both sides must elaborate as text
         |ctx| {
             let typ_text_l_il = typ_at(il::TypKind::Text, &exp_l.span);
-            let exp_l_il = elab_exp(ctx, &typ_text_l_il, exp_l)?;
+            let exp_l_il = unwrap!(elab_exp(ctx, &typ_text_l_il, exp_l));
             let typ_text_r_il = typ_at(il::TypKind::Text, &exp_r.span);
-            let exp_r_il = elab_exp(ctx, &typ_text_r_il, exp_r)?;
+            let exp_r_il = unwrap!(elab_exp(ctx, &typ_text_r_il, exp_r));
             let exp_il = note_phrase! {
                 node: il::ExpKind::Cat(Box::new(exp_l_il), Box::new(exp_r_il)),
                 note: il::TypKind::Text,
                 span: span.clone(),
             };
-            Ok(exp_il)
+            success!(exp_il)
         },
     )
 }
@@ -825,8 +841,8 @@ fn infer_cat_exp(
 // - Tuple expression inference
 
 /// Infers a tuple from the types of its components.
-fn infer_tuple_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Attempt<il::Exp> {
-    let exps_il = infer_exps(ctx, exps)?;
+fn infer_tuple_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Backtrack<il::Exp> {
+    let exps_il = unwrap!(infer_exps(ctx, exps));
     let typs_il = exps_il
         .iter()
         .map(|exp_il| phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone()))
@@ -836,37 +852,37 @@ fn infer_tuple_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Attempt<
         note: il::TypKind::Tuple(typs_il),
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Length expression inference
 
 /// Infers a length of a list first, then of a text.
-fn infer_len_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::Exp> {
+fn infer_len_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Backtrack<il::Exp> {
     choose_sequential(
         ctx,
         // Length of a list
         |ctx| {
-            let exp_il = infer_exp(ctx, exp)?;
+            let exp_il = unwrap!(infer_exp(ctx, exp));
             let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
-            as_list_typ(ctx, &typ_il)?;
+            unwrap!(as_list_typ(ctx, &typ_il));
             let exp_il = note_phrase! {
                 node: il::ExpKind::Len(Box::new(exp_il)),
                 note: il::TypKind::Num(prim::num::Typ::Nat),
                 span: span.clone(),
             };
-            Ok(exp_il)
+            success!(exp_il)
         },
         // Length of a text
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp.span);
-            let exp_il = elab_exp(ctx, &typ_text_il, exp)?;
+            let exp_il = unwrap!(elab_exp(ctx, &typ_text_il, exp));
             let exp_il = note_phrase! {
                 node: il::ExpKind::Len(Box::new(exp_il)),
                 note: il::TypKind::Num(prim::num::Typ::Nat),
                 span: span.clone(),
             };
-            Ok(exp_il)
+            success!(exp_il)
         },
     )
 }
@@ -879,39 +895,39 @@ fn infer_mem_exp(
     span: &Span,
     exp_elem: &el::Exp,
     exp_set: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     choose_sequential(
         ctx,
         // Element first: the list must hold elements of its type
         |ctx| {
-            let exp_elem_il = infer_exp(ctx, exp_elem)?;
+            let exp_elem_il = unwrap!(infer_exp(ctx, exp_elem));
             let typ_elem_il = phrase! {
                 node: exp_elem_il.note.as_ref().clone(),
                 span: exp_elem_il.span.clone(),
             };
             let typ_list_kind_il = il::TypKind::Iter(Box::new(typ_elem_il), il::Iter::List);
             let typ_list_il = phrase!(node: typ_list_kind_il, span: exp_set.span.clone());
-            let exp_set_il = elab_exp(ctx, &typ_list_il, exp_set)?;
+            let exp_set_il = unwrap!(elab_exp(ctx, &typ_list_il, exp_set));
             let exp_il = note_phrase! {
                 node: il::ExpKind::Mem(Box::new(exp_elem_il), Box::new(exp_set_il)),
                 note: il::TypKind::Bool,
                 span: span.clone(),
             };
-            Ok(exp_il)
+            success!(exp_il)
         },
         // List first: the element must have its element type
         |ctx| {
-            let exp_set_il = infer_exp(ctx, exp_set)?;
+            let exp_set_il = unwrap!(infer_exp(ctx, exp_set));
             let typ_set_il =
                 phrase!(node: exp_set_il.note.as_ref().clone(), span: exp_set_il.span.clone());
-            let typ_elem_il = as_list_typ(ctx, &typ_set_il)?;
-            let exp_elem_il = elab_exp(ctx, &typ_elem_il, exp_elem)?;
+            let typ_elem_il = unwrap!(as_list_typ(ctx, &typ_set_il));
+            let exp_elem_il = unwrap!(elab_exp(ctx, &typ_elem_il, exp_elem));
             let exp_il = note_phrase! {
                 node: il::ExpKind::Mem(Box::new(exp_elem_il), Box::new(exp_set_il)),
                 note: il::TypKind::Bool,
                 span: span.clone(),
             };
-            Ok(exp_il)
+            success!(exp_il)
         },
     )
 }
@@ -924,36 +940,36 @@ fn infer_idx_exp(
     span: &Span,
     exp_base: &el::Exp,
     exp_idx: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     choose_sequential(
         ctx,
         // Index into a list: the element type is the result
         |ctx| {
-            let exp_base_il = infer_exp(ctx, exp_base)?;
+            let exp_base_il = unwrap!(infer_exp(ctx, exp_base));
             let typ_base_il =
                 phrase!(node: exp_base_il.note.as_ref().clone(), span: exp_base_il.span.clone());
-            let typ_elem_il = as_list_typ(ctx, &typ_base_il)?;
+            let typ_elem_il = unwrap!(as_list_typ(ctx, &typ_base_il));
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
-            let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
+            let exp_idx_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_idx));
             let exp_il = note_phrase! {
                 node: il::ExpKind::Idx(Box::new(exp_base_il), Box::new(exp_idx_il)),
                 note: typ_elem_il.node,
                 span: span.clone(),
             };
-            Ok(exp_il)
+            success!(exp_il)
         },
         // Index into a text yields a text
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp_base.span);
-            let exp_base_il = elab_exp(ctx, &typ_text_il, exp_base)?;
+            let exp_base_il = unwrap!(elab_exp(ctx, &typ_text_il, exp_base));
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
-            let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
+            let exp_idx_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_idx));
             let exp_il = note_phrase! {
                 node: il::ExpKind::Idx(Box::new(exp_base_il), Box::new(exp_idx_il)),
                 note: il::TypKind::Text,
                 span: span.clone(),
             };
-            Ok(exp_il)
+            success!(exp_il)
         },
     )
 }
@@ -967,40 +983,40 @@ fn infer_slice_exp(
     exp_base: &el::Exp,
     exp_idx: &el::Exp,
     exp_len: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     choose_sequential(
         ctx,
         // Slice of a list keeps the list type
         |ctx| {
-            let exp_base_il = infer_exp(ctx, exp_base)?;
+            let exp_base_il = unwrap!(infer_exp(ctx, exp_base));
             let typ_base_il =
                 phrase!(node: exp_base_il.note.as_ref().clone(), span: exp_base_il.span.clone());
-            as_list_typ(ctx, &typ_base_il)?;
+            unwrap!(as_list_typ(ctx, &typ_base_il));
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
-            let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
+            let exp_idx_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_idx));
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_len.span);
-            let exp_len_il = elab_exp(ctx, &typ_nat_il, exp_len)?;
+            let exp_len_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_len));
             let exp_il = note_phrase! { node: il::ExpKind::Slice(
                 Box::new(exp_base_il),
                 Box::new(exp_idx_il),
                 Box::new(exp_len_il),
             ), note: typ_base_il.node, span: span.clone() };
-            Ok(exp_il)
+            success!(exp_il)
         },
         // Slice of a text
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp_base.span);
-            let exp_base_il = elab_exp(ctx, &typ_text_il, exp_base)?;
+            let exp_base_il = unwrap!(elab_exp(ctx, &typ_text_il, exp_base));
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
-            let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
+            let exp_idx_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_idx));
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_len.span);
-            let exp_len_il = elab_exp(ctx, &typ_nat_il, exp_len)?;
+            let exp_len_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_len));
             let exp_il = note_phrase! { node: il::ExpKind::Slice(
                 Box::new(exp_base_il),
                 Box::new(exp_idx_il),
                 Box::new(exp_len_il),
             ), note: il::TypKind::Text, span: span.clone() };
-            Ok(exp_il)
+            success!(exp_il)
         },
     )
 }
@@ -1013,11 +1029,11 @@ fn infer_dot_exp(
     span: &Span,
     exp: &el::Exp,
     atom: &el::Atom,
-) -> Attempt<il::Exp> {
-    let exp_il = infer_exp(ctx, exp)?;
+) -> Backtrack<il::Exp> {
+    let exp_il = unwrap!(infer_exp(ctx, exp));
     let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
     // The field must exist in the struct type
-    let typ_fields_il = as_struct_typ(ctx, &typ_il)?;
+    let typ_fields_il = unwrap!(as_struct_typ(ctx, &typ_il));
     let Some(il::TypField { typ: typ_field_il, .. }) = typ_fields_il
         .iter()
         .find(|il::TypField { atom: atom_field, .. }| atom_field.node == atom.node)
@@ -1029,7 +1045,7 @@ fn infer_dot_exp(
         note: typ_field_il.node.clone(),
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Update expression inference
@@ -1041,29 +1057,29 @@ fn infer_upd_exp(
     exp_base: &el::Exp,
     path: &el::Path,
     exp_field: &el::Exp,
-) -> Attempt<il::Exp> {
-    let exp_base_il = infer_exp(ctx, exp_base)?;
+) -> Backtrack<il::Exp> {
+    let exp_base_il = unwrap!(infer_exp(ctx, exp_base));
     let typ_base_il =
         phrase!(node: exp_base_il.note.as_ref().clone(), span: exp_base_il.span.clone());
     // The path from the base type gives the field type
-    let path_il = elab_path(ctx, &typ_base_il, path)?;
+    let path_il = unwrap!(elab_path(ctx, &typ_base_il, path));
     let typ_field_il = typ_at(path_il.note.as_ref().clone(), &path_il.span);
-    let exp_field_il = elab_exp(ctx, &typ_field_il, exp_field)?;
+    let exp_field_il = unwrap!(elab_exp(ctx, &typ_field_il, exp_field));
     let exp_il = note_phrase! {
         node: il::ExpKind::Upd(Box::new(exp_base_il), Box::new(path_il), Box::new(exp_field_il)),
         note: typ_base_il.node,
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Parenthesized expression inference
 
 /// Infers the inner expression and widens its span to the parentheses.
-fn infer_paren_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Attempt<il::Exp> {
-    let mut exp_il = infer_exp(ctx, exp)?;
+fn infer_paren_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Backtrack<il::Exp> {
+    let mut exp_il = unwrap!(infer_exp(ctx, exp));
     exp_il.span = span.clone();
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Call expression inference
@@ -1075,10 +1091,10 @@ fn infer_call_exp(
     id: &Id,
     targs: &[el::Targ],
     args: &[el::Arg],
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     let (tparams_il, params_il, typ_ret_il) = match ctx.find_func_signature(id) {
         Ok((tparams, params, typ_ret)) => (tparams.to_vec(), params.to_vec(), typ_ret.clone()),
-        Err(error) => return fail(error),
+        Err(error) => return fatal!(error: error),
     };
     let span_declaration = ctx
         .fenv
@@ -1089,7 +1105,7 @@ fn infer_call_exp(
         let span_error = targs
             .get(tparams_il.len())
             .map_or_else(|| id.span.clone(), |targ| targ.span.clone());
-        return fail(error::function_call_type_argument_arity_mismatch(
+        return fatal!(error: error::function_call_type_argument_arity_mismatch(
             id,
             tparams_il.len(),
             targs.len(),
@@ -1101,14 +1117,14 @@ fn infer_call_exp(
     for targ in targs {
         let targ_il = match elab_plain_typ(ctx, targ) {
             Ok(targ_il) => targ_il,
-            Err(error) => return fail(error),
+            Err(error) => return fatal!(error: error),
         };
         targs_il.push(targ_il);
     }
     let theta = match Theta::from_lists(&tparams_il, &targs_il) {
         Ok(theta) => theta,
         Err(mismatch) => {
-            return fail(error::function_call_type_argument_arity_mismatch(
+            return fatal!(error: error::function_call_type_argument_arity_mismatch(
                 id,
                 mismatch.expected,
                 mismatch.actual,
@@ -1119,21 +1135,27 @@ fn infer_call_exp(
     };
     // Substitute the type arguments into the parameters and return type
     let find_subst = |id: &il::Id| theta.get(id);
-    let params_il = subst_params(&find_subst, &params_il).map_err(|error| {
-        Backtrack::from(error::type_operation_invalid("cannot instantiate call parameters", error))
-    })?;
-    let typ_ret_il = subst_typ(&find_subst, &typ_ret_il).map_err(|error| {
-        Backtrack::from(error::type_operation_invalid("cannot instantiate call result", error))
-    })?;
+    let params_il = unwrap_from_result!(subst_params(&find_subst, &params_il).map_err(|error| {
+        error::type_operation_invalid("cannot instantiate call parameters", error)
+    }));
+    let typ_ret_il = unwrap_from_result!(subst_typ(&find_subst, &typ_ret_il).map_err(|error| {
+        error::type_operation_invalid("cannot instantiate call result", error)
+    }));
     // Check the arguments against the instantiated parameters
-    let args_il =
-        elab_args(ctx, &params_il, args, false, span, Some((id, span_declaration.as_ref())))?;
+    let args_il = unwrap!(elab_args(
+        ctx,
+        &params_il,
+        args,
+        false,
+        span,
+        Some((id, span_declaration.as_ref()))
+    ));
     let exp_il = note_phrase! {
         node: il::ExpKind::Call(id.clone(), targs_il, args_il),
         note: typ_ret_il.node,
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Iterated expression inference
@@ -1144,8 +1166,8 @@ fn infer_iter_exp(
     span: &Span,
     exp: &el::Exp,
     iter: el::Iter,
-) -> Attempt<il::Exp> {
-    let exp_il = infer_exp(ctx, exp)?;
+) -> Backtrack<il::Exp> {
+    let exp_il = unwrap!(infer_exp(ctx, exp));
     let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
     let iter_il = iter;
     let exp_il = note_phrase! {
@@ -1153,7 +1175,7 @@ fn infer_iter_exp(
         note: il::TypKind::Iter(Box::new(typ_il), iter_il),
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Subtype expression inference
@@ -1164,54 +1186,59 @@ fn infer_sub_exp(
     span: &Span,
     exp: &el::Exp,
     plain_typ: &el::PlainTyp,
-) -> Attempt<il::Exp> {
-    let exp_il = infer_exp(ctx, exp)?;
+) -> Backtrack<il::Exp> {
+    let exp_il = unwrap!(infer_exp(ctx, exp));
     let typ_source_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
     let typ_target_il = match elab_plain_typ(ctx, plain_typ) {
         Ok(typ_il) => typ_il,
-        Err(error) => return fail(error),
+        Err(error) => return fatal!(error: error),
     };
     // The types must be related in at least one direction
-    let source_sub = sub_typ(&ctx.tdenv, &typ_source_il, &typ_target_il).map_err(|error| {
-        Backtrack::from(error::type_operation_invalid("cannot compare subtype expression", error))
-    })?;
-    let target_sub = sub_typ(&ctx.tdenv, &typ_target_il, &typ_source_il).map_err(|error| {
-        Backtrack::from(error::type_operation_invalid("cannot compare subtype expression", error))
-    })?;
+    let source_sub =
+        unwrap_from_result!(sub_typ(&ctx.tdenv, &typ_source_il, &typ_target_il).map_err(|error| {
+            error::type_operation_invalid("cannot compare subtype expression", error)
+        }));
+    let target_sub =
+        unwrap_from_result!(sub_typ(&ctx.tdenv, &typ_target_il, &typ_source_il).map_err(|error| {
+            error::type_operation_invalid("cannot compare subtype expression", error)
+        }));
     if !source_sub && !target_sub {
-        return fail(error::expression_type_mismatch(
+        return mismatch!(error: error::expression_type_mismatch(
             &exp_il.span,
             "subtype expression compares incomparable types",
         ));
     }
     // Precompute the runtime check the test performs
-    let check = optimize_sub_typ(&ctx.tdenv, &typ_source_il, &typ_target_il).map_err(|error| {
-        Backtrack::from(error::type_operation_invalid("cannot optimize subtype expression", error))
-    })?;
+    let check =
+        unwrap_from_result!(optimize_sub_typ(&ctx.tdenv, &typ_source_il, &typ_target_il).map_err(
+            |error| error::type_operation_invalid("cannot optimize subtype expression", error)
+        ));
     let exp_il = note_phrase! {
         node: il::ExpKind::Sub(Box::new(exp_il), Box::new(typ_target_il), Box::new(check)),
         note: il::TypKind::Bool,
         span: span.clone(),
     };
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Expected-type expression elaboration
 
 /// Accepts an inferred expression at the expected type, upcasting if needed.
-fn cast_exp(ctx: &Context, typ_expect_il: &il::Typ, exp_il: il::Exp) -> Attempt<il::Exp> {
+fn cast_exp(ctx: &Context, typ_expect_il: &il::Typ, exp_il: il::Exp) -> Backtrack<il::Exp> {
     let typ_infer_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
     // Equivalent types need no cast
-    let equivalent = equiv_typ(&ctx.tdenv, typ_expect_il, &typ_infer_il).map_err(|error| {
-        Backtrack::from(error::type_operation_invalid("cannot compare expression types", error))
-    })?;
+    let equivalent =
+        unwrap_from_result!(equiv_typ(&ctx.tdenv, typ_expect_il, &typ_infer_il).map_err(|error| {
+            error::type_operation_invalid("cannot compare expression types", error)
+        }));
     if equivalent {
-        return Ok(exp_il);
+        return success!(exp_il);
     }
     // A subtype is upcast to the expected type
-    let subtype = sub_typ(&ctx.tdenv, &typ_infer_il, typ_expect_il).map_err(|error| {
-        Backtrack::from(error::type_operation_invalid("cannot compare expression types", error))
-    })?;
+    let subtype =
+        unwrap_from_result!(sub_typ(&ctx.tdenv, &typ_infer_il, typ_expect_il).map_err(|error| {
+            error::type_operation_invalid("cannot compare expression types", error)
+        }));
     if subtype {
         let span = exp_il.span.clone();
         let exp_il = note_phrase! {
@@ -1219,9 +1246,9 @@ fn cast_exp(ctx: &Context, typ_expect_il: &il::Typ, exp_il: il::Exp) -> Attempt<
             note: typ_expect_il.node.clone(),
             span: span,
         };
-        return Ok(exp_il);
+        return success!(exp_il);
     }
-    fail(error::expression_cast_invalid(&exp_il.span))
+    mismatch!(error: error::expression_cast_invalid(&exp_il.span))
 }
 
 /// Moves the span of an expression and its casts to the enclosing parentheses.
@@ -1237,9 +1264,9 @@ fn respan_parenthesized_exp(exp_il: &mut il::Exp, span: &Span) {
 
 /// Elaborates an expression against an expected type.
 ///
-/// Failures are nested under one error for the whole expression
+/// Mismatches are nested under one error for the whole expression
 /// so that traces stay readable.
-fn elab_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
+fn elab_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Backtrack<il::Exp> {
     // A parenthesized result takes the span of the parentheses
     let parenthesized = matches!(exp.node, el::ExpKind::Paren(_));
     let span = exp.span.clone();
@@ -1250,19 +1277,20 @@ fn elab_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Attemp
             }
             exp_il
         })
-        .map_err(|failure| failure.nest(exp.span.clone(), "expression elaboration failed"))
+        .nest(exp.span.clone(), "expression elaboration failed")
 }
 
 /// Tries the singleton reading first when an iteration type is expected.
-fn elab_exp_inner(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
-    if let Ok((typ_base_il, iter_expect_il)) = as_iter_typ(ctx, typ_expect_il) {
-        return choose_sequential(
+fn elab_exp_inner(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Backtrack<il::Exp> {
+    match as_iter_typ(ctx, typ_expect_il) {
+        success!((typ_base_il, iter_expect_il)) => choose_sequential(
             ctx,
             |ctx| elab_singleton_iter_exp(ctx, typ_expect_il, &typ_base_il, iter_expect_il, exp),
             |ctx| elab_exp_normal(ctx, typ_expect_il, exp),
-        );
+        ),
+        fatal!(reports) => fatal!(reports),
+        mismatch!(_) => elab_exp_normal(ctx, typ_expect_il, exp),
     }
-    elab_exp_normal(ctx, typ_expect_il, exp)
 }
 
 // - Singleton iteration expression elaboration
@@ -1274,20 +1302,20 @@ fn elab_singleton_iter_exp(
     typ_base_il: &il::Typ,
     iter_expect_il: il::Iter,
     exp: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     // Wildcards and empty sequences are never singletons
     if matches!(&exp.node, el::ExpKind::Id(id) if id.node == "_")
         || matches!(&exp.node, el::ExpKind::Eps)
         || matches!(&exp.node, el::ExpKind::List(exps) if exps.is_empty())
     {
-        return fail_silent();
+        return mismatch!(vec![]);
     }
-    let exp_inner_il = elab_exp(ctx, typ_base_il, exp)?;
+    let exp_inner_il = unwrap!(elab_exp(ctx, typ_base_il, exp));
     let exp_kind_il = match iter_expect_il {
         il::Iter::Opt => il::ExpKind::Opt(Some(Box::new(exp_inner_il))),
         il::Iter::List => il::ExpKind::List(vec![exp_inner_il]),
     };
-    Ok(note_phrase! {
+    success!(note_phrase! {
         node: exp_kind_il,
         note: typ_expect_il.node.clone(),
         span: exp.span.clone(),
@@ -1298,25 +1326,37 @@ fn elab_singleton_iter_exp(
 
 /// Elaborates by inference and cast, falling back to contextual elaboration.
 ///
-/// When inference fails,
+/// When inference mismatches,
 /// a wildcard becomes a fresh variable,
 /// a named expected type is unfolded into its plain, struct, or variant body,
 /// and other constructs elaborate against the expected type directly.
-fn elab_exp_normal(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
+fn elab_exp_normal(
+    ctx: &mut Context,
+    typ_expect_il: &il::Typ,
+    exp: &el::Exp,
+) -> Backtrack<il::Exp> {
     // Try inference first, keeping its context only on success
     let mut ctx_candidate = ctx.clone();
     match infer_exp(&mut ctx_candidate, exp) {
-        Ok(exp_il) => match cast_exp(&ctx_candidate, typ_expect_il, exp_il) {
-            Ok(exp_il) => {
+        success!(exp_il) => match cast_exp(&ctx_candidate, typ_expect_il, exp_il) {
+            success!(exp_il) => {
                 *ctx = ctx_candidate;
-                Ok(exp_il)
+                success!(exp_il)
             }
-            Err(failure) => Err(failure),
+            fatal!(reports) => fatal!(reports),
+            mismatch!(reports) => mismatch!(reports),
         },
-        Err(failure_infer) => {
+        fatal!(reports) => fatal!(reports),
+        mismatch!(mut reports_infer) => {
             // Retain inference diagnostics if contextual elaboration also fails
-            elab_exp_normal_fallback(ctx, typ_expect_il, exp)
-                .map_err(|failure| failure_infer.merge(failure))
+            match elab_exp_normal_fallback(ctx, typ_expect_il, exp) {
+                success!(exp_il) => success!(exp_il),
+                fatal!(reports) => fatal!(reports),
+                mismatch!(mut reports) => {
+                    reports_infer.append(&mut reports);
+                    mismatch!(reports_infer)
+                }
+            }
         }
     }
 }
@@ -1326,7 +1366,7 @@ fn elab_exp_normal_fallback(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
     exp: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     // A wildcard `_` becomes a fresh variable of the expected type
     if matches!(&exp.node, el::ExpKind::Id(id) if id.node == "_") {
         return elab_wildcard_exp(ctx, typ_expect_il, exp);
@@ -1338,7 +1378,7 @@ fn elab_exp_normal_fallback(
         let theta = match Theta::from_lists(tparams, targs_il) {
             Ok(theta) => theta,
             Err(mismatch) => {
-                return fail(error::type_argument_arity_mismatch(
+                return fatal!(error: error::type_argument_arity_mismatch(
                     id,
                     mismatch.expected,
                     mismatch.actual,
@@ -1352,24 +1392,21 @@ fn elab_exp_normal_fallback(
         match &def_typ_il.node {
             // Alias: elaborate against the aliased type
             il::DefTypKind::Plain(typ_il) => {
-                let typ_il = subst_typ(&|id| theta.get(id), typ_il).map_err(|error| {
-                    Backtrack::from(error::type_operation_invalid(
-                        "cannot instantiate type alias",
-                        error,
-                    ))
-                })?;
+                let typ_il =
+                    unwrap_from_result!(subst_typ(&|id| theta.get(id), typ_il).map_err(|error| {
+                        error::type_operation_invalid("cannot instantiate type alias", error)
+                    }));
                 return elab_exp_normal(ctx, &typ_il, exp);
             }
             // Struct: match the fields
             il::DefTypKind::Struct(typ_fields_il) => {
                 let mut typ_fields_subst_il = Vec::with_capacity(typ_fields_il.len());
                 for il::TypField { atom, typ: typ_il } in typ_fields_il {
-                    let typ_il = subst_typ(&|id| theta.get(id), typ_il).map_err(|error| {
-                        Backtrack::from(error::type_operation_invalid(
-                            "cannot instantiate struct field",
-                            error,
-                        ))
-                    })?;
+                    let typ_il = unwrap_from_result!(
+                        subst_typ(&|id| theta.get(id), typ_il).map_err(|error| {
+                            error::type_operation_invalid("cannot instantiate struct field", error)
+                        })
+                    );
                     typ_fields_subst_il.push(il::TypField { atom: atom.clone(), typ: typ_il });
                 }
                 return elab_struct_exp(ctx, typ_expect_il, &typ_fields_subst_il, exp);
@@ -1381,19 +1418,19 @@ fn elab_exp_normal_fallback(
                     typ_cases_il
                 {
                     let find_subst = |id: &il::Id| theta.get(id);
-                    let not_typ_il = subst_not_typ(&find_subst, not_typ_il).map_err(|error| {
-                        Backtrack::from(error::type_operation_invalid(
-                            "cannot instantiate variant case",
-                            error,
-                        ))
-                    })?;
-                    let targs_il =
+                    let not_typ_il = unwrap_from_result!(
+                        subst_not_typ(&find_subst, not_typ_il).map_err(|error| {
+                            error::type_operation_invalid("cannot instantiate variant case", error)
+                        })
+                    );
+                    let targs_il = unwrap_from_result!(
                         subst_typs(&find_subst, &typ_origin_il.node.targs).map_err(|error| {
-                            Backtrack::from(error::type_operation_invalid(
+                            error::type_operation_invalid(
                                 "cannot instantiate variant origin",
                                 error,
-                            ))
-                        })?;
+                            )
+                        })
+                    );
                     let typ_origin_il = phrase! {
                         node: il::TypOriginKind { id: typ_origin_il.node.id.clone(), targs: targs_il },
                         span: typ_origin_il.span.clone(),
@@ -1419,37 +1456,39 @@ fn elab_wildcard_exp(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
     exp: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     let var_il =
         il_fresh::var_from_typ_wildcard(&ctx.menv, &ctx.frees, exp.span.clone(), typ_expect_il);
     let exp_il = il_var::as_exp(false, &var_il);
     ctx.add_free(var_il.id);
-    Ok(exp_il)
+    success!(exp_il)
 }
 
 // - Plain expression elaboration
 
 /// Elaborates constructs whose shape is fixed by the expected type.
-fn elab_plain_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Attempt<il::Exp> {
+fn elab_plain_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Backtrack<il::Exp> {
     let exp_kind_il = match &exp.node {
-        el::ExpKind::Eps => elab_eps_exp(ctx, typ_expect_il)?,
-        el::ExpKind::List(exps) => elab_list_exp(ctx, typ_expect_il, exps)?,
+        el::ExpKind::Eps => unwrap!(elab_eps_exp(ctx, typ_expect_il)),
+        el::ExpKind::List(exps) => unwrap!(elab_list_exp(ctx, typ_expect_il, exps)),
         el::ExpKind::Cons(exp_head, exp_tail) => {
-            elab_cons_exp(ctx, typ_expect_il, exp_head, exp_tail)?
+            unwrap!(elab_cons_exp(ctx, typ_expect_il, exp_head, exp_tail))
         }
-        el::ExpKind::Cat(exp_l, exp_r) => elab_cat_exp(ctx, typ_expect_il, exp_l, exp_r)?,
-        el::ExpKind::Tuple(exps) => elab_tuple_exp(ctx, typ_expect_il, exps)?,
-        el::ExpKind::Paren(exp_inner) => elab_paren_exp(ctx, typ_expect_il, exp_inner)?,
-        el::ExpKind::Iter(exp_inner, iter) => elab_iter_exp(ctx, typ_expect_il, exp_inner, *iter)?,
+        el::ExpKind::Cat(exp_l, exp_r) => unwrap!(elab_cat_exp(ctx, typ_expect_il, exp_l, exp_r)),
+        el::ExpKind::Tuple(exps) => unwrap!(elab_tuple_exp(ctx, typ_expect_il, exps)),
+        el::ExpKind::Paren(exp_inner) => unwrap!(elab_paren_exp(ctx, typ_expect_il, exp_inner)),
+        el::ExpKind::Iter(exp_inner, iter) => {
+            unwrap!(elab_iter_exp(ctx, typ_expect_il, exp_inner, *iter))
+        }
         // Anything else needed inference
         _ => {
-            return fail_generic(error::frame(
+            return mismatch!(report: error::frame(
                 &exp.span,
                 "expression requires unsupported contextual elaboration",
             ));
         }
     };
-    Ok(note_phrase! {
+    success!(note_phrase! {
         node: exp_kind_il,
         note: typ_expect_il.node.clone(),
         span: exp.span.clone(),
@@ -1459,9 +1498,9 @@ fn elab_plain_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> 
 // - Epsilon expression elaboration
 
 /// Elaborates `eps` as the empty option or list the expected type requires.
-fn elab_eps_exp(ctx: &Context, typ_expect_il: &il::Typ) -> Attempt<il::ExpKind> {
-    let (_, iter_expect_il) = as_iter_typ(ctx, typ_expect_il)?;
-    Ok(match iter_expect_il {
+fn elab_eps_exp(ctx: &Context, typ_expect_il: &il::Typ) -> Backtrack<il::ExpKind> {
+    let (_, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
+    success!(match iter_expect_il {
         il::Iter::Opt => il::ExpKind::Opt(None),
         il::Iter::List => il::ExpKind::List(vec![]),
     })
@@ -1474,20 +1513,20 @@ fn elab_list_exp(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
     exps: &[el::Exp],
-) -> Attempt<il::ExpKind> {
-    let (typ_base_il, iter_expect_il) = as_iter_typ(ctx, typ_expect_il)?;
+) -> Backtrack<il::ExpKind> {
+    let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
     // A list literal needs a list type, not an option
     if iter_expect_il != il::Iter::List {
-        return fail(error::expression_iteration_mismatch(
+        return mismatch!(error: error::expression_iteration_mismatch(
             &typ_expect_il.span,
             "list expression has optional expected type",
         ));
     }
     let mut exps_il = Vec::with_capacity(exps.len());
     for exp in exps {
-        exps_il.push(elab_exp(ctx, &typ_base_il, exp)?);
+        exps_il.push(unwrap!(elab_exp(ctx, &typ_base_il, exp)));
     }
-    Ok(il::ExpKind::List(exps_il))
+    success!(il::ExpKind::List(exps_il))
 }
 
 // - Cons expression elaboration
@@ -1498,13 +1537,13 @@ fn elab_cons_exp(
     typ_expect_il: &il::Typ,
     exp_head: &el::Exp,
     exp_tail: &el::Exp,
-) -> Attempt<il::ExpKind> {
-    let (typ_base_il, iter_expect_il) = as_iter_typ(ctx, typ_expect_il)?;
-    let exp_head_il = elab_exp(ctx, &typ_base_il, exp_head)?;
+) -> Backtrack<il::ExpKind> {
+    let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
+    let exp_head_il = unwrap!(elab_exp(ctx, &typ_base_il, exp_head));
     let typ_tail_kind_il = il::TypKind::Iter(Box::new(typ_base_il), iter_expect_il);
     let typ_tail_il = phrase!(node: typ_tail_kind_il, span: typ_expect_il.span.clone());
-    let exp_tail_il = elab_exp(ctx, &typ_tail_il, exp_tail)?;
-    Ok(il::ExpKind::Cons(Box::new(exp_head_il), Box::new(exp_tail_il)))
+    let exp_tail_il = unwrap!(elab_exp(ctx, &typ_tail_il, exp_tail));
+    success!(il::ExpKind::Cons(Box::new(exp_head_il), Box::new(exp_tail_il)))
 }
 
 // - Concatenation expression elaboration
@@ -1515,25 +1554,25 @@ fn elab_cat_exp(
     typ_expect_il: &il::Typ,
     exp_l: &el::Exp,
     exp_r: &el::Exp,
-) -> Attempt<il::ExpKind> {
+) -> Backtrack<il::ExpKind> {
     choose_sequential(
         ctx,
         // Iterations: both sides at the expected type
         |ctx| {
-            let (typ_base_il, iter_expect_il) = as_iter_typ(ctx, typ_expect_il)?;
+            let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
             let typ_iter_kind_il = il::TypKind::Iter(Box::new(typ_base_il.clone()), iter_expect_il);
             let typ_iter_il = phrase!(node: typ_iter_kind_il, span: typ_base_il.span);
-            let exp_l_il = elab_exp(ctx, &typ_iter_il, exp_l)?;
-            let exp_r_il = elab_exp(ctx, &typ_iter_il, exp_r)?;
-            Ok(il::ExpKind::Cat(Box::new(exp_l_il), Box::new(exp_r_il)))
+            let exp_l_il = unwrap!(elab_exp(ctx, &typ_iter_il, exp_l));
+            let exp_r_il = unwrap!(elab_exp(ctx, &typ_iter_il, exp_r));
+            success!(il::ExpKind::Cat(Box::new(exp_l_il), Box::new(exp_r_il)))
         },
         // Texts
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp_l.span);
-            let exp_l_il = elab_exp(ctx, &typ_text_il, exp_l)?;
+            let exp_l_il = unwrap!(elab_exp(ctx, &typ_text_il, exp_l));
             let typ_text_il = typ_at(il::TypKind::Text, &exp_r.span);
-            let exp_r_il = elab_exp(ctx, &typ_text_il, exp_r)?;
-            Ok(il::ExpKind::Cat(Box::new(exp_l_il), Box::new(exp_r_il)))
+            let exp_r_il = unwrap!(elab_exp(ctx, &typ_text_il, exp_r));
+            success!(il::ExpKind::Cat(Box::new(exp_l_il), Box::new(exp_r_il)))
         },
     )
 }
@@ -1545,20 +1584,20 @@ fn elab_tuple_exp(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
     exps: &[el::Exp],
-) -> Attempt<il::ExpKind> {
+) -> Backtrack<il::ExpKind> {
     // Component count must match the tuple type
-    let typs_expect_il = as_tuple_typ(ctx, typ_expect_il)?;
+    let typs_expect_il = unwrap!(as_tuple_typ(ctx, typ_expect_il));
     if typs_expect_il.len() != exps.len() {
-        return fail(error::expression_arity_mismatch(
+        return mismatch!(error: error::expression_arity_mismatch(
             &typ_expect_il.span,
             "tuple expression arity does not match",
         ));
     }
     let mut exps_il = Vec::with_capacity(exps.len());
     for (typ_expect_il, exp) in typs_expect_il.iter().zip(exps) {
-        exps_il.push(elab_exp(ctx, typ_expect_il, exp)?);
+        exps_il.push(unwrap!(elab_exp(ctx, typ_expect_il, exp)));
     }
-    Ok(il::ExpKind::Tuple(exps_il))
+    success!(il::ExpKind::Tuple(exps_il))
 }
 
 // - Parenthesized expression elaboration
@@ -1567,9 +1606,9 @@ fn elab_paren_exp(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
     exp: &el::Exp,
-) -> Attempt<il::ExpKind> {
-    let exp_il = elab_exp(ctx, typ_expect_il, exp)?;
-    Ok(exp_il.node)
+) -> Backtrack<il::ExpKind> {
+    let exp_il = unwrap!(elab_exp(ctx, typ_expect_il, exp));
+    success!(exp_il.node)
 }
 
 // - Iterated expression elaboration
@@ -1580,15 +1619,15 @@ fn elab_iter_exp(
     typ_expect_il: &il::Typ,
     exp: &el::Exp,
     iter: el::Iter,
-) -> Attempt<il::ExpKind> {
-    let (typ_base_il, iter_expect_il) = as_iter_typ(ctx, typ_expect_il)?;
+) -> Backtrack<il::ExpKind> {
+    let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
     // The iteration must match the expected one
     let iter_il = iter;
     if iter_il != iter_expect_il {
-        return fail(error::expression_iteration_mismatch(&exp.span, "iteration mismatch"));
+        return mismatch!(error: error::expression_iteration_mismatch(&exp.span, "iteration mismatch"));
     }
-    let exp_il = elab_exp(ctx, &typ_base_il, exp)?;
-    Ok(il::ExpKind::Iter(Box::new(exp_il), il::ExpIter { iter: iter_il, vars: vec![] }))
+    let exp_il = unwrap!(elab_exp(ctx, &typ_base_il, exp));
+    success!(il::ExpKind::Iter(Box::new(exp_il), il::ExpIter { iter: iter_il, vars: vec![] }))
 }
 
 // - Notation expression elaboration
@@ -1597,7 +1636,11 @@ fn elab_iter_exp(
 ///
 /// Against `C |- e : t`, the expression `C |- x : nat` matches atom by atom
 /// while `C`, `x`, and `nat` elaborate against their argument types.
-fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> Attempt<il::NotExp> {
+fn elab_not_exp(
+    ctx: &mut Context,
+    not_typ_il: &il::NotTyp,
+    exp: &el::Exp,
+) -> Backtrack<il::NotExp> {
     // Parentheses around notation are transparent
     if let el::ExpKind::Paren(exp) = &exp.node {
         return elab_not_exp(ctx, not_typ_il, exp);
@@ -1605,17 +1648,17 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
     match (&not_typ_il.node, &exp.node) {
         // An argument elaborates against its type
         (Mixfix::Arg(typ_il), _) => {
-            let exp_il = elab_exp(ctx, typ_il, exp)?;
-            Ok(Mixfix::Arg(exp_il))
+            let exp_il = unwrap!(elab_exp(ctx, typ_il, exp));
+            success!(Mixfix::Arg(exp_il))
         }
         // Atoms must agree literally
         (Mixfix::Atom(atom_expect), el::ExpKind::Atom(atom)) if atom_expect.node == atom.node => {
-            Ok(Mixfix::Atom(atom_expect.clone()))
+            success!(Mixfix::Atom(atom_expect.clone()))
         }
         // Sequences match element-wise
         (Mixfix::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
             if not_typs_il.len() != exps.len() {
-                return fail_generic(error::frame(
+                return mismatch!(report: error::frame(
                     &exp.span,
                     "notation sequence arity does not match",
                 ));
@@ -1624,10 +1667,10 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
             for (not_typ_inner_il, exp) in not_typs_il.iter().zip(exps) {
                 let not_typ_inner_il =
                     phrase!(node: not_typ_inner_il.clone(), span: not_typ_il.span.clone());
-                let not_exp_il = elab_not_exp(ctx, &not_typ_inner_il, exp)?;
+                let not_exp_il = unwrap!(elab_not_exp(ctx, &not_typ_inner_il, exp));
                 not_exps_il.push(not_exp_il);
             }
-            Ok(Mixfix::Seq(not_exps_il))
+            success!(Mixfix::Seq(not_exps_il))
         }
         // Infix: the atom agrees, both sides match their notation
         (
@@ -1638,9 +1681,13 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
                 phrase!(node: (**not_typ_l_il).clone(), span: not_typ_il.span.clone());
             let not_typ_r_il =
                 phrase!(node: (**not_typ_r_il).clone(), span: not_typ_il.span.clone());
-            let not_exp_l_il = elab_not_exp(ctx, &not_typ_l_il, exp_l)?;
-            let not_exp_r_il = elab_not_exp(ctx, &not_typ_r_il, exp_r)?;
-            Ok(Mixfix::Infix(Box::new(not_exp_l_il), atom_expect.clone(), Box::new(not_exp_r_il)))
+            let not_exp_l_il = unwrap!(elab_not_exp(ctx, &not_typ_l_il, exp_l));
+            let not_exp_r_il = unwrap!(elab_not_exp(ctx, &not_typ_r_il, exp_r));
+            success!(Mixfix::Infix(
+                Box::new(not_exp_l_il),
+                atom_expect.clone(),
+                Box::new(not_exp_r_il)
+            ))
         }
         // Brackets: both atoms agree, the inside matches its notation
         (
@@ -1651,15 +1698,15 @@ fn elab_not_exp(ctx: &mut Context, not_typ_il: &il::NotTyp, exp: &el::Exp) -> At
                 node: (**not_typ_inner_il).clone(),
                 span: not_typ_il.span.clone(),
             };
-            let not_exp_inner_il = elab_not_exp(ctx, &not_typ_inner_il, exp_inner)?;
-            Ok(Mixfix::Brack(
+            let not_exp_inner_il = unwrap!(elab_not_exp(ctx, &not_typ_inner_il, exp_inner));
+            success!(Mixfix::Brack(
                 atom_expect_l.clone(),
                 Box::new(not_exp_inner_il),
                 atom_expect_r.clone(),
             ))
         }
         // Any other shape mismatch fails
-        _ => fail_generic(error::frame(&exp.span, "expression does not match notation")),
+        _ => mismatch!(report: error::frame(&exp.span, "expression does not match notation")),
     }
 }
 
@@ -1671,13 +1718,13 @@ fn elab_struct_exp(
     typ_expect_il: &il::Typ,
     typ_fields_il: &[il::TypField],
     exp: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     let el::ExpKind::Str(exp_fields) = &exp.node else {
-        return fail_generic(error::frame(&exp.span, "expression is not a struct"));
+        return mismatch!(report: error::frame(&exp.span, "expression is not a struct"));
     };
     // Field count must match the struct type
     if typ_fields_il.len() != exp_fields.len() {
-        return fail(error::expression_arity_mismatch(
+        return mismatch!(error: error::expression_arity_mismatch(
             &exp.span,
             "struct field count does not match",
         ));
@@ -1688,15 +1735,15 @@ fn elab_struct_exp(
     {
         // Fields must appear in declaration order
         if atom_expect.node != atom.node {
-            return fail(error::expression_type_mismatch(
+            return mismatch!(error: error::expression_type_mismatch(
                 &atom.span,
                 "struct field does not match",
             ));
         }
-        let exp_field_il = elab_exp(ctx, typ_il, exp_field)?;
+        let exp_field_il = unwrap!(elab_exp(ctx, typ_il, exp_field));
         exp_fields_il.push(il::ExpField { atom: atom_expect.clone(), exp: exp_field_il });
     }
-    Ok(note_phrase! {
+    success!(note_phrase! {
         node: il::ExpKind::Str(exp_fields_il),
         note: typ_expect_il.node.clone(),
         span: exp.span.clone(),
@@ -1711,20 +1758,18 @@ fn elab_variant_exp(
     typ_expect_il: &il::Typ,
     typ_cases_il: &[il::TypCase],
     exp: &el::Exp,
-) -> Attempt<il::Exp> {
+) -> Backtrack<il::Exp> {
     // Try each case on a copy of the context
     let mut ctx_match = ctx.clone();
     let mut exps_match_il = Vec::new();
-    let mut failure_candidates: Option<Backtrack> = None;
+    let mut reports_mismatch = Vec::new();
     for il::TypCase { not_typ: not_typ_il, typ_origin: typ_origin_il, .. } in typ_cases_il {
         let mut ctx_candidate = ctx_match.clone();
         let not_exp_il = match elab_not_exp(&mut ctx_candidate, not_typ_il, exp) {
-            Ok(not_exp_il) => not_exp_il,
-            Err(failure) => {
-                failure_candidates = Some(match failure_candidates {
-                    Some(failure_previous) => failure_previous.merge(failure),
-                    None => failure,
-                });
+            success!(not_exp_il) => not_exp_il,
+            fatal!(reports) => return fatal!(reports),
+            mismatch!(mut reports) => {
+                reports_mismatch.append(&mut reports);
                 continue;
             }
         };
@@ -1739,14 +1784,8 @@ fn elab_variant_exp(
         };
         // The case type must still cast to the expected type
         let exp_case_il = match cast_exp(&ctx_candidate, typ_expect_il, exp_case_il) {
-            Ok(exp_case_il) => exp_case_il,
-            Err(failure) => {
-                failure_candidates = Some(match failure_candidates {
-                    Some(failure_previous) => failure_previous.merge(failure),
-                    None => failure,
-                });
-                continue;
-            }
+            success!(exp_case_il) => exp_case_il,
+            fatal!(reports) | mismatch!(reports) => return fatal!(reports),
         };
         ctx_match = ctx_candidate;
         exps_match_il.push(exp_case_il);
@@ -1755,17 +1794,15 @@ fn elab_variant_exp(
     match exps_match_il.len() {
         1 => {
             *ctx = ctx_match;
-            Ok(exps_match_il.pop().expect("single variant match"))
+            success!(exps_match_il.pop().expect("single variant match"))
         }
-        0 => match failure_candidates {
-            Some(failure) => {
-                Err(failure.nest(exp.span.clone(), "expression does not match any variant case"))
-            }
-            None => {
-                fail_generic(error::frame(&exp.span, "expression does not match any variant case"))
-            }
-        },
-        _ => fail(error::variant_expression_match_repeated(&exp.span)),
+        0 if reports_mismatch.is_empty() => mismatch!(report: error::frame(
+            &exp.span,
+            "expression does not match any variant case",
+        )),
+        0 => mismatch!(reports_mismatch)
+            .nest(exp.span.clone(), "expression does not match any variant case"),
+        _ => mismatch!(error: error::variant_expression_match_repeated(&exp.span)),
     }
 }
 
@@ -1773,9 +1810,9 @@ fn elab_variant_exp(
 
 // - Path elaboration
 
-fn elab_path(ctx: &mut Context, typ_expect_il: &il::Typ, path: &el::Path) -> Attempt<il::Path> {
+fn elab_path(ctx: &mut Context, typ_expect_il: &il::Typ, path: &el::Path) -> Backtrack<il::Path> {
     match &path.node {
-        el::PathKind::Root => Ok(elab_root_path(&path.span, typ_expect_il)),
+        el::PathKind::Root => success!(elab_root_path(&path.span, typ_expect_il)),
         el::PathKind::Idx(path_inner, exp_idx) => {
             elab_idx_path(ctx, &path.span, typ_expect_il, path_inner, exp_idx)
         }
@@ -1807,18 +1844,18 @@ fn elab_idx_path(
     typ_expect_il: &il::Typ,
     path_inner: &el::Path,
     exp_idx: &el::Exp,
-) -> Attempt<il::Path> {
+) -> Backtrack<il::Path> {
     choose_sequential(
         ctx,
         // Index into a list: the path continues at the element type
         |ctx| {
-            let path_inner_il = elab_path(ctx, typ_expect_il, path_inner)?;
+            let path_inner_il = unwrap!(elab_path(ctx, typ_expect_il, path_inner));
             let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
-            let typ_elem_il = as_list_typ(ctx, &typ_inner_il)?;
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
-            let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
+            let exp_idx_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_idx));
             let path_kind_il = il::PathKind::Idx(Box::new(path_inner_il), Box::new(exp_idx_il));
-            Ok(note_phrase! {
+            let typ_elem_il = unwrap!(as_list_typ(ctx, &typ_inner_il));
+            success!(note_phrase! {
                 node: path_kind_il,
                 note: typ_elem_il.node,
                 span: span.clone(),
@@ -1826,13 +1863,13 @@ fn elab_idx_path(
         },
         // Index into a text stays a text
         |ctx| {
-            let path_inner_il = elab_path(ctx, typ_expect_il, path_inner)?;
+            let path_inner_il = unwrap!(elab_path(ctx, typ_expect_il, path_inner));
             let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
-            as_text_typ(ctx, &typ_inner_il)?;
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
-            let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
+            let exp_idx_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_idx));
             let path_kind_il = il::PathKind::Idx(Box::new(path_inner_il), Box::new(exp_idx_il));
-            Ok(note_phrase! {
+            unwrap!(as_text_typ(ctx, &typ_inner_il));
+            success!(note_phrase! {
                 node: path_kind_il,
                 note: typ_inner_il.node,
                 span: span.clone(),
@@ -1851,29 +1888,50 @@ fn elab_slice_path(
     path_inner: &el::Path,
     exp_idx: &el::Exp,
     exp_len: &el::Exp,
-) -> Attempt<il::Path> {
-    let path_inner_il = elab_path(ctx, typ_expect_il, path_inner)?;
-    let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
-    // The path may slice a list or a text
-    let is_list = as_list_typ(ctx, &typ_inner_il).is_ok();
-    let is_text = as_text_typ(ctx, &typ_inner_il).is_ok();
-    if !is_list && !is_text {
-        return fail(error::expression_type_mismatch(
-            &typ_inner_il.span,
-            "slice path requires a list or text",
-        ));
-    }
-    let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
-    let exp_idx_il = elab_exp(ctx, &typ_nat_il, exp_idx)?;
-    let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_len.span);
-    let exp_len_il = elab_exp(ctx, &typ_nat_il, exp_len)?;
-    let path_kind_il =
-        il::PathKind::Slice(Box::new(path_inner_il), Box::new(exp_idx_il), Box::new(exp_len_il));
-    Ok(note_phrase! {
-        node: path_kind_il,
-        note: typ_inner_il.node,
-        span: span.clone(),
-    })
+) -> Backtrack<il::Path> {
+    choose_sequential(
+        ctx,
+        // Slice a list after elaborating both bounds
+        |ctx| {
+            let path_inner_il = unwrap!(elab_path(ctx, typ_expect_il, path_inner));
+            let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
+            let exp_idx_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_idx));
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_len.span);
+            let exp_len_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_len));
+            let path_kind_il = il::PathKind::Slice(
+                Box::new(path_inner_il),
+                Box::new(exp_idx_il),
+                Box::new(exp_len_il),
+            );
+            unwrap!(as_list_typ(ctx, &typ_inner_il));
+            success!(note_phrase! {
+                node: path_kind_il,
+                note: typ_inner_il.node,
+                span: span.clone(),
+            })
+        },
+        // Slice a text after elaborating both bounds
+        |ctx| {
+            let path_inner_il = unwrap!(elab_path(ctx, typ_expect_il, path_inner));
+            let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
+            let exp_idx_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_idx));
+            let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_len.span);
+            let exp_len_il = unwrap!(elab_exp(ctx, &typ_nat_il, exp_len));
+            let path_kind_il = il::PathKind::Slice(
+                Box::new(path_inner_il),
+                Box::new(exp_idx_il),
+                Box::new(exp_len_il),
+            );
+            unwrap!(as_text_typ(ctx, &typ_inner_il));
+            success!(note_phrase! {
+                node: path_kind_il,
+                note: typ_inner_il.node,
+                span: span.clone(),
+            })
+        },
+    )
 }
 
 // - Dot path elaboration
@@ -1885,11 +1943,11 @@ fn elab_dot_path(
     typ_expect_il: &il::Typ,
     path_inner: &el::Path,
     atom: &el::Atom,
-) -> Attempt<il::Path> {
-    let path_inner_il = elab_path(ctx, typ_expect_il, path_inner)?;
+) -> Backtrack<il::Path> {
+    let path_inner_il = unwrap!(elab_path(ctx, typ_expect_il, path_inner));
     let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
     // The field must exist in the struct type
-    let typ_fields_il = as_struct_typ(ctx, &typ_inner_il)?;
+    let typ_fields_il = unwrap!(as_struct_typ(ctx, &typ_inner_il));
     let Some(il::TypField { typ: typ_field_il, .. }) = typ_fields_il
         .into_iter()
         .find(|il::TypField { atom: atom_field, .. }| atom_field.node == atom.node)
@@ -1897,7 +1955,7 @@ fn elab_dot_path(
         return fail_infer(&atom.span, "field");
     };
     let path_kind_il = il::PathKind::Dot(Box::new(path_inner_il), atom.clone());
-    Ok(note_phrase! {
+    success!(note_phrase! {
         node: path_kind_il,
         note: typ_field_il.node,
         span: span.clone(),
@@ -1969,14 +2027,14 @@ fn elab_arg(
     param_il: &il::Param,
     arg: &el::Arg,
     as_def: bool,
-) -> Attempt<il::Arg> {
+) -> Backtrack<il::Arg> {
     match (&param_il.node, &arg.node) {
         // Expression arguments elaborate against the parameter type
         (il::ParamKind::Exp(typ_il), el::ArgKind::Exp(exp)) => {
-            let exp_il = elab_exp(ctx, typ_il, exp)?;
+            let exp_il = unwrap!(elab_exp(ctx, typ_il, exp).promote_mismatch());
             let arg_il = il::ArgKind::Exp(Box::new(exp_il));
             let arg_il = phrase!(node: arg_il, span: arg.span.clone());
-            Ok(arg_il)
+            success!(arg_il)
         }
         // Clause definition: bind the function parameter under its own name
         (
@@ -1984,7 +2042,7 @@ fn elab_arg(
             el::ArgKind::Def(id_arg),
         ) if as_def => {
             if id_param.node != id_arg.node {
-                return fail(error::function_argument_name_mismatch(id_arg, id_param));
+                return fatal!(error: error::function_argument_name_mismatch(id_arg, id_param));
             }
             let defined_func_il = il::DefinedFunc {
                 id: id_param.clone(),
@@ -1996,11 +2054,11 @@ fn elab_arg(
                 hints: vec![],
             };
             if let Err(error) = ctx.add_defined_func(defined_func_il) {
-                return fail(error);
+                return fatal!(error: error);
             }
             let arg_il = il::ArgKind::Def(id_arg.clone());
             let arg_il = phrase!(node: arg_il, span: arg.span.clone());
-            Ok(arg_il)
+            success!(arg_il)
         }
         // Call: the named function must have an equivalent signature
         (
@@ -2010,14 +2068,14 @@ fn elab_arg(
             let (tparams_arg_il, params_arg_il, typ_ret_arg_il) =
                 match ctx.find_func_signature(id_arg) {
                     Ok(signature) => signature,
-                    Err(error) => return fail(error),
+                    Err(error) => return fatal!(error: error),
                 };
             let span_arg_declaration = ctx
                 .fenv
                 .get_key_value(id_arg)
                 .map(|(id_declaration, _)| &id_declaration.span);
             if tparams_il.len() != tparams_arg_il.len() {
-                return fail(error::function_argument_type_parameter_arity_mismatch(
+                return fatal!(error: error::function_argument_type_parameter_arity_mismatch(
                     id_param,
                     id_arg,
                     tparams_il.len(),
@@ -2027,7 +2085,7 @@ fn elab_arg(
                 ));
             }
             if params_il.len() != params_arg_il.len() {
-                return fail(error::function_argument_parameter_arity_mismatch(
+                return fatal!(error: error::function_argument_parameter_arity_mismatch(
                     id_param,
                     id_arg,
                     params_il.len(),
@@ -2047,17 +2105,16 @@ fn elab_arg(
                 typ_ret: Box::new(typ_ret_arg_il.clone()),
             };
             let find_typdef_opt = |id: &il::Id| ctx.tdenv.get(id);
-            let equivalent =
-                equiv_func_typ(&find_typdef_opt, &arg.span, &typ_param_il, &typ_arg_il).map_err(
-                    |type_error| {
-                        Backtrack::from(error::type_operation_invalid(
-                            "cannot compare function argument signatures",
-                            type_error,
-                        ))
-                    },
-                )?;
+            let equivalent = unwrap_from_result!(
+                equiv_func_typ(&find_typdef_opt, &arg.span, &typ_param_il, &typ_arg_il,).map_err(
+                    |type_error| error::type_operation_invalid(
+                        "cannot compare function argument signatures",
+                        type_error,
+                    )
+                )
+            );
             if !equivalent {
-                return fail(error::function_argument_signature_mismatch(
+                return fatal!(error: error::function_argument_signature_mismatch(
                     id_param,
                     id_arg,
                     &arg.span,
@@ -2066,10 +2123,10 @@ fn elab_arg(
             }
             let arg_il = il::ArgKind::Def(id_arg.clone());
             let arg_il = phrase!(node: arg_il, span: arg.span.clone());
-            Ok(arg_il)
+            success!(arg_il)
         }
         (il::ParamKind::Exp(_), el::ArgKind::Def(_)) => {
-            fail(error::function_argument_kind_mismatch(
+            fatal!(error: error::function_argument_kind_mismatch(
                 "an expression",
                 "a function",
                 &arg.span,
@@ -2077,7 +2134,7 @@ fn elab_arg(
             ))
         }
         (il::ParamKind::Def(_, _, _, _), el::ArgKind::Exp(_)) => {
-            fail(error::function_argument_kind_mismatch(
+            fatal!(error: error::function_argument_kind_mismatch(
                 "a function",
                 "an expression",
                 &arg.span,
@@ -2095,14 +2152,14 @@ fn elab_args(
     as_def: bool,
     span: &Span,
     callee: Option<(&Id, Option<&Span>)>,
-) -> Attempt<Vec<il::Arg>> {
+) -> Backtrack<Vec<il::Arg>> {
     // Argument count must match parameter count
     if params_il.len() != args.len() {
         let (id, span_declaration) = callee.map_or((None, None), |(id, span)| (Some(id), span));
         let span_error = args
             .get(params_il.len())
             .map_or_else(|| span.clone(), |arg| arg.span.clone());
-        return fail(error::function_call_argument_arity_mismatch(
+        return fatal!(error: error::function_call_argument_arity_mismatch(
             id,
             params_il.len(),
             args.len(),
@@ -2112,10 +2169,10 @@ fn elab_args(
     }
     let mut args_il = Vec::with_capacity(args.len());
     for (param_il, arg) in params_il.iter().zip(args) {
-        let arg_il = elab_arg(ctx, param_il, arg, as_def)?;
+        let arg_il = unwrap!(elab_arg(ctx, param_il, arg, as_def));
         args_il.push(arg_il);
     }
-    Ok(args_il)
+    success!(args_il)
 }
 
 // == Premises
@@ -2133,23 +2190,23 @@ enum PremInternal {
 // - Premise elaboration
 
 /// Elaborates a premise into an IL premise or a marker.
-fn elab_prem(ctx: &mut Context, prem: &el::Prem) -> Attempt<PremInternal> {
+fn elab_prem(ctx: &mut Context, prem: &el::Prem) -> Backtrack<PremInternal> {
     let prem_kind_il = match &prem.node {
         // Variable and otherwise premises leave no IL premise
         el::PremKind::Var(var_prem) => {
-            elab_var_prem(ctx, var_prem)?;
-            return Ok(PremInternal::Var);
+            unwrap!(elab_var_prem(ctx, var_prem));
+            return success!(PremInternal::Var);
         }
-        el::PremKind::Rule(rule_prem) => elab_rule_prem(ctx, rule_prem)?,
-        el::PremKind::RuleNot(rule_not_prem) => elab_rule_not_prem(ctx, rule_not_prem)?,
-        el::PremKind::If(if_prem) => elab_if_prem(ctx, if_prem)?,
+        el::PremKind::Rule(rule_prem) => unwrap!(elab_rule_prem(ctx, rule_prem)),
+        el::PremKind::RuleNot(rule_not_prem) => unwrap!(elab_rule_not_prem(ctx, rule_not_prem)),
+        el::PremKind::If(if_prem) => unwrap!(elab_if_prem(ctx, if_prem)),
         // An otherwise premise marks the fallback
-        el::PremKind::Else => return Ok(PremInternal::Else),
-        el::PremKind::Iter(iter_prem) => elab_iter_prem(ctx, iter_prem)?,
-        el::PremKind::Debug(debug_prem) => elab_debug_prem(ctx, debug_prem)?,
+        el::PremKind::Else => return success!(PremInternal::Else),
+        el::PremKind::Iter(iter_prem) => unwrap!(elab_iter_prem(ctx, iter_prem)),
+        el::PremKind::Debug(debug_prem) => unwrap!(elab_debug_prem(ctx, debug_prem)),
     };
     let prem_il = phrase!(node: prem_kind_il, span: prem.span.clone());
-    Ok(PremInternal::Some(prem_il))
+    success!(PremInternal::Some(prem_il))
 }
 
 /// Elaborates premises in order and reports whether one was `otherwise`.
@@ -2157,12 +2214,12 @@ fn elab_prems(
     ctx: &mut Context,
     prems: &[el::Prem],
     _span: &Span,
-) -> Attempt<(Vec<il::Prem>, bool)> {
+) -> Backtrack<(Vec<il::Prem>, bool)> {
     let mut prems_il = Vec::new();
     let mut span_else_first = None;
     let mut span_else_second = None;
     for prem in prems {
-        let prem_internal = elab_prem(ctx, prem)?;
+        let prem_internal = unwrap!(elab_prem(ctx, prem));
         match prem_internal {
             PremInternal::Some(prem_il) => prems_il.push(prem_il),
             PremInternal::Var => {}
@@ -2177,53 +2234,53 @@ fn elab_prems(
     }
     // At most one otherwise premise
     if let (Some(span_else_first), Some(span_else_second)) = (span_else_first, span_else_second) {
-        return fail(error::premise_otherwise_repeated(span_else_second, span_else_first));
+        return fatal!(error: error::premise_otherwise_repeated(span_else_second, span_else_first));
     }
-    Ok((prems_il, span_else_first.is_some()))
+    success!((prems_il, span_else_first.is_some()))
 }
 
 // - Variable premise elaboration
 
 /// Binds the meta-variable declared by a variable premise.
-fn elab_var_prem(ctx: &mut Context, prem: &el::VarPrem) -> Attempt<()> {
+fn elab_var_prem(ctx: &mut Context, prem: &el::VarPrem) -> Backtrack<()> {
     if !valid_tid(&prem.id) {
-        return fail(error::premise_variable_identifier_invalid(&prem.id));
+        return fatal!(error: error::premise_variable_identifier_invalid(&prem.id));
     }
     // A meta-variable name must not clash with a type
     if let Some((id_previous, _)) = ctx.tdenv.get_key_value(&prem.id) {
-        return fail(error::premise_variable_type_repeated(&prem.id, &id_previous.span));
+        return fatal!(error: error::premise_variable_type_repeated(&prem.id, &id_previous.span));
     }
     let typ_il = match elab_plain_typ(ctx, &prem.plain_typ) {
         Ok(typ_il) => typ_il,
-        Err(error) => return fail(error),
+        Err(error) => return fatal!(error: error),
     };
     if let Err(error) = ctx.add_metavar(prem.id.clone(), typ_il) {
-        return fail(error);
+        return fatal!(error: error);
     }
-    Ok(())
+    success!(())
 }
 
 // - Rule premise elaboration
 
 /// Elaborates a rule premise; one without outputs becomes a holding check.
-fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Attempt<il::PremKind> {
+fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Backtrack<il::PremKind> {
     let (not_typ_il, input_hint) = match ctx.find_rel_signature(&prem.id) {
         Ok((not_typ_il, input_hint)) => (not_typ_il.clone(), input_hint.clone()),
-        Err(error) => return fail(error),
+        Err(error) => return fatal!(error: error),
     };
-    let not_exp_il = elab_not_exp(ctx, &not_typ_il, &prem.exp)?;
+    let not_exp_il = unwrap!(elab_not_exp(ctx, &not_typ_il, &prem.exp).promote_mismatch());
     let exps_il = not_exp_il.args();
     let conditional = match input::is_conditional(&input_hint, &exps_il) {
         Ok(conditional) => conditional,
         Err(error) => {
-            return fail(error::relation_input_hint_mismatch(&prem.exp.span, error.to_string()));
+            return fatal!(error: error::relation_input_hint_mismatch(&prem.exp.span, error.to_string()));
         }
     };
     // A premise without outputs only checks that the relation holds
     if conditional {
-        Ok(il::PremKind::IfHold(il::IfHoldPrem { id: prem.id.clone(), not_exp: not_exp_il }))
+        success!(il::PremKind::IfHold(il::IfHoldPrem { id: prem.id.clone(), not_exp: not_exp_il }))
     } else {
-        Ok(il::PremKind::Rule(il::RulePrem {
+        success!(il::PremKind::Rule(il::RulePrem {
             id: prem.id.clone(),
             not_exp: not_exp_il,
             input_hint,
@@ -2234,62 +2291,68 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Attempt<il::PremKin
 // - Negated rule premise elaboration
 
 /// Elaborates a negated rule premise, which may not yield outputs.
-fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Attempt<il::PremKind> {
+fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il::PremKind> {
     let (not_typ_il, input_hint) = match ctx.find_rel_signature(&prem.id) {
         Ok((not_typ_il, input_hint)) => (not_typ_il.clone(), input_hint.clone()),
-        Err(error) => return fail(error),
+        Err(error) => return fatal!(error: error),
     };
-    let not_exp_il = elab_not_exp(ctx, &not_typ_il, &prem.exp)?;
+    let not_exp_il = unwrap!(elab_not_exp(ctx, &not_typ_il, &prem.exp).promote_mismatch());
     let exps_il = not_exp_il.args();
     let (_, exps_output_il) = match input::split(&input_hint, exps_il) {
         Ok(parts) => parts,
         Err(error) => {
-            return fail(error::relation_input_hint_mismatch(&prem.exp.span, error.to_string()));
+            return fatal!(error: error::relation_input_hint_mismatch(&prem.exp.span, error.to_string()));
         }
     };
     // A negated premise cannot bind outputs
     if let Some(exp_output_il) = exps_output_il.first() {
-        return fail(error::premise_negated_output_unsupported(
+        return fatal!(error: error::premise_negated_output_unsupported(
             &prem.id,
             &exp_output_il.span,
             &not_typ_il.span,
         ));
     }
-    Ok(il::PremKind::IfNotHold(il::IfNotHoldPrem { id: prem.id.clone(), not_exp: not_exp_il }))
+    success!(il::PremKind::IfNotHold(il::IfNotHoldPrem {
+        id: prem.id.clone(),
+        not_exp: not_exp_il
+    }))
 }
 
 // - Conditional premise elaboration
 
-fn elab_if_prem(ctx: &mut Context, prem: &el::IfPrem) -> Attempt<il::PremKind> {
+fn elab_if_prem(ctx: &mut Context, prem: &el::IfPrem) -> Backtrack<il::PremKind> {
     let typ_bool_il = typ_at(il::TypKind::Bool, &prem.exp.span);
-    let exp_il = elab_exp(ctx, &typ_bool_il, &prem.exp)?;
-    Ok(il::PremKind::If(il::IfPrem { exp: exp_il }))
+    let exp_il = unwrap!(elab_exp(ctx, &typ_bool_il, &prem.exp).promote_mismatch());
+    success!(il::PremKind::If(il::IfPrem { exp: exp_il }))
 }
 
 // - Iteration premise elaboration
 
 /// Elaborates an iterated premise, leaving its variables to dimension analysis.
-fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Attempt<il::PremKind> {
-    let prem_inner_il = elab_prem(ctx, &prem.prem)?;
+fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Backtrack<il::PremKind> {
+    let prem_inner_il = unwrap!(elab_prem(ctx, &prem.prem));
     // Only premises that produce an IL premise can be iterated
     let prem_inner_il = match prem_inner_il {
         PremInternal::Some(prem_inner_il) => prem_inner_il,
         PremInternal::Var => {
-            return fail(error::premise_variable_iteration_unsupported(&prem.prem.span));
+            return fatal!(error: error::premise_variable_iteration_unsupported(&prem.prem.span));
         }
         PremInternal::Else => {
-            return fail(error::premise_otherwise_iteration_unsupported(&prem.prem.span));
+            return fatal!(error: error::premise_otherwise_iteration_unsupported(&prem.prem.span));
         }
     };
     let prem_iter_il = il::PremIter { iter: prem.iter, vars_bound: vec![], vars_bind: vec![] };
-    Ok(il::PremKind::Iter(il::IterPrem { prem: Box::new(prem_inner_il), prem_iter: prem_iter_il }))
+    success!(il::PremKind::Iter(il::IterPrem {
+        prem: Box::new(prem_inner_il),
+        prem_iter: prem_iter_il
+    }))
 }
 
 // - Debug premise elaboration
 
-fn elab_debug_prem(ctx: &mut Context, prem: &el::DebugPrem) -> Attempt<il::PremKind> {
-    let exp_il = infer_exp(ctx, &prem.exp)?;
-    Ok(il::PremKind::Debug(il::DebugPrem { exp: exp_il }))
+fn elab_debug_prem(ctx: &mut Context, prem: &el::DebugPrem) -> Backtrack<il::PremKind> {
+    let exp_il = unwrap!(infer_exp(ctx, &prem.exp).promote_mismatch());
+    success!(il::PremKind::Debug(il::DebugPrem { exp: exp_il }))
 }
 
 // == Rules and clauses

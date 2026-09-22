@@ -39,32 +39,11 @@ error[elab/function-type-parameter-repeated]: type parameter `U` was already def
 
 ---
 === ctx-dec-undefined.watsup ===
-note: function `missing` is undefined
-  ┌─ elab/ctx-dec-undefined.watsup:6:19
-  │
-6 │ def $caller(n) = $missing(n)
-  │                   --------
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/ctx-dec-undefined.watsup:6:18
-  │
-6 │ def $caller(n) = $missing(n)
-  │                  -----------
-
-trace[1]:
 error[elab/function-undefined]: function `missing` is undefined
   ┌─ elab/ctx-dec-undefined.watsup:6:19
   │
 6 │ def $caller(n) = $missing(n)
   │                   ^^^^^^^^
-
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/ctx-dec-undefined.watsup:6:18
-  │
-6 │ def $caller(n) = $missing(n)
-  │                  -----------
 
 ---
 === ctx-defined-dec-undefined.watsup ===
@@ -141,13 +120,6 @@ error[elab/function-parameter-type-parameter-repeated]: type parameter `U` is re
 
 ---
 === ctx-invalid-metavar-in-prem.watsup ===
-note: meta-variable identifier `x_1` must not have a suffix
-   ┌─ elab/ctx-invalid-metavar-in-prem.watsup:11:10
-   │
-11 │   -- var x_1 : foo
-   │          ---
-
-trace[0]:
 error[elab/premise-variable-identifier-invalid]: meta-variable identifier `x_1` must not have a suffix
    ┌─ elab/ctx-invalid-metavar-in-prem.watsup:11:10
    │
@@ -200,13 +172,6 @@ error[elab/relation-repeated]: relation `R` was already defined
 
 ---
 === ctx-relation-undefined-in-premise.watsup ===
-note: relation `Missing` is undefined
-   ┌─ elab/ctx-relation-undefined-in-premise.watsup:10:6
-   │
-10 │   -- Missing: 0 |- 0
-   │      -------
-
-trace[0]:
 error[elab/relation-undefined]: relation `Missing` is undefined
    ┌─ elab/ctx-relation-undefined-in-premise.watsup:10:6
    │
@@ -274,13 +239,6 @@ error[elab/table-row-repeated]: table `lookup` was already defined
 
 ---
 === ctx-type-already-defined-in-prem.watsup ===
-note: meta-variable name `foo` is already used by a type
-   ┌─ elab/ctx-type-already-defined-in-prem.watsup:11:10
-   │
-11 │   -- var foo : nat
-   │          ---
-
-trace[0]:
 error[elab/premise-variable-type-repeated]: meta-variable name `foo` is already used by a type
    ┌─ elab/ctx-type-already-defined-in-prem.watsup:11:10
    │
@@ -387,13 +345,6 @@ error[elab/relation-input-hint-index-out-of-bounds]: input hint index `%2` is ou
 
 ---
 === relation-iter-otherwise-premise.watsup ===
-note: cannot iterate an `otherwise` premise
-  ┌─ elab/relation-iter-otherwise-premise.watsup:8:7
-  │
-8 │   -- (otherwise)*
-  │       ---------
-
-trace[0]:
 error[elab/premise-otherwise-iteration-unsupported]: cannot iterate an `otherwise` premise
   ┌─ elab/relation-iter-otherwise-premise.watsup:8:7
   │
@@ -404,13 +355,6 @@ error[elab/premise-otherwise-iteration-unsupported]: cannot iterate an `otherwis
 
 ---
 === relation-iter-var-premise.watsup ===
-note: cannot iterate a `var` premise
-   ┌─ elab/relation-iter-var-premise.watsup:10:7
-   │
-10 │   -- (var x : foo)*
-   │       -----------
-
-trace[0]:
 error[elab/premise-variable-iteration-unsupported]: cannot iterate a `var` premise
    ┌─ elab/relation-iter-var-premise.watsup:10:7
    │
@@ -430,13 +374,6 @@ warning[elab/relation-rule-missing]: relation `Foo_ok` has no rules defined
 
 ---
 === relation-multiple-otherwise-premises.watsup ===
-note: cannot use more than one `otherwise` premise
-  ┌─ elab/relation-multiple-otherwise-premises.watsup:9:6
-  │
-9 │   -- otherwise
-  │      ---------
-
-trace[0]:
 error[elab/premise-otherwise-repeated]: cannot use more than one `otherwise` premise
   ┌─ elab/relation-multiple-otherwise-premises.watsup:9:6
   │
@@ -447,13 +384,6 @@ error[elab/premise-otherwise-repeated]: cannot use more than one `otherwise` pre
 
 ---
 === relation-negated-premise-on-output-relation.watsup ===
-note: negated rule premise for relation `R` cannot use output positions
-   ┌─ elab/relation-negated-premise-on-output-relation.watsup:16:15
-   │
-16 │   -- R:/ 0 |- 0
-   │               -
-
-trace[0]:
 error[elab/premise-negated-output-unsupported]: negated rule premise for relation `R` cannot use output positions
    ┌─ elab/relation-negated-premise-on-output-relation.watsup:16:15
    │
@@ -537,20 +467,6 @@ error[elab/table-return-type-invalid]: table `lookup` must return `bool`, but it
 
 ---
 === type-call-arg-arity-mismatch.watsup ===
-note: function `f` expects 2 arguments, but got 1
-  ┌─ elab/type-call-arg-arity-mismatch.watsup:6:10
-  │
-6 │ def $g = $f(0)
-  │          -----
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-call-arg-arity-mismatch.watsup:6:10
-  │
-6 │ def $g = $f(0)
-  │          -----
-
-trace[1]:
 error[elab/function-call-argument-arity-mismatch]: function `f` expects 2 arguments, but got 1
   ┌─ elab/type-call-arg-arity-mismatch.watsup:6:10
   │
@@ -560,29 +476,8 @@ error[elab/function-call-argument-arity-mismatch]: function `f` expects 2 argume
 6 │ def $g = $f(0)
   │          ^^^^^
 
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-call-arg-arity-mismatch.watsup:6:10
-  │
-6 │ def $g = $f(0)
-  │          -----
-
 ---
 === type-call-targ-arity-mismatch.watsup ===
-note: function `f` expects 1 type argument, but got 2
-  ┌─ elab/type-call-targ-arity-mismatch.watsup:6:18
-  │
-6 │ def $g = $f<nat, nat>(0)
-  │                  ---
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-call-targ-arity-mismatch.watsup:6:10
-  │
-6 │ def $g = $f<nat, nat>(0)
-  │          ---------------
-
-trace[1]:
 error[elab/function-call-type-argument-arity-mismatch]: function `f` expects 1 type argument, but got 2
   ┌─ elab/type-call-targ-arity-mismatch.watsup:6:18
   │
@@ -591,13 +486,6 @@ error[elab/function-call-type-argument-arity-mismatch]: function `f` expects 1 t
   ·
 6 │ def $g = $f<nat, nat>(0)
   │                  ^^^
-
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-call-targ-arity-mismatch.watsup:6:10
-  │
-6 │ def $g = $f<nat, nat>(0)
-  │          ---------------
 
 ---
 === type-clause-arg-arity-mismatch.watsup ===
@@ -714,20 +602,6 @@ error[elab/type-parameter-mismatch]: type `foo` was forward-declared with no typ
 
 ---
 === type-funarg-expected-exp-got-fun.watsup ===
-note: expected an expression argument, but got a function argument
-  ┌─ elab/type-funarg-expected-exp-got-fun.watsup:9:21
-  │
-9 │ def $main = $caller(def $g)
-  │                     ------
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-funarg-expected-exp-got-fun.watsup:9:13
-  │
-9 │ def $main = $caller(def $g)
-  │             ---------------
-
-trace[1]:
 error[elab/function-argument-kind-mismatch]: expected an expression argument, but got a function argument
   ┌─ elab/type-funarg-expected-exp-got-fun.watsup:9:21
   │
@@ -737,29 +611,8 @@ error[elab/function-argument-kind-mismatch]: expected an expression argument, bu
 9 │ def $main = $caller(def $g)
   │                     ^^^^^^
 
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-funarg-expected-exp-got-fun.watsup:9:13
-  │
-9 │ def $main = $caller(def $g)
-  │             ---------------
-
 ---
 === type-funarg-expected-fun-got-exp.watsup ===
-note: expected a function argument, but got an expression argument
-  ┌─ elab/type-funarg-expected-fun-got-exp.watsup:8:21
-  │
-8 │ def $main = $caller(0)
-  │                     -
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-funarg-expected-fun-got-exp.watsup:8:13
-  │
-8 │ def $main = $caller(0)
-  │             ----------
-
-trace[1]:
 error[elab/function-argument-kind-mismatch]: expected a function argument, but got an expression argument
   ┌─ elab/type-funarg-expected-fun-got-exp.watsup:8:21
   │
@@ -769,22 +622,8 @@ error[elab/function-argument-kind-mismatch]: expected a function argument, but g
 8 │ def $main = $caller(0)
   │                     ^
 
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-funarg-expected-fun-got-exp.watsup:8:13
-  │
-8 │ def $main = $caller(0)
-  │             ----------
-
 ---
 === type-funarg-name-mismatch.watsup ===
-note: function argument `g` must have the same name as declared function parameter `expected`
-  ┌─ elab/type-funarg-name-mismatch.watsup:5:18
-  │
-5 │ def $caller(def $g) = 0
-  │                  -
-
-trace[0]:
 error[elab/function-argument-name-mismatch]: function argument `g` must have the same name as declared function parameter `expected`
   ┌─ elab/type-funarg-name-mismatch.watsup:5:18
   │
@@ -797,20 +636,6 @@ error[elab/function-argument-name-mismatch]: function argument `g` must have the
 
 ---
 === type-funarg-signature-mismatch.watsup ===
-note: passed function `h` must have the same signature as function parameter `f`
-  ┌─ elab/type-funarg-signature-mismatch.watsup:6:21
-  │
-6 │ def $main = $caller(def $h)
-  │                     ------
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-funarg-signature-mismatch.watsup:6:13
-  │
-6 │ def $main = $caller(def $h)
-  │             ---------------
-
-trace[1]:
 error[elab/function-argument-signature-mismatch]: passed function `h` must have the same signature as function parameter `f`
   ┌─ elab/type-funarg-signature-mismatch.watsup:6:21
   │
@@ -825,29 +650,8 @@ error[elab/function-argument-signature-mismatch]: passed function `h` must have 
   │
   = A passed function must have the same number of type parameters, parameter types, and return type as its function parameter.
 
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-funarg-signature-mismatch.watsup:6:13
-  │
-6 │ def $main = $caller(def $h)
-  │             ---------------
-
 ---
 === type-functyp-param-arity-mismatch.watsup ===
-note: function parameter `h` has 2 parameters, but passed function `g` has 1
-  ┌─ elab/type-functyp-param-arity-mismatch.watsup:8:20
-  │
-8 │ def $bad = $caller(def $g)
-  │                    ------
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-functyp-param-arity-mismatch.watsup:8:12
-  │
-8 │ def $bad = $caller(def $g)
-  │            ---------------
-
-trace[1]:
 error[elab/function-argument-parameter-arity-mismatch]: function parameter `h` has 2 parameters, but passed function `g` has 1
   ┌─ elab/type-functyp-param-arity-mismatch.watsup:8:20
   │
@@ -861,29 +665,8 @@ error[elab/function-argument-parameter-arity-mismatch]: function parameter `h` h
   │
   = A passed function must have the same number of type parameters, parameter types, and return type as its function parameter.
 
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-functyp-param-arity-mismatch.watsup:8:12
-  │
-8 │ def $bad = $caller(def $g)
-  │            ---------------
-
 ---
 === type-functyp-tparam-arity-mismatch.watsup ===
-note: function parameter `h` has 2 type parameters, but passed function `g` has 1
-  ┌─ elab/type-functyp-tparam-arity-mismatch.watsup:8:20
-  │
-8 │ def $bad = $caller(def $g)
-  │                    ------
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-functyp-tparam-arity-mismatch.watsup:8:12
-  │
-8 │ def $bad = $caller(def $g)
-  │            ---------------
-
-trace[1]:
 error[elab/function-argument-type-parameter-arity-mismatch]: function parameter `h` has 2 type parameters, but passed function `g` has 1
   ┌─ elab/type-functyp-tparam-arity-mismatch.watsup:8:20
   │
@@ -897,29 +680,8 @@ error[elab/function-argument-type-parameter-arity-mismatch]: function parameter 
   │
   = A passed function must have the same number of type parameters, parameter types, and return type as its function parameter.
 
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-functyp-tparam-arity-mismatch.watsup:8:12
-  │
-8 │ def $bad = $caller(def $g)
-  │            ---------------
-
 ---
 === type-fuse-outside-hint.watsup ===
-note: token concatenation `#` is not allowed outside a hint
-  ┌─ elab/type-fuse-outside-hint.watsup:5:12
-  │
-5 │ def $f = 0 # 1
-  │            -
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-fuse-outside-hint.watsup:5:10
-  │
-5 │ def $f = 0 # 1
-  │          -----
-
-trace[1]:
 error[elab/fuse-outside-hint-unsupported]: token concatenation `#` is not allowed outside a hint
   ┌─ elab/type-fuse-outside-hint.watsup:5:12
   │
@@ -928,29 +690,8 @@ error[elab/fuse-outside-hint-unsupported]: token concatenation `#` is not allowe
   │
   = The `#` operator joins rendered hint fragments without a space.
 
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-fuse-outside-hint.watsup:5:10
-  │
-5 │ def $f = 0 # 1
-  │          -----
-
 ---
 === type-hole-outside-hint.watsup ===
-note: hole is not allowed outside a hint
-  ┌─ elab/type-hole-outside-hint.watsup:5:10
-  │
-5 │ def $f = %0
-  │          --
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-hole-outside-hint.watsup:5:10
-  │
-5 │ def $f = %0
-  │          --
-
-trace[1]:
 error[elab/hole-outside-hint-unsupported]: hole is not allowed outside a hint
   ┌─ elab/type-hole-outside-hint.watsup:5:10
   │
@@ -959,29 +700,8 @@ error[elab/hole-outside-hint-unsupported]: hole is not allowed outside a hint
   │
   = A `%`, `%N`, `%%`, or `!%` marks an argument slot inside a `hint(...)` expression.
 
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-hole-outside-hint.watsup:5:10
-  │
-5 │ def $f = %0
-  │          --
-
 ---
 === type-latex-outside-hint.watsup ===
-note: LaTeX literals are not allowed outside a hint
-  ┌─ elab/type-latex-outside-hint.watsup:5:10
-  │
-5 │ def $f = %latex("hello")
-  │          ---------------
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-latex-outside-hint.watsup:5:10
-  │
-5 │ def $f = %latex("hello")
-  │          ---------------
-
-trace[1]:
 error[elab/latex-outside-hint-unsupported]: LaTeX literals are not allowed outside a hint
   ┌─ elab/type-latex-outside-hint.watsup:5:10
   │
@@ -989,13 +709,6 @@ error[elab/latex-outside-hint-unsupported]: LaTeX literals are not allowed outsi
   │          ^^^^^^^^^^^^^^^
   │
   = A `%latex("...")` literal embeds raw LaTeX only inside a hint.
-
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-latex-outside-hint.watsup:5:10
-  │
-5 │ def $f = %latex("hello")
-  │          ---------------
 
 ---
 === type-missing-definition.watsup ===
@@ -1059,20 +772,6 @@ error[elab/type-undefined]: type `nope` is undefined
 
 ---
 === type-unparen-outside-hint.watsup ===
-note: unparenthesizing operator `##` is not allowed outside a hint
-  ┌─ elab/type-unparen-outside-hint.watsup:5:10
-  │
-5 │ def $f = ## 0
-  │          ----
-
-trace[0]:
-note: expression elaboration failed
-  ┌─ elab/type-unparen-outside-hint.watsup:5:10
-  │
-5 │ def $f = ## 0
-  │          ----
-
-trace[1]:
 error[elab/unparen-outside-hint-unsupported]: unparenthesizing operator `##` is not allowed outside a hint
   ┌─ elab/type-unparen-outside-hint.watsup:5:10
   │
@@ -1080,13 +779,6 @@ error[elab/unparen-outside-hint-unsupported]: unparenthesizing operator `##` is 
   │          ^^^^
   │
   = The `##` operator strips parentheses only while rendering a hint.
-
-trace[1]:
-note: expression requires unsupported contextual elaboration
-  ┌─ elab/type-unparen-outside-hint.watsup:5:10
-  │
-5 │ def $f = ## 0
-  │          ----
 
 ---
 === type-variant-mixop-collision.watsup ===

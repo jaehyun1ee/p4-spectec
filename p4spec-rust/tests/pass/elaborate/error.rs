@@ -170,21 +170,43 @@ fn test_contextual_failure_retains_the_undefined_function_cause() {
 }
 
 #[test]
-fn test_all_failed_variant_candidates_retain_nested_function_failure() {
+fn test_fatal_variant_candidate_stops_before_later_cases() {
     let spec_el = parse_text(
         "variant-candidate.watsup".into(),
         concat!(
             "syntax choice =\n",
             "| nat GOOD\n",
+            "| bool BAD\n",
             "dec $f : choice\n",
             "def $f = $missing() GOOD\n",
         ),
     )
     .unwrap();
     let report = elaborate::convert(spec_el).expect_err("reject undefined nested call");
-    let diagnostic =
-        find_cause(&report, "elab/function-undefined").expect("nested undefined function cause");
-    assert_eq!(diagnostic.labels[0].span.left.line, 4);
+    let diagnostic = cause(&report);
+    assert_eq!(diagnostic.code.as_deref(), Some("elab/function-undefined"));
+    assert_eq!(diagnostic.labels[0].span.left.line, 5);
+    assert!(report.children.is_empty());
+}
+
+#[test]
+fn test_hint_only_syntax_reports_its_direct_cause_once() {
+    let spec_el = parse_text("unparen.watsup".into(), "dec $f : nat\ndef $f = ## 0\n").unwrap();
+    let report = elaborate::convert(spec_el).expect_err("reject hint-only syntax");
+    let diagnostic = cause(&report);
+    assert_eq!(diagnostic.code.as_deref(), Some("elab/unparen-outside-hint-unsupported"));
+    assert_eq!(diagnostic.notes.len(), 1);
+    assert!(report.children.is_empty());
+
+    let rendered = Renderer::new(RenderConfig::default())
+        .render_to_string(&report)
+        .unwrap();
+    assert_eq!(
+        rendered
+            .matches("unparenthesizing operator `##` is not allowed")
+            .count(),
+        1
+    );
 }
 
 #[test]
@@ -271,6 +293,19 @@ fn test_call_type_argument_count_precedes_type_elaboration() {
     let report = elaborate::convert(spec_el).expect_err("reject extra call type argument");
     assert!(find_cause(&report, "elab/function-call-type-argument-arity-mismatch").is_some());
     assert!(find_cause(&report, "elab/type-undefined").is_none());
+}
+
+#[test]
+fn test_update_path_bounds_fail_before_path_shape_mismatch() {
+    for (name, path) in [("index", "n[[$missing()] = 0]"), ("slice", "n[[$missing():0] = 0]")] {
+        let source = format!("var n : nat\ndec $f(nat) : nat\ndef $f(n) = {path}\n");
+        let spec_el = parse_text(format!("{name}.watsup").into(), &source).unwrap();
+        let report = elaborate::convert(spec_el).expect_err("reject undefined path bound call");
+        let diagnostic = cause(&report);
+        assert_eq!(diagnostic.code.as_deref(), Some("elab/function-undefined"));
+        assert_eq!(diagnostic.labels[0].span.left.line, 3);
+        assert!(report.children.is_empty());
+    }
 }
 
 #[test]

@@ -5,7 +5,7 @@ use crate::{
         il::ast::TypKind,
     },
     pass::elaborate::{
-        attempt::{Backtrack, Specificity, choose_sequential, fail_silent},
+        attempt::{Backtrack, choose_sequential, finish},
         context::Context,
         error,
     },
@@ -85,11 +85,11 @@ fn assert_preserved(report: &Report) {
 
 #[test]
 fn test_attempt_preserves_a_complete_foreign_report() {
-    let report = Backtrack::from(foreign_report()).into_error();
-    assert_preserved(&report.children[0]);
+    let report = finish(Backtrack::<()>::Fatal(vec![*foreign_report()])).unwrap_err();
+    assert_preserved(&report);
 }
 
-fn failure(message: &str, span: Span, specificity: Specificity) -> Backtrack {
+fn failure(message: &str, span: Span) -> Report {
     let diagnostic = Diagnostic {
         severity: Severity::Error,
         code: None,
@@ -98,22 +98,17 @@ fn failure(message: &str, span: Span, specificity: Specificity) -> Backtrack {
         notes: Vec::new(),
         source: "test",
     };
-    Backtrack::from_report(diagnostic.into(), specificity)
-}
-
-fn assert_summary(report: &Report, span_expected: &Span, message_expected: &str) {
-    let ReportKind::Frame { span, message } = &report.kind else {
-        panic!("expected summary frame")
-    };
-    assert_eq!(span, span_expected);
-    assert_eq!(message, message_expected);
+    diagnostic.into()
 }
 
 #[test]
 fn test_backtracking_preserves_nested_reports_and_alternative_order() {
-    let failure_first = Backtrack::from(foreign_report()).nest(Span::default(), "outer attempt");
-    let failure_second = failure("second alternative", Span::default(), Specificity::Specific);
-    let report = failure_first.merge(failure_second).into_error();
+    let failure_first =
+        Backtrack::<()>::Mismatch(vec![*foreign_report()]).nest(Span::default(), "outer attempt");
+    let failure_second = Backtrack::Mismatch(vec![failure("second alternative", Span::default())]);
+    let mut ctx = Context::new();
+    let report =
+        finish(choose_sequential(&mut ctx, |_| failure_first, |_| failure_second)).unwrap_err();
     assert_eq!(report.children.len(), 2);
     assert_eq!(report.children[0].children.len(), 1);
     assert_preserved(&report.children[0].children[0]);
@@ -124,11 +119,13 @@ fn test_backtracking_preserves_nested_reports_and_alternative_order() {
 #[test]
 fn test_finished_attempt_keeps_its_inner_reports_when_wrapped() {
     let report_inner =
-        failure("inner failure", Span::default(), Specificity::Specific).into_error();
-    let report_outer = Backtrack::from(report_inner)
-        .nest(Span::default(), "outer search")
-        .into_error();
-    let report = &report_outer.children[0].children[0].children[0];
+        finish(Backtrack::<()>::Mismatch(vec![failure("inner failure", Span::default())]))
+            .unwrap_err();
+    let report_outer = finish(
+        Backtrack::<()>::Mismatch(vec![*report_inner]).nest(Span::default(), "outer search"),
+    )
+    .unwrap_err();
+    let report = &report_outer.children[0];
     let ReportKind::Cause(diagnostic) = &report.kind else {
         panic!("expected preserved inner cause")
     };
@@ -136,68 +133,22 @@ fn test_finished_attempt_keeps_its_inner_reports_when_wrapped() {
 }
 
 #[test]
-fn test_attempt_selection_prefers_location_then_specificity_then_depth() {
-    let span =
-        Span::new(Position::new("selection.watsup", 1, 0), Position::new("selection.watsup", 1, 1));
-    let failure_located = failure("located generic", span.clone(), Specificity::Generic);
-    let failure_specific = failure("unlocated specific", Span::default(), Specificity::Specific);
-    let error = failure_located.merge(failure_specific).into_error();
-    assert_summary(&error, &span, "located generic");
-
-    let failure_specific = failure("shallow specific", span.clone(), Specificity::Specific);
-    let failure_generic = failure("deep generic", span.clone(), Specificity::Generic)
-        .nest(span.clone(), "generic context");
-    assert_summary(
-        &failure_specific.merge(failure_generic).into_error(),
-        &span,
-        "shallow specific",
-    );
-
-    let span_inner =
-        Span::new(Position::new("selection.watsup", 2, 0), Position::new("selection.watsup", 2, 1));
-    let failure_shallow = failure("shallow specific", span.clone(), Specificity::Specific);
-    let failure_deep = failure("deeper specific", span_inner.clone(), Specificity::Specific)
-        .nest(span, "generic context");
-    assert_summary(
-        &failure_shallow.merge(failure_deep).into_error(),
-        &span_inner,
-        "deeper specific",
-    );
-}
-
-#[test]
-fn test_attempt_selection_keeps_the_first_equal_ranked_failure() {
-    let failure_first = failure("first", Span::default(), Specificity::Specific);
-    let failure_second = failure("second", Span::default(), Specificity::Specific);
-    assert_summary(&failure_first.merge(failure_second).into_error(), &Span::default(), "first");
-}
-
-#[test]
-fn test_foreign_report_children_do_not_affect_attempt_depth() {
-    let failure_first = failure("first", Span::default(), Specificity::Specific);
-    let failure_second = Backtrack::from(foreign_report());
-    let report = failure_first.merge(failure_second).into_error();
-    assert_summary(&report, &Span::default(), "first");
-    assert_preserved(&report.children[1]);
-}
-
-#[test]
 fn test_silent_failed_alternative_rolls_back_and_commits_the_winner() {
     let id_failed = crate::phrase!(node: "failed".to_owned(), span: Span::default());
     let id_winner = crate::phrase!(node: "winner".to_owned(), span: Span::default());
     let mut ctx = Context::new();
-    let value = choose_sequential(
+    let value = finish(choose_sequential(
         &mut ctx,
         |ctx| {
             ctx.frees.insert(id_failed.clone());
-            fail_silent()
+            Backtrack::Mismatch(vec![])
         },
         |ctx| {
             assert!(!ctx.frees.contains(&id_failed));
             ctx.frees.insert(id_winner.clone());
-            Ok(7)
+            Backtrack::Success(7)
         },
-    )
+    ))
     .unwrap();
     assert_eq!(value, 7);
     assert!(!ctx.frees.contains(&id_failed));
@@ -208,23 +159,49 @@ fn test_silent_failed_alternative_rolls_back_and_commits_the_winner() {
 fn test_all_failed_alternatives_keep_context_and_ordered_causes() {
     let id = crate::phrase!(node: "failed".to_owned(), span: Span::default());
     let mut ctx = Context::new();
-    let result: Result<(), _> = choose_sequential(
+    let result = choose_sequential(
         &mut ctx,
         |ctx| {
             ctx.frees.insert(id.clone());
-            Err(failure("first", Span::default(), Specificity::Specific))
+            Backtrack::<()>::Mismatch(vec![failure("first", Span::default())])
         },
         |ctx| {
             assert!(!ctx.frees.contains(&id));
             ctx.frees.insert(id.clone());
-            Err(failure("second", Span::default(), Specificity::Specific))
+            Backtrack::Mismatch(vec![failure("second", Span::default())])
         },
     );
     assert!(!ctx.frees.contains(&id));
-    let report = result.unwrap_err().into_error();
+    let report = finish(result).unwrap_err();
     assert_eq!(report.children.len(), 2);
     for (report, message) in report.children.iter().zip(["first", "second"]) {
         let ReportKind::Cause(diagnostic) = &report.kind else { panic!("expected cause") };
         assert_eq!(diagnostic.message, message);
     }
+}
+
+#[test]
+fn test_fatal_failure_aborts_sequential_fallback() {
+    let id_failed = crate::phrase!(node: "failed".to_owned(), span: Span::default());
+    let mut ctx = Context::new();
+    let result: Backtrack<()> = choose_sequential(
+        &mut ctx,
+        |ctx| {
+            ctx.frees.insert(id_failed.clone());
+            Backtrack::Fatal(vec![failure("fatal", Span::default())])
+        },
+        |_| panic!("fatal failure tried the next alternative"),
+    );
+    assert!(matches!(result, Backtrack::Fatal(_)));
+    assert!(!ctx.frees.contains(&id_failed));
+}
+
+#[test]
+fn test_nesting_does_not_wrap_a_fatal_report() {
+    let result = Backtrack::<()>::Fatal(vec![failure("fatal", Span::default())])
+        .nest(Span::default(), "attempt context");
+    let report = finish(result).unwrap_err();
+    let ReportKind::Cause(diagnostic) = &report.kind else { panic!("expected direct cause") };
+    assert_eq!(diagnostic.message, "fatal");
+    assert!(report.children.is_empty());
 }
