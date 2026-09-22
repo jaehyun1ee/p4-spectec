@@ -70,7 +70,7 @@ fn distinct_tparams(tparams: &[el::TParam], span: &Span) -> Result<(), ElabError
 }
 
 /// Finds the first repeated parameter while retaining the earlier occurrence.
-fn repeated_tparam(tparams: &[el::TParam]) -> Option<(&Id, &Span)> {
+fn find_repeated_tparam(tparams: &[el::TParam]) -> Option<(&Id, &Span)> {
     let mut seen = IdMap::new();
     for tparam in tparams {
         // Stop at the first duplicate in source order
@@ -2618,7 +2618,7 @@ fn elab_rule_group_def(
 /// Declares an extern function.
 fn elab_extern_dec_def(ctx: &mut Context, def: el::ExternDecDef) -> Result<il::DefKind, ElabError> {
     // Label both occurrences of the first repeated type parameter
-    if let Some((tparam, span_previous)) = repeated_tparam(&def.tparams) {
+    if let Some((tparam, span_previous)) = find_repeated_tparam(&def.tparams) {
         return Err(error::function_extern_type_parameter_repeated(tparam, span_previous).into());
     }
     // Parameters and return type see the type parameters
@@ -2650,7 +2650,7 @@ fn elab_builtin_dec_def(
     def: el::BuiltinDecDef,
 ) -> Result<il::DefKind, ElabError> {
     // Label both occurrences of the first repeated type parameter
-    if let Some((tparam, span_previous)) = repeated_tparam(&def.tparams) {
+    if let Some((tparam, span_previous)) = find_repeated_tparam(&def.tparams) {
         return Err(error::function_builtin_type_parameter_repeated(tparam, span_previous).into());
     }
     // Parameters and return type see the type parameters
@@ -2714,7 +2714,7 @@ fn elab_table_dec_def(ctx: &mut Context, def: el::TableDecDef) -> Result<il::Def
 /// Declares a function whose clauses arrive later.
 fn elab_func_dec_def(ctx: &mut Context, def: el::FuncDecDef) -> Result<il::DefKind, ElabError> {
     // Label both occurrences of the first repeated type parameter
-    if let Some((tparam, span_previous)) = repeated_tparam(&def.tparams) {
+    if let Some((tparam, span_previous)) = find_repeated_tparam(&def.tparams) {
         return Err(error::function_type_parameter_repeated(tparam, span_previous).into());
     }
     // Parameters and return type see the type parameters
