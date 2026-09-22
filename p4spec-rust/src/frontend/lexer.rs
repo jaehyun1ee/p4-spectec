@@ -995,10 +995,10 @@ where
     /// One escape: a `\n` byte, a `\XX` hex byte, or a `\u{...}` code point.
     fn scan_escape(&mut self, start: Cursor, bytes: &mut Vec<u8>) -> Result<(), LexError> {
         let escape_start = self.cursor.offset;
-        // A trailing backslash is a malformed literal
+        // Report a trailing backslash as an incomplete literal at EOF
         let Some(escape) = self.cursor_offset(escape_start + 1) else {
-            self.cursor = Cursor { offset: start.offset + 1, ..start };
-            return Err(error::character_invalid(self.span(start), '"'));
+            self.advance_add(1);
+            return Err(error::text_literal_incomplete(self.span(self.cursor)));
         };
 
         // Single-character escapes

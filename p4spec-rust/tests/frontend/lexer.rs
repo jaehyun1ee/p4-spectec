@@ -276,7 +276,7 @@ fn test_uppercase_identifier_classification_is_lazy_and_contextual() {
 fn test_lexical_failures_report_codes_and_precise_spans() {
     let fixtures = [
         ("\"unterminated", "parse/text-literal-incomplete", 13, 13),
-        ("\"abc\\", "parse/character-invalid", 0, 1),
+        ("\"abc\\", "parse/text-literal-incomplete", 5, 5),
         ("\"bad\\q\"", "parse/text-escape-invalid", 4, 6),
         ("\"bad\u{7}\"", "parse/text-character-invalid", 4, 4),
         ("\"unterminated\nnext", "parse/text-literal-incomplete", 13, 13),
@@ -300,6 +300,27 @@ fn test_lexical_failures_report_codes_and_precise_spans() {
             Position::new("error.watsup", 1, right_column),
             "source: {source:?}"
         );
+    }
+}
+
+#[test]
+fn test_trailing_backslash_reports_a_renderable_eof_span() {
+    use p4spec_rust::diagnostic::{RenderConfig, Renderer};
+
+    for (source, line, column) in [("\"abc\\", 1, 5), ("\n\"é\\", 2, 4)] {
+        let report = Lexer::new("escape.watsup", source, |_| false)
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(report.code.as_deref(), Some("parse/text-literal-incomplete"));
+        let pos = Position::new("escape.watsup", line, column);
+        assert_eq!(report.labels[0].span.left, pos);
+        assert_eq!(report.labels[0].span.right, pos);
+
+        let mut renderer = Renderer::new(RenderConfig::default());
+        renderer.insert_source("escape.watsup", source);
+        let text = renderer.render_plain(&report).expect("valid EOF position");
+        assert!(text.contains("expected a closing quote"), "{text}");
     }
 }
 
