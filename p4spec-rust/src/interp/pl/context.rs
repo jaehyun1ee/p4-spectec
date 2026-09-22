@@ -1,16 +1,18 @@
 //! Loaded PL definitions and per-call execution bindings
+//!
+//! `Global::load` retains annotated source and prepares callables once.
+//! A `Context` borrows global definitions and owns local bindings.
+//! Cloning preserves the local scope through copy-on-write value frames;
+//! `localize` starts a fresh scope over the same global definitions.
 
 use std::rc::Rc;
 
 use crate::{
-    interp::{
-        pl::prepare,
-        shared::{
-            backtrack::{Backtrack, ok, unwrap_from_result},
-            context::{IterContext, ReadContext, WriteContext},
-            error::{ContextErrorKind, EntityKind, Error, ErrorKind},
-            prepare::ast as exec,
-        },
+    interp::shared::{
+        backtrack::{Backtrack, ok, unwrap_from_result},
+        context::{IterContext, ReadContext, WriteContext},
+        error::{ContextErrorKind, EntityKind, Error, ErrorKind},
+        prepare::ast as exec,
     },
     lang::{
         common::source::Span,
@@ -19,60 +21,69 @@ use crate::{
             value::{Value, ValueArena, get, make},
             var::{SlotIdx, VarSlot},
         },
-        pl::ast,
+        pl::ast as source,
         traits::print::Print,
     },
     runtime::{
         envs::interp::{
-            pl::{FEnv, REnv, TDEnv},
+            pl::{FEnv, REnv, TDEnv, ast_prepared as ast},
             shared::{callable::Callable, frame::Frame},
         },
         typdef::TypeDef,
     },
 };
 
+/// Identifies the scope supplying a function definition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
+    /// Loaded from the specification.
     Global,
+    /// Bound by a function argument in the current call.
     Local,
 }
 
+/// Stores loaded definitions alongside their original annotated source.
 #[derive(Debug)]
 pub struct Global {
-    source: ast::Spec,
+    source: source::Spec,
     tdenv: TDEnv,
     renv: REnv,
     fenv: FEnv,
 }
 
 impl Global {
-    pub fn load(spec: ast::Spec) -> Result<Self, Error> {
-        let mut loaded = Self {
-            source: spec.clone(),
-            tdenv: TDEnv::new(),
-            renv: REnv::new(),
-            fenv: FEnv::new(),
-        };
-        for def in spec {
-            match def.node.node {
-                ast::DefKind::Typ(typdef) => {
+    /// Retains the source and prepares each callable for slot execution.
+    pub fn load(spec: source::Spec) -> Result<Self, Error> {
+        let mut loaded =
+            Self { source: Vec::new(), tdenv: TDEnv::new(), renv: REnv::new(), fenv: FEnv::new() };
+        // Borrow source definitions while building the execution environments
+        for def in &spec {
+            match &def.node.node {
+                source::DefKind::Typ(typdef) => {
+                    // Types keep their definition body
                     let (id, typdef) = match typdef {
-                        ast::TypDef::Extern(typdef) => (typdef.id, TypeDef::Extern),
-                        ast::TypDef::Defined(typdef) => {
-                            let ast::DefinedTyp { id, tparams, def_typ } = *typdef;
-                            (id, TypeDef::Defined(tparams, Box::new(def_typ)))
+                        source::TypDef::Extern(typdef) => (typdef.id.clone(), TypeDef::Extern),
+                        source::TypDef::Defined(typdef) => {
+                            let source::DefinedTyp { id, tparams, def_typ } = typdef.as_ref();
+                            (
+                                id.clone(),
+                                TypeDef::Defined(tparams.clone(), Box::new(def_typ.clone())),
+                            )
                         }
                     };
+                    // Ids are unique per namespace
                     if loaded.tdenv.contains_key(&id) {
                         return Err(Error::duplicate(EntityKind::Type, id.node, id.span));
                     }
                     loaded.tdenv.insert(id, typdef);
                 }
-                ast::DefKind::Var(_) => {}
-                ast::DefKind::Rel(def) => {
-                    let id = match &def {
-                        ast::RelDef::Extern(def) => &def.id,
-                        ast::RelDef::Defined(def) => &def.id,
+                // Meta-variables carry no runtime state
+                source::DefKind::Var(_) => {}
+                source::DefKind::Rel(def) => {
+                    // Relations are prepared once with their frame layout
+                    let id = match def {
+                        source::RelDef::Extern(def) => &def.id,
+                        source::RelDef::Defined(def) => &def.id,
                     }
                     .clone();
                     if loaded.renv.contains_key(&id) {
@@ -82,15 +93,16 @@ impl Global {
                             id.span.clone(),
                         ));
                     }
-                    let callable = Callable { layout: Rc::new(prepare::layout_rel(&def)), def };
+                    let callable = Callable::prepare(def);
                     loaded.renv.insert(id, callable);
                 }
-                ast::DefKind::MetaFunc(def) => {
-                    let id = match &def {
-                        ast::MetaFuncDef::Extern(def) => &def.id,
-                        ast::MetaFuncDef::Builtin(def) => &def.id,
-                        ast::MetaFuncDef::Table(def) => &def.id,
-                        ast::MetaFuncDef::Defined(def) => &def.id,
+                source::DefKind::MetaFunc(def) => {
+                    // Function values share their prepared callable through Rc
+                    let id = match def {
+                        source::MetaFuncDef::Extern(def) => &def.id,
+                        source::MetaFuncDef::Builtin(def) => &def.id,
+                        source::MetaFuncDef::Table(def) => &def.id,
+                        source::MetaFuncDef::Defined(def) => &def.id,
                     }
                     .clone();
                     if loaded.fenv.contains_key(&id) {
@@ -100,27 +112,34 @@ impl Global {
                             id.span.clone(),
                         ));
                     }
-                    let callable = Callable { layout: Rc::new(prepare::layout_func(&def)), def };
+                    let callable = Callable::prepare(def);
                     loaded.fenv.insert(id, Rc::new(callable));
                 }
             }
         }
+        // Keep the original annotated definitions without cloning the spec
+        loaded.source = spec;
         Ok(loaded)
     }
 
     /// The annotated PL specification in its original definition order.
-    pub fn source(&self) -> &ast::Spec {
+    pub fn source(&self) -> &source::Spec {
         &self.source
     }
 }
 
+/// Holds type parameters, function arguments, and values of one call.
 #[derive(Clone, Debug, Default)]
 struct Local {
+    /// Type parameters bound to their type arguments.
     tdenv: TDEnv,
+    /// Function arguments bound to their definitions.
     fenv: FEnv,
+    /// Value slots of the current callable.
     frame: Frame,
 }
 
+/// Combines global definitions with local bindings of one call.
 #[derive(Clone, Debug)]
 pub struct Context<'global> {
     global: &'global Global,
@@ -128,14 +147,19 @@ pub struct Context<'global> {
 }
 
 impl<'global> Context<'global> {
+    // == Constructors
+
+    /// Creates a context with no local bindings.
     pub fn new(global: &'global Global) -> Self {
         Self { global, local: Local::default() }
     }
 
+    /// Starts a fresh local scope over the same globals.
     pub fn localize(&self) -> Self {
         Self::new(self.global)
     }
 
+    /// Starts a fresh local scope with the callee's frame layout.
     pub fn localize_with_layout(
         &self,
         layout: &Rc<crate::runtime::envs::interp::shared::frame::FrameLayout>,
@@ -150,15 +174,18 @@ impl<'global> Context<'global> {
         }
     }
 
-    pub fn layout(&self) -> &crate::runtime::envs::interp::shared::frame::FrameLayout {
-        self.local.frame.layout()
-    }
+    // == Finders
+
+    // - Types
 
     pub fn find_typdef(&self, id: &ast::Id) -> Result<&TypeDef, Error> {
         self.find_typdef_opt(id)
             .ok_or_else(|| Error::undefined(EntityKind::Type, id.node.clone(), id.span.clone()))
     }
 
+    // - Relations
+
+    /// Finds a relation in the global definitions.
     pub fn find_rel(&self, id: &ast::Id) -> Result<&'global Callable<ast::RelDef>, Error> {
         self.global
             .renv
@@ -166,6 +193,9 @@ impl<'global> Context<'global> {
             .ok_or_else(|| Error::undefined(EntityKind::Relation, id.node.clone(), id.span.clone()))
     }
 
+    // - Functions
+
+    /// Finds a function, with local arguments shadowing global definitions.
     pub fn find_func_opt(&self, id: &ast::Id) -> Option<(Scope, &Rc<Callable<ast::MetaFuncDef>>)> {
         self.local
             .fenv
@@ -182,6 +212,11 @@ impl<'global> Context<'global> {
             .ok_or_else(|| Error::undefined(EntityKind::Function, id.node.clone(), id.span.clone()))
     }
 
+    // == Adders
+
+    // - Types
+
+    /// Binds a type parameter; the id must be new in the local scope.
     pub(crate) fn bind_tparam(&mut self, id: ast::Id, typdef: TypeDef) -> Result<(), Error> {
         if self.local.tdenv.contains_key(&id) {
             return Err(Error::duplicate(EntityKind::Type, id.node, id.span));
@@ -191,8 +226,14 @@ impl<'global> Context<'global> {
     }
 }
 
+// = Read access
+
 impl ReadContext for Context<'_> {
     type Func = Callable<ast::MetaFuncDef>;
+
+    // == Finders
+
+    // - Values
 
     fn find_value(&self, slot: SlotIdx) -> Option<&Value> {
         self.local.frame.get(slot)
@@ -200,6 +241,8 @@ impl ReadContext for Context<'_> {
     fn find_iter_var(&self, var: &VarSlot, iter: exec::Iter) -> VarSlot {
         self.local.frame.layout().find_iter_var(var, iter)
     }
+    // - Types
+
     fn find_typdef_local_opt(&self, id: &exec::Id) -> Option<&TypeDef> {
         self.local.tdenv.get(id)
     }
@@ -218,6 +261,8 @@ impl ReadContext for Context<'_> {
             _ => Err(Error::undefined(EntityKind::DefinedType, id.node.clone(), id.span.clone())),
         }
     }
+    // - Functions
+
     fn find_func(&self, id: &exec::Id) -> Result<&Rc<Self::Func>, Error> {
         self.find_func_with_scope(id).map(|(_, func)| func)
     }
@@ -247,13 +292,26 @@ impl ReadContext for Context<'_> {
     }
 }
 
+// = Write access
+
 impl WriteContext for Context<'_> {
+    // == Adders
+
+    // - Values
+
     fn add_value(&mut self, slot: SlotIdx, value: Value) {
         self.local.frame.set(slot, value);
     }
+    // == Clearing
+
     fn clear_value_bindings(&mut self) {
+        // Keep the layout, drop the values
         self.local.frame = self.local.frame.wipe();
     }
+    // == Adders
+
+    // - Functions
+
     fn add_func(&mut self, id: exec::Id, func: Rc<Self::Func>) -> Result<(), Error> {
         if self.find_func_opt(&id).is_some() {
             return Err(Error::duplicate(EntityKind::Function, id.node, id.span));
@@ -263,7 +321,13 @@ impl WriteContext for Context<'_> {
     }
 }
 
+// = Iteration access
+
 impl IterContext for Context<'_> {
+    // == Finders
+
+    // - Values
+
     fn find_list_values_by_var<'a>(
         &self,
         arena: &'a ValueArena,
@@ -271,6 +335,7 @@ impl IterContext for Context<'_> {
     ) -> Result<Vec<&'a [Value]>, Error> {
         let mut rows = Vec::with_capacity(vars.len());
         for var in vars {
+            // Every variable must be bound
             let value = self.find_value(var.slot).ok_or_else(|| {
                 Error::undefined(
                     EntityKind::Value,
@@ -278,11 +343,13 @@ impl IterContext for Context<'_> {
                     var.var.id.span.clone(),
                 )
             })?;
+            // Each variable must hold a list
             rows.push(
                 get::list(arena, value)
                     .map_err(|error| Error::from(error).at_if_missing(&var.var.id.span))?,
             );
         }
+        // All lists must have the same length
         if let Some(first) = rows.first() {
             for row in &rows {
                 if row.len() != first.len() {
@@ -306,6 +373,7 @@ impl IterContext for Context<'_> {
     ) -> Result<Option<Vec<Value>>, Error> {
         let mut values = Vec::with_capacity(vars.len());
         for var in vars {
+            // Every variable must be bound
             let value = self.find_value(var.slot).ok_or_else(|| {
                 Error::undefined(
                     EntityKind::Value,
@@ -313,11 +381,13 @@ impl IterContext for Context<'_> {
                     var.var.id.span.clone(),
                 )
             })?;
+            // Each variable must hold an option
             values.push(
                 get::opt(arena, value)
                     .map_err(|error| Error::from(error).at_if_missing(&var.var.id.span))?,
             );
         }
+        // All present, all absent, or a mismatch
         if values.iter().all(Option::is_some) {
             Ok(Some(values.into_iter().flatten().collect()))
         } else if values.iter().all(Option::is_none) {
@@ -330,11 +400,16 @@ impl IterContext for Context<'_> {
         }
     }
 
+    // == Collectors
+
+    // - Values
+
     fn collect_values_by_var(
         &self,
         vars: &[exec::Var],
         columns: &mut [Vec<Value>],
     ) -> Backtrack<()> {
+        // Append this row's value of each variable
         for (var, column) in vars.iter().zip(columns) {
             column.push(*unwrap_from_result!(
                 self.find_value(var.slot).ok_or_else(|| Error::undefined(
@@ -348,6 +423,10 @@ impl IterContext for Context<'_> {
         ok!(())
     }
 
+    // == Adders
+
+    // - Values
+
     fn bind_list_values_by_var(
         &mut self,
         arena: &mut ValueArena,
@@ -356,6 +435,7 @@ impl IterContext for Context<'_> {
     ) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(columns) {
             let typ = typ::make::iterate(var.var.typ.clone(), &var.var.iters);
+            // Each variable becomes a list one iteration outward
             let value = unwrap_from_result!(
                 make::list(arena, typ.node.into(), values, Span::default()),
                 &Span::default()
@@ -373,6 +453,7 @@ impl IterContext for Context<'_> {
     ) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(columns) {
             let typ = typ::make::iterate(var.var.typ.clone(), &var.var.iters);
+            // Each variable becomes an option one iteration outward
             let value = unwrap_from_result!(
                 make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default()),
                 &Span::default()

@@ -1,4 +1,9 @@
 //! Prose-language execution over annotated PL definitions
+//!
+//! `PlInterp` runs prepared group and dispatch blocks through `eval`.
+//! Blocks isolate local bindings; alternatives share their enclosing scope.
+//! An otherwise block handles a body that produces no conclusion.
+//! `Config` controls memoization, alternative determinism, and type guards.
 
 pub mod context;
 mod eval;
@@ -6,16 +11,18 @@ pub mod flow;
 mod prepare;
 
 use crate::{
-    interp::shared::{
-        backtrack::Backtrack, cache::Cache, error::Error, eval::Invoker, prepare::ast as exec,
-    },
+    interp::shared::{cache::Cache, error::Error, eval::Invoker},
     lang::{common::source::Span, data::value::Value, pl::ast},
     runner::{Extern, Interface, Interpreter, RunnerContext},
 };
 
+/// Configures the PL interpreter.
 pub struct Config {
+    /// Memoize pure calls.
     pub(crate) cache: bool,
+    /// Evaluate every alternative and reject multiple conclusions.
     pub(crate) det: bool,
+    /// Check argument and result types at call boundaries.
     pub(crate) guard: bool,
 }
 
@@ -25,6 +32,7 @@ impl Config {
     }
 }
 
+/// Stores interpreter configuration and the call cache.
 pub struct PlInterp {
     pub(crate) config: Config,
     pub(crate) cache: Cache,
@@ -33,29 +41,6 @@ pub struct PlInterp {
 impl PlInterp {
     pub fn new(config: Config) -> Self {
         Self { config, cache: Cache::default() }
-    }
-}
-
-impl<Iface: Interface, Ext: Extern> Invoker<Iface, Ext> for PlInterp {
-    type Context<'global> = context::Context<'global>;
-
-    fn invoke_func<'global>(
-        runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
-        ctx: &Self::Context<'global>,
-        id: &exec::Id,
-        targs: &[exec::Typ],
-        values: &[Value],
-    ) -> Backtrack<Value> {
-        eval::invoke_func(runner_ctx, ctx, id, targs, values)
-    }
-
-    fn invoke_rel<'global>(
-        runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
-        ctx: &Self::Context<'global>,
-        id: &exec::Id,
-        values: &[Value],
-    ) -> Backtrack<Vec<Value>> {
-        eval::invoke_rel(runner_ctx, ctx, id, values)
     }
 }
 
@@ -83,11 +68,13 @@ impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for PlInterp {
         name: &str,
         values: &[Value],
     ) -> Result<Vec<Value>, Error> {
+        // Public entries start from a fresh cache
         runner_ctx.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = context::Context::new(runner_ctx.spec());
-        if runner_ctx.interp().config.guard && !eval::cache_rel(runner_ctx, &ctx, &id) {
-            eval::check_rel_inputs(runner_ctx.arena(), &ctx, &id, values).finish()?;
+        // Guard inputs unless the call is eligible for memoization
+        if runner_ctx.interp().config.guard && !eval::call::cache_rel(runner_ctx, &ctx, &id) {
+            eval::call::check_rel_inputs(runner_ctx.arena(), &ctx, &id, values).finish()?;
         }
         Self::invoke_rel(runner_ctx, &ctx, &id, values).finish()
     }
@@ -98,11 +85,15 @@ impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for PlInterp {
         targs: &[ast::Typ],
         values: &[Value],
     ) -> Result<Value, Error> {
+        // Public entries start from a fresh cache
         runner_ctx.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
         let ctx = context::Context::new(runner_ctx.spec());
-        if runner_ctx.interp().config.guard && !eval::cache_func(runner_ctx, &ctx, &id, values) {
-            eval::check_func_inputs(runner_ctx.arena(), &ctx, &id, targs, values).finish()?;
+        // Guard inputs unless the call is eligible for memoization
+        if runner_ctx.interp().config.guard
+            && !eval::call::cache_func(runner_ctx, &ctx, &id, values)
+        {
+            eval::call::check_func_inputs(runner_ctx.arena(), &ctx, &id, targs, values).finish()?;
         }
         Self::invoke_func(runner_ctx, &ctx, &id, targs, values).finish()
     }

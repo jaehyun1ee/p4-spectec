@@ -305,3 +305,5 @@ def $option(o) = 0
         .to_string();
     assert!(error.contains("o evaluated to an empty option"), "{error}");
 }
+
+mod control;

@@ -6,6 +6,7 @@
 //! when they do not conclude.
 //! Instructions are generic over a `Tier`, the instruction kind it alone has:
 //! `DispatchInstr` selects a rule group, `GroupInstr` runs its body.
+//! `E` and `V` let execution substitute prepared expressions and variable slots.
 
 use crate::lang::{
     common::{
@@ -108,7 +109,7 @@ pub enum ExpKind {
 }
 /// A notation expression: a mixfix skeleton with expressions as arguments.
 pub type NotExp = Mixfix<Exp>;
-pub type ExpIter = sl::ast::ExpIter;
+pub type ExpIter<V = Var> = sl::ast::ExpIter<V>;
 
 // Patterns
 
@@ -134,12 +135,12 @@ pub type TParam = sl::ast::TParam;
 // Parameters
 
 /// A function parameter with its span.
-pub type Param = Phrase<ParamKind>;
+pub type Param<E = Exp> = Phrase<ParamKind<E>>;
 #[derive(Clone, Debug, PartialEq)]
 /// A parameter: a typed pattern, or a function with its own signature.
-pub enum ParamKind {
-    Exp(Typ, Box<Exp>),
-    Def(Id, Vec<TParam>, Vec<Param>, Typ),
+pub enum ParamKind<E = Exp> {
+    Exp(Typ, Box<E>),
+    Def(Id, Vec<TParam>, Vec<Param<E>>, Typ),
 }
 
 // Type arguments
@@ -165,42 +166,42 @@ pub type Dangle = sl::ast::Dangle;
 
 #[derive(Clone, Debug, PartialEq)]
 /// Which branches a hold instruction has: both, or one that may dangle.
-pub enum HoldCase<Tier> {
+pub enum HoldCase<Tier, E = Exp, V = Var> {
     /// The holds branch, then the does-not-hold branch.
-    Both(Block<Tier>, Block<Tier>),
+    Both(Block<Tier, E, V>, Block<Tier, E, V>),
     /// Only the holds branch.
-    Hold(Block<Tier>, Dangle),
+    Hold(Block<Tier, E, V>, Dangle),
     /// Only the does-not-hold branch.
-    NotHold(Block<Tier>, Dangle),
+    NotHold(Block<Tier, E, V>, Dangle),
 }
 
 // Case analysis
 
 #[derive(Clone, Debug, PartialEq)]
 /// One arm of a case analysis: a guard and its block.
-pub struct Case<Tier> {
-    pub guard: Guard,
-    pub block: Block<Tier>,
+pub struct Case<Tier, E = Exp, V = Var> {
+    pub guard: Guard<E>,
+    pub block: Block<Tier, E, V>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// A test on the case scrutinee; the shorthands also bind it.
-pub enum Guard {
+pub enum Guard<E = Exp> {
     /// The scrutinee is this boolean.
     Bool(bool),
     /// The scrutinee compares so with the expression.
-    Cmp(CmpOp, OpTyp, Exp),
+    Cmp(CmpOp, OpTyp, E),
     /// The scrutinee has the type.
     Sub(Typ, Box<Subcheck>),
     /// The scrutinee matches the pattern.
     Match(Pattern),
     /// The scrutinee is an element of the list.
-    Mem(Exp),
+    Mem(E),
     // Shorthands
     /// Let the expression be the scrutinee, which has the type.
-    CheckLetSub(Typ, Box<Subcheck>, Exp),
+    CheckLetSub(Typ, Box<Subcheck>, E),
     /// Let the expression be the scrutinee, which matches the pattern.
-    CheckLetMatch(Pattern, Exp),
+    CheckLetMatch(Pattern, E),
 }
 
 // Instructions
@@ -219,99 +220,99 @@ pub enum Fallthrough {
 }
 
 /// An instruction with its fall-through note, before annotation.
-pub type InstrNode<Tier> = NotePhrase<InstrKind<Tier>, Option<Fallthrough>>;
+pub type InstrNode<Tier, E = Exp, V = Var> = NotePhrase<InstrKind<Tier, E, V>, Option<Fallthrough>>;
 /// An instruction with prose hints.
-pub type Instr<Tier> = annot::Annotated<InstrNode<Tier>>;
+pub type Instr<Tier, E = Exp, V = Var> = annot::Annotated<InstrNode<Tier, E, V>>;
 
 #[derive(Clone, Debug, PartialEq)]
 /// The control flow shared by both tiers, plus the tier's own instruction.
-pub enum InstrKind<Tier> {
+pub enum InstrKind<Tier, E = Exp, V = Var> {
     /// Run the block if a condition holds.
-    If(IfInstr<Tier>),
+    If(IfInstr<Tier, E, V>),
     /// Run a branch by whether a relation applies.
-    Hold(HoldInstr<Tier>),
+    Hold(HoldInstr<Tier, E, V>),
     /// Run the first arm whose guard accepts.
-    Case(CaseInstr<Tier>),
+    Case(CaseInstr<Tier, E, V>),
     /// Bind a pattern.
-    Let(LetInstr),
+    Let(LetInstr<E, V>),
     /// Print an expression.
-    Debug(DebugInstr),
+    Debug(DebugInstr<E>),
     /// Shorthand: bind several fields of one value at once.
-    Destruct(DestructInstr),
+    Destruct(DestructInstr<E>),
     /// Shorthand: bind after a subtype check, then run the block.
-    CheckLetSub(CheckLetSubInstr<Tier>),
+    CheckLetSub(CheckLetSubInstr<Tier, E, V>),
     /// Shorthand: bind after a pattern match, then run the block.
-    CheckLetMatch(CheckLetMatchInstr<Tier>),
+    CheckLetMatch(CheckLetMatchInstr<Tier, E, V>),
     /// Shorthand: bind the content of a present option, then run the block.
-    OptionGet(OptionGetInstr<Tier>),
+    OptionGet(OptionGetInstr<Tier, E, V>),
     /// The tier's own instruction.
     Tier(TierInstr<Tier>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// Run the block when the condition holds under its iterations.
-pub struct IfInstr<Tier> {
-    pub exp: Exp,
-    pub iter_exps: Vec<ExpIter>,
-    pub block: Block<Tier>,
+pub struct IfInstr<Tier, E = Exp, V = Var> {
+    pub exp: E,
+    pub iter_exps: Vec<ExpIter<V>>,
+    pub block: Block<Tier, E, V>,
     pub dangle: Dangle,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// Run a branch by whether the relation applies under its iterations.
-pub struct HoldInstr<Tier> {
+pub struct HoldInstr<Tier, E = Exp, V = Var> {
     pub id: Id,
-    pub not_exp: NotExp,
-    pub iter_exps: Vec<ExpIter>,
-    pub hold_case: HoldCase<Tier>,
+    pub not_exp: Mixfix<E>,
+    pub iter_exps: Vec<ExpIter<V>>,
+    pub hold_case: HoldCase<Tier, E, V>,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// Case analysis on an expression.
-pub struct CaseInstr<Tier> {
-    pub exp: Exp,
-    pub cases: Vec<Case<Tier>>,
+pub struct CaseInstr<Tier, E = Exp, V = Var> {
+    pub exp: E,
+    pub cases: Vec<Case<Tier, E, V>>,
     pub dangle: Dangle,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// Bind `exp_l` to `exp_r` under the iterations.
-pub struct LetInstr {
-    pub exp_l: Exp,
-    pub exp_r: Exp,
-    pub iter_instrs: Vec<InstrIter>,
+pub struct LetInstr<E = Exp, V = Var> {
+    pub exp_l: E,
+    pub exp_r: E,
+    pub iter_instrs: Vec<InstrIter<V>>,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// Print the expression.
-pub struct DebugInstr {
-    pub exp: Exp,
+pub struct DebugInstr<E = Exp> {
+    pub exp: E,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// Bind each field expression, named when shown, from `exp`.
-pub struct DestructInstr {
-    pub bindings: Vec<(Option<String>, Exp)>,
-    pub exp: Exp,
+pub struct DestructInstr<E = Exp> {
+    pub bindings: Vec<(Option<String>, E)>,
+    pub exp: E,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// Bind `exp_l` to `exp_r` once it passes the subtype check, then the block.
-pub struct CheckLetSubInstr<Tier> {
+pub struct CheckLetSubInstr<Tier, E = Exp, V = Var> {
     pub typ: Typ,
     pub subcheck: Box<Subcheck>,
-    pub exp_l: Exp,
-    pub exp_r: Exp,
-    pub block: Block<Tier>,
+    pub exp_l: E,
+    pub exp_r: E,
+    pub block: Block<Tier, E, V>,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// Bind `exp_l` to `exp_r` once it matches the pattern, then run the block.
-pub struct CheckLetMatchInstr<Tier> {
+pub struct CheckLetMatchInstr<Tier, E = Exp, V = Var> {
     pub pattern: Pattern,
-    pub exp_l: Exp,
-    pub exp_r: Exp,
-    pub block: Block<Tier>,
+    pub exp_l: E,
+    pub exp_r: E,
+    pub block: Block<Tier, E, V>,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// Bind `exp_l` to the content of the option `exp_r`, then run the block.
-pub struct OptionGetInstr<Tier> {
-    pub exp_l: Exp,
-    pub exp_r: Exp,
-    pub block: Block<Tier>,
+pub struct OptionGetInstr<Tier, E = Exp, V = Var> {
+    pub exp_l: E,
+    pub exp_r: E,
+    pub block: Block<Tier, E, V>,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// The tier-specific instruction.
@@ -320,8 +321,8 @@ pub struct TierInstr<Tier> {
 }
 
 /// Instructions run in order.
-pub type Block<Tier> = Vec<Instr<Tier>>;
-pub type InstrIter = sl::ast::InstrIter;
+pub type Block<Tier, E = Exp, V = Var> = Vec<Instr<Tier, E, V>>;
+pub type InstrIter<V = Var> = sl::ast::InstrIter<V>;
 
 // Relations
 
@@ -331,74 +332,74 @@ pub type RelSignature = sl::ast::RelSignature;
 
 #[derive(Clone, Debug, PartialEq)]
 /// Instructions of a rule group's body.
-pub enum GroupInstr {
+pub enum GroupInstr<E = Exp, V = Var> {
     /// Conclude the relation with outputs.
-    Result(ResultInstr),
+    Result(ResultInstr<E>),
     /// Conclude the function with a value.
-    Return(ReturnInstr),
+    Return(ReturnInstr<E>),
     /// Call a relation and bind its outputs.
-    Rule(RuleInstr),
+    Rule(RuleInstr<E, V>),
     /// Try the arms in order until one concludes.
-    Backtrack(BacktrackInstr),
+    Backtrack(BacktrackInstr<E, V>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// The relation's outputs.
-pub struct ResultInstr {
+pub struct ResultInstr<E = Exp> {
     pub rel_signature: RelSignature,
-    pub exps_output: Vec<Exp>,
+    pub exps_output: Vec<E>,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// The function's result.
-pub struct ReturnInstr {
-    pub exp: Exp,
+pub struct ReturnInstr<E = Exp> {
+    pub exp: E,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// A relation call under its iterations; the hint marks the input arguments.
-pub struct RuleInstr {
+pub struct RuleInstr<E = Exp, V = Var> {
     pub id: Id,
-    pub not_exp: NotExp,
+    pub not_exp: Mixfix<E>,
     pub input_hint: crate::lang::hints::input::InputHint,
-    pub iter_instrs: Vec<InstrIter>,
+    pub iter_instrs: Vec<InstrIter<V>>,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// Alternative blocks; the first that concludes wins.
-pub struct BacktrackInstr {
-    pub blocks: Vec<GroupBlock>,
+pub struct BacktrackInstr<E = Exp, V = Var> {
+    pub blocks: Vec<GroupBlock<E, V>>,
 }
 
 /// A block of the group-body tier.
-pub type GroupBlock = Block<GroupInstr>;
+pub type GroupBlock<E = Exp, V = Var> = Block<GroupInstr<E, V>, E, V>;
 
 // Dispatch tier
 
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 /// Instructions of a relation's dispatch: which group runs.
-pub enum DispatchInstr {
+pub enum DispatchInstr<E = Exp, V = Var> {
     /// Match the inputs against a rule group and run its body.
-    Group(RuleGroupInstr),
+    Group(RuleGroupInstr<E, V>),
     /// Try alternative dispatch blocks in order.
-    Route(RouteInstr),
+    Route(RouteInstr<E, V>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// One rule group: its relation, name, input patterns, and body.
-pub struct RuleGroupInstr {
+pub struct RuleGroupInstr<E = Exp, V = Var> {
     pub id_rel: Id,
     pub id_group: Id,
     pub rel_signature: RelSignature,
-    pub exps_input: Vec<Exp>,
-    pub block: GroupBlock,
+    pub exps_input: Vec<E>,
+    pub block: GroupBlock<E, V>,
 }
 #[derive(Clone, Debug, PartialEq)]
 /// Alternative dispatch blocks; the first that concludes wins.
-pub struct RouteInstr {
-    pub blocks: Vec<DispatchBlock>,
+pub struct RouteInstr<E = Exp, V = Var> {
+    pub blocks: Vec<DispatchBlock<E, V>>,
 }
 
 /// A block of the dispatch tier.
-pub type DispatchBlock = Block<DispatchInstr>;
+pub type DispatchBlock<E = Exp, V = Var> = Block<DispatchInstr<E, V>, E, V>;
 
 // Type definitions
 
@@ -438,109 +439,109 @@ pub struct VarDef {
 
 #[derive(Clone, Debug, PartialEq)]
 /// A relation definition: extern or defined.
-pub enum RelDef {
+pub enum RelDef<E = Exp, V = Var> {
     /// `extern relation id : not_typ hint(input %int*) hint*`
-    Extern(ExternRel),
+    Extern(ExternRel<E>),
     /// `relation id : not_typ hint(input %int*) rulegroup* hint*`
-    Defined(DefinedRel),
+    Defined(DefinedRel<E, V>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// A relation provided by the host.
-pub struct ExternRel {
+pub struct ExternRel<E = Exp> {
     pub id: Id,
     pub rel_signature: RelSignature,
-    pub exps_input: Vec<Exp>,
+    pub exps_input: Vec<E>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// A relation as a dispatch block with an optional otherwise block.
-pub struct DefinedRel {
+pub struct DefinedRel<E = Exp, V = Var> {
     pub id: Id,
     pub rel_signature: RelSignature,
-    pub exps_input: Vec<Exp>,
-    pub block: DispatchBlock,
-    pub block_else_opt: Option<DispatchBlock>,
+    pub exps_input: Vec<E>,
+    pub block: DispatchBlock<E, V>,
+    pub block_else_opt: Option<DispatchBlock<E, V>>,
 }
 
 // Meta-functions
 
 #[derive(Clone, Debug, PartialEq)]
 /// A function definition: extern, builtin, table, or defined.
-pub enum MetaFuncDef {
+pub enum MetaFuncDef<E = Exp, V = Var> {
     /// `extern dec id <` list(tparam, `,`) `> list(param, `,`) : typ hint*`
-    Extern(ExternFunc),
+    Extern(ExternFunc<E>),
     /// `builtin dec id <` list(tparam, `,`) `> list(param, `,`) : typ hint*`
-    Builtin(BuiltinFunc),
+    Builtin(BuiltinFunc<E>),
     /// `table dec id list(param, `,`) : typ hint*`
-    Table(TableFunc),
+    Table(TableFunc<E, V>),
     /// `dec id <` list(tparam, `,`) `> list(param, `,`) : typ clause* hint*`
-    Defined(DefinedFunc),
+    Defined(DefinedFunc<E, V>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// A function provided by the host.
-pub struct ExternFunc {
+pub struct ExternFunc<E = Exp> {
     pub id: Id,
     pub tparams: Vec<TParam>,
-    pub params: Vec<Param>,
+    pub params: Vec<Param<E>>,
     pub typ: Typ,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// A function provided by the interpreter.
-pub struct BuiltinFunc {
+pub struct BuiltinFunc<E = Exp> {
     pub id: Id,
     pub tparams: Vec<TParam>,
-    pub params: Vec<Param>,
+    pub params: Vec<Param<E>>,
     pub typ: Typ,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// One row: input patterns, the matched expression, and a group-body block.
-pub struct TableRow {
-    pub exps_input: Vec<Exp>,
-    pub exp: Exp,
-    pub block: GroupBlock,
+pub struct TableRow<E = Exp, V = Var> {
+    pub exps_input: Vec<E>,
+    pub exp: E,
+    pub block: GroupBlock<E, V>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// A function defined by table rows.
-pub struct TableFunc {
+pub struct TableFunc<E = Exp, V = Var> {
     pub id: Id,
-    pub params: Vec<Param>,
+    pub params: Vec<Param<E>>,
     pub typ: Typ,
-    pub rows: Vec<TableRow>,
+    pub rows: Vec<TableRow<E, V>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 /// A function as a group-body block with an optional otherwise block.
-pub struct DefinedFunc {
+pub struct DefinedFunc<E = Exp, V = Var> {
     pub id: Id,
     pub tparams: Vec<TParam>,
-    pub params: Vec<Param>,
+    pub params: Vec<Param<E>>,
     pub typ: Typ,
-    pub block: GroupBlock,
-    pub block_else_opt: Option<GroupBlock>,
+    pub block: GroupBlock<E, V>,
+    pub block_else_opt: Option<GroupBlock<E, V>>,
 }
 
 // Definitions
 
 /// A definition before annotation.
-pub type DefNode = Phrase<DefKind>;
+pub type DefNode<E = Exp, V = Var> = Phrase<DefKind<E, V>>;
 /// A definition with prose hints.
-pub type Def = annot::Annotated<DefNode>;
+pub type Def<E = Exp, V = Var> = annot::Annotated<DefNode<E, V>>;
 
 #[derive(Clone, Debug, PartialEq)]
 /// The forms of a definition.
-pub enum DefKind {
+pub enum DefKind<E = Exp, V = Var> {
     Typ(TypDef),
     Var(VarDef),
-    Rel(RelDef),
-    MetaFunc(MetaFuncDef),
+    Rel(RelDef<E, V>),
+    MetaFunc(MetaFuncDef<E, V>),
 }
 
-// Spec
+// Spec<E, V>
 
 /// A whole specification: its definitions in source order.
-pub type Spec = Vec<Def>;
+pub type Spec<E = Exp, V = Var> = Vec<Def<E, V>>;
