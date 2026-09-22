@@ -37,18 +37,22 @@ pub enum Suite {
 fn run_suite(
     name_suite: &str,
     cases: &[&str],
-    run_case: fn(&str) -> Result<Box<Report>>,
+    run_case: fn(&str) -> Result<Vec<Report>>,
 ) -> Result<()> {
     let progress = ProgressBar::new(cases.len() as u64);
     let mut text = String::new();
 
-    // Execute each input and validate its semantic report before rendering
+    // Render each input's diagnostics in emission order
     for name in cases {
-        let report = run_case(name)?;
-        let rendered = Renderer::new(RenderConfig::default())
-            .render_to_string(&report)
-            .map_err(|error| failure(name, error))?;
-        text.push_str(&format!("=== {name} ===\n{rendered}---\n"));
+        let reports = run_case(name)?;
+        text.push_str(&format!("=== {name} ===\n"));
+        for report in reports {
+            let rendered = Renderer::new(RenderConfig::default())
+                .render_to_string(&report)
+                .map_err(|error| failure(name, error))?;
+            text.push_str(&rendered);
+        }
+        text.push_str("---\n");
         progress.inc(1);
     }
     progress.finish_and_clear();
@@ -69,13 +73,18 @@ pub fn run(suite: Option<Suite>) -> Result<()> {
 
     // Absence selects every active suite in stage order
     match suite {
-        Some(Suite::Parse) => run_suite("parse", cases::PARSE, parse::run),
+        Some(Suite::Parse) => run_parse(),
         Some(Suite::Elab) => run_elab(),
         None => {
-            run_suite("parse", cases::PARSE, parse::run)?;
+            run_parse()?;
             run_elab()
         }
     }
+}
+
+/// Adapts parser failures to the shared diagnostic sequence.
+fn run_parse() -> Result<()> {
+    run_suite("parse", cases::PARSE, |name| parse::run(name).map(|report| vec![*report]))
 }
 
 /// Runs declaration acceptance and reports later-unit inventory separately.
