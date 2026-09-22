@@ -194,6 +194,77 @@ fn dispatch_alternatives_keep_their_bindings_local() {
 }
 
 #[test]
+fn nested_instruction_traces_are_attached_once_in_both_tiers() {
+    use p4spec_rust::{
+        interp::shared::error::{Error, ErrorKind, TraceErrorKind},
+        lang::common::source::Position,
+    };
+
+    // Collect instruction locations separately from expression and call traces
+    fn instruction_spans(error: &Error, spans: &mut Vec<Span>) {
+        if matches!(&*error.kind, ErrorKind::Trace(TraceErrorKind::Evaluation { .. }))
+            && error.span.left.file.as_ref() == "instruction_trace"
+        {
+            spans.push(error.span.clone());
+        }
+        for error in &error.children {
+            instruction_spans(error, spans);
+        }
+    }
+
+    let spans = (1..=4)
+        .map(|line| {
+            Span::new(
+                Position::new("instruction_trace", line, 1),
+                Position::new("instruction_trace", line, 2),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut spec_pl =
+        spec("var n : nat\nrelation Entry: nat ~> nat\n  hint(input %0)\nrule Entry: n ~> 0");
+    let rel = spec_pl
+        .iter_mut()
+        .find_map(|def| match &mut def.node.node {
+            ast::DefKind::Rel(ast::RelDef::Defined(rel)) => Some(rel),
+            _ => None,
+        })
+        .unwrap();
+    // A dispatch condition enters a group whose condition reaches a fatal result
+    let mut instr_result = instr(ast::InstrKind::Tier(ast::TierInstr {
+        tier: ast::GroupInstr::Result(ast::ResultInstr {
+            rel_signature: rel.rel_signature.clone(),
+            exps_output: vec![variable("missing")],
+        }),
+    }));
+    instr_result.node.span = spans[3].clone();
+    let mut instr_condition = condition(true, vec![instr_result]);
+    instr_condition.node.span = spans[2].clone();
+    let mut instr_group = instr(ast::InstrKind::Tier(ast::TierInstr {
+        tier: ast::DispatchInstr::Group(ast::RuleGroupInstr {
+            id_rel: rel.id.clone(),
+            id_group: rel.id.clone(),
+            rel_signature: rel.rel_signature.clone(),
+            exps_input: vec![variable("n")],
+            block: vec![instr_condition],
+        }),
+    }));
+    instr_group.node.span = spans[1].clone();
+    let mut instr_dispatch = condition(true, vec![instr_group]);
+    instr_dispatch.node.span = spans[0].clone();
+    rel.block = vec![instr_dispatch];
+    // Each instruction contributes one trace in enclosing-to-enclosed order
+    for det in [false, true] {
+        let mut runner = configured(spec_pl.clone(), det);
+        let value = make::nat(runner.arena_mut(), 0u64.into(), Span::default()).unwrap();
+        let error = runner.context().call_rel("Entry", &[value]).unwrap_err();
+        assert!(error.to_string().contains("value `missing` is undefined"), "{error}");
+        let mut spans_actual = vec![];
+        instruction_spans(&error, &mut spans_actual);
+        assert_eq!(spans_actual, spans, "det={det}");
+    }
+}
+
+#[test]
 fn nested_instructions_execute_on_a_small_stack() {
     std::thread::Builder::new()
         .stack_size(256 * 1024)
