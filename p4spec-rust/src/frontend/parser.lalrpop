@@ -4,7 +4,7 @@
 
 use crate::frontend::{
     ctx::{Context, Location as Loc},
-    error,
+    error::{self, FrontendError},
     lexer::Token,
 };
 use crate::lang::{
@@ -17,7 +17,7 @@ grammar(ctx: &Context);
 
 extern {
     type Location = Loc;
-    type Error = Box<crate::diagnostic::Report>;
+    type Error = FrontendError;
 
     enum Token {
         "TAG_UPID" => Token::TagUpperId(<String>),

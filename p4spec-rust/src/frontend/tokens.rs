@@ -3,7 +3,7 @@
 //! `parser_tokens` wraps a lexer iterator in [`ParserTokens`].
 //! Each `ParserTokens::next` call
 //! converts source positions to [`Location`] handles
-//! and forwards lexical failures as [`Report`].
+//! and forwards lexical failures as [`FrontendError`].
 //! Outside arithmetic mode it relabels `Star` as `IterStar`
 //! for postfix iteration.
 //!
@@ -22,12 +22,11 @@
 //! arithmetic mode: Star -> Star
 //! ```
 
-use crate::diagnostic::Report;
-
 use crate::lang::common::source::{Phrase, Position};
 
 use super::{
     ctx::{Context, Location},
+    error::{FrontendError, LexError},
     lexer::Token,
 };
 
@@ -124,9 +123,9 @@ fn ends_sequence(token: &Token) -> bool {
 
 impl<I> Iterator for ParserTokens<'_, I>
 where
-    I: Iterator<Item = Result<Phrase<Token>, Box<Report>>>,
+    I: Iterator<Item = Result<Phrase<Token>, LexError>>,
 {
-    type Item = Result<(Location, Token, Location), Box<Report>>;
+    type Item = Result<(Location, Token, Location), FrontendError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // A held-back lexeme comes before the next one from the lexer

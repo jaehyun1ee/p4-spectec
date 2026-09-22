@@ -54,8 +54,7 @@ use crate::lang::{
     common::source::{Phrase, Position, Span},
 };
 
-use super::error;
-use crate::diagnostic::Report;
+use super::error::{self, LexError};
 
 /// A token consumed by the SpecTec grammar.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -374,7 +373,7 @@ where
     // - Token state
 
     /// Scans the next lexeme, skipping whitespace and comments.
-    fn scan_token(&mut self) -> Result<Phrase<Token>, Box<Report>> {
+    fn scan_token(&mut self) -> Result<Phrase<Token>, LexError> {
         loop {
             let start = self.cursor;
             if self.cursor_is_eof() {
@@ -467,7 +466,7 @@ where
     // - Newline states
 
     /// After one newline: a `| ` bar, a second newline, or nothing.
-    fn scan_after_newline(&mut self) -> Result<Option<Phrase<Token>>, Box<Report>> {
+    fn scan_after_newline(&mut self) -> Result<Option<Phrase<Token>>, LexError> {
         if let Some(lexeme) = self.scan_newline_bar() {
             return Ok(Some(lexeme));
         }
@@ -485,7 +484,7 @@ where
 
     /// After a blank line: a bar, a third newline, or `Newline2`;
     /// comment lines do not count.
-    fn scan_after_two_newlines(&mut self) -> Result<Phrase<Token>, Box<Report>> {
+    fn scan_after_two_newlines(&mut self) -> Result<Phrase<Token>, LexError> {
         loop {
             if let Some(lexeme) = self.scan_newline_bar() {
                 return Ok(lexeme);
@@ -541,7 +540,7 @@ where
     // - Comment state
 
     /// Skips a `(; ;)` block comment, which nests.
-    fn scan_comment(&mut self, start: Cursor) -> Result<(), Box<Report>> {
+    fn scan_comment(&mut self, start: Cursor) -> Result<(), LexError> {
         self.in_block_comment = true;
         let mut starts = vec![start];
         while !starts.is_empty() {
@@ -582,7 +581,7 @@ where
     // - Token-state layout rules
 
     /// Skips a `;;` comment and handles the newline after it as layout.
-    fn scan_line_comment(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, Box<Report>> {
+    fn scan_line_comment(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, LexError> {
         self.advance_to_line_end();
         if self.cursor_is_eof() {
             return Ok(Some(self.lexeme(Token::Eof, start)));
@@ -744,7 +743,7 @@ where
     // - Token-state numbered holes
 
     /// `%N` with a decimal index; too large an index is an error.
-    fn scan_numbered_hole(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, Box<Report>> {
+    fn scan_numbered_hole(&mut self, start: Cursor) -> Result<Option<Phrase<Token>>, LexError> {
         // A percent followed by a digit
         if self.cursor_current() != Some(b'%')
             || !Self::is_digit(
@@ -921,7 +920,7 @@ where
     // - Token-state operator rule
 
     /// A `'...'` quoted operator; it must close on the same line.
-    fn scan_operator(&mut self, start: Cursor) -> Result<Phrase<Token>, Box<Report>> {
+    fn scan_operator(&mut self, start: Cursor) -> Result<Phrase<Token>, LexError> {
         // Everything up to the closing quote is the operator
         let content_start = self.cursor.offset + 1;
         let mut end = content_start;
@@ -945,7 +944,7 @@ where
     // - Text state
 
     /// A `"..."` text literal, decoding escapes into UTF-8 bytes.
-    fn scan_text(&mut self, start: Cursor) -> Result<Phrase<Token>, Box<Report>> {
+    fn scan_text(&mut self, start: Cursor) -> Result<Phrase<Token>, LexError> {
         self.advance_add(1);
         let mut bytes = Vec::new();
         loop {
@@ -994,7 +993,7 @@ where
     }
 
     /// One escape: a `\n` byte, a `\XX` hex byte, or a `\u{...}` code point.
-    fn scan_escape(&mut self, start: Cursor, bytes: &mut Vec<u8>) -> Result<(), Box<Report>> {
+    fn scan_escape(&mut self, start: Cursor, bytes: &mut Vec<u8>) -> Result<(), LexError> {
         let escape_start = self.cursor.offset;
         // A trailing backslash is a malformed literal
         let Some(escape) = self.cursor_offset(escape_start + 1) else {
@@ -1079,7 +1078,7 @@ where
     // - Errors
 
     /// Classifies a byte no rule accepted and steps over it.
-    fn unrecognized_character(&mut self, start: Cursor) -> Box<Report> {
+    fn unrecognized_character(&mut self, start: Cursor) -> LexError {
         // The UTF-8 source and cursor movement guarantee a scalar boundary
         let character = self.source[self.cursor.offset..]
             .chars()
@@ -1094,7 +1093,7 @@ impl<Classify> Iterator for Lexer<'_, Classify>
 where
     Classify: FnMut(&str) -> bool,
 {
-    type Item = Result<Phrase<Token>, Box<Report>>;
+    type Item = Result<Phrase<Token>, LexError>;
 
     // - Iteration
 

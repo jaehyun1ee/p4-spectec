@@ -8,7 +8,13 @@ use crate::lang::common::source::Span;
 
 use super::tokens::describe_expected;
 
-fn make_report(code: &str, message: String, labels: Vec<Label>) -> Box<Report> {
+/// Names a structured frontend failure without adding a wrapper.
+pub type FrontendError = Box<Report>;
+
+/// Names a lexical failure with the same representation as frontend failures.
+pub type LexError = FrontendError;
+
+fn make_report(code: &str, message: String, labels: Vec<Label>) -> FrontendError {
     Box::new(Report {
         severity: Severity::Error,
         code: Some(code.to_owned()),
@@ -23,7 +29,7 @@ fn make_report(code: &str, message: String, labels: Vec<Label>) -> Box<Report> {
 const TEXT_LITERAL_INCOMPLETE: &str = "parse/text-literal-incomplete";
 
 /// Reports an unclosed text literal.
-pub(crate) fn text_literal_incomplete(span: Span) -> Box<Report> {
+pub(crate) fn text_literal_incomplete(span: Span) -> LexError {
     make_report(
         TEXT_LITERAL_INCOMPLETE,
         "unclosed text literal".to_owned(),
@@ -38,7 +44,7 @@ pub(crate) fn text_literal_incomplete(span: Span) -> Box<Report> {
 const TEXT_CHARACTER_INVALID: &str = "parse/text-character-invalid";
 
 /// Reports a forbidden control character in a text literal.
-pub(crate) fn text_character_invalid(span: Span, character: char) -> Box<Report> {
+pub(crate) fn text_character_invalid(span: Span, character: char) -> LexError {
     let mut report = make_report(
         TEXT_CHARACTER_INVALID,
         format!("{} is not allowed literally in a text literal", describe_character(character)),
@@ -58,7 +64,7 @@ pub(crate) fn text_character_invalid(span: Span, character: char) -> Box<Report>
 const TEXT_ESCAPE_INVALID: &str = "parse/text-escape-invalid";
 
 /// Reports a forbidden text escape.
-pub(crate) fn text_escape_invalid(span: Span, escape: &str) -> Box<Report> {
+pub(crate) fn text_escape_invalid(span: Span, escape: &str) -> LexError {
     let mut report = make_report(
         TEXT_ESCAPE_INVALID,
         format!("escape `\\{}` is not allowed in a text literal", escape[1..].escape_debug()),
@@ -71,7 +77,7 @@ pub(crate) fn text_escape_invalid(span: Span, escape: &str) -> Box<Report> {
 const TEXT_ENCODING_INVALID: &str = "parse/text-encoding-invalid";
 
 /// Reports decoded text bytes that are not valid UTF-8.
-pub(crate) fn text_encoding_invalid(span: Span, error: &std::string::FromUtf8Error) -> Box<Report> {
+pub(crate) fn text_encoding_invalid(span: Span, error: &std::string::FromUtf8Error) -> LexError {
     let error_utf8 = error.utf8_error();
     let mut report = make_report(
         TEXT_ENCODING_INVALID,
@@ -94,7 +100,7 @@ pub(crate) fn text_encoding_invalid(span: Span, error: &std::string::FromUtf8Err
 const TEXT_ESCAPE_CODEPOINT_INVALID: &str = "parse/text-escape-codepoint-invalid";
 
 /// Reports a text escape that does not encode a Unicode scalar value.
-pub(crate) fn text_escape_codepoint_invalid(span: Span, digits: &str) -> Box<Report> {
+pub(crate) fn text_escape_codepoint_invalid(span: Span, digits: &str) -> LexError {
     // Surrogates fit in u32; larger values and overflow exceed Unicode's maximum
     let message = match u32::from_str_radix(digits, 16) {
         Ok(0xD800..=0xDFFF) => {
@@ -118,7 +124,7 @@ pub(crate) fn text_escape_codepoint_invalid(span: Span, digits: &str) -> Box<Rep
 const HOLE_INDEX_OUT_OF_BOUNDS: &str = "parse/hole-index-out-of-bounds";
 
 /// Reports a numbered hole outside the supported index range.
-pub(crate) fn hole_index_out_of_bounds(span: Span) -> Box<Report> {
+pub(crate) fn hole_index_out_of_bounds(span: Span) -> LexError {
     let mut report = make_report(
         HOLE_INDEX_OUT_OF_BOUNDS,
         "numbered hole is out of range".to_owned(),
@@ -137,7 +143,7 @@ pub(crate) fn hole_index_out_of_bounds(span: Span) -> Box<Report> {
 const BLOCK_COMMENT_INCOMPLETE: &str = "parse/block-comment-incomplete";
 
 /// Reports an unclosed block comment.
-pub(crate) fn block_comment_incomplete(span: Span, spans_open: Vec<Span>) -> Box<Report> {
+pub(crate) fn block_comment_incomplete(span: Span, spans_open: Vec<Span>) -> LexError {
     let mut report = make_report(
         BLOCK_COMMENT_INCOMPLETE,
         "unclosed comment".to_owned(),
@@ -161,7 +167,7 @@ pub(crate) fn block_comment_incomplete(span: Span, spans_open: Vec<Span>) -> Box
 const CHARACTER_INVALID: &str = "parse/character-invalid";
 
 /// Reports a character outside the token alphabet.
-pub(crate) fn character_invalid(span: Span, character: char) -> Box<Report> {
+pub(crate) fn character_invalid(span: Span, character: char) -> LexError {
     make_report(
         CHARACTER_INVALID,
         format!("{} is not allowed here", describe_character(character)),
@@ -172,7 +178,11 @@ pub(crate) fn character_invalid(span: Span, character: char) -> Box<Report> {
 const TOKEN_INVALID: &str = "parse/token-invalid";
 
 /// Reports an unexpected token.
-pub(crate) fn token_invalid(span: Span, actual: Option<&str>, expected: &[String]) -> Box<Report> {
+pub(crate) fn token_invalid(
+    span: Span,
+    actual: Option<&str>,
+    expected: &[String],
+) -> FrontendError {
     make_report(
         TOKEN_INVALID,
         actual
@@ -188,7 +198,7 @@ pub(crate) fn token_invalid(span: Span, actual: Option<&str>, expected: &[String
 const INPUT_INCOMPLETE: &str = "parse/input-incomplete";
 
 /// Reports an unexpected end of input with the grammar's expected alternatives.
-pub(crate) fn input_incomplete(span: Span, expected: &[String]) -> Box<Report> {
+pub(crate) fn input_incomplete(span: Span, expected: &[String]) -> FrontendError {
     make_report(
         INPUT_INCOMPLETE,
         "unexpected end of input".to_owned(),
@@ -204,7 +214,7 @@ pub(crate) fn input_incomplete(span: Span, expected: &[String]) -> Box<Report> {
 const RELATION_SIGNATURE_INVALID: &str = "parse/relation-signature-invalid";
 
 /// Reports a plain type used as a relation signature.
-pub(crate) fn relation_signature_invalid(span: Span) -> Box<Report> {
+pub(crate) fn relation_signature_invalid(span: Span) -> FrontendError {
     let mut report = make_report(
         RELATION_SIGNATURE_INVALID,
         "relation signature must be a notation type".to_owned(),
@@ -221,7 +231,7 @@ pub(crate) fn relation_signature_invalid(span: Span) -> Box<Report> {
 const STRUCT_FIELD_MISSING: &str = "parse/struct-field-missing";
 
 /// Reports a struct type without fields.
-pub(crate) fn struct_field_missing(span: Span) -> Box<Report> {
+pub(crate) fn struct_field_missing(span: Span) -> FrontendError {
     make_report(
         STRUCT_FIELD_MISSING,
         "empty struct type".to_owned(),
@@ -236,7 +246,7 @@ pub(crate) fn struct_field_missing(span: Span) -> Box<Report> {
 const VARIANT_CASE_MISSING: &str = "parse/variant-case-missing";
 
 /// Reports a variant type without cases.
-pub(crate) fn variant_case_missing(span: Span) -> Box<Report> {
+pub(crate) fn variant_case_missing(span: Span) -> FrontendError {
     make_report(
         VARIANT_CASE_MISSING,
         "empty variant type".to_owned(),
@@ -251,7 +261,7 @@ pub(crate) fn variant_case_missing(span: Span) -> Box<Report> {
 const SYNTAX_BODY_MISSING: &str = "parse/syntax-body-missing";
 
 /// Reports a syntax definition without a body.
-pub(crate) fn syntax_body_missing(span: Span) -> Box<Report> {
+pub(crate) fn syntax_body_missing(span: Span) -> FrontendError {
     make_report(
         SYNTAX_BODY_MISSING,
         "syntax definition has no body".to_owned(),
@@ -266,7 +276,7 @@ pub(crate) fn syntax_body_missing(span: Span) -> Box<Report> {
 const PLAIN_TYPE_HINT_UNSUPPORTED: &str = "parse/plain-type-hint-unsupported";
 
 /// Reports hints attached to a plain type definition.
-pub(crate) fn plain_type_hint_unsupported(span: Span) -> Box<Report> {
+pub(crate) fn plain_type_hint_unsupported(span: Span) -> FrontendError {
     let mut report = make_report(
         PLAIN_TYPE_HINT_UNSUPPORTED,
         "hints are not allowed on a plain type definition".to_owned(),
@@ -283,7 +293,7 @@ pub(crate) fn plain_type_hint_unsupported(span: Span) -> Box<Report> {
 const SYNTAX_IDENTIFIER_MISSING: &str = "parse/syntax-identifier-missing";
 
 /// Reports a syntax declaration without identifiers.
-pub(crate) fn syntax_identifier_missing(span: Span) -> Box<Report> {
+pub(crate) fn syntax_identifier_missing(span: Span) -> FrontendError {
     make_report(
         SYNTAX_IDENTIFIER_MISSING,
         "empty syntax declaration".to_owned(),
@@ -302,7 +312,7 @@ pub(crate) fn source_encoding_invalid(
     span: Span,
     bytes: &[u8],
     error: &std::str::Utf8Error,
-) -> Box<Report> {
+) -> FrontendError {
     make_report(
         SOURCE_ENCODING_INVALID,
         "source is not valid UTF-8".to_owned(),
@@ -321,7 +331,7 @@ pub(crate) fn comment_encoding_invalid(
     span: Span,
     bytes: &[u8],
     error: &std::str::Utf8Error,
-) -> Box<Report> {
+) -> FrontendError {
     make_report(
         COMMENT_ENCODING_INVALID,
         "comment is not valid UTF-8".to_owned(),
@@ -338,7 +348,7 @@ const INPUT_PATH_READ_FAILED: &str = "parse/input-path-read-failed";
 const MIXFIX_OPERATOR_INVALID: &str = "parse/mixfix-operator-invalid";
 
 /// Reports an unreadable source file at its file-only position.
-pub(crate) fn file_read_failed(span: Span, error: &std::io::Error) -> Box<Report> {
+pub(crate) fn file_read_failed(span: Span, error: &std::io::Error) -> FrontendError {
     make_report(
         FILE_READ_FAILED,
         format!("cannot read {:?}: {}", span.left.file, describe_io_error(error)),
@@ -354,7 +364,7 @@ pub(crate) fn file_read_failed(span: Span, error: &std::io::Error) -> Box<Report
 pub(crate) fn input_path_read_failed(
     path: &std::path::Path,
     error: &std::io::Error,
-) -> Box<Report> {
+) -> FrontendError {
     make_report(
         INPUT_PATH_READ_FAILED,
         format!("cannot read {:?}: {}", path, describe_io_error(error)),
@@ -363,7 +373,7 @@ pub(crate) fn input_path_read_failed(
 }
 
 /// Reports a malformed runtime mixfix shape without a source location.
-pub(crate) fn mixfix_operator_invalid(source: &str) -> Box<Report> {
+pub(crate) fn mixfix_operator_invalid(source: &str) -> FrontendError {
     let message = if source.is_empty() {
         "mixfix operator must not be empty".to_owned()
     } else {

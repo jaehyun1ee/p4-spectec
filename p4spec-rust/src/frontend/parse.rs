@@ -15,8 +15,6 @@ use std::{
 
 use lalrpop_util::ParseError;
 
-use crate::diagnostic::Report;
-
 use crate::lang::{
     common::{
         notation::{mixfix::Mixfix, mixop::Mixop},
@@ -27,14 +25,14 @@ use crate::lang::{
 
 use super::{
     ctx::{Bindings, Context, Location},
-    error,
+    error::{self, FrontendError},
     lexer::{Lexer, Token},
     parser,
     tokens::parser_tokens,
 };
 
 /// Parses the notation shape syntax used by runtime case constructors.
-pub fn parse_mixop(source: &str) -> Result<Mixop, Box<Report>> {
+pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
     /// Replaces every type in a notation type with an argument hole.
     fn from_typ(typ: &ast::Typ) -> Mixop {
         match typ {
@@ -84,7 +82,7 @@ fn parse_source_with_context(
     name: Rc<str>,
     source: &str,
     ctx: &Context,
-) -> Result<Spec, Box<Report>> {
+) -> Result<Spec, FrontendError> {
     let lexer = Lexer::new(name, source, |id| ctx.find_id(id));
     let tokens = parser_tokens(ctx, lexer);
     let result = parser::SpecParser::new().parse(ctx, tokens);
@@ -95,8 +93,8 @@ fn parse_source_with_context(
 fn parse_error(
     ctx: &Context,
     source: &str,
-    error_parse: ParseError<Location, Token, Box<Report>>,
-) -> Box<Report> {
+    error_parse: ParseError<Location, Token, FrontendError>,
+) -> FrontendError {
     match error_parse {
         ParseError::InvalidToken { location: loc } => {
             error::token_invalid(ctx.span(loc, loc), None, &[])
@@ -147,12 +145,12 @@ fn describe_token(source: &str, span: &Span, token: &Token) -> String {
 }
 
 /// Parses a UTF-8 source string with fresh variable bindings.
-pub fn parse_source(name: Rc<str>, source: &str) -> Result<Spec, Box<Report>> {
+pub fn parse_source(name: Rc<str>, source: &str) -> Result<Spec, FrontendError> {
     parse_source_with_context(name, source, &Context::default())
 }
 
 /// Validates source bytes and parses them with fresh variable bindings.
-pub fn parse_bytes(name: Rc<str>, bytes: &[u8]) -> Result<Spec, Box<Report>> {
+pub fn parse_bytes(name: Rc<str>, bytes: &[u8]) -> Result<Spec, FrontendError> {
     parse_bytes_with_context(name, bytes, &Context::default())
 }
 
@@ -161,7 +159,7 @@ fn parse_bytes_with_context(
     name: Rc<str>,
     bytes: &[u8],
     ctx: &Context,
-) -> Result<Spec, Box<Report>> {
+) -> Result<Spec, FrontendError> {
     let source = str::from_utf8(bytes).map_err(|error_utf8| {
         let span = invalid_utf8_span(Rc::clone(&name), bytes, &error_utf8);
         // Utf8Error guarantees that the prefix before valid_up_to is valid
@@ -180,7 +178,7 @@ fn parse_bytes_with_context(
 }
 
 /// Reads a file and parses its bytes with shared variable bindings.
-fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, Box<Report>> {
+fn parse_file_with_context(path: &Path, ctx: &Context) -> Result<Spec, FrontendError> {
     let name = Rc::<str>::from(path.to_string_lossy().into_owned());
     let pos = Position::new(Rc::clone(&name), 0, 0);
     let span = Span::new(pos.clone(), pos);
@@ -211,7 +209,7 @@ fn invalid_utf8_span(name: Rc<str>, bytes: &[u8], error: &str::Utf8Error) -> Spa
 /// Parses files and directories in order,
 /// recursively expanding `.watsup` files in directories
 /// while excluding nested `include` directories.
-pub fn parse_files<I, P>(paths: I) -> Result<Spec, Box<Report>>
+pub fn parse_files<I, P>(paths: I) -> Result<Spec, FrontendError>
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
@@ -234,7 +232,7 @@ where
 }
 
 /// Adds a file, or the `.watsup` files under a directory, in name order.
-fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), Box<Report>> {
+fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), FrontendError> {
     // Resolve path failures before parsing any collected files
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,

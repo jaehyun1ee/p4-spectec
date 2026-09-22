@@ -3,8 +3,8 @@ use std::{path::PathBuf, process::ExitCode};
 use clap::{Args, Parser, Subcommand};
 
 use p4spec_rust::{
-    diagnostic::{RenderConfig, Renderer, Report},
-    frontend::parse::parse_files,
+    diagnostic::{RenderConfig, Renderer},
+    frontend::{error::FrontendError, parse::parse_files},
     interface::p4::parse::parse_file,
     lang::{al, data::value::external::Encoding, il, sl, traits::print::Print},
     pass::{algo, elaborate, structure},
@@ -85,7 +85,7 @@ fn struct_command(args: StructArgs) -> ExitCode {
 }
 
 /// Renders frontend reports while preserving their structured payloads.
-fn frontend_error(report: Box<Report>) -> ExitCode {
+fn frontend_error(report: FrontendError) -> ExitCode {
     let mut renderer = Renderer::new(RenderConfig::default());
     if let Err(error) = renderer.emit_stderr(&report) {
         eprintln!("{report}\ndiagnostic rendering failed: {error}");
