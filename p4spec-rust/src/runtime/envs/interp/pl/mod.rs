@@ -1,7 +1,7 @@
 //! Definition environments used by PL execution
 //!
 //! Callables contain prepared PL control flow and a frame layout.
-//! The interpreter retains the original annotated specification separately.
+//! Prepared expressions retain their prose annotations until evaluation.
 
 pub mod ast_prepared;
 

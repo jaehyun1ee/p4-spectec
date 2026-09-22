@@ -54,19 +54,16 @@ impl Global {
     /// Loads type definitions and prepares each callable for slot execution.
     pub fn load(spec: source::Spec) -> Result<Self, Error> {
         let mut loaded = Self { tdenv: TDEnv::new(), renv: REnv::new(), fenv: FEnv::new() };
-        // Borrow source definitions while building the execution environments
-        for def in &spec {
-            match &def.node.node {
+        // Move source definitions into the execution environments
+        for def in spec {
+            match def.node.node {
                 source::DefKind::Typ(typdef) => {
                     // Types keep their definition body
                     let (id, typdef) = match typdef {
-                        source::TypDef::Extern(typdef) => (typdef.id.clone(), TypeDef::Extern),
+                        source::TypDef::Extern(typdef) => (typdef.id, TypeDef::Extern),
                         source::TypDef::Defined(typdef) => {
-                            let source::DefinedTyp { id, tparams, def_typ } = typdef.as_ref();
-                            (
-                                id.clone(),
-                                TypeDef::Defined(tparams.clone(), Box::new(def_typ.clone())),
-                            )
+                            let source::DefinedTyp { id, tparams, def_typ } = *typdef;
+                            (id, TypeDef::Defined(tparams, Box::new(def_typ)))
                         }
                     };
                     // Ids are unique per namespace
@@ -79,7 +76,7 @@ impl Global {
                 source::DefKind::Var(_) => {}
                 source::DefKind::Rel(def) => {
                     // Relations are prepared once with their frame layout
-                    let id = match def {
+                    let id = match &def {
                         source::RelDef::Extern(def) => &def.id,
                         source::RelDef::Defined(def) => &def.id,
                     }
@@ -96,7 +93,7 @@ impl Global {
                 }
                 source::DefKind::MetaFunc(def) => {
                     // Function values share their prepared callable through Rc
-                    let id = match def {
+                    let id = match &def {
                         source::MetaFuncDef::Extern(def) => &def.id,
                         source::MetaFuncDef::Builtin(def) => &def.id,
                         source::MetaFuncDef::Table(def) => &def.id,
