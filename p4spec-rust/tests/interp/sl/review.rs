@@ -37,7 +37,7 @@ fn func(name: &str, block: ast::Block) -> ast::Def {
 fn signature() -> ast::RelSignature {
     ast::RelSignature {
         not_typ: phrase!(node: Mixfix::Arg(typ::make::nat()), span: Span::default()),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
     }
 }
 fn rel(name: &str, block: ast::Block) -> ast::Def {
@@ -45,7 +45,7 @@ fn rel(name: &str, block: ast::Block) -> ast::Def {
 }
 fn rel_call(name: &str) -> ast::Instr {
     let instr = phrase!(node: ast::InstrKind::Result(ast::ResultInstr { rel_signature: signature(), exps: vec![] }), span: Span::default());
-    phrase!(node: ast::InstrKind::Rule(ast::RuleInstr { id: id(name), not_exp: Mixfix::Arg(id_exp("n")), input_hint: InputHint::new(vec![0]), iter_instrs: vec![], block: vec![instr] }), span: Span::default())
+    phrase!(node: ast::InstrKind::Rule(ast::RuleInstr { id: id(name), not_exp: Mixfix::Arg(id_exp("n")), input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]), iter_instrs: vec![], block: vec![instr] }), span: Span::default())
 }
 fn evaluate(spec_sl: ast::Spec, relation: bool) -> Error {
     let mut runner = Runner::new(

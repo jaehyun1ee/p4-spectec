@@ -154,7 +154,7 @@ fn test_totalization_descends_all_owning_blocks() {
             instr(ast_ol::InstrKind::Rule(ast_ol::RuleInstr {
                 id: id("R"),
                 not_exp: Mixfix::Arg(id_exp("arg")),
-                input_hint: InputHint::new(vec![0]),
+                input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
                 iter_instrs: vec![],
                 block: vec![instr_inner.clone()],
             })),

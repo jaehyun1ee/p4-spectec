@@ -86,7 +86,10 @@ fn test_nested_containers_rewrite_but_debug_remains_opaque() {
                 block: vec![instr_inner.clone()],
             })),
             binding(literal(), vec![instr_inner.clone()]),
-            rule(vec![instr_inner], InputHint::new(vec![0])),
+            rule(
+                vec![instr_inner],
+                InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
+            ),
         ]
     };
     assert_eq!(

@@ -89,6 +89,16 @@ pub enum CmpOp {
     Num(num::CmpOp),
 }
 
+/// A fuse operator with its span.
+pub type FuseOp = Phrase<FuseOpKind>;
+
+/// The form of a fuse operator.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FuseOpKind {
+    /// `#`
+    Fuse,
+}
+
 // Expressions
 
 /// An expression with its span.
@@ -158,7 +168,7 @@ pub enum ExpKind {
     /// `%N` or `%` or `%%` or `!%`
     Hole(Hole),
     /// `exp # exp`
-    Fuse(Box<Exp>, Box<Exp>),
+    Fuse(Box<Exp>, FuseOp, Box<Exp>),
     /// `## exp`
     Unparen(Box<Exp>),
     /// `latex (` `"..."`* `)`

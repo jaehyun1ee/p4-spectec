@@ -4,11 +4,11 @@
 //! LALRPOP terminal names become readable expected alternatives.
 //! Token and end-of-input reports use these descriptions in their labels.
 
-use crate::diagnostic::{Label, LabelStyle};
+use crate::diagnostic::Label;
 use crate::frontend::lexer::Token;
 use crate::lang::common::source::{Position, Span};
 
-use super::{FrontendError, make_diagnostic};
+use super::{FrontendError, diagnostic};
 
 // = Helpers
 
@@ -202,32 +202,29 @@ pub(crate) fn token_invalid(
     actual: Option<&str>,
     expected: &[String],
 ) -> FrontendError {
-    let diagnostic = make_diagnostic(
+    let diagnostic_error = diagnostic(
         TOKEN_INVALID,
         actual
             .map_or_else(|| "unexpected token".to_owned(), |actual| format!("unexpected {actual}")),
-        vec![Label {
-            style: LabelStyle::Primary,
-            span,
-            message: describe_expected(expected).unwrap_or_else(|| "unexpected token".to_owned()),
-        }],
+        vec![Label::primary(
+            &span,
+            describe_expected(expected).unwrap_or_else(|| "unexpected token".to_owned()),
+        )],
     );
-    Box::new(diagnostic.into())
+    Box::new(diagnostic_error.into())
 }
 
 const INPUT_INCOMPLETE: &str = "parse/input-incomplete";
 
 /// Reports an unexpected end of input with the grammar's expected alternatives.
 pub(crate) fn input_incomplete(span: Span, expected: &[String]) -> FrontendError {
-    let diagnostic = make_diagnostic(
+    let diagnostic_error = diagnostic(
         INPUT_INCOMPLETE,
         "unexpected end of input".to_owned(),
-        vec![Label {
-            style: LabelStyle::Primary,
-            span,
-            message: describe_expected(expected)
-                .unwrap_or_else(|| "expected more input".to_owned()),
-        }],
+        vec![Label::primary(
+            &span,
+            describe_expected(expected).unwrap_or_else(|| "expected more input".to_owned()),
+        )],
     );
-    Box::new(diagnostic.into())
+    Box::new(diagnostic_error.into())
 }

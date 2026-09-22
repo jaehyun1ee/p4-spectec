@@ -65,7 +65,7 @@ pub(in crate::interp::sl) fn check_rel_inputs(
     let typs = inputs
         .indices()
         .iter()
-        .map(|index| typs[*index].clone())
+        .map(|idx| typs[idx.node].clone())
         .collect::<Vec<_>>();
     check_values(
         arena,

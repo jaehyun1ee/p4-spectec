@@ -112,7 +112,7 @@ impl FreeIds for ExpKind {
             | Self::Idx(exp_l, exp_r)
             | Self::Mem(exp_l, exp_r)
             | Self::Infix(exp_l, _, exp_r)
-            | Self::Fuse(exp_l, exp_r) => {
+            | Self::Fuse(exp_l, _, exp_r) => {
                 exp_l.free_ids_into(free);
                 exp_r.free_ids_into(free);
             }

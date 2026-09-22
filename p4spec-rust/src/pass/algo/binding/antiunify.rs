@@ -9,6 +9,8 @@
 //! if the types are equivalent.
 //! Fresh names from the failed attempt are discarded.
 
+use crate::lang::traits::at::At;
+
 use crate::{
     lang::{
         common::prim,
@@ -346,7 +348,7 @@ fn populate_exps<'a>(
 
 /// Builds `if template = exp` spanning both operands.
 fn populate_equality_prem(exp_template: &ast::Exp, exp: &ast::Exp) -> ast::Prem {
-    let span = Span::over(&[exp_template.span.clone(), exp.span.clone()]);
+    let span = [&exp_template, &exp].at();
     let op = ast::CmpOp::Bool(prim::bool::CmpOp::Eq);
     let exp_template = Box::new(exp_template.clone());
     let exp = Box::new(exp.clone());

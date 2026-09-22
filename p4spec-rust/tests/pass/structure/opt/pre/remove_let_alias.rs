@@ -84,7 +84,7 @@ fn test_alias_substitution_propagates_located_rule_errors() {
         let mut instr_rule = instr(InstrKind::Rule(RuleInstr {
             id: id("relation"),
             not_exp: Mixfix::Arg(id_exp("y")),
-            input_hint: InputHint::new(vec![2]),
+            input_hint: InputHint::new(vec![crate::phrase!(node: 2, span: Default::default())]),
             iter_instrs: vec![],
             block: vec![],
         }));
@@ -93,7 +93,10 @@ fn test_alias_substitution_propagates_located_rule_errors() {
         assert_eq!(error.span, span(9));
         assert_eq!(
             error.kind,
-            StructureErrorKind::Input(InputError::IndexOutOfBounds { index: 2, arity: 1 })
+            StructureErrorKind::Input(InputError::IndexOutOfBounds {
+                idx: Box::new(crate::phrase!(node: 2, span: Default::default())),
+                arity: 1
+            })
         );
     }
 }

@@ -58,7 +58,7 @@ fn test_rule_output_renaming_keeps_input_and_locations() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
         not_exp: Mixfix::Seq(vec![Mixfix::Arg(id_exp("input")), Mixfix::Arg(exp_output)]),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         iter_instrs: vec![iterator("input", "out'''")],
         block: vec![ret("out'''")],
     }));

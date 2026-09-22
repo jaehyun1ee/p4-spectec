@@ -205,16 +205,16 @@ fn write_ruleinput<I: Print, V: Print>(
     input_hint: &InputHint,
     exps_input: &[Exp<I, V>],
 ) -> fmt::Result {
-    let input_indices = input_hint.indices();
-    assert_eq!(input_indices.len(), exps_input.len());
+    let idxs_input = input_hint.indices();
+    assert_eq!(idxs_input.len(), exps_input.len());
     let (_, typs) = not_typ.node.split();
     // Each notation position takes its input, or nothing
     let exps = (0..typs.len())
         .map(|index| {
-            input_indices
+            idxs_input
                 .iter()
                 .zip(exps_input)
-                .find_map(|(input, exp)| (*input == index).then_some(exp))
+                .find_map(|(idx_input, exp)| (idx_input.node == index).then_some(exp))
         })
         .collect();
     write_notation(output, not_typ, exps)
@@ -227,11 +227,11 @@ fn write_ruleoutput<I: Print, V: Print>(
     input_hint: &InputHint,
     exps_output: &[Exp<I, V>],
 ) -> fmt::Result {
-    let input_indices = input_hint.indices();
+    let idxs_input = input_hint.indices();
     let (_, typs) = not_typ.node.split();
     // Outputs are the positions the hint leaves
     let outputs = (0..typs.len())
-        .filter(|index| !input_indices.contains(index))
+        .filter(|index| !idxs_input.iter().any(|idx_input| idx_input.node == *index))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
     // A relation without outputs only holds

@@ -1,13 +1,15 @@
 //! File-based entry points for specification transformations
 //!
-//! `parse`, `elab`, `algo`, `structure`, and `prosify` run the passes
+//! [`parse`], [`elab`], [`algo`], [`structure`], and [`prosify`] run the passes
 //! from ordered source paths to the requested language.
 //! Errors preserve the failing stage and its source diagnostics;
-//! callers choose how to report them.
+//! the `*_with_warnings` variants also return ordered elaboration warnings,
+//! including when a later stage fails. Callers choose how to report them.
 
 use std::path::Path;
 
 use crate::{
+    diagnostic::Report,
     frontend::{error::FrontendError, parse::parse_files},
     lang::{al, el, il, pl, sl},
     pass::{
@@ -25,7 +27,7 @@ pub enum Error {
     Frontend(#[from] FrontendError),
     /// Elaborating EL into IL failed.
     #[error(transparent)]
-    Elab(#[from] Box<ElabError>),
+    Elab(ElabError),
     /// Converting IL into AL failed.
     #[error(transparent)]
     Algo(#[from] AlgoError),
@@ -35,12 +37,6 @@ pub enum Error {
     /// Converting SL into PL failed.
     #[error(transparent)]
     Prose(#[from] ProseError),
-}
-
-impl From<ElabError> for Error {
-    fn from(error: ElabError) -> Self {
-        Self::Elab(Box::new(error))
-    }
 }
 
 // = Transformations
@@ -60,8 +56,26 @@ where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
 {
-    let spec_el = parse(paths)?;
-    Ok(pass::elaborate::convert(spec_el)?)
+    elab_with_warnings(paths).0
+}
+
+/// Elaborates paths into typed IL and returns accumulated warnings.
+///
+/// Preserves warnings from [`pass::elaborate::convert_with_warnings`]
+/// on success or elaboration failure; frontend failures return no warnings.
+pub fn elab_with_warnings<I, P>(paths: I) -> (Result<il::ast::Spec, Error>, Vec<Report>)
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<Path>,
+{
+    let spec_el = match parse(paths) {
+        // Elaborate only after every source file has parsed
+        Ok(spec_el) => spec_el,
+        // Parsing fails before elaboration can accumulate warnings
+        Err(error) => return (Err(error), Vec::new()),
+    };
+    let (result, warnings) = pass::elaborate::convert_with_warnings(spec_el);
+    (result.map_err(Error::Elab), warnings)
 }
 
 /// Parses, elaborates, and converts specification paths into AL.
@@ -70,8 +84,18 @@ where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
 {
-    let spec_il = elab(paths)?;
-    Ok(pass::algo::convert(spec_il)?)
+    algo_with_warnings(paths).0
+}
+
+/// Converts paths into AL and preserves warnings across stage failures.
+pub fn algo_with_warnings<I, P>(paths: I) -> (Result<al::ast::Spec, Error>, Vec<Report>)
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<Path>,
+{
+    let (result, warnings) = elab_with_warnings(paths);
+    let result = result.and_then(|spec_il| pass::algo::convert(spec_il).map_err(Error::Algo));
+    (result, warnings)
 }
 
 /// Converts specification paths into SL, optionally removing rule groups.
@@ -83,8 +107,25 @@ where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
 {
-    let spec_al = algo(paths)?;
-    Ok(pass::structure::convert(spec_al, without_rule_groups)?)
+    structure_with_warnings(paths, without_rule_groups).0
+}
+
+/// Converts paths into SL and preserves warnings across stage failures.
+///
+/// Uses the same rule-group setting as [`structure`].
+pub fn structure_with_warnings<I, P>(
+    paths: I,
+    without_rule_groups: bool,
+) -> (Result<sl::ast::Spec, Error>, Vec<Report>)
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<Path>,
+{
+    let (result, warnings) = algo_with_warnings(paths);
+    let result = result.and_then(|spec_al| {
+        pass::structure::convert(spec_al, without_rule_groups).map_err(Error::Structure)
+    });
+    (result, warnings)
 }
 
 /// Converts specification paths through SL with rule groups into annotated PL.
@@ -93,6 +134,18 @@ where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
 {
-    let spec_sl = structure(paths, false)?;
-    Ok(pass::prosify::convert(spec_sl)?)
+    prosify_with_warnings(paths).0
+}
+
+/// Converts paths into annotated PL and preserves warnings across stage failures.
+///
+/// Retains SL rule groups for prose conversion, as in [`prosify`].
+pub fn prosify_with_warnings<I, P>(paths: I) -> (Result<pl::ast::Spec, Error>, Vec<Report>)
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<Path>,
+{
+    let (result, warnings) = structure_with_warnings(paths, false);
+    let result = result.and_then(|spec_sl| pass::prosify::convert(spec_sl).map_err(Error::Prose));
+    (result, warnings)
 }

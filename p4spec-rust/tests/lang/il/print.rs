@@ -25,7 +25,7 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
             prem(ast::PremKind::Rule(ast::RulePrem {
                 id: id("relation"),
                 not_exp: notexp("input"),
-                input_hint: InputHint::new(vec![0]),
+                input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
             })),
             nested,
         ],

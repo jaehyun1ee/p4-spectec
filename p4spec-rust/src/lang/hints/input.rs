@@ -5,6 +5,7 @@
 //! `split` and `combine` move between source order and the input/output lists.
 
 use crate::lang::{
+    common::source::Phrase,
     el::ast::{Exp, ExpKind, Hole},
     traits::eq::SyntaxEq,
 };
@@ -15,10 +16,10 @@ use thiserror::Error;
 /// `new` does not validate indices;
 /// call `validate` when the relation arity is known;
 /// operations such as `split` validate before consuming items.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub struct InputHint {
     /// Input positions, in the order the hint lists them.
-    indices: Vec<usize>,
+    indices: Vec<Phrase<usize>>,
 }
 
 /// An invalid hint or a list that does not fit it.
@@ -29,12 +30,12 @@ pub enum InputError {
     Empty,
 
     /// A position listed twice.
-    #[error("input hint contains duplicate index {0}")]
-    DuplicateIndex(usize),
+    #[error("input hint contains duplicate index {}", idx.node)]
+    DuplicateIndex { idx: Box<Phrase<usize>>, idx_previous: Box<Phrase<usize>> },
 
     /// A position past the relation's arity.
-    #[error("input hint index {index} is out of bounds for arity {arity}")]
-    IndexOutOfBounds { index: usize, arity: usize },
+    #[error("input hint index {} is out of bounds for arity {arity}", idx.node)]
+    IndexOutOfBounds { idx: Box<Phrase<usize>>, arity: usize },
 
     /// The input list has the wrong length.
     #[error("input hint expects {expected} input items, but got {actual}")]
@@ -46,23 +47,32 @@ pub enum InputError {
 }
 
 impl InputHint {
-    /// Preserves indices without validation.
-    pub fn new(indices: Vec<usize>) -> Self {
+    /// Stores located indices without validation.
+    pub fn new(indices: Vec<Phrase<usize>>) -> Self {
         Self { indices }
     }
 
-    /// Borrows positions in source order.
-    pub fn indices(&self) -> &[usize] {
+    /// Borrows located positions in the order the hint lists them.
+    pub fn indices(&self) -> &[Phrase<usize>] {
         &self.indices
     }
 
-    /// Returns positions in source order.
-    pub fn into_indices(self) -> Vec<usize> {
+    /// Returns located positions in the order the hint lists them.
+    pub fn into_indices(self) -> Vec<Phrase<usize>> {
         self.indices
     }
 }
 
 // Syntax equivalence of hints
+
+impl PartialEq for InputHint {
+    fn eq(&self, other: &Self) -> bool {
+        self.indices
+            .iter()
+            .map(|idx| idx.node)
+            .eq(other.indices.iter().map(|idx| idx.node))
+    }
+}
 
 impl SyntaxEq for InputHint {
     fn syntax_eq(&self, other: &Self) -> bool {
@@ -79,12 +89,16 @@ pub fn init(hint_exp: &Exp) -> Option<InputHint> {
         ExpKind::Seq(hint_exps) => hint_exps
             .iter()
             .map(|hint_exp| match hint_exp.node {
-                ExpKind::Hole(Hole::Num(index)) => Some(index),
+                ExpKind::Hole(Hole::Num(idx)) => {
+                    Some(crate::phrase!(node: idx, span: hint_exp.span.clone()))
+                }
                 _ => None,
             })
             .collect(),
         // A single hole
-        ExpKind::Hole(Hole::Num(index)) => Some(vec![*index]),
+        ExpKind::Hole(Hole::Num(idx)) => {
+            Some(vec![crate::phrase!(node: *idx, span: hint_exp.span.clone())])
+        }
         // Anything else is not an input hint
         _ => None,
     }?;
@@ -99,16 +113,27 @@ pub fn validate(hint: &InputHint, arity: usize) -> Result<(), InputError> {
         return Err(InputError::Empty);
     }
     // Each position at most once
-    for (position, index) in hint.indices.iter().enumerate() {
-        if hint.indices[..position].contains(index) {
-            return Err(InputError::DuplicateIndex(*index));
+    for (idx_hint, idx) in hint.indices.iter().enumerate() {
+        if let Some(idx_previous) = hint.indices[..idx_hint]
+            .iter()
+            .find(|idx_previous| idx_previous.node == idx.node)
+        {
+            return Err(InputError::DuplicateIndex {
+                idx: Box::new(idx.clone()),
+                idx_previous: Box::new(idx_previous.clone()),
+            });
         }
     }
     // Every position within the arity
-    if let Some(index) = hint.indices.iter().find(|index| **index >= arity) {
-        return Err(InputError::IndexOutOfBounds { index: *index, arity });
+    if let Some(idx) = hint.indices.iter().find(|idx| idx.node >= arity) {
+        return Err(InputError::IndexOutOfBounds { idx: Box::new(idx.clone()), arity });
     }
     Ok(())
+}
+
+/// Validates operational positions, including a zero-arity relation's default.
+fn validate_items(hint: &InputHint, arity: usize) -> Result<(), InputError> {
+    if arity == 0 && hint.indices.is_empty() { Ok(()) } else { validate(hint, arity) }
 }
 
 // Splitting and combining expressions based on input hints
@@ -120,12 +145,12 @@ pub fn split<Item>(
     hint: &InputHint,
     items: Vec<Item>,
 ) -> Result<(Vec<Item>, Vec<Item>), InputError> {
-    validate(hint, items.len())?;
+    validate_items(hint, items.len())?;
     let mut items_input = Vec::new();
     let mut items_output = Vec::new();
     // Inputs and outputs each keep source order
-    for (index, item) in items.into_iter().enumerate() {
-        if hint.indices.contains(&index) {
+    for (idx, item) in items.into_iter().enumerate() {
+        if hint.indices.iter().any(|idx_input| idx_input.node == idx) {
             items_input.push(item);
         } else {
             items_output.push(item);
@@ -146,7 +171,7 @@ pub fn combine<Item>(
     let input_actual = items_input.len();
     let output_actual = items_output.len();
     let items_len = input_actual + output_actual;
-    validate(hint, items_len)?;
+    validate_items(hint, items_len)?;
     let input_expected = hint.indices.len();
     let output_expected = items_len - input_expected;
     // Both lists must have the lengths the hint implies
@@ -169,7 +194,7 @@ pub fn combine<Item>(
     let mut items = Vec::with_capacity(items_len);
     // Refill source positions from the two lists in turn
     for idx in 0..items_len {
-        let item = if hint.indices.contains(&idx) {
+        let item = if hint.indices.iter().any(|idx_input| idx_input.node == idx) {
             items_input.next().ok_or(InputError::InputCountMismatch {
                 expected: input_expected,
                 actual: input_actual,
@@ -191,9 +216,9 @@ pub fn combine<Item>(
 ///
 /// Validates the hint against `items.len()`
 pub fn is_conditional<Item>(hint: &InputHint, items: &[Item]) -> Result<bool, InputError> {
-    validate(hint, items.len())?;
+    validate_items(hint, items.len())?;
     Ok(items
         .iter()
         .enumerate()
-        .all(|(index, _)| hint.indices.contains(&index)))
+        .all(|(idx, _)| hint.indices.iter().any(|idx_input| idx_input.node == idx)))
 }

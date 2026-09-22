@@ -64,21 +64,19 @@ impl Span {
     }
 
     /// Covers all supplied spans.
-    pub fn over(regions: &[Self]) -> Self {
-        // No spans: the default span
-        let Some((region_h, regions_t)) = regions.split_first() else {
-            return Self::default();
-        };
+    pub fn over(spans: &[Self]) -> Self {
+        Self::over_iter(spans.iter().cloned())
+    }
 
-        // Leftmost start to rightmost end
-        regions_t
-            .iter()
-            .fold(region_h.clone(), |region_over, region| {
-                Self::new(
-                    region_over.left.min(region.left.clone()),
-                    region_over.right.max(region.right.clone()),
-                )
-            })
+    /// Covers a span iterator without collecting its elements.
+    pub fn over_iter(spans: impl IntoIterator<Item = Self>) -> Self {
+        // Use the first actual span, including a generated source annotation
+        let mut spans = spans.into_iter();
+        let Some(span) = spans.next() else { return Self::default() };
+        // Cover endpoints using the source position ordering
+        spans.fold(span, |span_over, span| {
+            Self::new(span_over.left.min(span.left), span_over.right.max(span.right))
+        })
     }
 }
 

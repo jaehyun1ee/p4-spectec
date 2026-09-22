@@ -100,6 +100,13 @@ impl<V> PhraseMap<Id, V> {
         self.entries.get(&key.node)
     }
 
+    /// Returns the stored identifier and value without replacing its source span.
+    pub fn get_key_value(&self, key: &Id) -> Option<(&Id, &V)> {
+        self.entries
+            .get_key_value(&key.node)
+            .map(|(key, value)| (&key.0, value))
+    }
+
     /// Returns the mutable value for an equivalent key.
     pub fn get_mut(&mut self, key: &Id) -> Option<&mut V>
     where

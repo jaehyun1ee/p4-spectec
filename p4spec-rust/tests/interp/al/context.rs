@@ -276,13 +276,13 @@ fn test_duplicate_relations_share_namespace_and_report_second_span() {
     let rel = ast::RelDef::Extern(Box::new(ast::ExternRel {
         id: id("r", 1),
         not_typ: not_typ.clone(),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
         hints: vec![],
     }));
     let rel_duplicate = ast::RelDef::Defined(Box::new(ast::DefinedRel {
         id: id("r", 9),
         not_typ,
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]),
         rule_groups: vec![],
         else_group: None,
         hints: vec![],

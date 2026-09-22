@@ -45,7 +45,7 @@ fn test_nested_collection_preserves_first_identifier_spans_and_existing_names() 
     let instr_rule = ast_ol::RuleInstr {
         id: id("relation"),
         not_exp: Mixfix::Arg(id_exp("rule_arg")),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         iter_instrs: vec![],
         block: vec![instr_debug],
     };

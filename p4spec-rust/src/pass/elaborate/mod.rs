@@ -11,19 +11,35 @@
 
 #![allow(clippy::result_large_err)]
 
-mod attempt;
+mod backtrack;
 mod context;
 mod dimension;
 mod error;
 mod transform;
 
-pub use error::*;
+#[cfg(test)]
+#[path = "../../../tests/pass/elaborate/internal.rs"]
+mod tests;
 
-use crate::lang::{el, il};
+pub use error::ElabError;
+
+use crate::{
+    diagnostic::Report,
+    lang::{el, il},
+};
 
 // == Entry point
 
-/// Validates and converts an EL specification to IL.
+/// Validates and converts EL to IL, discarding nonfatal warnings.
 pub fn convert(spec_el: el::ast::Spec) -> Result<il::ast::Spec, ElabError> {
-    transform::elab_spec(spec_el)
+    convert_with_warnings(spec_el).0
+}
+
+/// Converts EL to IL and retains committed warnings even when a later check fails.
+pub fn convert_with_warnings(
+    spec_el: el::ast::Spec,
+) -> (Result<il::ast::Spec, ElabError>, Vec<Report>) {
+    let mut warnings = Vec::new();
+    let result = transform::elab_spec(spec_el, &mut warnings);
+    (result, warnings)
 }

@@ -78,8 +78,18 @@ fn test_rule_instructions_compare_inputs_iterations_and_nested_blocks() {
         )
     };
 
-    assert!(instr_rule(InputHint::new(vec![0])).syntax_eq(&instr_rule(InputHint::new(vec![0]))));
-    assert!(!instr_rule(InputHint::new(vec![0])).syntax_eq(&instr_rule(InputHint::new(vec![1]))));
+    assert!(
+        instr_rule(InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]))
+            .syntax_eq(&instr_rule(InputHint::new(vec![
+                p4spec_rust::phrase!(node: 0, span: Default::default())
+            ])))
+    );
+    assert!(
+        !instr_rule(InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]))
+            .syntax_eq(&instr_rule(InputHint::new(vec![
+                p4spec_rust::phrase!(node: 1, span: Default::default())
+            ])))
+    );
 }
 
 #[test]

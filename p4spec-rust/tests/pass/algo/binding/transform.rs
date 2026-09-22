@@ -41,7 +41,7 @@ fn test_conversion_preserves_rule_paths_and_populates_antiunified_inputs_in_orde
     ast::DefKind::Rel(ast::RelDef::Defined(Box::new(ast::DefinedRel {
         id: id("relation", 1),
         not_typ: relation_not_typ,
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         rule_groups: vec![
             crate::phrase! { node: ast::RuleGroupKind { id: id("first_group", 1), rules: rules_first }, span:  span(1) },
             crate::phrase! { node: ast::RuleGroupKind { id: id("second_group", 8), rules: rules_second }, span:  span(8) },
@@ -219,7 +219,7 @@ fn test_otherwise_clauses_and_rules_reject_impure_premises_at_the_branch_span() 
     ast::DefKind::Rel(ast::RelDef::Defined(Box::new(ast::DefinedRel {
         id: id("relation", 20),
         not_typ: relation_not_typ,
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         rule_groups: vec![],
         else_group: Some(crate::phrase! { node: ast::ElseGroupKind { id: id("else_group", 20), rule: else_rule }, span:  span(20) }),
         hints: vec![],
@@ -374,7 +374,7 @@ fn test_conversion_preserves_definition_clause_and_table_row_order() {
     ast::DefKind::Rel(ast::RelDef::Extern(Box::new(ast::ExternRel {
         id: id("external_relation", 10),
         not_typ: crate::phrase! { node: Mixfix::Arg(typ::make::bool()), span:  span(10) },
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         hints: vec![],
     }))), span:
     span(10) };

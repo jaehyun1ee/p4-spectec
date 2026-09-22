@@ -78,7 +78,8 @@ fn test_hint_split_compatibility_and_intervening_instruction() {
             Mixfix::Seq(vec![Mixfix::Arg(id_exp("same")), Mixfix::Arg(id_exp("same"))]);
     }
     if let InstrKind::Rule(instr_rule) = &mut instr_b.node {
-        instr_rule.input_hint = InputHint::new(vec![1]);
+        instr_rule.input_hint =
+            InputHint::new(vec![crate::phrase!(node: 1, span: Default::default())]);
     }
     let mut instr_expect = instr_a.clone();
     if let InstrKind::Rule(instr_rule) = &mut instr_expect.node {
@@ -103,7 +104,8 @@ fn test_invalid_rule_hint_keeps_owning_span() {
     let mut instr_ol = rule("a", vec![]);
     instr_ol.span = span(17);
     if let InstrKind::Rule(instr_rule) = &mut instr_ol.node {
-        instr_rule.input_hint = InputHint::new(vec![9]);
+        instr_rule.input_hint =
+            InputHint::new(vec![crate::phrase!(node: 9, span: Default::default())]);
     }
     let error = apply(&mut false, vec![instr_ol]).unwrap_err();
     assert_eq!(error.span, span(17));

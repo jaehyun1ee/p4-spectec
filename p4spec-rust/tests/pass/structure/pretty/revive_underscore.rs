@@ -39,7 +39,7 @@ fn test_rule_iterator_scopes_and_used_guard_survive_nested_branches() {
     let instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
         not_exp: Mixfix::Seq(vec![Mixfix::Arg(id_exp("_input")), Mixfix::Arg(id_exp("_out"))]),
-        input_hint: InputHint::new(vec![0]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 0, span: Default::default())]),
         iter_instrs: vec![iterator("_input", "_out")],
         block: vec![ret("_out"), ret("_input")],
     }));
@@ -92,7 +92,7 @@ fn test_input_hint_failure_keeps_rule_span() {
     let mut instr_rule = instr(InstrKind::Rule(RuleInstr {
         id: id("rel"),
         not_exp: Mixfix::Arg(id_exp("_x")),
-        input_hint: InputHint::new(vec![2]),
+        input_hint: InputHint::new(vec![crate::phrase!(node: 2, span: Default::default())]),
         iter_instrs: vec![],
         block: vec![],
     }));

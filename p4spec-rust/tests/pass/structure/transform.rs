@@ -91,11 +91,14 @@ fn test_explicit_fallback_changes_main_fallthrough_and_preserves_return() {
 
 #[test]
 fn test_invalid_relation_inputs_report_definition_span() {
-    let def_al = p4spec_rust::phrase! {node: al::DefKind::Rel(al::RelDef::Extern(Box::new(al::ExternRel {id: id("r", 1), not_typ: p4spec_rust::phrase! {node: Mixfix::Arg(typ(2)), span: span(2)}, input_hint: InputHint::new(vec![2]), hints: vec![]}))), span: span(1)};
+    let def_al = p4spec_rust::phrase! {node: al::DefKind::Rel(al::RelDef::Extern(Box::new(al::ExternRel {id: id("r", 1), not_typ: p4spec_rust::phrase! {node: Mixfix::Arg(typ(2)), span: span(2)}, input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 2, span: Default::default())]), hints: vec![]}))), span: span(1)};
     let error = convert(vec![def_al], true).unwrap_err();
     assert_eq!(
         error.kind,
-        StructureErrorKind::Input(InputError::IndexOutOfBounds { index: 2, arity: 1 })
+        StructureErrorKind::Input(InputError::IndexOutOfBounds {
+            idx: Box::new(p4spec_rust::phrase!(node: 2, span: Default::default())),
+            arity: 1
+        })
     );
     assert_eq!(error.span, span(1));
 }
@@ -157,7 +160,7 @@ fn test_relation_groups_and_result_signatures_follow_group_mode() {
         al::RulePath { id: id("path", 7), prems: vec![], exps_output: vec![exp_output.clone()] };
     let rule_group = p4spec_rust::phrase! {node: al::RuleGroupKind {id: id("group", 4), rule_match, rule_paths: vec![rule_path]}, span: span(4)};
     let not_typ = p4spec_rust::phrase! {node: Mixfix::Seq(vec![Mixfix::Arg(typ(2)), Mixfix::Arg(typ(2))]), span: span(2)};
-    let def_al = p4spec_rust::phrase! {node: al::DefKind::Rel(al::RelDef::Defined(Box::new(al::DefinedRel {id: id("r", 1), not_typ: not_typ.clone(), input_hint: InputHint::new(vec![0]), rule_groups: vec![rule_group], else_group: None, hints: vec![]}))), span: span(1)};
+    let def_al = p4spec_rust::phrase! {node: al::DefKind::Rel(al::RelDef::Defined(Box::new(al::DefinedRel {id: id("r", 1), not_typ: not_typ.clone(), input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())]), rule_groups: vec![rule_group], else_group: None, hints: vec![]}))), span: span(1)};
     for without_rule_groups in [false, true] {
         let spec_sl = convert(vec![def_al.clone()], without_rule_groups).unwrap();
         let def_kind_sl = &spec_sl[0].node;
@@ -299,7 +302,7 @@ fn count_hold_groups(hold_case: &sl::HoldCase) -> usize {
 fn test_external_relation_fresh_inputs_follow_unsorted_hint_order() {
     let typ_text = p4spec_rust::phrase! {node: al::TypKind::Text, span: span(3)};
     let not_typ = p4spec_rust::phrase! {node: Mixfix::Seq(vec![Mixfix::Arg(typ(2)), Mixfix::Arg(typ_text)]), span: span(2)};
-    let def_al = p4spec_rust::phrase! {node: al::DefKind::Rel(al::RelDef::Extern(Box::new(al::ExternRel {id: id("r", 1), not_typ, input_hint: InputHint::new(vec![1, 0]), hints: vec![]}))), span: span(1)};
+    let def_al = p4spec_rust::phrase! {node: al::DefKind::Rel(al::RelDef::Extern(Box::new(al::ExternRel {id: id("r", 1), not_typ, input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 1, span: Default::default()), p4spec_rust::phrase!(node: 0, span: Default::default())]), hints: vec![]}))), span: span(1)};
     let spec_sl = convert(vec![def_al], true).unwrap();
     let def_kind_sl = &spec_sl[0].node;
     let sl::DefKind::Rel(def_rel_sl) = def_kind_sl else { panic!("relation") };
@@ -347,11 +350,14 @@ fn test_empty_table_rejects_unmatched_parameters_at_definition_span() {
 
 #[test]
 fn test_rule_input_error_preserves_premise_span() {
-    let prem = p4spec_rust::phrase! {node: al::PremKind::Rule(al::RulePrem {id: id("r", 7), not_exp: Mixfix::Arg(id_exp("x", 7)), input_hint: InputHint::new(vec![1])}), span: span(7)};
+    let prem = p4spec_rust::phrase! {node: al::PremKind::Rule(al::RulePrem {id: id("r", 7), not_exp: Mixfix::Arg(id_exp("x", 7)), input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 1, span: Default::default())])}), span: span(7)};
     let error = convert(vec![function(vec![clause(vec![prem], 5)], None)], true).unwrap_err();
     assert_eq!(
         error.kind,
-        StructureErrorKind::Input(InputError::IndexOutOfBounds { index: 1, arity: 1 })
+        StructureErrorKind::Input(InputError::IndexOutOfBounds {
+            idx: Box::new(p4spec_rust::phrase!(node: 1, span: Default::default())),
+            arity: 1
+        })
     );
     assert_eq!(error.span, span(7));
 }
@@ -419,7 +425,7 @@ fn test_debug_continuation_preserves_binding_rule_and_hold_payloads() {
     let prems = vec![
         p4spec_rust::phrase! {node: al::PremKind::Debug(al::DebugPrem {exp: boolean(true, 7)}), span: span(7)},
         prem_let,
-        p4spec_rust::phrase! {node: al::PremKind::Rule(al::RulePrem {id: id("r", 10), not_exp: Mixfix::Arg(id_exp("x", 10)), input_hint: InputHint::new(vec![0])}), span: span(10)},
+        p4spec_rust::phrase! {node: al::PremKind::Rule(al::RulePrem {id: id("r", 10), not_exp: Mixfix::Arg(id_exp("x", 10)), input_hint: InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())])}), span: span(10)},
         p4spec_rust::phrase! {node: al::PremKind::IfHold(al::IfHoldPrem {id: id("r", 11), not_exp: Mixfix::Arg(id_exp("x", 11))}), span: span(11)},
         p4spec_rust::phrase! {node: al::PremKind::IfNotHold(al::IfNotHoldPrem {id: id("s", 12), not_exp: Mixfix::Arg(id_exp("x", 12))}), span: span(12)},
     ];
@@ -434,7 +440,10 @@ fn test_debug_continuation_preserves_binding_rule_and_hold_payloads() {
     assert_eq!(instr_let.exp_r, id_exp("x", 8));
     let sl::InstrKind::Rule(instr_rule) = &instr_let.block[0].node else { panic!("rule") };
     assert_eq!(instr_rule.id, id("r", 10));
-    assert_eq!(instr_rule.input_hint, InputHint::new(vec![0]));
+    assert_eq!(
+        instr_rule.input_hint,
+        InputHint::new(vec![p4spec_rust::phrase!(node: 0, span: Default::default())])
+    );
     let sl::InstrKind::Hold(instr_hold) = &instr_rule.block[0].node else { panic!("hold") };
     let sl::HoldCase::Hold(block_hold, dangle) = &instr_hold.hold_case else {
         panic!("hold branch")

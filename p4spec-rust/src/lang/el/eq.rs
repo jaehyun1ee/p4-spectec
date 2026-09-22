@@ -127,6 +127,12 @@ impl SyntaxEq for CmpOp {
     }
 }
 
+impl SyntaxEq for FuseOpKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
 // - Expressions
 
 impl SyntaxEq for ExpKind {
@@ -158,7 +164,7 @@ impl SyntaxEq for ExpKind {
             (ExpKind::Cons(exp_l_l, exp_r_l), ExpKind::Cons(exp_l_r, exp_r_r))
             | (ExpKind::Cat(exp_l_l, exp_r_l), ExpKind::Cat(exp_l_r, exp_r_r))
             | (ExpKind::Mem(exp_l_l, exp_r_l), ExpKind::Mem(exp_l_r, exp_r_r))
-            | (ExpKind::Fuse(exp_l_l, exp_r_l), ExpKind::Fuse(exp_l_r, exp_r_r)) => {
+            | (ExpKind::Fuse(exp_l_l, _, exp_r_l), ExpKind::Fuse(exp_l_r, _, exp_r_r)) => {
                 exp_l_l.syntax_eq(exp_l_r) && exp_r_l.syntax_eq(exp_r_r)
             }
             (ExpKind::Idx(exp_base_l, exp_idx_l), ExpKind::Idx(exp_base_r, exp_idx_r)) => {

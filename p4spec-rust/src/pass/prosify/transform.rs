@@ -13,6 +13,7 @@
 //! sequence `let x be e` then `R(x)` as sibling steps rather than a nested
 //! block, so the prose reads as consecutive numbered steps.
 
+use crate::lang::traits::at::At;
 use crate::lang::{
     al,
     common::{ds::set::IdSet, notation::mixfix::Mixfix, source::Span},
@@ -1069,11 +1070,7 @@ fn prosify_dispatch_block(
             prosify_dispatch_instr(ctx, instr_sl)
         }
         _ => {
-            let spans = block_sl
-                .iter()
-                .map(|instr_sl| instr_sl.span.clone())
-                .collect::<Vec<_>>();
-            let span = Span::over(&spans);
+            let span = block_sl.at();
             let mut blocks_pl = Vec::with_capacity(block_sl.len());
             for instr_sl in block_sl {
                 let block_pl = prosify_dispatch_instr(ctx, instr_sl)?;
@@ -1405,11 +1402,7 @@ fn prosify_group_block(ctx: &Context, block_sl: sl::Block) -> Result<pl::GroupBl
             prosify_group_instr(ctx, instr_sl)
         }
         _ => {
-            let spans = block_sl
-                .iter()
-                .map(|instr_sl| instr_sl.span.clone())
-                .collect::<Vec<_>>();
-            let span = Span::over(&spans);
+            let span = block_sl.at();
             let mut blocks_pl = Vec::with_capacity(block_sl.len());
             for instr_sl in block_sl {
                 let block_pl = prosify_group_instr(ctx, instr_sl)?;

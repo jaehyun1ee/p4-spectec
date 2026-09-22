@@ -15,7 +15,7 @@ use crate::lang::{
     common::{ds::set::IdSet, source::Span},
     hints::input,
     sl::ast as sl,
-    traits::{eq::SyntaxEq, free::FreeIds},
+    traits::{at::At, eq::SyntaxEq, free::FreeIds},
 };
 
 // == Parameters
@@ -378,21 +378,9 @@ fn struct_rule_path(
     let al::RulePath { prems, exps_output, .. } = rule_path;
     // Locate the result at the outputs, else the premises, else the signature
     let span = if exps_output.is_empty() {
-        if prems.is_empty() {
-            rel_signature.not_typ.span.clone()
-        } else {
-            let spans = prems
-                .iter()
-                .map(|prem| prem.span.clone())
-                .collect::<Vec<_>>();
-            Span::over(&spans)
-        }
+        if prems.is_empty() { rel_signature.not_typ.span.clone() } else { prems.at() }
     } else {
-        let spans = exps_output
-            .iter()
-            .map(|exp| exp.span.clone())
-            .collect::<Vec<_>>();
-        Span::over(&spans)
+        exps_output.at()
     };
     let instr_ol = ol::ResultInstr { rel_signature: rel_signature.clone(), exps: exps_output };
     let instr_kind_ol = ol::InstrKind::Result(instr_ol);
@@ -566,7 +554,7 @@ fn struct_rel_exps_input(
     let mut frees = IdSet::new();
     let mut exps_input = vec![];
     for idx in input_hint.indices() {
-        let typ = typs[*idx];
+        let typ = typs[idx.node];
         let (frees_next, exp_input) = fresh::exp_from_typ(true, &ctx.menv, &frees, typ);
         frees = frees_next;
         exps_input.push(exp_input);

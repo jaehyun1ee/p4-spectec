@@ -850,7 +850,10 @@ fn test_relation_input_guards_use_hint_order() {
             _ => None,
         })
         .expect("relation");
-    rel.input_hint = p4spec_rust::lang::hints::input::InputHint::new(vec![1, 0]);
+    rel.input_hint = p4spec_rust::lang::hints::input::InputHint::new(vec![
+        p4spec_rust::phrase!(node: 1, span: Default::default()),
+        p4spec_rust::phrase!(node: 0, span: Default::default()),
+    ]);
     let mut runner = make_runner(spec_al, false);
     let boolean = make::bool(runner.arena_mut(), true, Span::default()).unwrap();
     assert_eq!(

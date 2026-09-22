@@ -46,7 +46,13 @@ fn test_alter_realigns_outputs_around_noncontiguous_inputs() {
     );
 
     assert_eq!(
-        alter_impl::realign(&hint, &InputHint::new(vec![0, 2])),
+        alter_impl::realign(
+            &hint,
+            &InputHint::new(vec![
+                p4spec_rust::phrase!(node: 0, span: Default::default()),
+                p4spec_rust::phrase!(node: 2, span: Default::default())
+            ])
+        ),
         AlterationHint::Brack(
             atom("L"),
             Box::new(AlterationHint::Fuse(

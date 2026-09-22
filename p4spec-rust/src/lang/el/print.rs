@@ -322,7 +322,7 @@ impl Print for Exp {
             ExpKind::Hole(Hole::Next) => printer.write_char('%'),
             ExpKind::Hole(Hole::Rest) => printer.write_str("%%"),
             ExpKind::Hole(Hole::None) => printer.write_str("!%"),
-            ExpKind::Fuse(exp_l, exp_r) => {
+            ExpKind::Fuse(exp_l, _, exp_r) => {
                 exp_l.print(printer)?;
                 printer.write_char('#')?;
                 exp_r.print(printer)

@@ -9,6 +9,7 @@ use super::super::context::ReadContext;
 use super::Invoker;
 use crate::interp::shared::prepare::ast;
 use crate::lang::data::var::IdSlot;
+use crate::lang::traits::at::At;
 
 use std::{borrow::Borrow, rc::Rc};
 
@@ -395,7 +396,7 @@ fn eval_cat_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
         // Mixed operands are an error
         _ => {
             return err!(
-                Span::over(&[exp_l.span.clone(), exp_r.span.clone()]),
+                [&exp_l, &exp_r].at(),
                 ErrorKind::Expr(ExprErrorKind::ConcatenationOperandMismatch),
             );
         }
