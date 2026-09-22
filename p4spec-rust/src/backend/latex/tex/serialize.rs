@@ -326,21 +326,21 @@ fn render_grid_rows(
     output: &mut dyn Write,
     alignments: &[Alignment],
     docs_column_head: &[Doc],
-    rows: &[Row],
+    rows: &[GridRow],
 ) -> fmt::Result {
     let mut idx = 0;
     // A gap is valid only immediately after a content row
     while idx < rows.len() {
         match &rows[idx] {
-            Row::Cells(docs) => render_cells(output, docs)?,
-            Row::Spanning(doc) => {
+            GridRow::Cells(docs) => render_cells(output, docs)?,
+            GridRow::Spanning(doc) => {
                 render_grid_spanning_row(output, alignments, docs_column_head, doc)?
             }
-            Row::Gap => return Err(fmt::Error),
+            GridRow::Gap => return Err(fmt::Error),
         }
         idx += 1;
         // Consume one gap with its preceding row; consecutive gaps stay invalid
-        if matches!(rows.get(idx), Some(Row::Gap)) {
+        if matches!(rows.get(idx), Some(GridRow::Gap)) {
             output.write_str(" \\\\[1ex]\n")?;
             idx += 1;
         } else if idx < rows.len() {
@@ -355,7 +355,7 @@ fn render_grid_array(
     output: &mut dyn Write,
     alignments: &[Alignment],
     rows_cell: &[&[Doc]],
-    rows: &[Row],
+    rows: &[GridRow],
 ) -> fmt::Result {
     let docs_column_head: Vec<_> = rows_cell
         .iter()
@@ -370,18 +370,18 @@ fn render_grid_array(
 }
 
 /// Gives mixed grids the maximum of their cell and spanning widths.
-fn render_grid(output: &mut dyn Write, alignments: &[Alignment], rows: &[Row]) -> fmt::Result {
+fn render_grid(output: &mut dyn Write, alignments: &[Alignment], rows: &[GridRow]) -> fmt::Result {
     let rows_cell: Vec<_> = rows
         .iter()
         .filter_map(|row| match row {
-            Row::Cells(docs) => Some(docs.as_slice()),
+            GridRow::Cells(docs) => Some(docs.as_slice()),
             _ => None,
         })
         .collect();
     let docs_spanning: Vec<_> = rows
         .iter()
         .filter_map(|row| match row {
-            Row::Spanning(doc) => Some(doc),
+            GridRow::Spanning(doc) => Some(doc),
             _ => None,
         })
         .collect();
@@ -518,17 +518,17 @@ fn validate(doc: &Doc) -> Result<()> {
             let mut gap_allowed = false;
             for row in rows {
                 match row {
-                    Row::Cells(docs) => {
+                    GridRow::Cells(docs) => {
                         for doc in docs {
                             validate(doc)?;
                         }
                         gap_allowed = true;
                     }
-                    Row::Spanning(doc) => {
+                    GridRow::Spanning(doc) => {
                         validate(doc)?;
                         gap_allowed = true;
                     }
-                    Row::Gap => {
+                    GridRow::Gap => {
                         if !gap_allowed {
                             return Err(Error::MalformedGridGap);
                         }

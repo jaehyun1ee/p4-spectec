@@ -21,7 +21,7 @@ use super::{
     precedence::{self, Assoc, Category, Side},
     render::Anchors,
     tex::{
-        doc::{self, Alignment, Block, Delimiter, Doc, Row, Style, Symbol},
+        doc::{self, Alignment, Block, Delimiter, Doc, GridRow, Style, Symbol},
         layout, link, width,
     },
 };
@@ -812,13 +812,13 @@ fn tex_of_funcs(defs: &[&FuncDef], anchors: Option<&Anchors<'_>>) -> Result<Doc>
     // Keep each clause's condition next to its equation before adding the gap
     for def in defs {
         if !rows.is_empty() {
-            rows.push(Row::Gap);
+            rows.push(GridRow::Gap);
         }
         let (docs, condition) = layout_func(def, anchors)?;
-        rows.push(Row::Cells(docs));
+        rows.push(GridRow::Cells(docs));
         if let Some(doc) = condition {
             has_condition_below = true;
-            rows.push(Row::Spanning(doc));
+            rows.push(GridRow::Spanning(doc));
         }
     }
 
@@ -831,7 +831,7 @@ fn tex_of_funcs(defs: &[&FuncDef], anchors: Option<&Anchors<'_>>) -> Result<Doc>
         let rows = rows
             .into_iter()
             .filter_map(|row| match row {
-                Row::Cells(docs) => Some(docs),
+                GridRow::Cells(docs) => Some(docs),
                 _ => None,
             })
             .collect();

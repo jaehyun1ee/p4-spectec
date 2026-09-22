@@ -45,13 +45,13 @@ pub(crate) fn flat(doc: &Doc) -> usize {
         Doc::Aligned(rows) => flat_columns(&flat_column_widths(rows.iter().map(Vec::as_slice))),
         Doc::Grid(_, rows) => {
             let rows_cell = rows.iter().filter_map(|row| match row {
-                Row::Cells(docs) => Some(docs.as_slice()),
+                GridRow::Cells(docs) => Some(docs.as_slice()),
                 _ => None,
             });
             let width_spanning = rows
                 .iter()
                 .filter_map(|row| match row {
-                    Row::Spanning(doc) => Some(flat(doc)),
+                    GridRow::Spanning(doc) => Some(flat(doc)),
                     _ => None,
                 })
                 .max()

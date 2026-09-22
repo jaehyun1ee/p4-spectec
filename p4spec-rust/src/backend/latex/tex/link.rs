@@ -46,9 +46,9 @@ fn has_link_doc(doc: &Doc) -> bool {
         }
         Doc::Aligned(rows) => rows.iter().any(|docs| docs.iter().any(has_link_doc)),
         Doc::Grid(_, rows) => rows.iter().any(|row| match row {
-            Row::Cells(docs) => docs.iter().any(has_link_doc),
-            Row::Spanning(doc) => has_link_doc(doc),
-            Row::Gap => false,
+            GridRow::Cells(docs) => docs.iter().any(has_link_doc),
+            GridRow::Spanning(doc) => has_link_doc(doc),
+            GridRow::Gap => false,
         }),
         Doc::Gathered(blocks) => blocks.iter().any(|block| match block {
             Block::Line(doc) => has_link_doc(doc),
@@ -84,9 +84,9 @@ fn has_boundary_doc(doc: &Doc) -> bool {
         }
         Doc::Aligned(rows) => rows.iter().any(|docs| docs.iter().any(has_boundary_doc)),
         Doc::Grid(_, rows) => rows.iter().any(|row| match row {
-            Row::Cells(docs) => docs.iter().any(has_boundary_doc),
-            Row::Spanning(doc) => has_boundary_doc(doc),
-            Row::Gap => false,
+            GridRow::Cells(docs) => docs.iter().any(has_boundary_doc),
+            GridRow::Spanning(doc) => has_boundary_doc(doc),
+            GridRow::Gap => false,
         }),
         Doc::Gathered(blocks) => blocks.iter().any(|block| match block {
             Block::Line(doc) => has_boundary_doc(doc),
@@ -216,15 +216,15 @@ fn link_unowned_concat(target: &Target, docs: Vec<Doc>) -> Doc {
 }
 
 /// Assigns fallback ownership independently to each visible grid cell.
-fn link_unowned_row(target: &Target, row: Row) -> Row {
+fn link_unowned_row(target: &Target, row: GridRow) -> GridRow {
     match row {
-        Row::Cells(docs) => Row::Cells(
+        GridRow::Cells(docs) => GridRow::Cells(
             docs.into_iter()
                 .map(|doc| link_unowned_doc(target, doc))
                 .collect(),
         ),
-        Row::Spanning(doc) => Row::Spanning(link_unowned_doc(target, doc)),
-        Row::Gap => Row::Gap,
+        GridRow::Spanning(doc) => GridRow::Spanning(link_unowned_doc(target, doc)),
+        GridRow::Gap => GridRow::Gap,
     }
 }
 
@@ -289,9 +289,9 @@ pub(super) fn strip_links(doc: &Doc) -> Doc {
             alignments.clone(),
             rows.iter()
                 .map(|row| match row {
-                    Row::Cells(docs) => Row::Cells(docs.iter().map(strip_links).collect()),
-                    Row::Spanning(doc) => Row::Spanning(strip_links(doc)),
-                    Row::Gap => Row::Gap,
+                    GridRow::Cells(docs) => GridRow::Cells(docs.iter().map(strip_links).collect()),
+                    GridRow::Spanning(doc) => GridRow::Spanning(strip_links(doc)),
+                    GridRow::Gap => GridRow::Gap,
                 })
                 .collect(),
         ),

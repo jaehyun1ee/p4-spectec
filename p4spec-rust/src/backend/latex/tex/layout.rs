@@ -388,9 +388,9 @@ fn resolve_rows<'a>(
 }
 
 /// Replaces cell rows in order and independently resolves spanning rows.
-fn resolve_grid(width: usize, alignments: &[Alignment], rows: &[Row]) -> Doc {
+fn resolve_grid(width: usize, alignments: &[Alignment], rows: &[GridRow]) -> Doc {
     let rows_cell = rows.iter().filter_map(|row| match row {
-        Row::Cells(docs) => Some(docs.as_slice()),
+        GridRow::Cells(docs) => Some(docs.as_slice()),
         _ => None,
     });
     let rows_cell = resolve_rows(width, Some(alignments), rows_cell);
@@ -399,13 +399,13 @@ fn resolve_grid(width: usize, alignments: &[Alignment], rows: &[Row]) -> Doc {
     let rows = rows
         .iter()
         .map(|row| match row {
-            Row::Cells(_) => Row::Cells(
+            GridRow::Cells(_) => GridRow::Cells(
                 rows_cell
                     .next()
                     .expect("each input cell row has one resolved row"),
             ),
-            Row::Spanning(doc) => Row::Spanning(resolve_doc(width, 0, 0, 0, doc)),
-            Row::Gap => Row::Gap,
+            GridRow::Spanning(doc) => GridRow::Spanning(resolve_doc(width, 0, 0, 0, doc)),
+            GridRow::Gap => GridRow::Gap,
         })
         .collect();
     Doc::Grid(alignments.to_vec(), rows)

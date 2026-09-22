@@ -221,7 +221,7 @@ pub(crate) enum Doc {
     /// Equation rows in `aligned`, with shared column widths.
     Aligned(Vec<Vec<Doc>>),
     /// Explicit column alignments and cell, spanning, or gap rows.
-    Grid(Vec<Alignment>, Vec<Row>),
+    Grid(Vec<Alignment>, Vec<GridRow>),
     /// Rows in `aligned`, each following an empty alignment cell.
     #[allow(dead_code)]
     Stacked(Vec<Doc>),
@@ -235,7 +235,7 @@ pub(crate) enum Doc {
 
 /// Supplies cells, a spanning document, or a vertical grid gap.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Row {
+pub(crate) enum GridRow {
     /// One document per declared grid column.
     Cells(Vec<Doc>),
     /// Content spanning the grid, laid out with the full line-width budget.
@@ -383,14 +383,14 @@ pub(crate) fn fill(indent: usize, separator: Doc, docs: Vec<Doc>) -> Doc {
 // == Multi-row composition
 
 /// Validates grid arity and removes empty content rows.
-pub(crate) fn grid(alignments: Vec<Alignment>, rows: Vec<Row>) -> Result<Doc> {
+pub(crate) fn grid(alignments: Vec<Alignment>, rows: Vec<GridRow>) -> Result<Doc> {
     // A nonempty row sequence needs a column specification
     if alignments.is_empty() {
         return if rows.is_empty() { Ok(Doc::Empty) } else { Err(Error::GridWithoutColumns) };
     }
     // Validate before filtering so malformed empty rows remain errors
     for row in &rows {
-        if let Row::Cells(docs) = row
+        if let GridRow::Cells(docs) = row
             && docs.len() != alignments.len()
         {
             return Err(Error::GridCellCount { expected: alignments.len(), actual: docs.len() });
@@ -399,9 +399,9 @@ pub(crate) fn grid(alignments: Vec<Alignment>, rows: Vec<Row>) -> Result<Doc> {
     let rows: Vec<_> = rows
         .into_iter()
         .filter(|row| match row {
-            Row::Cells(docs) => !docs.iter().all(is_empty),
-            Row::Spanning(doc) => !is_empty(doc),
-            Row::Gap => true,
+            GridRow::Cells(docs) => !docs.iter().all(is_empty),
+            GridRow::Spanning(doc) => !is_empty(doc),
+            GridRow::Gap => true,
         })
         .collect();
     if rows.is_empty() { Ok(Doc::Empty) } else { Ok(Doc::Grid(alignments, rows)) }
