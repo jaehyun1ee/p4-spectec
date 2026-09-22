@@ -2,7 +2,7 @@ mod render;
 mod report;
 
 use p4spec_rust::{
-    diagnostic::{Label, LabelStyle, Report, Severity},
+    diagnostic::{Diagnostic, Label, LabelStyle, Report, ReportKind, Severity},
     lang::common::source::{Position, Span},
 };
 
@@ -11,7 +11,7 @@ fn span(file: &str, line_l: usize, col_l: usize, line_r: usize, col_r: usize) ->
 }
 
 fn report(span: Span) -> Report {
-    Report {
+    Diagnostic {
         severity: Severity::Error,
         code: Some("parse/text-escape-invalid".to_owned()),
         message: "invalid escape in text literal".to_owned(),
@@ -22,8 +22,18 @@ fn report(span: Span) -> Report {
         }],
         notes: vec!["use a supported escape".to_owned()],
         source: "parse",
-        traces: Vec::new(),
     }
+    .into()
+}
+
+fn cause(report: &Report) -> &Diagnostic {
+    let ReportKind::Cause(diagnostic) = &report.kind else { panic!("expected a cause") };
+    diagnostic
+}
+
+fn cause_mut(report: &mut Report) -> &mut Diagnostic {
+    let ReportKind::Cause(diagnostic) = &mut report.kind else { panic!("expected a cause") };
+    diagnostic
 }
 
 #[test]

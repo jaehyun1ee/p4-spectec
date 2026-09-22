@@ -8,7 +8,7 @@ use crate::diagnostic::{Label, LabelStyle};
 use crate::frontend::lexer::Token;
 use crate::lang::common::source::{Position, Span};
 
-use super::{FrontendError, make_report};
+use super::{FrontendError, make_diagnostic};
 
 // = Helpers
 
@@ -202,7 +202,7 @@ pub(crate) fn token_invalid(
     actual: Option<&str>,
     expected: &[String],
 ) -> FrontendError {
-    make_report(
+    let diagnostic = make_diagnostic(
         TOKEN_INVALID,
         actual
             .map_or_else(|| "unexpected token".to_owned(), |actual| format!("unexpected {actual}")),
@@ -211,14 +211,15 @@ pub(crate) fn token_invalid(
             span,
             message: describe_expected(expected).unwrap_or_else(|| "unexpected token".to_owned()),
         }],
-    )
+    );
+    Box::new(diagnostic.into())
 }
 
 const INPUT_INCOMPLETE: &str = "parse/input-incomplete";
 
 /// Reports an unexpected end of input with the grammar's expected alternatives.
 pub(crate) fn input_incomplete(span: Span, expected: &[String]) -> FrontendError {
-    make_report(
+    let diagnostic = make_diagnostic(
         INPUT_INCOMPLETE,
         "unexpected end of input".to_owned(),
         vec![Label {
@@ -227,5 +228,6 @@ pub(crate) fn input_incomplete(span: Span, expected: &[String]) -> FrontendError
             message: describe_expected(expected)
                 .unwrap_or_else(|| "expected more input".to_owned()),
         }],
-    )
+    );
+    Box::new(diagnostic.into())
 }

@@ -17,9 +17,9 @@ fn test_lexical_reports_preserve_code_and_span() {
         .unwrap_err();
     let expected_span = span("source.watsup", 0, 1);
 
-    assert_eq!(lexical.code.as_deref(), Some("parse/character-invalid"));
-    assert_eq!(lexical.labels[0].span, expected_span);
-    assert_eq!(lexical.source, "parse");
+    assert_eq!(crate::cause(&lexical).code.as_deref(), Some("parse/character-invalid"));
+    assert_eq!(crate::cause(&lexical).labels[0].span, expected_span);
+    assert_eq!(crate::cause(&lexical).source, "parse");
 }
 
 #[test]
@@ -49,7 +49,7 @@ fn test_syntax_failures_report_codes_and_precise_spans() {
             Position::new(file.as_ref(), line_r, col_r),
         );
 
-        assert_eq!(error.code.as_deref().unwrap(), code_expect, "{name}");
-        assert_eq!(error.labels[0].span, span_expect, "{name}");
+        assert_eq!(crate::cause(&error).code.as_deref().unwrap(), code_expect, "{name}");
+        assert_eq!(crate::cause(&error).labels[0].span, span_expect, "{name}");
     }
 }

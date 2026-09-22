@@ -164,9 +164,15 @@ fn test_byte_escapes_reject_non_utf8_text() {
         .expect("lexer result")
         .expect_err("byte-only text");
 
-    assert_eq!(error.code.as_deref().unwrap(), "parse/text-encoding-invalid");
-    assert_eq!(error.labels[0].span.left, Position::new("unicode-policy.watsup", 1, 0));
-    assert_eq!(error.labels[0].span.right, Position::new("unicode-policy.watsup", 1, source.len()));
+    assert_eq!(crate::cause(&error).code.as_deref().unwrap(), "parse/text-encoding-invalid");
+    assert_eq!(
+        crate::cause(&error).labels[0].span.left,
+        Position::new("unicode-policy.watsup", 1, 0)
+    );
+    assert_eq!(
+        crate::cause(&error).labels[0].span.right,
+        Position::new("unicode-policy.watsup", 1, source.len())
+    );
 }
 
 #[test]
@@ -176,9 +182,18 @@ fn test_unicode_escapes_reject_surrogates() {
         .expect("lexer result")
         .expect_err("surrogate escape");
 
-    assert_eq!(error.code.as_deref().unwrap(), "parse/text-escape-codepoint-invalid");
-    assert_eq!(error.labels[0].span.left, Position::new("unicode-policy.watsup", 1, 1));
-    assert_eq!(error.labels[0].span.right, Position::new("unicode-policy.watsup", 1, 9));
+    assert_eq!(
+        crate::cause(&error).code.as_deref().unwrap(),
+        "parse/text-escape-codepoint-invalid"
+    );
+    assert_eq!(
+        crate::cause(&error).labels[0].span.left,
+        Position::new("unicode-policy.watsup", 1, 1)
+    );
+    assert_eq!(
+        crate::cause(&error).labels[0].span.right,
+        Position::new("unicode-policy.watsup", 1, 9)
+    );
 }
 
 #[test]
@@ -293,10 +308,13 @@ fn test_lexical_failures_report_codes_and_precise_spans() {
             .expect("lexer result")
             .expect_err("invalid source");
 
-        assert_eq!(error.code.as_deref().unwrap(), kind, "source: {source:?}");
-        assert_eq!(error.labels[0].span.left, Position::new("error.watsup", 1, left_column));
+        assert_eq!(crate::cause(&error).code.as_deref().unwrap(), kind, "source: {source:?}");
         assert_eq!(
-            error.labels[0].span.right,
+            crate::cause(&error).labels[0].span.left,
+            Position::new("error.watsup", 1, left_column)
+        );
+        assert_eq!(
+            crate::cause(&error).labels[0].span.right,
             Position::new("error.watsup", 1, right_column),
             "source: {source:?}"
         );
@@ -312,10 +330,10 @@ fn test_trailing_backslash_reports_a_renderable_eof_span() {
             .next()
             .unwrap()
             .unwrap_err();
-        assert_eq!(report.code.as_deref(), Some("parse/text-literal-incomplete"));
+        assert_eq!(crate::cause(&report).code.as_deref(), Some("parse/text-literal-incomplete"));
         let pos = Position::new("escape.watsup", line, column);
-        assert_eq!(report.labels[0].span.left, pos);
-        assert_eq!(report.labels[0].span.right, pos);
+        assert_eq!(crate::cause(&report).labels[0].span.left, pos);
+        assert_eq!(crate::cause(&report).labels[0].span.right, pos);
 
         let mut renderer = Renderer::new(RenderConfig::default());
         renderer.insert_source("escape.watsup", source);
@@ -333,9 +351,9 @@ fn test_escaped_newline_reports_a_renderable_multiline_span() {
         .next()
         .unwrap()
         .unwrap_err();
-    assert_eq!(report.code.as_deref(), Some("parse/text-escape-invalid"));
-    assert_eq!(report.labels[0].span.left, Position::new("escape.watsup", 1, 4));
-    assert_eq!(report.labels[0].span.right, Position::new("escape.watsup", 2, 0));
+    assert_eq!(crate::cause(&report).code.as_deref(), Some("parse/text-escape-invalid"));
+    assert_eq!(crate::cause(&report).labels[0].span.left, Position::new("escape.watsup", 1, 4));
+    assert_eq!(crate::cause(&report).labels[0].span.right, Position::new("escape.watsup", 2, 0));
 
     let mut renderer = Renderer::new(RenderConfig::default());
     renderer.insert_source("escape.watsup", source);
@@ -358,13 +376,29 @@ fn test_unicode_escape_diagnostics_distinguish_invalid_scalar_values() {
             .next()
             .unwrap()
             .unwrap_err();
-        assert_eq!(report.code.as_deref(), Some("parse/text-escape-codepoint-invalid"));
-        assert!(report.message.contains(digits), "{}", report.message);
-        assert!(report.message.contains(reason), "{}", report.message);
-        assert!(report.notes.iter().any(|text| text.contains("U+0000")
-            && text.contains("U+D7FF")
-            && text.contains("U+E000")
-            && text.contains("U+10FFFF")));
+        assert_eq!(
+            crate::cause(&report).code.as_deref(),
+            Some("parse/text-escape-codepoint-invalid")
+        );
+        assert!(
+            crate::cause(&report).message.contains(digits),
+            "{}",
+            crate::cause(&report).message
+        );
+        assert!(
+            crate::cause(&report).message.contains(reason),
+            "{}",
+            crate::cause(&report).message
+        );
+        assert!(
+            crate::cause(&report)
+                .notes
+                .iter()
+                .any(|text| text.contains("U+0000")
+                    && text.contains("U+D7FF")
+                    && text.contains("U+E000")
+                    && text.contains("U+10FFFF"))
+        );
     }
 }
 
@@ -375,11 +409,16 @@ fn test_invalid_characters_name_controls_without_emitting_them() {
             .next()
             .unwrap()
             .unwrap_err();
-        assert!(report.message.contains("U+000B"));
-        assert!(report.message.contains("vertical tab"));
-        assert!(!report.message.contains('\u{b}'));
+        assert!(crate::cause(&report).message.contains("U+000B"));
+        assert!(crate::cause(&report).message.contains("vertical tab"));
+        assert!(!crate::cause(&report).message.contains('\u{b}'));
         if source.starts_with('"') {
-            assert!(report.notes.iter().any(|text| text.contains("\\u{B}")));
+            assert!(
+                crate::cause(&report)
+                    .notes
+                    .iter()
+                    .any(|text| text.contains("\\u{B}"))
+            );
         }
     }
 }
@@ -390,9 +429,9 @@ fn test_invalid_escape_names_escape_and_supported_forms() {
         .next()
         .unwrap()
         .unwrap_err();
-    assert!(report.message.contains("\\q"));
+    assert!(crate::cause(&report).message.contains("\\q"));
     assert!(
-        report
+        crate::cause(&report)
             .notes
             .iter()
             .any(|text| text.contains("\\n") && text.contains("\\HH") && text.contains("\\u{HEX}"))
@@ -405,10 +444,15 @@ fn test_decoded_utf8_error_identifies_escaped_bytes_and_offset() {
         .next()
         .unwrap()
         .unwrap_err();
-    assert!(report.message.contains("decoded bytes"));
-    assert!(report.labels[0].message.contains("0xFF"));
-    assert!(report.labels[0].message.contains("offset 1"));
-    assert!(report.notes.iter().any(|text| text.contains("\\u{FF}")));
+    assert!(crate::cause(&report).message.contains("decoded bytes"));
+    assert!(crate::cause(&report).labels[0].message.contains("0xFF"));
+    assert!(crate::cause(&report).labels[0].message.contains("offset 1"));
+    assert!(
+        crate::cause(&report)
+            .notes
+            .iter()
+            .any(|text| text.contains("\\u{FF}"))
+    );
 }
 
 #[test]
@@ -424,10 +468,10 @@ fn test_unclosed_comment_labels_only_still_open_delimiters() {
             .next()
             .unwrap()
             .unwrap_err();
-        assert_eq!(report.labels[0].style, LabelStyle::Primary);
-        assert_eq!(report.labels[0].span.left.column, source.len());
-        assert_eq!(report.labels.len(), columns.len() + 1);
-        for (label, column) in report.labels[1..].iter().zip(columns) {
+        assert_eq!(crate::cause(&report).labels[0].style, LabelStyle::Primary);
+        assert_eq!(crate::cause(&report).labels[0].span.left.column, source.len());
+        assert_eq!(crate::cause(&report).labels.len(), columns.len() + 1);
+        for (label, column) in crate::cause(&report).labels[1..].iter().zip(columns) {
             assert_eq!(label.style, LabelStyle::Secondary);
             assert_eq!(label.message, "comment opened here");
             assert_eq!(label.span.left.column, column);

@@ -9,7 +9,7 @@ mod lex;
 mod syntax;
 mod token;
 
-use crate::diagnostic::{Label, Report, Severity};
+use crate::diagnostic::{Diagnostic, Label, Report, Severity};
 
 // = Error aliases
 
@@ -39,17 +39,16 @@ fn describe_utf8_error(bytes: &[u8], error: &std::str::Utf8Error) -> String {
     }
 }
 
-/// Creates an error report authored by the SpecTec frontend.
-fn make_report(code: &str, message: String, labels: Vec<Label>) -> FrontendError {
-    Box::new(Report {
+/// Creates diagnostic data authored by the SpecTec frontend.
+fn make_diagnostic(code: &str, message: String, labels: Vec<Label>) -> Diagnostic {
+    Diagnostic {
         severity: Severity::Error,
         code: Some(code.to_owned()),
         message,
         labels,
         notes: Vec::new(),
         source: "parse",
-        traces: Vec::new(),
-    })
+    }
 }
 
 // = Diagnostic helpers and constructors

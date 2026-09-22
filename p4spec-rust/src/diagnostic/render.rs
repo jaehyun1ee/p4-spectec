@@ -9,7 +9,7 @@
 use std::{collections::HashMap, fs, io::Write};
 
 use codespan_reporting::{
-    diagnostic::{Diagnostic, Label as CodeLabel},
+    diagnostic::{Diagnostic as CodeDiagnostic, Label as CodeLabel},
     files::{self, Files, SimpleFiles},
     term::{
         self,
@@ -19,7 +19,9 @@ use codespan_reporting::{
 
 use crate::lang::common::source::{Position, Span};
 
-use super::{ColorChoice, Label, LabelStyle, Report, Severity, SnippetConfig, Trace};
+use super::{
+    ColorChoice, Diagnostic, Label, LabelStyle, Report, ReportKind, Severity, SnippetConfig,
+};
 
 // = Helpers
 
@@ -100,7 +102,7 @@ impl Renderer {
         label: &Label,
         loc: &str,
         reason: Option<&str>,
-        diagnostic: &mut Diagnostic<usize>,
+        diagnostic: &mut CodeDiagnostic<usize>,
     ) {
         let role = match label.style {
             LabelStyle::Primary => "at",
@@ -184,7 +186,7 @@ impl Renderer {
     fn label(
         &mut self,
         label: &Label,
-        diagnostic: &mut Diagnostic<usize>,
+        diagnostic: &mut CodeDiagnostic<usize>,
     ) -> Result<(), RenderError> {
         let span = &label.span;
         // One codespan label cannot describe two source identities
@@ -236,35 +238,60 @@ impl Renderer {
         Ok(())
     }
 
-    /// Constructs a temporary codespan view without copying recursive causes.
-    fn diagnostic(&mut self, report: &Report) -> Result<Diagnostic<usize>, RenderError> {
-        let mut diagnostic = Diagnostic::new(report.severity);
-        diagnostic.code.clone_from(&report.code);
-        diagnostic.message.clone_from(&report.message);
-        diagnostic.notes.clone_from(&report.notes);
+    /// Converts diagnostic data without inspecting the report tree.
+    fn cause(&mut self, diagnostic: &Diagnostic) -> Result<CodeDiagnostic<usize>, RenderError> {
+        let mut rendered = CodeDiagnostic::new(diagnostic.severity);
+        rendered.code.clone_from(&diagnostic.code);
+        rendered.message.clone_from(&diagnostic.message);
+        rendered.notes.clone_from(&diagnostic.notes);
         // Uncoded failures still identify their author
-        if report.code.is_none() && !report.source.is_empty() {
-            diagnostic.notes.push(format!("source: {}", report.source));
+        if diagnostic.code.is_none() && !diagnostic.source.is_empty() {
+            rendered
+                .notes
+                .push(format!("source: {}", diagnostic.source));
         }
         // Convert each label independently to retain cross-file relationships
-        for label in &report.labels {
-            self.label(label, &mut diagnostic)?;
+        for label in &diagnostic.labels {
+            self.label(label, &mut rendered)?;
         }
-        Ok(diagnostic)
+        Ok(rendered)
+    }
+
+    /// Gives root and child nodes the same source-aware presentation.
+    fn diagnostic(&mut self, kind: &ReportKind) -> Result<CodeDiagnostic<usize>, RenderError> {
+        match kind {
+            // Render context as a note with its own source location
+            ReportKind::Frame { span, message } => {
+                let mut rendered = CodeDiagnostic::new(Severity::Note).with_message(message);
+                if *span != Span::default() {
+                    self.label(
+                        &Label {
+                            style: LabelStyle::Secondary,
+                            span: span.clone(),
+                            message: String::new(),
+                        },
+                        &mut rendered,
+                    )?;
+                }
+                Ok(rendered)
+            }
+            // Keep each cause's code, severity, labels, and notes
+            ReportKind::Cause(diagnostic) => self.cause(diagnostic),
+        }
     }
 
     // - Trace rendering
 
     /// Emits the root and traverses visible causes in depth-first branch order.
     fn render(&mut self, buffer: &mut Buffer, report: &Report) -> Result<(), RenderError> {
-        let diagnostic = self.diagnostic(report)?;
+        let diagnostic = self.diagnostic(&report.kind)?;
         term::emit_to_write_style(buffer, &self.config.snippet, &self.files, &diagnostic)?;
 
         // Store traversal cursors instead of recursing or cloning reports
-        let mut pending = vec![(report.traces.iter(), 0usize)];
+        let mut pending = vec![(report.children.iter(), 0usize)];
         let mut count = 0;
-        while let Some((traces, depth)) = pending.last_mut() {
-            let Some(trace) = traces.next() else {
+        while let Some((children, depth)) = pending.last_mut() {
+            let Some(child) = children.next() else {
                 pending.pop();
                 continue;
             };
@@ -278,28 +305,9 @@ impl Renderer {
             count += 1;
             writeln!(buffer, "trace[{depth}]:").map_err(files::Error::from)?;
 
-            // Frames supply context; child diagnostics retain their own metadata
-            let (diagnostic, children) = match trace {
-                // Render context as a note with its own source location
-                Trace::Frame { span, message, children } => {
-                    let mut diagnostic = Diagnostic::new(Severity::Note).with_message(message);
-                    if *span != Span::default() {
-                        self.label(
-                            &Label {
-                                style: LabelStyle::Secondary,
-                                span: span.clone(),
-                                message: String::new(),
-                            },
-                            &mut diagnostic,
-                        )?;
-                    }
-                    (diagnostic, children)
-                }
-                // Keep each nested diagnostic's code and severity
-                Trace::Cause(report) => (self.diagnostic(report)?, &report.traces),
-            };
+            let diagnostic = self.diagnostic(&child.kind)?;
             term::emit_to_write_style(buffer, &self.config.snippet, &self.files, &diagnostic)?;
-            pending.push((children.iter(), depth + 1));
+            pending.push((child.children.iter(), depth + 1));
         }
         Ok(())
     }

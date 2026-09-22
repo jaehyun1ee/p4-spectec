@@ -1,9 +1,9 @@
-//! Source-independent diagnostic records and causal traces
+//! Source-independent diagnostics and recursive report trees
 //!
-//! Labels identify responsible and related spans.
-//! Trace frames add evaluation context;
-//! diagnostic children retain their own codes, labels, and notes.
-//! Trace destruction drains descendants iteratively to bound stack use.
+//! Every report is a context frame or a cause with structured diagnostic data.
+//! Both kinds keep nested reports in the same ordered `children` field.
+//! Diagnostics retain codes, labels, and notes without owning descendants.
+//! Report destruction drains descendants iteratively to bound stack use.
 
 use std::fmt;
 
@@ -24,11 +24,11 @@ pub struct Label {
     pub message: String,
 }
 
-// = Reports
+// = Diagnostic data
 
-/// Carries one diagnostic without source text or terminal policy.
+/// Carries one diagnostic without descendants, source text, or terminal policy.
 #[derive(Debug)]
-pub struct Report {
+pub struct Diagnostic {
     /// Describes presentation severity, not recovery behavior.
     pub severity: Severity,
     /// Identifies the check using its producer and subject.
@@ -41,11 +41,9 @@ pub struct Report {
     pub notes: Vec<String>,
     /// Identifies the component that authored the diagnostic.
     pub source: &'static str,
-    /// Preserves causal context and alternative order.
-    pub traces: Vec<Trace>,
 }
 
-impl fmt::Display for Report {
+impl fmt::Display for Diagnostic {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Translate severity without traversing sources or causes
         let severity = match self.severity {
@@ -60,63 +58,67 @@ impl fmt::Display for Report {
         if let Some(code) = &self.code {
             write!(fmt, "[{code}]")?;
         }
-        // Leave notes and traces for the renderer
+        // Leave notes and labels for the renderer
         write!(fmt, ": {}", self.message)
     }
 }
 
-impl std::error::Error for Report {}
+// = Report trees
 
-// = Traces
+/// Preserves one context frame or cause and its ordered child reports.
+pub struct Report {
+    /// Distinguishes operation context from structured diagnostic content.
+    pub kind: ReportKind,
+    /// Retains nested causes and alternative order for either node kind.
+    pub children: Vec<Report>,
+}
 
-/// Preserves a context frame or an independently structured cause.
-pub enum Trace {
-    /// Groups causes under a located evaluation or search context.
+/// Describes a report node independently of its children.
+#[derive(Debug)]
+pub enum ReportKind {
+    /// Groups child reports under a located evaluation or search context.
     Frame {
         /// Locates the operation being attempted.
         span: Span,
         /// Describes the operation being attempted.
         message: String,
-        /// Retains nested causes in their original order.
-        children: Vec<Trace>,
     },
     /// Retains a cause with its own code, severity, labels, and notes.
-    Cause(Box<Report>),
+    Cause(Diagnostic),
 }
 
-impl Trace {
-    fn children_mut(&mut self) -> &mut Vec<Self> {
-        match self {
-            Self::Frame { children, .. } => children,
-            Self::Cause(report) => &mut report.traces,
+impl From<Diagnostic> for Report {
+    fn from(diagnostic: Diagnostic) -> Self {
+        Self { kind: ReportKind::Cause(diagnostic), children: Vec::new() }
+    }
+}
+
+impl fmt::Display for Report {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            ReportKind::Frame { message, .. } => write!(fmt, "note: {message}"),
+            ReportKind::Cause(diagnostic) => fmt::Display::fmt(diagnostic, fmt),
         }
     }
 }
 
-impl Drop for Trace {
+impl std::error::Error for Report {}
+
+impl Drop for Report {
     fn drop(&mut self) {
         // Detach descendants before dropping each node
-        let mut pending = std::mem::take(self.children_mut());
-        while let Some(mut trace) = pending.pop() {
-            pending.append(trace.children_mut());
+        let mut pending = std::mem::take(&mut self.children);
+        while let Some(mut report) = pending.pop() {
+            pending.append(&mut report.children);
         }
     }
 }
 
-impl fmt::Debug for Trace {
+impl fmt::Debug for Report {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Frame { span, message, children } => fmt
-                .debug_struct("Frame")
-                .field("span", span)
-                .field("message", message)
-                .field("children", &children.len())
-                .finish(),
-            Self::Cause(report) => fmt
-                .debug_struct("Cause")
-                .field("summary", &format_args!("{report}"))
-                .field("children", &report.traces.len())
-                .finish(),
-        }
+        fmt.debug_struct("Report")
+            .field("kind", &self.kind)
+            .field("children", &self.children.len())
+            .finish()
     }
 }

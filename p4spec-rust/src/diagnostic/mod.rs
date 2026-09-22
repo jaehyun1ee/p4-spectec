@@ -10,4 +10,4 @@ mod report;
 pub use codespan_reporting::diagnostic::{LabelStyle, Severity};
 pub use codespan_reporting::term::{Config as SnippetConfig, termcolor::ColorChoice};
 pub use render::{RenderConfig, RenderError, Renderer};
-pub use report::{Label, Report, Trace};
+pub use report::{Diagnostic, Label, Report, ReportKind};

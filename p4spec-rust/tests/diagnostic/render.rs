@@ -40,7 +40,7 @@ fn two_files_keep_label_roles_messages_and_notes() {
     renderer.insert_source("input.watsup", "foo bar\n");
     renderer.insert_source("decl.watsup", "var foo : nat\n");
     let mut report = report(span("input.watsup", 1, 0, 1, 3));
-    report.labels.push(Label {
+    super::cause_mut(&mut report).labels.push(Label {
         style: LabelStyle::Secondary,
         span: span("decl.watsup", 1, 4, 1, 7),
         message: "first declared here".to_owned(),
@@ -113,7 +113,7 @@ fn unavailable_sources_keep_the_responsible_location() {
         (span(file.name(), 1, 0, 1, 1), file.name()),
     ] {
         let mut report = report(span.clone());
-        report.labels.push(Label {
+        super::cause_mut(&mut report).labels.push(Label {
             style: LabelStyle::Secondary,
             span: super::span("related", 1, 0, 1, 3),
             message: "related declaration".to_owned(),
@@ -122,7 +122,7 @@ fn unavailable_sources_keep_the_responsible_location() {
         assert!(text.contains(loc), "{text}");
         assert!(text.contains("at "), "{text}");
         assert!(text.contains("invalid escape"), "{text}");
-        assert_eq!(report.labels[0].span, span);
+        assert_eq!(super::cause(&report).labels[0].span, span);
     }
     fs::write(&file_missing.0, b"now present\n").unwrap();
     let text = renderer
@@ -181,7 +181,7 @@ fn extreme_byte_columns_do_not_panic_while_reporting_bad_locations() {
 fn fallback_locations_use_readable_roles_and_colon_coordinates() {
     let mut renderer = Renderer::new(RenderConfig::default());
     let mut report = report(span("missing-input", 2, 3, 2, 5));
-    report.labels.push(Label {
+    super::cause_mut(&mut report).labels.push(Label {
         style: LabelStyle::Secondary,
         span: span("missing-decl", 4, 0, 4, 2),
         message: "declared here".to_owned(),
@@ -242,7 +242,7 @@ fn source_names_escape_terminal_controls_without_changing_source_identity() {
         let text = renderer.render_plain(&report).unwrap();
         assert!(!text.contains('\u{1b}'), "{text:?}");
         assert!(text.contains(&file.escape_debug().to_string()), "{text}");
-        assert_eq!(report.labels[0].span.left.file.as_ref(), file);
+        assert_eq!(super::cause(&report).labels[0].span.left.file.as_ref(), file);
     }
     let text = renderer
         .render_plain(&super::report(span(file, 0, 0, 0, 0)))
