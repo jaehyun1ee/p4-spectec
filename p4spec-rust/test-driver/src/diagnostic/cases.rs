@@ -27,7 +27,7 @@ pub enum Kind {
     Preservation,
 }
 
-/// Records a primary location with an endpoint when the reference proves it.
+/// Records a label location with an endpoint when the fixture proves it.
 pub struct Location {
     pub file: &'static str,
     pub start: (usize, usize),
@@ -46,6 +46,7 @@ pub struct Case {
     pub kind: Kind,
     pub state: State,
     pub primary: Option<Location>,
+    pub secondary: &'static [Location],
     pub obligations: &'static str,
 }
 
@@ -66,6 +67,7 @@ pub const CASES: &[Case] = &[
             start: (4, 19),
             end: Some((4, 29)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -83,6 +85,7 @@ pub const CASES: &[Case] = &[
             start: (4, 19),
             end: Some((4, 29)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -100,6 +103,7 @@ pub const CASES: &[Case] = &[
             start: (4, 17),
             end: Some((4, 27)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -117,6 +121,7 @@ pub const CASES: &[Case] = &[
             start: (4, 17),
             end: Some((4, 27)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -134,6 +139,7 @@ pub const CASES: &[Case] = &[
             start: (6, 13),
             end: Some((6, 34)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -151,6 +157,7 @@ pub const CASES: &[Case] = &[
             start: (3, 4),
             end: Some((3, 6)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -168,6 +175,7 @@ pub const CASES: &[Case] = &[
             start: (3, 12),
             end: Some((3, 15)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -185,6 +193,7 @@ pub const CASES: &[Case] = &[
             start: (3, 0),
             end: Some((3, 2)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -202,6 +211,7 @@ pub const CASES: &[Case] = &[
             start: (3, 0),
             end: Some((3, 1)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -219,6 +229,7 @@ pub const CASES: &[Case] = &[
             start: (3, 0),
             end: Some((3, 1)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -236,6 +247,7 @@ pub const CASES: &[Case] = &[
             start: (3, 13),
             end: Some((3, 15)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -253,6 +265,7 @@ pub const CASES: &[Case] = &[
             start: (3, 12),
             end: Some((3, 12)),
         }),
+        secondary: &[],
         obligations: "Match the grammar production range, including an empty syntax body.",
     },
     Case {
@@ -270,6 +283,7 @@ pub const CASES: &[Case] = &[
             start: (3, 0),
             end: Some((3, 6)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -287,6 +301,11 @@ pub const CASES: &[Case] = &[
             start: (4, 0),
             end: Some((4, 0)),
         }),
+        secondary: &[Location {
+            file: "parse-unclosed-block-comment.watsup",
+            start: (3, 0),
+            end: Some((3, 2)),
+        }],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -304,6 +323,7 @@ pub const CASES: &[Case] = &[
             start: (3, 4),
             end: Some((3, 4)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -321,6 +341,7 @@ pub const CASES: &[Case] = &[
             start: (3, 13),
             end: Some((3, 14)),
         }),
+        secondary: &[],
         obligations: "Match the grammar production range, including an empty syntax body.",
     },
     Case {
@@ -334,6 +355,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Active,
         primary: Some(Location { file: "missing-input.watsup", start: (0, 0), end: Some((0, 0)) }),
+        secondary: &[],
         obligations: "Preserve the file-only primary location without inventing a line.",
     },
     Case {
@@ -347,6 +369,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Active,
         primary: Some(Location { file: "<string>", start: (1, 1), end: Some((1, 1)) }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -360,6 +383,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Active,
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -373,6 +397,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Active,
         primary: Some(Location { file: "<string>", start: (1, 0), end: Some((1, 1)) }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -386,6 +411,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Active,
         primary: Some(Location { file: "<string>", start: (1, 2), end: Some((1, 3)) }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -399,6 +425,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Active,
         primary: Some(Location { file: "<string>", start: (1, 0), end: Some((1, 1)) }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -412,6 +439,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Active,
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -429,6 +457,7 @@ pub const CASES: &[Case] = &[
             start: (4, 13),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: ctx-builtin-dec-redefined.watsup:3:13 (verify endpoint at source site) originally defined here",
     },
     Case {
@@ -446,6 +475,7 @@ pub const CASES: &[Case] = &[
             start: (4, 21),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: ctx-builtin-dec-tparam-duplicate.watsup:4:18 (verify endpoint at source site) first declared here",
     },
     Case {
@@ -463,6 +493,7 @@ pub const CASES: &[Case] = &[
             start: (4, 5),
             end: Some((4, 7)),
         }),
+        secondary: &[],
         obligations: "Secondary: ctx-dec-redefined.watsup:3:5..3:7 originally defined here",
     },
     Case {
@@ -480,6 +511,7 @@ pub const CASES: &[Case] = &[
             start: (3, 13),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: ctx-dec-tparam-duplicate.watsup:3:10 (verify endpoint at source site) first declared here",
     },
     Case {
@@ -497,6 +529,7 @@ pub const CASES: &[Case] = &[
             start: (6, 18),
             end: Some((6, 26)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -514,6 +547,7 @@ pub const CASES: &[Case] = &[
             start: (3, 5),
             end: Some((3, 13)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -531,6 +565,7 @@ pub const CASES: &[Case] = &[
             start: (2, 12),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: ctx-extern-dec-redefined.watsup:1:12 (verify endpoint at source site) originally defined here",
     },
     Case {
@@ -548,6 +583,7 @@ pub const CASES: &[Case] = &[
             start: (1, 20),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: ctx-extern-dec-tparam-duplicate.watsup:1:17 (verify endpoint at source site) first declared here",
     },
     Case {
@@ -565,6 +601,7 @@ pub const CASES: &[Case] = &[
             start: (5, 16),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: ctx-extern-relation-redefined.watsup:1:16 (verify endpoint at source site) originally defined here",
     },
     Case {
@@ -582,6 +619,7 @@ pub const CASES: &[Case] = &[
             start: (5, 5),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: ctx-extern-relation-rules.watsup:1:16 (verify endpoint at source site) extern relation declared here",
     },
     Case {
@@ -599,6 +637,7 @@ pub const CASES: &[Case] = &[
             start: (8, 0),
             end: Some((9, 14)),
         }),
+        secondary: &[],
         obligations: "Secondary: ctx-function-otherwise-redefined.watsup:5:0..6:14 previous `otherwise` clause defined here",
     },
     Case {
@@ -616,6 +655,7 @@ pub const CASES: &[Case] = &[
             start: (4, 20),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: ctx-funparam-tparam-duplicate.watsup:4:17 (verify endpoint at source site) first declared here",
     },
     Case {
@@ -633,6 +673,7 @@ pub const CASES: &[Case] = &[
             start: (11, 9),
             end: Some((11, 12)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -650,6 +691,7 @@ pub const CASES: &[Case] = &[
             start: (4, 4),
             end: Some((4, 7)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -663,6 +705,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Pending,
         primary: Some(Location { file: "ctx-metavar-redefined.watsup", start: (4, 4), end: None }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: ctx-metavar-redefined.watsup:3:4 (verify endpoint at source site) originally defined here",
     },
     Case {
@@ -680,6 +723,7 @@ pub const CASES: &[Case] = &[
             start: (10, 0),
             end: Some((12, 14)),
         }),
+        secondary: &[],
         obligations: "Secondary: ctx-otherwise-redefined.watsup:6:0..8:14 previous `otherwise` rule defined here",
     },
     Case {
@@ -693,6 +737,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Pending,
         primary: Some(Location { file: "ctx-relation-redefined.watsup", start: (8, 9), end: None }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: ctx-relation-redefined.watsup:5:9 (verify endpoint at source site) originally defined here",
     },
     Case {
@@ -710,6 +755,7 @@ pub const CASES: &[Case] = &[
             start: (10, 5),
             end: Some((10, 12)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -727,6 +773,7 @@ pub const CASES: &[Case] = &[
             start: (5, 5),
             end: Some((5, 12)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -744,6 +791,7 @@ pub const CASES: &[Case] = &[
             start: (9, 6),
             end: Some((9, 11)),
         }),
+        secondary: &[],
         obligations: "Secondary: ctx-rulegroup-redefined.watsup:6:6..6:11 originally defined here",
     },
     Case {
@@ -761,6 +809,7 @@ pub const CASES: &[Case] = &[
             start: (2, 9),
             end: Some((2, 16)),
         }),
+        secondary: &[],
         obligations: "Secondary: ctx-table-dec-redefined.watsup:1:9..1:16 originally defined here",
     },
     Case {
@@ -778,6 +827,7 @@ pub const CASES: &[Case] = &[
             start: (1, 9),
             end: Some((1, 16)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -795,6 +845,7 @@ pub const CASES: &[Case] = &[
             start: (3, 9),
             end: Some((3, 15)),
         }),
+        secondary: &[],
         obligations: "Secondary: ctx-table-function-required.watsup:1:5..1:12 function declared here",
     },
     Case {
@@ -812,6 +863,7 @@ pub const CASES: &[Case] = &[
             start: (6, 9),
             end: Some((6, 15)),
         }),
+        secondary: &[],
         obligations: "Secondary: ctx-table-rows-redefined.watsup:4:4..4:13 first table definition here",
     },
     Case {
@@ -829,6 +881,7 @@ pub const CASES: &[Case] = &[
             start: (11, 9),
             end: Some((11, 12)),
         }),
+        secondary: &[],
         obligations: "Secondary: ctx-type-already-defined-in-prem.watsup:4:7..4:10 originally defined here",
     },
     Case {
@@ -846,6 +899,7 @@ pub const CASES: &[Case] = &[
             start: (6, 4),
             end: Some((6, 7)),
         }),
+        secondary: &[],
         obligations: "Secondary: ctx-type-already-defined-in-var.watsup:4:7..4:10 originally defined here",
     },
     Case {
@@ -863,6 +917,7 @@ pub const CASES: &[Case] = &[
             start: (4, 7),
             end: Some((4, 10)),
         }),
+        secondary: &[],
         obligations: "Secondary: ctx-type-fully-redefined.watsup:3:7..3:10 originally defined here",
     },
     Case {
@@ -880,6 +935,7 @@ pub const CASES: &[Case] = &[
             start: (4, 9),
             end: Some((4, 11)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -897,6 +953,7 @@ pub const CASES: &[Case] = &[
             start: (10, 5),
             end: Some((10, 15)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -914,6 +971,7 @@ pub const CASES: &[Case] = &[
             start: (1, 14),
             end: Some((1, 17)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -931,6 +989,7 @@ pub const CASES: &[Case] = &[
             start: (4, 13),
             end: Some((4, 16)),
         }),
+        secondary: &[],
         obligations: "Secondary: iteration-dimension-mismatch.watsup:4:7..4:10 other occurrence has dimension `int*`",
     },
     Case {
@@ -948,6 +1007,7 @@ pub const CASES: &[Case] = &[
             start: (6, 19),
             end: Some((6, 21)),
         }),
+        secondary: &[],
         obligations: "Secondary: relation-input-hint-duplicate-index.watsup:6:16..6:18 first occurrence here",
     },
     Case {
@@ -965,6 +1025,7 @@ pub const CASES: &[Case] = &[
             start: (6, 12),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width.",
     },
     Case {
@@ -982,6 +1043,7 @@ pub const CASES: &[Case] = &[
             start: (7, 13),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width.",
     },
     Case {
@@ -999,6 +1061,7 @@ pub const CASES: &[Case] = &[
             start: (4, 13),
             end: Some((4, 15)),
         }),
+        secondary: &[],
         obligations: "Secondary: relation-input-hint-out-of-bounds.watsup:3:12..3:22 relation has 2 positions",
     },
     Case {
@@ -1016,6 +1079,7 @@ pub const CASES: &[Case] = &[
             start: (8, 6),
             end: Some((8, 15)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1033,6 +1097,7 @@ pub const CASES: &[Case] = &[
             start: (10, 6),
             end: Some((10, 17)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1050,6 +1115,7 @@ pub const CASES: &[Case] = &[
             start: (6, 0),
             end: Some((7, 16)),
         }),
+        secondary: &[],
         obligations: "Operation succeeds while collecting this warning; do not demand a fatal failure.",
     },
     Case {
@@ -1067,6 +1133,7 @@ pub const CASES: &[Case] = &[
             start: (9, 5),
             end: Some((9, 14)),
         }),
+        secondary: &[],
         obligations: "Secondary: relation-multiple-otherwise-premises.watsup:8:5..8:14 first `otherwise` premise here",
     },
     Case {
@@ -1084,6 +1151,7 @@ pub const CASES: &[Case] = &[
             start: (16, 14),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: relation-negated-premise-on-output-relation.watsup:5:16..5:18 relation signature with output positions here",
     },
     Case {
@@ -1101,6 +1169,7 @@ pub const CASES: &[Case] = &[
             start: (3, 0),
             end: Some((3, 23)),
         }),
+        secondary: &[],
         obligations: "Operation succeeds while collecting this warning; do not demand a fatal failure.",
     },
     Case {
@@ -1118,6 +1187,7 @@ pub const CASES: &[Case] = &[
             start: (10, 2),
             end: Some((12, 16)),
         }),
+        secondary: &[],
         obligations: "Secondary: rule-multiple-otherwise-rules.watsup:7:2..9:16 first `otherwise` rule here",
     },
     Case {
@@ -1135,6 +1205,7 @@ pub const CASES: &[Case] = &[
             start: (9, 2),
             end: Some((11, 16)),
         }),
+        secondary: &[],
         obligations: "Secondary: rule-other-rule-before-otherwise.watsup:7:2..8:10 other rule here",
     },
     Case {
@@ -1152,6 +1223,7 @@ pub const CASES: &[Case] = &[
             start: (11, 7),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: rule-relation-mismatch.watsup:9:10 (verify endpoint at source site) enclosing rule group names relation `R`",
     },
     Case {
@@ -1169,6 +1241,7 @@ pub const CASES: &[Case] = &[
             start: (1, 16),
             end: Some((1, 30)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1186,6 +1259,7 @@ pub const CASES: &[Case] = &[
             start: (1, 0),
             end: Some((1, 27)),
         }),
+        secondary: &[],
         obligations: "Operation succeeds while collecting this warning; do not demand a fatal failure.",
     },
     Case {
@@ -1203,6 +1277,7 @@ pub const CASES: &[Case] = &[
             start: (7, 23),
             end: Some((7, 26)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1220,6 +1295,7 @@ pub const CASES: &[Case] = &[
             start: (6, 9),
             end: Some((6, 14)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-call-arg-arity-mismatch.watsup:3:5..3:7 function declared here",
     },
     Case {
@@ -1237,6 +1313,7 @@ pub const CASES: &[Case] = &[
             start: (6, 17),
             end: Some((6, 20)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-call-targ-arity-mismatch.watsup:3:5..3:7 declared here",
     },
     Case {
@@ -1254,6 +1331,7 @@ pub const CASES: &[Case] = &[
             start: (4, 10),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: type-clause-arg-arity-mismatch.watsup:3:5..3:7 declared here",
     },
     Case {
@@ -1271,6 +1349,7 @@ pub const CASES: &[Case] = &[
             start: (4, 7),
             end: Some((4, 11)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-clause-tparam-mismatch.watsup:3:7 (verify endpoint at source site) expected type parameters declared here",
     },
     Case {
@@ -1288,6 +1367,7 @@ pub const CASES: &[Case] = &[
             start: (1, 0),
             end: Some((1, 18)),
         }),
+        secondary: &[],
         obligations: "Operation succeeds while collecting this warning; do not demand a fatal failure.",
     },
     Case {
@@ -1305,6 +1385,7 @@ pub const CASES: &[Case] = &[
             start: (2, 7),
             end: Some((2, 13)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-define-extern.watsup:1:14..1:20 extern type declared here",
     },
     Case {
@@ -1322,6 +1403,7 @@ pub const CASES: &[Case] = &[
             start: (4, 4),
             end: Some((4, 10)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-extend-extern.watsup:1:14..1:20 extern type declared here",
     },
     Case {
@@ -1339,6 +1421,7 @@ pub const CASES: &[Case] = &[
             start: (7, 4),
             end: Some((7, 14)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-extend-forward-decl.watsup:4:7..4:17 originally declared here",
     },
     Case {
@@ -1352,6 +1435,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Pending,
         primary: Some(Location { file: "type-extend-param.watsup", start: (2, 4), end: None }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: type-extend-param.watsup:1:15 (verify endpoint at source site) type parameter declared here",
     },
     Case {
@@ -1369,6 +1453,7 @@ pub const CASES: &[Case] = &[
             start: (2, 4),
             end: Some((2, 8)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1386,6 +1471,7 @@ pub const CASES: &[Case] = &[
             start: (7, 4),
             end: Some((7, 12)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-extend-struct.watsup:4:7..4:15 originally defined here",
     },
     Case {
@@ -1403,6 +1489,7 @@ pub const CASES: &[Case] = &[
             start: (5, 11),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: type-forward-tparam-mismatch.watsup:4:7..4:10 declaration with no type parameters here",
     },
     Case {
@@ -1420,6 +1507,7 @@ pub const CASES: &[Case] = &[
             start: (9, 20),
             end: Some((9, 26)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-funarg-expected-exp-got-fun.watsup:6:12..6:15 parameter declared here",
     },
     Case {
@@ -1437,6 +1525,7 @@ pub const CASES: &[Case] = &[
             start: (8, 20),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: type-funarg-expected-fun-got-exp.watsup:4:12..4:29 parameter declared here",
     },
     Case {
@@ -1454,6 +1543,7 @@ pub const CASES: &[Case] = &[
             start: (5, 17),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: type-funarg-name-mismatch.watsup:4:17..4:25 function parameter declared here",
     },
     Case {
@@ -1471,6 +1561,7 @@ pub const CASES: &[Case] = &[
             start: (6, 20),
             end: Some((6, 26)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-funarg-signature-mismatch.watsup:3:17..3:19 function parameter declared here Secondary: type-funarg-signature-mismatch.watsup:1:5..1:7 passed function declared here",
     },
     Case {
@@ -1488,6 +1579,7 @@ pub const CASES: &[Case] = &[
             start: (8, 19),
             end: Some((8, 25)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-functyp-param-arity-mismatch.watsup:5:17..5:19 function parameter declared here Secondary: type-functyp-param-arity-mismatch.watsup:4:5..4:7 passed function declared here",
     },
     Case {
@@ -1505,6 +1597,7 @@ pub const CASES: &[Case] = &[
             start: (8, 19),
             end: Some((8, 25)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-functyp-tparam-arity-mismatch.watsup:5:17..5:19 function parameter declared here Secondary: type-functyp-tparam-arity-mismatch.watsup:4:5..4:7 passed function declared here",
     },
     Case {
@@ -1522,6 +1615,7 @@ pub const CASES: &[Case] = &[
             start: (5, 11),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width.",
     },
     Case {
@@ -1539,6 +1633,7 @@ pub const CASES: &[Case] = &[
             start: (5, 9),
             end: Some((5, 11)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1556,6 +1651,7 @@ pub const CASES: &[Case] = &[
             start: (5, 9),
             end: Some((5, 24)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1573,6 +1669,7 @@ pub const CASES: &[Case] = &[
             start: (1, 7),
             end: Some((1, 15)),
         }),
+        secondary: &[],
         obligations: "Operation succeeds while collecting this warning; do not demand a fatal failure.",
     },
     Case {
@@ -1590,6 +1687,7 @@ pub const CASES: &[Case] = &[
             start: (2, 7),
             end: Some((2, 10)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-redeclared.watsup:1:7..1:10 first declared here",
     },
     Case {
@@ -1607,6 +1705,7 @@ pub const CASES: &[Case] = &[
             start: (4, 7),
             end: Some((4, 10)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1624,6 +1723,7 @@ pub const CASES: &[Case] = &[
             start: (1, 17),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: type-syn-tparam-duplicate.watsup:1:14 (verify endpoint at source site) first declared here",
     },
     Case {
@@ -1641,6 +1741,7 @@ pub const CASES: &[Case] = &[
             start: (4, 7),
             end: Some((4, 10)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1658,6 +1759,7 @@ pub const CASES: &[Case] = &[
             start: (4, 11),
             end: Some((4, 14)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1675,6 +1777,7 @@ pub const CASES: &[Case] = &[
             start: (3, 22),
             end: Some((3, 26)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1692,6 +1795,7 @@ pub const CASES: &[Case] = &[
             start: (5, 9),
             end: Some((5, 11)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1709,6 +1813,7 @@ pub const CASES: &[Case] = &[
             start: (6, 4),
             end: Some((6, 7)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-variant-mixop-collision.watsup:5:4..5:7 earlier case with this shape",
     },
     Case {
@@ -1726,6 +1831,7 @@ pub const CASES: &[Case] = &[
             start: (5, 13),
             end: Some((5, 16)),
         }),
+        secondary: &[],
         obligations: "Secondary: type-vart-targ-arity-mismatch.watsup:3:7..3:11 type declared here",
     },
     Case {
@@ -1743,6 +1849,7 @@ pub const CASES: &[Case] = &[
             start: (14, 8),
             end: Some((14, 13)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1760,6 +1867,7 @@ pub const CASES: &[Case] = &[
             start: (13, 9),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width.",
     },
     Case {
@@ -1777,6 +1885,7 @@ pub const CASES: &[Case] = &[
             start: (14, 7),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width.",
     },
     Case {
@@ -1794,6 +1903,7 @@ pub const CASES: &[Case] = &[
             start: (13, 6),
             end: Some((13, 14)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1811,6 +1921,7 @@ pub const CASES: &[Case] = &[
             start: (10, 7),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: dataflow-parallel-binding-dimension-mismatch.watsup:10:3 (verify endpoint at source site) first bound here",
     },
     Case {
@@ -1828,6 +1939,7 @@ pub const CASES: &[Case] = &[
             start: (5, 5),
             end: Some((5, 12)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1845,6 +1957,7 @@ pub const CASES: &[Case] = &[
             start: (11, 17),
             end: Some((11, 29)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1862,6 +1975,7 @@ pub const CASES: &[Case] = &[
             start: (13, 5),
             end: Some((13, 14)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1879,6 +1993,7 @@ pub const CASES: &[Case] = &[
             start: (4, 4),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width.",
     },
     Case {
@@ -1896,6 +2011,7 @@ pub const CASES: &[Case] = &[
             start: (1, 16),
             end: Some((1, 19)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -1913,6 +2029,7 @@ pub const CASES: &[Case] = &[
             start: (3, 16),
             end: Some((3, 22)),
         }),
+        secondary: &[],
         obligations: "Secondary: table-pattern-extern.watsup:1:14..1:20 type declared here",
     },
     Case {
@@ -1930,6 +2047,7 @@ pub const CASES: &[Case] = &[
             start: (8, 13),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: table-pattern-incomplete.watsup:3:4 (verify endpoint at source site) case in uncovered pattern",
     },
     Case {
@@ -1947,6 +2065,7 @@ pub const CASES: &[Case] = &[
             start: (3, 16),
             end: Some((3, 22)),
         }),
+        secondary: &[],
         obligations: "Secondary: table-pattern-non-variant.watsup:1:7..1:13 type declared here",
     },
     Case {
@@ -1960,6 +2079,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Pending,
         primary: Some(Location { file: "table-pattern-overlap.watsup", start: (9, 4), end: None }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: table-pattern-overlap.watsup:8:4 (verify endpoint at source site) earlier overlapping pattern",
     },
     Case {
@@ -1977,6 +2097,7 @@ pub const CASES: &[Case] = &[
             start: (11, 11),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width. Secondary: table-repeated-binding.watsup:11:8 (verify endpoint at source site) first bound here",
     },
     Case {
@@ -1994,6 +2115,7 @@ pub const CASES: &[Case] = &[
             start: (2, 28),
             end: Some((2, 35)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -2011,6 +2133,7 @@ pub const CASES: &[Case] = &[
             start: (2, 20),
             end: None,
         }),
+        secondary: &[],
         obligations: "Verify primary endpoint at source site; a one-caret snapshot may be zero-width.",
     },
     Case {
@@ -2028,6 +2151,7 @@ pub const CASES: &[Case] = &[
             start: (2, 16),
             end: Some((2, 18)),
         }),
+        secondary: &[],
         obligations: "Match the primary source range.",
     },
     Case {
@@ -2041,6 +2165,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Pending,
         primary: Some(Location { file: "", start: (0, 0), end: Some((0, 0)) }),
+        secondary: &[],
         obligations: "Secondary: generated syntax related item Trace: generated syntax trace Return syntax failure identity unchanged, including all fields; successful preservation renders no diagnostic. Preserve detail Syntax detail. and generated regions without source invention.",
     },
     Case {
@@ -2054,6 +2179,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Pending,
         primary: Some(Location { file: "", start: (0, 0), end: Some((0, 0)) }),
+        secondary: &[],
         obligations: "Secondary: generated syntax related item Trace: generated syntax trace Return syntax failure identity unchanged, including all fields; successful preservation renders no diagnostic. Preserve detail Syntax detail. and generated regions without source invention.",
     },
     Case {
@@ -2067,6 +2193,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Deferred("G15"),
         primary: Some(Location { file: "", start: (0, 0), end: Some((0, 0)) }),
+        secondary: &[],
         obligations: "Secondary: generated syntax related item Trace: generated syntax trace Return syntax failure identity unchanged, including all fields; successful preservation renders no diagnostic. Preserve detail Syntax detail. and generated regions without source invention.",
     },
     Case {
@@ -2080,6 +2207,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Pending,
         primary: Some(Location { file: "", start: (0, 0), end: Some((0, 0)) }),
+        secondary: &[],
         obligations: "Secondary: generated external related item Trace: generated external trace root -> [generated external trace leaf] Fatal Abort returns unchanged across extern boundary; successful preservation renders no diagnostic. Preserve detail external detail, code, source, generated related locations, nested trace order.",
     },
     Case {
@@ -2093,6 +2221,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Pending,
         primary: Some(Location { file: "", start: (0, 0), end: Some((0, 0)) }),
+        secondary: &[],
         obligations: "Secondary: generated external related item Trace: generated external trace root -> [generated external trace leaf] Fatal Abort returns unchanged across extern boundary; successful preservation renders no diagnostic. Preserve detail external detail, code, source, generated related locations, nested trace order.",
     },
     Case {
@@ -2106,6 +2235,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Deferred("G15"),
         primary: Some(Location { file: "", start: (0, 0), end: Some((0, 0)) }),
+        secondary: &[],
         obligations: "Secondary: generated external related item Trace: generated external trace root -> [generated external trace leaf] Fatal Abort returns unchanged across extern boundary; successful preservation renders no diagnostic. Preserve detail external detail, code, source, generated related locations, nested trace order.",
     },
     Case {
@@ -2119,6 +2249,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Pending,
         primary: None,
+        secondary: &[],
         obligations: "Trace: cases/interp/backtrack.watsup:7:2..7:3 Preserve ordered root/leaf trace and branch control; primary root remains unlocated as in reference. Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2132,6 +2263,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Pending,
         primary: None,
+        secondary: &[],
         obligations: "Trace: cases/interp/backtrack.watsup:7:2..7:3 Preserve ordered root/leaf trace and branch control; primary root remains unlocated as in reference. Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2145,6 +2277,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Deferred("G15"),
         primary: None,
+        secondary: &[],
         obligations: "Trace: cases/interp/backtrack.watsup:7:2..7:3 Preserve ordered root/leaf trace and branch control; primary root remains unlocated as in reference. Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2158,6 +2291,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Pending,
         primary: None,
+        secondary: &[],
         obligations: "Trace: cases/interp/external.watsup:15:5..15:28 Preserve recoverable Unmatch until execution boundary promotes exhausted alternatives. Retain nested external relation failed -> external leaf generated frames in order, plus exact preceding source-bearing frames from expected section. Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2171,6 +2305,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Pending,
         primary: None,
+        secondary: &[],
         obligations: "Trace: cases/interp/external.watsup:15:5..15:28 Preserve recoverable Unmatch until execution boundary promotes exhausted alternatives. Retain nested external relation failed -> external leaf generated frames in order, plus exact preceding source-bearing frames from expected section. Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2184,6 +2319,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Deferred("G15"),
         primary: None,
+        secondary: &[],
         obligations: "Trace: cases/interp/external.watsup:13:6..13:13 Trace: cases/interp/external.watsup:15:5..15:36 Trace: cases/interp/external.watsup:15:5..15:28 Preserve recoverable Unmatch until execution boundary promotes exhausted alternatives. Retain nested external relation failed -> external leaf generated frames in order, plus exact preceding source-bearing frames from expected section. Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2197,6 +2333,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Pending,
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2210,6 +2347,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Deferred("G20/G21"),
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2223,6 +2361,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Deferred("G20/G21"),
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2236,6 +2375,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Deferred("G19/G21"),
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2249,6 +2389,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Deferred("G20"),
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2262,6 +2403,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Pending,
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2275,6 +2417,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Pending,
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2288,6 +2431,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Deferred("G15"),
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
     Case {
@@ -2301,6 +2445,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Deferred("G20"),
         primary: Some(Location { file: "input.watsup", start: (1, 19), end: Some((1, 29)) }),
+        secondary: &[],
         obligations: "Compare all diagnostic fields with generic SpecTec parser result for identical input; preserve source code/producer already assigned by parser. Source input: syntax foo = | nat hint(blah). Successful equality renders no diagnostic.",
     },
     Case {
@@ -2314,6 +2459,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Preservation,
         state: State::Deferred("G20"),
         primary: Some(Location { file: "input.watsup", start: (1, 19), end: Some((1, 29)) }),
+        secondary: &[],
         obligations: "Compare all diagnostic fields with generic SpecTec parser result for identical input; preserve source code/producer already assigned by parser. Source input: syntax foo = | nat hint(blah). Successful equality renders no diagnostic.",
     },
     Case {
@@ -2327,6 +2473,7 @@ pub const CASES: &[Case] = &[
         kind: Kind::Failure,
         state: State::Pending,
         primary: None,
+        secondary: &[],
         obligations: "Reference root has no region; do not invent a source location.",
     },
 ];

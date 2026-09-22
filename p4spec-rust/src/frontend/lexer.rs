@@ -386,7 +386,7 @@ where
                 // Block comment: skip it, nesting allowed
                 b'(' if self.cursor_starts_with("(;") => {
                     self.advance_add(2);
-                    self.scan_comment()?;
+                    self.scan_comment(start)?;
                     continue;
                 }
                 // Line comment: skip it, but the newline after it is layout
@@ -541,19 +541,28 @@ where
     // - Comment state
 
     /// Skips a `(; ;)` block comment, which nests.
-    fn scan_comment(&mut self) -> Result<(), Box<Report>> {
+    fn scan_comment(&mut self, start: Cursor) -> Result<(), Box<Report>> {
         self.in_block_comment = true;
-        let mut depth = 1usize;
-        while depth > 0 {
+        let mut starts = vec![start];
+        while !starts.is_empty() {
             if self.cursor_is_eof() {
-                return Err(error::block_comment_incomplete(self.span(self.cursor)));
+                let spans_open = starts
+                    .into_iter()
+                    .map(|start| {
+                        Span::new(
+                            Self::position(self, start),
+                            Self::position(self, Cursor { offset: start.offset + 2, ..start }),
+                        )
+                    })
+                    .collect();
+                return Err(error::block_comment_incomplete(self.span(self.cursor), spans_open));
             }
-            // Nested comments open and close by depth
+            // Keep only the openers whose closing delimiters have not appeared
             if self.cursor_starts_with("(;") {
-                depth += 1;
+                starts.push(self.cursor);
                 self.advance_add(2);
             } else if self.cursor_starts_with(";)") {
-                depth -= 1;
+                starts.pop();
                 self.advance_add(2);
             // Newlines keep the line count; other characters are skipped whole
             } else if self.cursor_current() == Some(b'\n') {
@@ -930,7 +939,7 @@ where
         }
 
         self.advance_add(1);
-        Err(error::character_invalid(self.span(start)))
+        Err(error::character_invalid(self.span(start), '\''))
     }
 
     // - Text state
@@ -947,8 +956,9 @@ where
                 // Closing quote: the bytes must form valid UTF-8
                 b'"' => {
                     self.advance_add(1);
-                    let text = String::from_utf8(bytes)
-                        .map_err(|_| error::text_encoding_invalid(self.span(start)))?;
+                    let text = String::from_utf8(bytes).map_err(|error_utf8| {
+                        error::text_encoding_invalid(self.span(start), &error_utf8)
+                    })?;
                     return Ok(self.lexeme(Token::TextLiteral(text), start));
                 }
                 // A literal cannot span lines
@@ -957,7 +967,10 @@ where
                 }
                 // Control characters must be escaped
                 0x00..=0x1f | 0x7f => {
-                    return Err(error::text_character_invalid(self.span(self.cursor)));
+                    return Err(error::text_character_invalid(
+                        self.span(self.cursor),
+                        char::from(byte),
+                    ));
                 }
                 // Escape sequence
                 b'\\' => self.scan_escape(start, &mut bytes)?,
@@ -986,7 +999,7 @@ where
         // A trailing backslash is a malformed literal
         let Some(escape) = self.cursor_offset(escape_start + 1) else {
             self.cursor = Cursor { offset: start.offset + 1, ..start };
-            return Err(error::character_invalid(self.span(start)));
+            return Err(error::character_invalid(self.span(start), '"'));
         };
 
         // Single-character escapes
@@ -1034,6 +1047,7 @@ where
                         .ok_or_else(|| {
                             error::text_escape_codepoint_invalid(
                                 self.span(Cursor { offset: escape_start, ..start }),
+                                &digits.to_uppercase(),
                             )
                         })?;
                     let mut bytes_char = [0; 4];
@@ -1059,7 +1073,7 @@ where
         } else {
             self.advance_to(invalid_end);
         }
-        Err(error::text_escape_invalid(self.span(pos)))
+        Err(error::text_escape_invalid(self.span(pos), &self.source[escape_start..invalid_end]))
     }
 
     // - Errors
@@ -1072,7 +1086,7 @@ where
             .next()
             .expect("unrecognized character exists");
         self.advance_add(character.len_utf8());
-        error::character_invalid(self.span(start))
+        error::character_invalid(self.span(start), character)
     }
 }
 

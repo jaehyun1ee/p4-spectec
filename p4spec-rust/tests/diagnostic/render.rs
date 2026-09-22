@@ -120,7 +120,7 @@ fn unavailable_sources_keep_the_responsible_location() {
         });
         let text = renderer.render_plain(&report).unwrap();
         assert!(text.contains(loc), "{text}");
-        assert!(text.contains("primary"), "{text}");
+        assert!(text.contains("at "), "{text}");
         assert!(text.contains("invalid escape"), "{text}");
         assert_eq!(report.labels[0].span, span);
     }
@@ -175,4 +175,78 @@ fn extreme_byte_columns_do_not_panic_while_reporting_bad_locations() {
         .render_plain(&report(span(file.name(), 1, usize::MAX, 1, usize::MAX)))
         .unwrap();
     assert!(text.contains("source unavailable"));
+}
+
+#[test]
+fn fallback_locations_use_readable_roles_and_colon_coordinates() {
+    let mut renderer = Renderer::new(RenderConfig::default());
+    let mut report = report(span("missing-input", 2, 3, 2, 5));
+    report.labels.push(Label {
+        style: LabelStyle::Secondary,
+        span: span("missing-decl", 4, 0, 4, 2),
+        message: "declared here".to_owned(),
+    });
+    let text = renderer.render_plain(&report).unwrap();
+    assert!(text.contains("at missing-input:2:4-missing-input:2:6: invalid escape"), "{text}");
+    assert!(
+        text.contains("related location at missing-decl:4:1-missing-decl:4:3: declared here"),
+        "{text}"
+    );
+    assert!(!text.contains("primary"), "{text}");
+    let text = renderer
+        .render_plain(&super::report(span("missing-input", 0, 0, 0, 0)))
+        .unwrap();
+    assert!(text.contains("at missing-input: invalid escape"), "{text}");
+    assert!(!text.contains("no source range"), "{text}");
+}
+
+#[test]
+fn control_characters_in_source_never_reach_the_terminal() {
+    for control in ['\u{000b}', '\u{001b}', '\u{007f}', '\u{0085}', '\r'] {
+        let text = format!("abc\n{control}x\n");
+        let file = File::new(text.as_bytes());
+        let mut renderer = Renderer::new(RenderConfig::default());
+        // Context lines must be safe even when the label itself is printable
+        let report = report(span(file.name(), 1, 0, 1, 3));
+        let rendered = renderer.render_plain(&report).unwrap();
+        assert!(!rendered.contains(control), "{rendered:?}");
+        assert!(
+            rendered.contains("snippet omitted: source contains control characters"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(&format!("at {}:1:1-{}:1:4", file.name(), file.name())),
+            "{rendered}"
+        );
+        renderer.insert_source(file.name(), "safe\n");
+        assert!(renderer.render_plain(&report).unwrap().contains("safe"));
+        renderer.insert_source(file.name(), text);
+        assert!(!renderer.render_plain(&report).unwrap().contains(control));
+        // Source suppression must not mask malformed producer coordinates
+        assert!(matches!(
+            renderer.render_plain(&super::report(span(file.name(), 1, 0, 1, 99))),
+            Err(RenderError::InvalidSpan { .. })
+        ));
+    }
+}
+
+#[test]
+fn source_names_escape_terminal_controls_without_changing_source_identity() {
+    let file = "input\u{1b}[31m\n.watsup";
+    let mut renderer = Renderer::new(RenderConfig::default());
+    let report = report(span(file, 1, 0, 1, 1));
+    for available in [false, true] {
+        if available {
+            renderer.insert_source(file, "x");
+        }
+        let text = renderer.render_plain(&report).unwrap();
+        assert!(!text.contains('\u{1b}'), "{text:?}");
+        assert!(text.contains(&file.escape_debug().to_string()), "{text}");
+        assert_eq!(report.labels[0].span.left.file.as_ref(), file);
+    }
+    let text = renderer
+        .render_plain(&super::report(span(file, 0, 0, 0, 0)))
+        .unwrap();
+    assert!(!text.contains('\u{1b}'), "{text:?}");
+    assert!(text.contains(&file.escape_debug().to_string()), "{text}");
 }

@@ -88,28 +88,62 @@ fn parse_source_with_context(
     let lexer = Lexer::new(name, source, |id| ctx.find_id(id));
     let tokens = parser_tokens(ctx, lexer);
     let result = parser::SpecParser::new().parse(ctx, tokens);
-    result.map_err(|error| parse_error(ctx, error))
+    result.map_err(|error| parse_error(ctx, source, error))
 }
 
 /// Maps LALRPOP control failures to reports at the responsible token.
 fn parse_error(
     ctx: &Context,
+    source: &str,
     error_parse: ParseError<Location, Token, Box<Report>>,
 ) -> Box<Report> {
     match error_parse {
-        ParseError::InvalidToken { location: loc } => error::token_invalid(ctx.span(loc, loc)),
-        ParseError::UnrecognizedEof { location: loc, .. } => {
-            error::input_incomplete(ctx.span(loc, loc))
+        ParseError::InvalidToken { location: loc } => {
+            error::token_invalid(ctx.span(loc, loc), None, &[])
         }
-        ParseError::UnrecognizedToken { token: (loc_l, Token::Eof, loc_r), .. } => {
-            error::input_incomplete(ctx.span(loc_l, loc_r))
+        ParseError::UnrecognizedEof { location: loc, expected } => {
+            error::input_incomplete(ctx.span(loc, loc), &expected)
         }
-        ParseError::UnrecognizedToken { token: (loc_l, _, loc_r), .. }
-        | ParseError::ExtraToken { token: (loc_l, _, loc_r) } => {
-            error::token_invalid(ctx.span(loc_l, loc_r))
+        ParseError::UnrecognizedToken { token: (loc_l, Token::Eof, loc_r), expected } => {
+            error::input_incomplete(ctx.span(loc_l, loc_r), &expected)
+        }
+        ParseError::UnrecognizedToken { token: (loc_l, token, loc_r), expected } => {
+            let span = ctx.span(loc_l, loc_r);
+            let actual = describe_token(source, &span, &token);
+            error::token_invalid(span, Some(&actual), &expected)
+        }
+        ParseError::ExtraToken { token: (loc_l, token, loc_r) } => {
+            let span = ctx.span(loc_l, loc_r);
+            let actual = describe_token(source, &span, &token);
+            error::token_invalid(span, Some(&actual), &["EOF".to_owned()])
         }
         ParseError::User { error } => error,
     }
+}
+
+/// Uses the lexeme's source spelling, including payloads and punctuation.
+fn describe_token(source: &str, span: &Span, token: &Token) -> String {
+    // Layout and parser-inserted tokens can have zero-width source spans
+    match token {
+        Token::Sequence => return "adjacent token".to_owned(),
+        Token::Eof => return "end of input".to_owned(),
+        Token::NewlineBar => return "newline followed by `|`".to_owned(),
+        Token::Newline2 => return "blank line".to_owned(),
+        Token::Newline3 => return "two blank lines".to_owned(),
+        _ => {}
+    }
+
+    // Positions retain byte columns, so source spelling needs no decoding
+    let offset = |pos: &Position| {
+        source
+            .split_inclusive('\n')
+            .take(pos.line.saturating_sub(1))
+            .map(str::len)
+            .sum::<usize>()
+            + pos.column
+    };
+    let text = &source[offset(&span.left)..offset(&span.right)];
+    format!("token {text:?}")
 }
 
 /// Parses a UTF-8 source string with fresh variable bindings.
@@ -137,9 +171,9 @@ fn parse_bytes_with_context(
         let mut lexer = Lexer::new(Rc::clone(&name), prefix, |_| false);
         while lexer.next().is_some_and(|token| token.is_ok()) {}
         if lexer.in_block_comment() {
-            error::comment_encoding_invalid(span)
+            error::comment_encoding_invalid(span, bytes, &error_utf8)
         } else {
-            error::source_encoding_invalid(span)
+            error::source_encoding_invalid(span, bytes, &error_utf8)
         }
     })?;
     parse_source_with_context(name, source, ctx)

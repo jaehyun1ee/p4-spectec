@@ -15,7 +15,7 @@ use indicatif::ProgressBar;
 use p4spec_rust::diagnostic::{ColorChoice, LabelStyle, RenderConfig, Renderer, Report};
 
 use crate::{Error, Result};
-use cases::{CASES, Case, Kind, State};
+use cases::{CASES, Case, Kind, Location, State};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 /// Selects a reference acceptance family.
@@ -62,41 +62,56 @@ impl Case {
         {
             return Err(self.failure(format!("unexpected report: {report:?}")));
         }
-        // Parser failures have one responsible label, or no reference region
-        if self.suite == Suite::Parse
-            && (report.labels.len() != usize::from(self.primary.is_some())
-                || report
-                    .labels
-                    .iter()
-                    .any(|label| label.style != LabelStyle::Primary || label.message.is_empty())
-                || !report.traces.is_empty())
-        {
-            return Err(self.failure("unexpected parser label roles or trace"));
-        }
-        // Compare byte coordinates, not the renderer's display columns
-        if let Some(loc) = &self.primary {
-            let Some(label) = report
+        // Active parser cases pin every label role before snapshot promotion
+        if self.suite == Suite::Parse {
+            let labels = &report.labels;
+            let count_primary = usize::from(self.primary.is_some());
+            if labels.len() != count_primary + self.secondary.len()
+                || labels.iter().any(|label| label.message.is_empty())
+                || !report.traces.is_empty()
+            {
+                return Err(self.failure("unexpected parser label count, message, or trace"));
+            }
+            let locations = self
+                .primary
+                .iter()
+                .map(|loc| (LabelStyle::Primary, loc))
+                .chain(
+                    self.secondary
+                        .iter()
+                        .map(|loc| (LabelStyle::Secondary, loc)),
+                );
+            for (label, (style, loc)) in labels.iter().zip(locations) {
+                if label.style != style || !loc.matches(&label.span) {
+                    return Err(self.failure(format!("unexpected parser label: {label:?}")));
+                }
+            }
+        } else if let Some(loc) = &self.primary {
+            // Future suites retain their existing primary-coordinate obligation
+            if !report
                 .labels
                 .iter()
-                .find(|label| label.style == LabelStyle::Primary)
-            else {
-                return Err(self.failure("missing primary label"));
-            };
-            let span = &label.span;
-            if Path::new(span.left.file.as_ref())
-                .file_name()
-                .and_then(|file| file.to_str())
-                != Some(loc.file)
-                || span.left.file != span.right.file
-                || (span.left.line, span.left.column) != loc.start
-                || loc
-                    .end
-                    .is_some_and(|end| (span.right.line, span.right.column) != end)
+                .any(|label| label.style == LabelStyle::Primary && loc.matches(&label.span))
             {
-                return Err(self.failure(format!("unexpected primary span: {span:?}")));
+                return Err(self.failure("missing expected primary label"));
             }
         }
         Ok(())
+    }
+}
+
+impl Location {
+    /// Compares byte coordinates, independently of renderer display columns.
+    fn matches(&self, span: &p4spec_rust::lang::common::source::Span) -> bool {
+        Path::new(span.left.file.as_ref())
+            .file_name()
+            .and_then(|file| file.to_str())
+            == Some(self.file)
+            && span.left.file == span.right.file
+            && (span.left.line, span.left.column) == self.start
+            && self
+                .end
+                .is_none_or(|end| (span.right.line, span.right.column) == end)
     }
 }
 

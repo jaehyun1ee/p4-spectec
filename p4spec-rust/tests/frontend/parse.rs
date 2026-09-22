@@ -215,3 +215,92 @@ fn test_missing_path_fails_before_parsing_collected_files() {
     assert_eq!(report.code.as_deref(), Some("parse/file-read-failed"));
     assert_eq!(report.labels[0].span.left, Position::new(missing.to_string_lossy(), 0, 0));
 }
+
+#[test]
+fn test_parser_diagnostics_preserve_actual_and_expected_tokens() {
+    use p4spec_rust::frontend::parse::parse_source;
+
+    let report = parse_source(Rc::from("syntax.watsup"), "var x :").unwrap_err();
+    let text = report.labels[0].message.as_str();
+    assert!(text.contains("expected"), "{text}");
+    assert!(text.contains("nat"), "{text}");
+    assert!(text.contains("identifier"), "{text}");
+    assert!(!text.contains("UPID") && !text.contains("NL2"), "{text}");
+    for (source, actual) in [("var x : }", "}"), ("var : nat", ":"), ("var x : 123", "123")] {
+        let report = parse_source(Rc::from("syntax.watsup"), source).unwrap_err();
+        assert!(report.message.contains(actual), "{}", report.message);
+        assert!(report.labels[0].message.contains("expected"));
+    }
+}
+
+#[test]
+fn test_source_utf8_errors_identify_invalid_and_truncated_bytes() {
+    use p4spec_rust::frontend::parse::parse_bytes;
+
+    for (bytes, code, hex, truncated) in [
+        (&b"\xff"[..], "parse/source-encoding-invalid", "0xFF", false),
+        (&b"(; \xe2\x82"[..], "parse/comment-encoding-invalid", "0xE2 0x82", true),
+    ] {
+        let report = parse_bytes(Rc::from("bytes.watsup"), bytes).unwrap_err();
+        assert_eq!(report.code.as_deref(), Some(code));
+        assert!(report.labels[0].message.contains(hex));
+        assert_eq!(report.labels[0].message.contains("truncated"), truncated);
+    }
+}
+
+#[test]
+fn test_missing_file_diagnostic_names_path_and_cause() {
+    let directory = TempDirectory::new();
+    let path = directory.path("missing.watsup");
+    let report = parse_files([&path]).unwrap_err();
+    assert!(report.message.contains("cannot read"));
+    assert!(report.message.contains("missing.watsup"));
+    assert!(report.message.contains("file does not exist"));
+    assert!(!report.message.contains("entity"));
+}
+
+#[test]
+fn test_unexpected_token_spelling_preserves_payload_on_later_lines() {
+    use p4spec_rust::frontend::parse::parse_source;
+
+    for (source, actual) in [
+        ("var x : nat\n\nvar 0xFE : nat", "0xFE"),
+        ("var x : nat\n\nvar \"é\\n\" : nat", "é"),
+        ("var x : nat\n\nvar bad( : nat", "bad("),
+    ] {
+        let report = parse_source(Rc::from("syntax.watsup"), source).unwrap_err();
+        assert!(report.message.contains(actual), "{}", report.message);
+        assert!(!report.message.contains('\n'));
+        assert_eq!(report.labels[0].span.left.line, 3);
+    }
+}
+
+#[test]
+fn test_unexpected_layout_tokens_keep_their_identity_with_empty_spans() {
+    use p4spec_rust::frontend::parse::parse_source;
+
+    for (source, actual) in [
+        ("var x :\n\nvar y : nat", "blank line"),
+        ("var x :\n\n\nvar y : nat", "two blank lines"),
+        ("var x :\n| var y : nat", "newline followed by `|`"),
+    ] {
+        let report = parse_source(Rc::from("layout.watsup"), source).unwrap_err();
+        assert_eq!(report.code.as_deref(), Some("parse/token-invalid"));
+        assert!(report.message.contains(actual), "{}", report.message);
+        assert_eq!(report.message, format!("unexpected {actual}"));
+        assert!(report.labels[0].message.contains("expected"));
+    }
+}
+
+#[test]
+fn test_expected_identifiers_include_contextually_bound_uppercase_names() {
+    use p4spec_rust::frontend::parse::parse_source;
+
+    parse_source(Rc::from("bindings.watsup"), "var X : nat\n\nvar y : X")
+        .expect("bound uppercase names are accepted as identifiers");
+    for source in ["var : nat", "var X : nat\n\nvar y : }"] {
+        let report = parse_source(Rc::from("bindings.watsup"), source).unwrap_err();
+        assert!(report.labels[0].message.contains("an identifier"));
+        assert!(!report.labels[0].message.contains("lowercase"));
+    }
+}

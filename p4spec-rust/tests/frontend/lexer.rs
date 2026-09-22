@@ -323,3 +323,102 @@ fn test_escaped_newline_reports_a_renderable_multiline_span() {
         .expect("valid byte endpoints");
     assert!(text.contains("invalid escape"));
 }
+
+#[test]
+fn test_unicode_escape_diagnostics_distinguish_invalid_scalar_values() {
+    for (digits, reason) in [
+        ("D800", "surrogate"),
+        ("DFFF", "surrogate"),
+        ("110000", "maximum"),
+        ("FFFFFFFFFFFFFFFF", "maximum"),
+    ] {
+        let source = format!("\"\\u{{{digits}}}\"");
+        let report = Lexer::new("escape.watsup", &source, |_| false)
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(report.code.as_deref(), Some("parse/text-escape-codepoint-invalid"));
+        assert!(report.message.contains(digits), "{}", report.message);
+        assert!(report.message.contains(reason), "{}", report.message);
+        assert!(report.notes.iter().any(|text| text.contains("U+0000")
+            && text.contains("U+D7FF")
+            && text.contains("U+E000")
+            && text.contains("U+10FFFF")));
+    }
+}
+
+#[test]
+fn test_invalid_characters_name_controls_without_emitting_them() {
+    for source in ["\u{b}", "\"\u{b}\""] {
+        let report = Lexer::new("control.watsup", source, |_| false)
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert!(report.message.contains("U+000B"));
+        assert!(report.message.contains("vertical tab"));
+        assert!(!report.message.contains('\u{b}'));
+        if source.starts_with('"') {
+            assert!(report.notes.iter().any(|text| text.contains("\\u{B}")));
+        }
+    }
+}
+
+#[test]
+fn test_invalid_escape_names_escape_and_supported_forms() {
+    let report = Lexer::new("escape.watsup", r#""\q""#, |_| false)
+        .next()
+        .unwrap()
+        .unwrap_err();
+    assert!(report.message.contains("\\q"));
+    assert!(
+        report
+            .notes
+            .iter()
+            .any(|text| text.contains("\\n") && text.contains("\\HH") && text.contains("\\u{HEX}"))
+    );
+}
+
+#[test]
+fn test_decoded_utf8_error_identifies_escaped_bytes_and_offset() {
+    let report = Lexer::new("escape.watsup", r#""a\FF""#, |_| false)
+        .next()
+        .unwrap()
+        .unwrap_err();
+    assert!(report.message.contains("decoded bytes"));
+    assert!(report.labels[0].message.contains("0xFF"));
+    assert!(report.labels[0].message.contains("offset 1"));
+    assert!(report.notes.iter().any(|text| text.contains("\\u{FF}")));
+}
+
+#[test]
+fn test_unclosed_comment_labels_only_still_open_delimiters() {
+    use p4spec_rust::diagnostic::LabelStyle;
+
+    for (source, columns) in [
+        ("(; outer (; inner", vec![0, 9]),
+        ("(; outer (; closed ;) (; inner", vec![0, 22]),
+        ("(; outer (; closed ;)", vec![0]),
+    ] {
+        let report = Lexer::new("comment.watsup", source, |_| false)
+            .next()
+            .unwrap()
+            .unwrap_err();
+        assert_eq!(report.labels[0].style, LabelStyle::Primary);
+        assert_eq!(report.labels[0].span.left.column, source.len());
+        assert_eq!(report.labels.len(), columns.len() + 1);
+        for (label, column) in report.labels[1..].iter().zip(columns) {
+            assert_eq!(label.style, LabelStyle::Secondary);
+            assert_eq!(label.message, "comment opened here");
+            assert_eq!(label.span.left.column, column);
+            assert_eq!(label.span.right.column, column + 2);
+        }
+    }
+}
+
+#[test]
+fn test_unicode_escape_scalar_boundaries_remain_accepted() {
+    assert_eq!(
+        token_nodes(r#""\u{D7FF}\u{E000}\u{10FFFF}""#),
+        vec![Token::TextLiteral("\u{D7FF}\u{E000}\u{10FFFF}".to_owned()), Token::Eof]
+    );
+}

@@ -56,7 +56,9 @@ pub enum RenderError {
 
 /// Formats even invalid byte columns without overflowing their display offset.
 fn span_location(span: &Span) -> String {
-    let loc = |pos: &Position| format!("{}:{}.{}", pos.file, pos.line, pos.column as u128 + 1);
+    let loc = |pos: &Position| {
+        format!("{}:{}:{}", pos.file.escape_debug(), pos.line, pos.column as u128 + 1)
+    };
     if span.left == span.right {
         loc(&span.left)
     } else {
@@ -64,11 +66,18 @@ fn span_location(span: &Span) -> String {
     }
 }
 
+/// Records whether cached source text can be printed safely as a snippet.
+#[derive(Clone, Copy)]
+struct Source {
+    id: usize,
+    printable: bool,
+}
+
 /// Resolves source text and renders reports without changing semantic state.
 pub struct Renderer {
     config: RenderConfig,
     files: SimpleFiles<String, String>,
-    cache: HashMap<String, Option<usize>>,
+    cache: HashMap<String, Option<Source>>,
 }
 
 impl Renderer {
@@ -80,8 +89,8 @@ impl Renderer {
     /// Supplies source text that takes precedence over disk contents.
     pub fn insert_source(&mut self, file: impl Into<String>, text: impl Into<String>) {
         let file = file.into();
-        let id = self.files.add(file.clone(), text.into());
-        self.cache.insert(file, Some(id));
+        let source = self.add_source(file.clone(), text.into());
+        self.cache.insert(file, Some(source));
     }
 
     /// Renders a report without terminal color codes.
@@ -101,19 +110,38 @@ impl Renderer {
         Ok(())
     }
 
+    /// Caches original bytes and suppresses snippets containing terminal controls.
+    fn add_source(&mut self, file: String, text: String) -> Source {
+        // Codespan may print context lines outside the labelled range
+        let mut chars = text.chars().peekable();
+        let mut printable = true;
+        while let Some(ch) = chars.next() {
+            if ch.is_control()
+                && ch != '\n'
+                && ch != '\t'
+                && !(ch == '\r' && chars.peek() == Some(&'\n'))
+            {
+                printable = false;
+                break;
+            }
+        }
+        // Keep the source untouched so span validation uses original byte offsets
+        Source { id: self.files.add(file.escape_debug().to_string(), text), printable }
+    }
+
     /// Caches both successful and unavailable reads under the original file name.
-    fn resolve(&mut self, file: &str) -> Option<usize> {
+    fn resolve(&mut self, file: &str) -> Option<Source> {
         // An explicit override or previous load always wins
-        if let Some(id) = self.cache.get(file) {
-            return *id;
+        if let Some(source) = self.cache.get(file) {
+            return *source;
         }
 
         // Unreadable and non-UTF-8 files retain location-only diagnostics
-        let id = fs::read_to_string(file)
+        let source = fs::read_to_string(file)
             .ok()
-            .map(|text| self.files.add(file.to_owned(), text));
-        self.cache.insert(file.to_owned(), id);
-        id
+            .map(|text| self.add_source(file.to_owned(), text));
+        self.cache.insert(file.to_owned(), source);
+        source
     }
 
     fn invalid(span: &Span, reason: &'static str) -> RenderError {
@@ -161,26 +189,41 @@ impl Renderer {
         // Generated and file-only spans have no line to underline
         let file_only = span.left.line == 0 && span.left.column == 0 && span.left == span.right;
         if file_only {
-            let loc = if span.left.file.is_empty() { "generated source" } else { &span.left.file };
-            Self::fallback(label, loc, "no source range", diagnostic);
+            let loc = if span.left.file.is_empty() {
+                "generated source".to_owned()
+            } else {
+                span.left.file.escape_debug().to_string()
+            };
+            Self::fallback(label, &loc, None, diagnostic);
             return Ok(());
         }
 
         // Missing source must not hide a responsible location behind related labels
-        let Some(id) = self.resolve(&span.left.file) else {
-            Self::fallback(label, &span_location(span), "source unavailable", diagnostic);
+        let Some(source) = self.resolve(&span.left.file) else {
+            Self::fallback(label, &span_location(span), Some("source unavailable"), diagnostic);
             return Ok(());
         };
-        let start = self.offset(id, &span.left, span)?;
-        let end = self.offset(id, &span.right, span)?;
+        let start = self.offset(source.id, &span.left, span)?;
+        let end = self.offset(source.id, &span.right, span)?;
         if start > end {
             return Err(Self::invalid(span, "end precedes start"));
+        }
+
+        // Preserve coordinates without sending invisible controls to the terminal
+        if !source.printable {
+            Self::fallback(
+                label,
+                &span_location(span),
+                Some("snippet omitted: source contains control characters"),
+                diagnostic,
+            );
+            return Ok(());
         }
 
         // Preserve the producer's role, range, and explanation
         diagnostic.labels.push(CodeLabel {
             style: label.style,
-            file_id: id,
+            file_id: source.id,
             range: start..end,
             message: label.message.clone(),
         });
@@ -188,16 +231,22 @@ impl Renderer {
     }
 
     /// Retains a label's role and location when a snippet cannot be produced.
-    fn fallback(label: &Label, loc: &str, reason: &str, diagnostic: &mut Diagnostic<usize>) {
+    fn fallback(
+        label: &Label,
+        loc: &str,
+        reason: Option<&str>,
+        diagnostic: &mut Diagnostic<usize>,
+    ) {
         let role = match label.style {
-            LabelStyle::Primary => "primary",
-            LabelStyle::Secondary => "secondary",
+            LabelStyle::Primary => "at",
+            LabelStyle::Secondary => "related location at",
         };
         let message =
             if label.message.is_empty() { String::new() } else { format!(": {}", label.message) };
+        let reason = reason.map_or_else(String::new, |reason| format!(" ({reason})"));
         diagnostic
             .notes
-            .push(format!("{role} at {loc}{message} ({reason})"));
+            .push(format!("{role} {loc}{message}{reason}"));
     }
 
     /// Constructs a temporary codespan view without copying recursive causes.

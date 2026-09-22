@@ -49,11 +49,13 @@ error[parse/hole-index-out-of-bounds]: numbered hole is out of range
 
 ---
 === parse-illegal-escape.watsup ===
-error[parse/text-escape-invalid]: escape is not allowed in a text literal
+error[parse/text-escape-invalid]: escape `\q` is not allowed in a text literal
   ┌─ parse/parse-illegal-escape.watsup:3:5
   │
 3 │ "abc\qdef"
   │     ^^ invalid escape
+  │
+  = Supported escapes are \n, \r, \t, \\, \', \", \HH (two hexadecimal digits for one byte), and \u{HEX} (a Unicode scalar value).
 
 ---
 === parse-relation-body-must-be-notation.watsup ===
@@ -67,7 +69,7 @@ error[parse/relation-signature-invalid]: relation signature must be a notation t
 
 ---
 === parse-stray-non-ascii-char.watsup ===
-error[parse/character-invalid]: character is not allowed here
+error[parse/character-invalid]: character 'α' (U+03B1) is not allowed here
   ┌─ parse/parse-stray-non-ascii-char.watsup:3:1
   │
 3 │ α
@@ -75,7 +77,7 @@ error[parse/character-invalid]: character is not allowed here
 
 ---
 === parse-stray-printable.watsup ===
-error[parse/character-invalid]: character is not allowed here
+error[parse/character-invalid]: character '@' (U+0040) is not allowed here
   ┌─ parse/parse-stray-printable.watsup:3:1
   │
 3 │ @
@@ -83,11 +85,11 @@ error[parse/character-invalid]: character is not allowed here
 
 ---
 === parse-stray-rbrace.watsup ===
-error[parse/token-invalid]: unexpected token
+error[parse/token-invalid]: unexpected token "}"
   ┌─ parse/parse-stray-rbrace.watsup:3:1
   │
 3 │ }
-  │ ^ unexpected token
+  │ ^ expected a line break (a blank line, two blank lines) or a keyword (such as `syntax`, `extern`, `tbl`) or end of input
 
 ---
 === parse-struct-no-fields.watsup ===
@@ -118,6 +120,8 @@ error[parse/syntax-identifier-missing]: empty syntax declaration
 error[parse/block-comment-incomplete]: unclosed comment
   ┌─ parse/parse-unclosed-block-comment.watsup:4:1
   │
+3 │ (; this never closes
+  │ -- comment opened here
 4 │ 
   │ ^ expected a closing `;)`
 
@@ -139,13 +143,14 @@ error[parse/variant-case-missing]: empty variant type
 
 ---
 === parse-io-error ===
-error[parse/file-read-failed]: I/O error: entity not found
- = primary at missing-input.watsup: could not read this file (no source range)
+error[parse/file-read-failed]: cannot read "missing-input.watsup": file does not exist
+ = at missing-input.watsup: could not read this file
 
 ---
 === parse-illegal-control-in-text-literal ===
-error[parse/text-character-invalid]: control character is not allowed in a text literal
- = primary at <string>:1.2: invalid text character (source unavailable)
+error[parse/text-character-invalid]: U+000B vertical tab is not allowed literally in a text literal
+ = Use `\u{B}` to include this character in the text.
+ = at <string>:1:2: escape this control character (source unavailable)
 
 ---
 === parse-malformed-mixop ===
@@ -154,20 +159,20 @@ error[parse/mixfix-operator-invalid]: mixfix operator must not be empty
 ---
 === parse-malformed-utf8 ===
 error[parse/source-encoding-invalid]: source is not valid UTF-8
- = primary at <string>:1.1-<string>:1.2: invalid UTF-8 bytes (source unavailable)
+ = at <string>:1:1-<string>:1:2: invalid UTF-8 bytes: 0x80 (source unavailable)
 
 ---
 === parse-malformed-utf8-in-comment ===
 error[parse/comment-encoding-invalid]: comment is not valid UTF-8
- = primary at <string>:1.3-<string>:1.4: invalid UTF-8 bytes (source unavailable)
+ = at <string>:1:3-<string>:1:4: invalid UTF-8 bytes: 0x80 (source unavailable)
 
 ---
 === parse-misplaced-control-char ===
-error[parse/character-invalid]: character is not allowed here
- = primary at <string>:1.1-<string>:1.2: invalid character (source unavailable)
+error[parse/character-invalid]: U+000B vertical tab is not allowed here
+ = at <string>:1:1-<string>:1:2: invalid character (source unavailable)
 
 ---
 === parse-directory-io-error ===
-error[parse/input-path-read-failed]: I/O error reading unreadable-dir: permission denied
+error[parse/input-path-read-failed]: cannot read "unreadable-dir": permission denied
 
 ---
