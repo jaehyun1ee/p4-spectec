@@ -1376,8 +1376,12 @@ Exp: ast::Exp = {
     // Exp ::= Exp HASH Exp
     <exp_l:Exp> <l:@L> "HASH" <r:@R> <exp_r:Exp> => {
         let span = Span::new(exp_l.span.left.clone(), exp_r.span.right.clone());
+        let op = crate::phrase! {
+            node: FuseOpKind::Fuse,
+            span: ctx.span(l, r),
+        };
         crate::phrase! {
-            node: ExpKind::Fuse(Box::new(exp_l), ctx.span(l, r), Box::new(exp_r)),
+            node: ExpKind::Fuse(Box::new(exp_l), op, Box::new(exp_r)),
             span: span,
         }
     },
@@ -1697,8 +1701,12 @@ ExpBin: ast::Exp = {
     // ExpBin ::= ExpBin HASH ExpBin
     <exp_l:ExpBin> <l:@L> "HASH" <r:@R> <exp_r:ExpBin> => {
         let span = Span::new(exp_l.span.left.clone(), exp_r.span.right.clone());
+        let op = crate::phrase! {
+            node: FuseOpKind::Fuse,
+            span: ctx.span(l, r),
+        };
         crate::phrase! {
-            node: ExpKind::Fuse(Box::new(exp_l), ctx.span(l, r), Box::new(exp_r)),
+            node: ExpKind::Fuse(Box::new(exp_l), op, Box::new(exp_r)),
             span: span,
         }
     },
@@ -2944,11 +2952,11 @@ TablePattern: ast::Exp = ExpSeq;
 ExpSeq: ast::Exp = {
     // ExpSeq ::= ExpSeqStart ExpSeqTail*
     <first:ExpSeqStart> <rest:ExpSeqTail*> => {
-        rest.into_iter().fold(first, |exp_l, (span_fuse, exp_r)| {
+        rest.into_iter().fold(first, |exp_l, (op, exp_r)| {
             let span = Span::new(exp_l.span.left.clone(), exp_r.span.right.clone());
-            if let Some(span_fuse) = span_fuse {
+            if let Some(op) = op {
                 crate::phrase! {
-                    node: ExpKind::Fuse(Box::new(exp_l), span_fuse, Box::new(exp_r)),
+                    node: ExpKind::Fuse(Box::new(exp_l), op, Box::new(exp_r)),
                     span: span,
                 }
             } else {
@@ -2977,12 +2985,18 @@ ExpSeqStart: ast::Exp = {
     ExpListIter,
 };
 
-ExpSeqTail: (Option<Span>, ast::Exp) = {
+ExpSeqTail: (Option<ast::FuseOp>, ast::Exp) = {
     // ExpSeqTail ::= SEQ ExpPost
     "SEQ" <exp:ExpPost> => (None, exp),
 
     // ExpSeqTail ::= HASH ExpPost
-    <l:@L> "HASH" <r:@R> <exp:ExpPost> => (Some(ctx.span(l, r)), exp),
+    <l:@L> "HASH" <r:@R> <exp:ExpPost> => {
+        let op = crate::phrase! {
+            node: FuseOpKind::Fuse,
+            span: ctx.span(l, r),
+        };
+        (Some(op), exp)
+    },
 };
 
 RuleRule: ast::Rule = {

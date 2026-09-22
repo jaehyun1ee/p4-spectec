@@ -127,6 +127,12 @@ impl SyntaxEq for CmpOp {
     }
 }
 
+impl SyntaxEq for FuseOpKind {
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self == other
+    }
+}
+
 // - Expressions
 
 impl SyntaxEq for ExpKind {

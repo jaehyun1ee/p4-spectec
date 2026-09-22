@@ -12,7 +12,7 @@ use p4spec_rust::{
             notation::mixfix::Mixfix,
             source::{Position, Span},
         },
-        el::ast::{DefKind, ExpKind},
+        el::ast::{DefKind, ExpKind, FuseOpKind},
     },
 };
 
@@ -147,9 +147,10 @@ fn test_fuse_operator_spans_survive_expression_and_table_grammar_paths() {
         let columns: Vec<_> = source.match_indices('#').map(|(idx, _)| idx).collect();
         assert_eq!(exps.len(), columns.len());
         for (exp, column) in exps.into_iter().zip(columns) {
-            let ExpKind::Fuse(exp_l, span, exp_r) = &exp.node else { panic!("expected fuse") };
-            assert_eq!((span.left.line, span.left.column), (1, column));
-            assert_eq!((span.right.line, span.right.column), (1, column + 1));
+            let ExpKind::Fuse(exp_l, op, exp_r) = &exp.node else { panic!("expected fuse") };
+            assert_eq!(op.node, FuseOpKind::Fuse);
+            assert_eq!((op.span.left.line, op.span.left.column), (1, column));
+            assert_eq!((op.span.right.line, op.span.right.column), (1, column + 1));
             assert_eq!(exp.span.left, exp_l.span.left);
             assert_eq!(exp.span.right, exp_r.span.right);
         }

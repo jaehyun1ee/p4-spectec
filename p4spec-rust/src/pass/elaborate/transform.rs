@@ -470,7 +470,9 @@ fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Backtrack<il::Exp> {
         el::ExpKind::Infix(_, _, _) => fail_infer(&exp.span, "infix expression"),
         el::ExpKind::Brack(_, _, _) => fail_infer(&exp.span, "bracket expression"),
         el::ExpKind::Hole(_) => fatal!(error: error::hole_outside_hint_unsupported(&exp.span)),
-        el::ExpKind::Fuse(_, span, _) => fatal!(error: error::fuse_outside_hint_unsupported(span)),
+        el::ExpKind::Fuse(_, op, _) => {
+            fatal!(error: error::fuse_outside_hint_unsupported(&op.span))
+        }
         el::ExpKind::Unparen(_) => {
             fatal!(error: error::unparen_outside_hint_unsupported(&exp.span))
         }
