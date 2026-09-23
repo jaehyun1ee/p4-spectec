@@ -1937,7 +1937,8 @@ fn elab_not_exp_inner(
         // Sequences match element-wise without guessing omitted positions
         (Mixfix::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
             if not_typs_il.len() != exps.len() {
-                return unavailable!(error::not::notation_shape_mismatch(&exp.span, expect));
+                let error = error::not::notation_shape_mismatch(&exp.span, expect);
+                return unavailable!(NotationReport::shape(*error, &exp.span));
             }
             let mut not_exps_il = Vec::with_capacity(exps.len());
             let mut tokens_matched = 0;
@@ -1988,35 +1989,34 @@ fn elab_not_exp_inner(
         }
         // Explain corresponding tokens only after establishing their shape
         _ => {
-            let report = match (mixfix, &exp.node) {
+            let (atom_expect, atom) = match (mixfix, &exp.node) {
                 // Two literal atoms occupy the same matched slot
-                (Mixfix::Atom(atom_expect), el::ExpKind::Atom(atom)) => {
-                    error::not::notation_token_mismatch(atom_expect, atom, expect)
-                }
+                (Mixfix::Atom(atom_expect), el::ExpKind::Atom(atom)) => (atom_expect, atom),
                 // Equal operand shapes identify the differing infix token
                 (Mixfix::Infix(_, atom_expect, _), el::ExpKind::Infix(_, atom, _))
                     if notation_shape_matches(mixfix, exp) =>
                 {
-                    error::not::notation_token_mismatch(atom_expect, atom, expect)
+                    (atom_expect, atom)
                 }
                 // Equal contents identify the differing bracket delimiter
                 (
                     Mixfix::Brack(atom_expect_l, _, atom_expect_r),
                     el::ExpKind::Brack(atom_l, _, atom_r),
                 ) if notation_shape_matches(mixfix, exp) => {
-                    let (atom_expect, atom) = if atom_expect_l.node != atom_l.node {
+                    if atom_expect_l.node != atom_l.node {
                         (atom_expect_l, atom_l)
                     } else {
                         (atom_expect_r, atom_r)
-                    };
-                    error::not::notation_token_mismatch(atom_expect, atom, expect)
+                    }
                 }
                 // Different tree shapes do not establish a missing token
                 _ => {
-                    return unavailable!(error::not::notation_shape_mismatch(&exp.span, expect));
+                    let error = error::not::notation_shape_mismatch(&exp.span, expect);
+                    return unavailable!(NotationReport::shape(*error, &exp.span));
                 }
             };
-            mismatch!(report)
+            let error = error::not::notation_token_mismatch(atom_expect, atom, expect);
+            mismatch!(NotationReport::token(*error, atom_expect, atom))
         }
     }
 }
@@ -2123,8 +2123,14 @@ fn elab_variant_exp(
             // buried under unrelated candidates' shape errors
             // If none applies, keep the shape errors to show expected notations
             let reports = if has_mismatch { reports_mismatch } else { reports_unavailable };
-            let report = not::summarize_variant(typ_expect_il, &exp.span, reports);
-            if has_mismatch { mismatch!(report) } else { unavailable!(report) }
+            let report = not::summarize_variant(typ_expect_il, reports);
+            let count = report.reports.len();
+            let result = if has_mismatch { mismatch!(report) } else { unavailable!(report) };
+            if count == 1 {
+                result
+            } else {
+                result.nest(exp.span.clone(), "expression does not match any variant case")
+            }
         }
         _ => mismatch!(error: error::exp::variant_expression_match_repeated(&exp.span)),
     }

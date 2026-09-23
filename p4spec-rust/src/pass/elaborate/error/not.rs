@@ -7,7 +7,10 @@ use crate::{
     diagnostic::Label,
     lang::{
         common::{
-            notation::{atom::Atom, mixfix::AtomPhrase},
+            notation::{
+                atom::Atom,
+                mixfix::{AtomPhrase, Mixfix},
+            },
             source::Span,
         },
         il::ast as il,
@@ -15,10 +18,7 @@ use crate::{
     },
 };
 
-use super::super::{
-    expect::{NotExpect, NotExpectKind},
-    not::NotationReport,
-};
+use super::super::expect::{NotExpect, NotExpectKind};
 use super::{ElabError, cause};
 
 const NOTATION_SHAPE_MISMATCH: &str = "elab/notation-shape-mismatch";
@@ -28,25 +28,22 @@ const NOTATION_TOKEN_MISMATCH: &str = "elab/notation-token-mismatch";
 pub(in crate::pass::elaborate) fn notation_shape_mismatch(
     span: &Span,
     expect: &NotExpect<'_>,
-) -> NotationReport {
+) -> ElabError {
     let subject = notation_subject(expect.kind);
     let not_typ_il = expect.not_typ_il;
-    NotationReport::shape(
-        *cause(
-            NOTATION_SHAPE_MISMATCH,
-            format!("expression does not match {subject}"),
-            vec![
-                Label::primary(span, ""),
-                Label::secondary(&not_typ_il.node.at(), "notation declared here"),
-            ],
-            vec![format!("expected notation: {}", not_typ_il.to_string())],
-        ),
-        span,
+    cause(
+        NOTATION_SHAPE_MISMATCH,
+        format!("expression does not match {subject}"),
+        vec![
+            Label::primary(span, ""),
+            Label::secondary(&not_typ_il.node.at(), "notation declared here"),
+        ],
+        vec![format!("expected notation: {}", not_typ_il.to_string())],
     )
 }
 
 /// Prints a token spelling without adding a second pair of quotes.
-fn atom_text(atom: &AtomPhrase) -> String {
+pub(in crate::pass::elaborate) fn atom_text(atom: &AtomPhrase) -> String {
     match &atom.node {
         Atom::Operator(text) => text.clone(),
         _ => atom.to_string(),
@@ -58,27 +55,22 @@ pub(in crate::pass::elaborate) fn notation_token_mismatch(
     atom_expect: &AtomPhrase,
     atom: &AtomPhrase,
     expect: &NotExpect<'_>,
-) -> NotationReport {
+) -> ElabError {
     let subject = notation_subject(expect.kind);
     let not_typ_il = expect.not_typ_il;
     // A single literal is already fully described by the mismatch message
     let notes = match &not_typ_il.node {
-        crate::lang::common::notation::mixfix::Mixfix::Atom(_) => Vec::new(),
+        Mixfix::Atom(_) => Vec::new(),
         _ => vec![format!("expected {subject}: {}", not_typ_il.to_string())],
     };
-    NotationReport::token(
-        *cause(
-            NOTATION_TOKEN_MISMATCH,
-            format!("expected '{}', but found '{}'", atom_text(atom_expect), atom_text(atom)),
-            vec![
-                Label::primary(&atom.span, "unexpected token"),
-                Label::secondary(&atom_expect.span, "expected token declared here"),
-            ],
-            notes,
-        ),
-        &atom.span,
-        &atom_text(atom_expect),
-        &atom_text(atom),
+    cause(
+        NOTATION_TOKEN_MISMATCH,
+        format!("expected '{}', but found '{}'", atom_text(atom_expect), atom_text(atom)),
+        vec![
+            Label::primary(&atom.span, "unexpected token"),
+            Label::secondary(&atom_expect.span, "expected token declared here"),
+        ],
+        notes,
     )
 }
 

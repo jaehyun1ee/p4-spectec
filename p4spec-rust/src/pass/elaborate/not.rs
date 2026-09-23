@@ -9,10 +9,16 @@ use std::cmp::Reverse;
 
 use crate::{
     diagnostic::{Diagnostic, Report},
-    lang::{common::source::Span, il::ast as il},
+    lang::{
+        common::{notation::mixfix::AtomPhrase, source::Span},
+        il::ast as il,
+    },
 };
 
-use super::{backtrack::Backtrack, error};
+use super::{
+    backtrack::{Backtrack, mismatch, unavailable},
+    error,
+};
 
 /// Carries notation evidence without changing elaboration recovery states.
 pub(super) type NotationBacktrack<T> = Backtrack<T, NotationReport>;
@@ -56,13 +62,15 @@ impl NotationReport {
     }
 
     /// Records a mismatch between corresponding literal tokens.
-    pub(super) fn token(report: Report, span: &Span, text_expect: &str, text: &str) -> Self {
+    pub(super) fn token(report: Report, atom_expect: &AtomPhrase, atom: &AtomPhrase) -> Self {
+        let text_expect = error::not::atom_text(atom_expect);
+        let text = error::not::atom_text(atom);
         Self {
             reports: vec![report],
             similarity: Some(NotationSimilarity {
-                span: span.clone(),
+                span: atom.span.clone(),
                 shape_mismatch: false,
-                token_distance: token_distance(text_expect, text),
+                token_distance: token_distance(&text_expect, &text),
                 tokens_matched: 0,
             }),
         }
@@ -146,7 +154,6 @@ fn representative<'a>(
 /// Summarizes retained variant failures without reordering their reports.
 pub(super) fn summarize_variant(
     typ_expect_il: &il::Typ,
-    span: &Span,
     mut reports: Vec<NotationCaseReport<'_>>,
 ) -> NotationReport {
     // A sole candidate already owns its complete failure context
@@ -178,17 +185,22 @@ pub(super) fn summarize_variant(
             similarity: Some(similarity),
         },
         // Unsupported or differently located failures keep the original tree
-        None => {
-            let reports = if reports.len() == 1 {
-                reports
-            } else {
-                vec![Report::frame(
-                    span.clone(),
-                    "expression does not match any variant case",
-                    reports,
-                )]
-            };
-            NotationReport::from(reports)
+        None => NotationReport::from(reports),
+    }
+}
+
+// Context frames group comparisons that no longer describe one location
+impl<T> NotationBacktrack<T> {
+    /// Wraps a recoverable failure under operation context.
+    ///
+    /// Fatal reports pass through unchanged so their direct cause is retained.
+    pub(super) fn nest(self, span: Span, message: impl Into<String>) -> Self {
+        match self {
+            unavailable!(failure) => {
+                unavailable!(report: Report::frame(span, message, failure.reports))
+            }
+            mismatch!(failure) => mismatch!(report: Report::frame(span, message, failure.reports)),
+            result => result,
         }
     }
 }
