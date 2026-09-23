@@ -1791,7 +1791,7 @@ fn elab_iter_exp(
 
 // - Notation expression elaboration
 
-/// Elaborates notation with its declaration and one-based argument positions.
+/// Elaborates notation with its declaration and zero-based argument positions.
 fn elab_not_exp(
     ctx: &mut Context,
     not_typ_il: &il::NotTyp,
@@ -1817,8 +1817,8 @@ fn elab_not_exp_inner(
     match (mixfix, &exp.node) {
         // Count only argument slots and retain a nested failure's own cause
         (Mixfix::Arg(typ_il), _) => {
-            *arg_idx += 1;
             let arg = error::NotationArgument { idx: *arg_idx, id_rel, typ_il };
+            *arg_idx += 1;
             match elab_exp_with_argument(ctx, typ_il, exp, Some(&arg)) {
                 // Rebuild the elaborated argument
                 success!(exp_il) => success!(Mixfix::Arg(exp_il)),

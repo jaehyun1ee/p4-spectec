@@ -76,7 +76,7 @@ pub(in crate::pass::elaborate) fn notation_token_mismatch(
 
 /// Identifies one non-literal slot in a notation declaration.
 pub(in crate::pass::elaborate) struct NotationArgument<'a> {
-    /// Counts only argument slots, starting at one.
+    /// Counts only argument slots, starting at zero.
     pub idx: usize,
     /// Names the relation when the notation belongs to one.
     pub id_rel: Option<&'a Id>,
@@ -85,7 +85,7 @@ pub(in crate::pass::elaborate) struct NotationArgument<'a> {
 }
 
 impl NotationArgument<'_> {
-    /// Names the argument using its one-based position among type slots.
+    /// Names the argument using its zero-based position among type slots.
     fn subject(&self) -> String {
         format!("argument {} of {}", self.idx, notation_subject(self.id_rel))
     }

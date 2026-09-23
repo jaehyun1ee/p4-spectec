@@ -805,11 +805,11 @@ error[elab/type-argument-arity-mismatch]: type `foo` expects 1 type argument, bu
 
 ---
 === notation-argument-type.watsup ===
-error[elab/notation-argument-type-mismatch]: argument 1 of relation 'F' expects 'nat', but found 'bool'
+error[elab/notation-argument-type-mismatch]: argument 0 of relation 'F' expects 'nat', but found 'bool'
   ┌─ elab/notation-argument-type.watsup:4:9
   │
 1 │ relation F: nat |- int : int
-  │             --- argument 1 of relation 'F' expects 'nat'
+  │             --- argument 0 of relation 'F' expects 'nat'
   ·
 4 │   -- F: true |- 0 : -1
   │         ^^^^
@@ -857,11 +857,11 @@ error[elab/notation-token-mismatch]: expected ':', but found ';'
 
 ---
 === notation-argument-third.watsup ===
-error[elab/notation-argument-type-mismatch]: argument 3 of relation 'F' expects 'int', but found 'bool'
+error[elab/notation-argument-type-mismatch]: argument 2 of relation 'F' expects 'int', but found 'bool'
   ┌─ elab/notation-argument-third.watsup:4:18
   │
 1 │ relation F: nat |- int : int
-  │                          --- argument 3 of relation 'F' expects 'int'
+  │                          --- argument 2 of relation 'F' expects 'int'
   ·
 4 │   -- F: 1 |- 0 : true
   │                  ^^^^
@@ -872,7 +872,7 @@ error[elab/function-undefined]: function `missing` is undefined
   ┌─ elab/notation-argument-inner.watsup:4:19
   │
 1 │ relation F: nat |- int : int
-  │                          --- argument 3 of relation 'F' expects 'int'
+  │                          --- argument 2 of relation 'F' expects 'int'
   ·
 4 │   -- F: 1 |- 0 : $missing()
   │                   ^^^^^^^^
@@ -883,7 +883,7 @@ error[elab/operator-operand-type-mismatch]: operator is not defined for the oper
   ┌─ elab/notation-argument-operator.watsup:4:18
   │
 1 │ relation F: nat |- int : int
-  │                          --- argument 3 of relation 'F' expects 'int'
+  │                          --- argument 2 of relation 'F' expects 'int'
   ·
 4 │   -- F: 1 |- 0 : -true
   │                  ^^^^^
@@ -931,11 +931,11 @@ error[elab/notation-token-mismatch]: expected '}', but found ']'
 
 ---
 === notation-variant-type.watsup ===
-error[elab/notation-argument-type-mismatch]: argument 1 of notation expects 'nat', but found 'bool'
+error[elab/notation-argument-type-mismatch]: argument 0 of notation expects 'nat', but found 'bool'
   ┌─ elab/notation-variant-type.watsup:3:15
   │
 1 │ syntax choice = TAG nat
-  │                     --- argument 1 of notation expects 'nat'
+  │                     --- argument 0 of notation expects 'nat'
 2 │ dec $take(choice) : bool
 3 │ def $take(TAG true) = true
   │               ^^^^
@@ -944,22 +944,22 @@ error[elab/notation-argument-type-mismatch]: argument 1 of notation expects 'nat
 === notation-variant-fallback-valid.watsup ===
 ---
 === notation-negated-type.watsup ===
-error[elab/notation-argument-type-mismatch]: argument 1 of relation 'F' expects 'nat', but found 'bool'
+error[elab/notation-argument-type-mismatch]: argument 0 of relation 'F' expects 'nat', but found 'bool'
   ┌─ elab/notation-negated-type.watsup:4:10
   │
 1 │ relation F: nat |- int : int
-  │             --- argument 1 of relation 'F' expects 'nat'
+  │             --- argument 0 of relation 'F' expects 'nat'
   ·
 4 │   -- F:/ true |- 0 : -1
   │          ^^^^
 
 ---
 === notation-conclusion-type.watsup ===
-error[elab/notation-argument-type-mismatch]: argument 1 of relation 'F' expects 'nat', but found 'bool'
+error[elab/notation-argument-type-mismatch]: argument 0 of relation 'F' expects 'nat', but found 'bool'
   ┌─ elab/notation-conclusion-type.watsup:3:14
   │
 1 │ relation F: nat |- int : int
-  │             --- argument 1 of relation 'F' expects 'nat'
+  │             --- argument 0 of relation 'F' expects 'nat'
 2 │   hint(input %0 %1 %2)
 3 │ rule F/base: true |- 0 : -1
   │              ^^^^
@@ -970,7 +970,7 @@ error[elab/operator-operand-type-mismatch]: operator is not defined for the oper
   ┌─ elab/notation-alias-inner.watsup:4:14
   │
 2 │ relation F: foo |- bool
-  │             --- argument 1 of relation 'F' expects 'foo'
+  │             --- argument 0 of relation 'F' expects 'foo'
 3 │   hint(input %0 %1)
 4 │ rule F/base: -true |- true
   │              ^^^^^
@@ -981,18 +981,18 @@ error[elab/operator-operand-type-mismatch]: operator is not defined for the oper
   ┌─ elab/notation-iteration-inner.watsup:3:14
   │
 1 │ relation F: nat* |- bool
-  │             ---- argument 1 of relation 'F' expects 'nat*'
+  │             ---- argument 0 of relation 'F' expects 'nat*'
 2 │   hint(input %0 %1)
 3 │ rule F/base: -true |- true
   │              ^^^^^
 
 ---
 === notation-iteration-type.watsup ===
-error[elab/notation-argument-type-mismatch]: argument 1 of relation 'F' expects 'nat*', but found 'bool'
+error[elab/notation-argument-type-mismatch]: argument 0 of relation 'F' expects 'nat*', but found 'bool'
   ┌─ elab/notation-iteration-type.watsup:3:14
   │
 1 │ relation F: nat* |- bool
-  │             ---- argument 1 of relation 'F' expects 'nat*'
+  │             ---- argument 0 of relation 'F' expects 'nat*'
 2 │   hint(input %0 %1)
 3 │ rule F/base: true |- true
   │              ^^^^
@@ -1003,7 +1003,7 @@ error[elab/operator-operand-type-mismatch]: operator is not defined for the oper
   ┌─ elab/notation-list-inner.watsup:3:15
   │
 1 │ relation F: nat* |- bool
-  │             ---- argument 1 of relation 'F' expects 'nat*'
+  │             ---- argument 0 of relation 'F' expects 'nat*'
 2 │   hint(input %0 %1)
 3 │ rule F/base: [-true] |- true
   │               ^^^^^
@@ -1023,13 +1023,13 @@ error[elab/notation-token-mismatch]: expected '`(', but found '`['
 
 ---
 === notation-singleton-variant-inner.watsup ===
-error[elab/notation-argument-type-mismatch]: argument 1 of notation expects 'nat', but found 'bool'
+error[elab/notation-argument-type-mismatch]: argument 0 of notation expects 'nat', but found 'bool'
   ┌─ elab/notation-singleton-variant-inner.watsup:4:18
   │
 1 │ syntax choice = TAG nat
-  │                     --- argument 1 of notation expects 'nat'
+  │                     --- argument 0 of notation expects 'nat'
 2 │ relation F: choice* |- bool
-  │             ------- argument 1 of relation 'F' expects 'choice*'
+  │             ------- argument 0 of relation 'F' expects 'choice*'
 3 │   hint(input %0 %1)
 4 │ rule F/base: TAG true |- true
   │                  ^^^^
@@ -1046,18 +1046,18 @@ error[elab/operator-operand-type-mismatch]: operator is not defined for the oper
   ┌─ elab/notation-singleton-tuple-inner.watsup:3:15
   │
 1 │ relation F: (nat, nat)* |- bool
-  │             ----------- argument 1 of relation 'F' expects '(nat, nat)*'
+  │             ----------- argument 0 of relation 'F' expects '(nat, nat)*'
 2 │   hint(input %0 %1)
 3 │ rule F/base: (-true, 1) |- true
   │               ^^^^^
 
 ---
 === notation-sequence-type.watsup ===
-error[elab/notation-argument-type-mismatch]: argument 2 of relation 'F' expects 'int', but found 'bool'
+error[elab/notation-argument-type-mismatch]: argument 1 of relation 'F' expects 'int', but found 'bool'
   ┌─ elab/notation-sequence-type.watsup:3:24
   │
 1 │ relation F: TAG nat END int
-  │                         --- argument 2 of relation 'F' expects 'int'
+  │                         --- argument 1 of relation 'F' expects 'int'
 2 │   hint(input %0 %1)
 3 │ rule F/base: TAG 1 END true
   │                        ^^^^
@@ -1068,7 +1068,7 @@ error[elab/operator-operand-type-mismatch]: operator is not defined for the oper
   ┌─ elab/notation-option-list-inner.watsup:3:15
   │
 1 │ relation F: nat? |- bool
-  │             ---- argument 1 of relation 'F' expects 'nat?'
+  │             ---- argument 0 of relation 'F' expects 'nat?'
 2 │   hint(input %0 %1)
 3 │ rule F/base: [-true] |- true
   │               ^^^^^
@@ -1079,7 +1079,7 @@ error[elab/operator-operand-type-mismatch]: operator is not defined for the oper
   ┌─ elab/notation-alias-list-inner.watsup:4:15
   │
 2 │ relation F: foo |- bool
-  │             --- argument 1 of relation 'F' expects 'foo'
+  │             --- argument 0 of relation 'F' expects 'foo'
 3 │   hint(input %0 %1)
 4 │ rule F/base: [-true] |- true
   │               ^^^^^
