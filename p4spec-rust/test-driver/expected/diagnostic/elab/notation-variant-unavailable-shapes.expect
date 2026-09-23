@@ -1,30 +1,13 @@
-note: expression does not match any variant case
+error[elab/notation-shape-mismatch]: expression does not match notation
   ┌─ elab/notation-variant-unavailable-shapes.watsup:3:10
   │
+1 │ syntax choice = A | B
+  │                 - notation declared here
+2 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
 3 │ def $f = 1 ',' 2
-  │          -------
-
-├─ error[elab/notation-shape-mismatch]: expression does not match notation
-│    ┌─ elab/notation-variant-unavailable-shapes.watsup:3:10
-│    │
-│  1 │ syntax choice = A | B
-│    │                 - notation declared here
-│  2 │ dec $f : choice
-│    │          ------ return value of function '$f' expects 'choice'
-│  3 │ def $f = 1 ',' 2
-│    │          ^^^^^^^
-│    │
-│    = expected notation: A
-│
-└─ error[elab/notation-shape-mismatch]: expression does not match notation
-     ┌─ elab/notation-variant-unavailable-shapes.watsup:3:10
-     │
-   1 │ syntax choice = A | B
-     │                     - notation declared here
-   2 │ dec $f : choice
-     │          ------ return value of function '$f' expects 'choice'
-   3 │ def $f = 1 ',' 2
-     │          ^^^^^^^
-     │
-     = expected notation: B
+  │          ^^^^^^^
+  │
+  = expected notation: A
+  = other expected notations for 'choice': B
 

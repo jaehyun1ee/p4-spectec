@@ -1,0 +1,3 @@
+syntax choice = TAG nat ':' | TAG nat ';'
+dec $f : choice
+def $f = TAG 0 ','

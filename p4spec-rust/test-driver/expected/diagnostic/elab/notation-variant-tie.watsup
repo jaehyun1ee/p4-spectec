@@ -1,0 +1,3 @@
+syntax choice = 'ab' | 'ac' | 'z'
+dec $f : choice
+def $f = 'ad'

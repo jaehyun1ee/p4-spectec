@@ -1,7 +1,7 @@
 //! Source-independent diagnostics and recursive report trees
 //!
-//! Every report is a context frame or a cause with structured diagnostic data.
-//! Both kinds keep nested reports in the same ordered `children` field.
+//! Reports retain context frames, causes, and representatives of alternatives.
+//! All node kinds keep nested reports in the same ordered `children` field.
 //! Diagnostics retain codes, labels, and notes without owning descendants.
 //! Report destruction drains descendants iteratively to bound stack use.
 
@@ -39,7 +39,7 @@ impl Label {
 // = Diagnostic data
 
 /// Carries one diagnostic without descendants, source text, or terminal policy.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Diagnostic {
     /// Describes presentation severity, not recovery behavior.
     pub severity: Severity,
@@ -91,11 +91,11 @@ impl fmt::Display for Diagnostic {
 
 // = Report trees
 
-/// Preserves one context frame or cause and its ordered child reports.
+/// Preserves one diagnostic or context node and its ordered child reports.
 pub struct Report {
     /// Distinguishes operation context from structured diagnostic content.
     pub kind: ReportKind,
-    /// Retains nested causes and alternative order for either node kind.
+    /// Retains nested causes and alternative order for every node kind.
     pub children: Vec<Report>,
 }
 
@@ -111,12 +111,39 @@ pub enum ReportKind {
     },
     /// Retains a cause with its own code, severity, labels, and notes.
     Cause(Diagnostic),
+    /// Displays one representative diagnostic above its retained alternatives.
+    Representative(Diagnostic),
 }
 
 impl Report {
     /// Groups ordered child reports under an uncoded source context.
     pub fn frame(span: Span, message: impl Into<String>, children: Vec<Report>) -> Self {
         Self { kind: ReportKind::Frame { span, message: message.into() }, children }
+    }
+
+    /// Retains ordered alternative failures beneath their representative.
+    pub fn representative(diagnostic: Diagnostic, children: Vec<Report>) -> Self {
+        Self { kind: ReportKind::Representative(diagnostic), children }
+    }
+
+    /// Borrows the diagnostic of a cause or representative node.
+    pub fn diagnostic(&self) -> Option<&Diagnostic> {
+        match &self.kind {
+            ReportKind::Cause(diagnostic) | ReportKind::Representative(diagnostic) => {
+                Some(diagnostic)
+            }
+            ReportKind::Frame { .. } => None,
+        }
+    }
+
+    /// Mutably borrows the diagnostic of a cause or representative node.
+    pub fn diagnostic_mut(&mut self) -> Option<&mut Diagnostic> {
+        match &mut self.kind {
+            ReportKind::Cause(diagnostic) | ReportKind::Representative(diagnostic) => {
+                Some(diagnostic)
+            }
+            ReportKind::Frame { .. } => None,
+        }
     }
 }
 
@@ -130,7 +157,9 @@ impl fmt::Display for Report {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
             ReportKind::Frame { message, .. } => write!(fmt, "note: {message}"),
-            ReportKind::Cause(diagnostic) => fmt::Display::fmt(diagnostic, fmt),
+            ReportKind::Cause(diagnostic) | ReportKind::Representative(diagnostic) => {
+                fmt::Display::fmt(diagnostic, fmt)
+            }
         }
     }
 }

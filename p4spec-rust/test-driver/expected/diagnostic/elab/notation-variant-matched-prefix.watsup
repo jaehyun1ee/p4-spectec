@@ -1,0 +1,4 @@
+syntax head = PREFIX
+syntax choice = head 'ab' | PREFIX 'ac'
+dec $f : choice
+def $f = PREFIX 'ad'

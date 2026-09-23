@@ -16,6 +16,7 @@ mod context;
 mod dimension;
 mod error;
 mod expect;
+mod not;
 mod transform;
 
 pub use error::ElabError;

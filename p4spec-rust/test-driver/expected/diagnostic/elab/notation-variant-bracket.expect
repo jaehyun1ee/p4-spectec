@@ -1,0 +1,13 @@
+error[elab/notation-token-mismatch]: expected '`(', but found '`['
+  ┌─ elab/notation-variant-bracket.watsup:3:10
+  │
+1 │ syntax choice = `( nat `) | `{ nat `}
+  │                 -- expected token declared here
+2 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
+3 │ def $f = `[ 0 `]
+  │          ^^ unexpected token
+  │
+  = expected notation: `( nat `)
+  = other expected notations for 'choice': `{ nat `}
+

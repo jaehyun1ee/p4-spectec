@@ -1,0 +1,5 @@
+syntax unop = '~' | '!' | '-' | '+'
+syntax expressionIR = D nat | unop nat | SEQ `{ nat `} | SEQ `{ nat ',' nat `}
+syntax typedExpressionIR = expressionIR '#' nat
+relation Expr_ok: nat |- typedExpressionIR
+rule Expr_ok: 0 |- ('!l' 0) '#' 0

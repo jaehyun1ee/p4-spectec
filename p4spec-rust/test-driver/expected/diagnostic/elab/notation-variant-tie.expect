@@ -1,0 +1,12 @@
+error[elab/notation-token-mismatch]: expected 'ab', but found 'ad'
+  ┌─ elab/notation-variant-tie.watsup:3:10
+  │
+1 │ syntax choice = 'ab' | 'ac' | 'z'
+  │                 ---- expected token declared here
+2 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
+3 │ def $f = 'ad'
+  │          ^^^^ unexpected token
+  │
+  = other expected notations for 'choice': 'ac'; 'z'
+

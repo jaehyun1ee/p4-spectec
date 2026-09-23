@@ -1,0 +1,10 @@
+error[elab/function-undefined]: function `missing` is undefined
+  ┌─ elab/notation-variant-fatal.watsup:3:15
+  │
+1 │ syntax choice = TAG nat A | TAG bool B
+  │                     --- argument 0 of notation expects 'nat'
+2 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
+3 │ def $f = TAG $missing B
+  │               ^^^^^^^
+

@@ -1,0 +1,5 @@
+syntax unop = '~' | '!' | '-' | '+'
+syntax op = unop
+syntax choice = D nat | op nat
+dec $f : choice
+def $f = '!l' 0

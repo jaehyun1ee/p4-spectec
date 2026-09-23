@@ -1,0 +1,3 @@
+syntax choice = TAG nat A | TAG bool B
+dec $f : choice
+def $f = TAG $missing B

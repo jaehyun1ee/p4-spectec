@@ -1,0 +1,3 @@
+syntax choice = nat 'ac' nat nat | nat 'ab' END LONG
+dec $f : choice
+def $f = 0 'ad' END LONG

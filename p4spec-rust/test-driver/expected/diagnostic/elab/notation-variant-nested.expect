@@ -1,0 +1,24 @@
+warning[elab/relation-input-hint-missing]: relation `Expr_ok` has no input hint
+  ┌─ elab/notation-variant-nested.watsup:4:1
+  │
+4 │ relation Expr_ok: nat |- typedExpressionIR
+  │ ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[elab/notation-token-mismatch]: expected '!', but found '!l'
+  ┌─ elab/notation-variant-nested.watsup:5:21
+  │
+1 │ syntax unop = '~' | '!' | '-' | '+'
+  │                     --- expected token declared here
+2 │ syntax expressionIR = D nat | unop nat | SEQ `{ nat `} | SEQ `{ nat ',' nat `}
+  │                               ---- argument 0 of notation expects 'unop'
+3 │ syntax typedExpressionIR = expressionIR '#' nat
+  │                            ------------ argument 0 of notation expects 'expressionIR'
+4 │ relation Expr_ok: nat |- typedExpressionIR
+  │                          ----------------- argument 1 of relation 'Expr_ok' expects 'typedExpressionIR'
+5 │ rule Expr_ok: 0 |- ('!l' 0) '#' 0
+  │                     ^^^^ unexpected token
+  │
+  = other expected notations for 'unop': '~'; '-'; '+'
+  = other expected notations for 'expressionIR': D nat; SEQ `{ nat `};
+      SEQ `{ nat ',' nat `}
+
