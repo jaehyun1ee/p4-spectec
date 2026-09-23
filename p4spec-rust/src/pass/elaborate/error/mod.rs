@@ -9,21 +9,13 @@ use crate::{
     lang::{il::ast as il, traits::print::Print},
 };
 
-mod arg;
-mod decl;
-mod dim;
-mod exp;
-mod not;
-mod prem;
-mod typ;
-
-pub(super) use arg::*;
-pub(super) use decl::*;
-pub(super) use dim::*;
-pub(super) use exp::*;
-pub(super) use not::*;
-pub(super) use prem::*;
-pub(super) use typ::*;
+pub(super) mod arg;
+pub(super) mod decl;
+pub(super) mod dim;
+pub(super) mod exp;
+pub(super) mod not;
+pub(super) mod prem;
+pub(super) mod typ;
 
 /// Names a structured elaboration failure without adding a wrapper.
 pub type ElabError = Box<Report>;

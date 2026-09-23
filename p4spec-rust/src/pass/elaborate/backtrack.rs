@@ -170,7 +170,7 @@ pub(super) fn finish<T>(result: Backtrack<T>) -> Result<T, ElabError> {
 /// Preserves one report unchanged and groups multiple alternative reports.
 fn finish_reports(mut reports: Vec<Report>) -> ElabError {
     match reports.len() {
-        0 => error::elaboration_alternative_missing(),
+        0 => error::typ::elaboration_alternative_missing(),
         1 => Box::new(reports.pop().expect("one report remains")),
         _ => {
             let span = reports.iter().find_map(report_span).unwrap_or_default();
