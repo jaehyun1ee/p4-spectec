@@ -1477,7 +1477,19 @@ fn elab_singleton_iter_exp(
 
 /// Elaborates by inference and cast, falling back to contextual elaboration.
 ///
-/// When inference mismatches,
+/// Successful inference casts the expression to the expected type.
+/// The inference and contextual results determine which result is retained:
+///
+/// | Inference result | Contextual result | Result retained |
+/// | --- | --- | --- |
+/// | `Success` | Not attempted | Cast result |
+/// | `Fatal` | Not attempted | Fatal cause |
+/// | `Mismatch` | `Unavailable` | Inference mismatch |
+/// | `Mismatch` | `Success`, `Mismatch`, or `Fatal` | Contextual result |
+/// | `Unavailable` | Empty `Unavailable` | Inference report |
+/// | `Unavailable` | Any other result | Contextual result |
+///
+/// When contextual elaboration is attempted,
 /// a wildcard becomes a fresh variable,
 /// a named expected type is unfolded into its plain, struct, or variant body,
 /// and other constructs elaborate against the expected type directly.
