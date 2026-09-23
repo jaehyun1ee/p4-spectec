@@ -23,42 +23,65 @@ pub(in crate::pass::elaborate) fn expression_inference_invalid(
     )
 }
 
-const OPERATOR_OPERAND_TYPE_MISMATCH: &str = "elab/operator-operand-type-mismatch";
+const OPERATOR_UNOP_TYPE_MISMATCH: &str = "elab/operator-unop-type-mismatch";
+const OPERATOR_BINOP_TYPE_MISMATCH: &str = "elab/operator-binop-type-mismatch";
+const OPERATOR_CMPOP_TYPE_MISMATCH: &str = "elab/operator-cmpop-type-mismatch";
 
-/// Reports an operator with unsupported operand types.
-pub(in crate::pass::elaborate) fn operator_operand_type_mismatch(
+/// Reports a unary operator with an unsupported operand type.
+pub(in crate::pass::elaborate) fn operator_unop_type_mismatch(
+    op: &il::UnOp,
+    exp_il: &il::Exp,
+) -> ElabError {
+    let typ_il = crate::phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
+    let text = typ_il.to_string();
+    cause(
+        OPERATOR_UNOP_TYPE_MISMATCH,
+        format!("operator '{}' is not defined for '{text}'", op.to_string()),
+        vec![Label::primary(&exp_il.span, format!("operand has type '{text}'"))],
+        Vec::new(),
+    )
+}
+
+/// Reports a binary operator with unsupported operand types.
+pub(in crate::pass::elaborate) fn operator_binop_type_mismatch(
+    op: &il::BinOp,
+    exp_l_il: &il::Exp,
+    exp_r_il: &il::Exp,
+) -> ElabError {
+    operator_pair_type_mismatch(OPERATOR_BINOP_TYPE_MISMATCH, op, exp_l_il, exp_r_il)
+}
+
+/// Reports a comparison operator with unsupported operand types.
+pub(in crate::pass::elaborate) fn operator_cmpop_type_mismatch(
+    op: &il::CmpOp,
+    exp_l_il: &il::Exp,
+    exp_r_il: &il::Exp,
+) -> ElabError {
+    operator_pair_type_mismatch(OPERATOR_CMPOP_TYPE_MISMATCH, op, exp_l_il, exp_r_il)
+}
+
+/// Labels both operands using their inferred types before candidate casts.
+fn operator_pair_type_mismatch(
+    code: &str,
     op: &impl Print,
     exp_l_il: &il::Exp,
-    exp_r_il: Option<&il::Exp>,
+    exp_r_il: &il::Exp,
 ) -> ElabError {
     let typ_l_il =
         crate::phrase!(node: exp_l_il.note.as_ref().clone(), span: exp_l_il.span.clone());
+    let typ_r_il =
+        crate::phrase!(node: exp_r_il.note.as_ref().clone(), span: exp_r_il.span.clone());
     let text_l = typ_l_il.to_string();
-    // Use the inferred types before any unsuccessful candidate casts
-    let (message, labels) = match exp_r_il {
-        // Binary operators identify both operand positions
-        Some(exp_r_il) => {
-            let typ_r_il =
-                crate::phrase!(node: exp_r_il.note.as_ref().clone(), span: exp_r_il.span.clone());
-            let text_r = typ_r_il.to_string();
-            (
-                format!(
-                    "operator '{}' is not defined for '{text_l}' and '{text_r}'",
-                    op.to_string()
-                ),
-                vec![
-                    Label::primary(&exp_l_il.span, format!("left operand has type '{text_l}'")),
-                    Label::primary(&exp_r_il.span, format!("right operand has type '{text_r}'")),
-                ],
-            )
-        }
-        // Unary operators identify their single operand
-        None => (
-            format!("operator '{}' is not defined for '{text_l}'", op.to_string()),
-            vec![Label::primary(&exp_l_il.span, format!("operand has type '{text_l}'"))],
-        ),
-    };
-    cause(OPERATOR_OPERAND_TYPE_MISMATCH, message, labels, Vec::new())
+    let text_r = typ_r_il.to_string();
+    cause(
+        code,
+        format!("operator '{}' is not defined for '{text_l}' and '{text_r}'", op.to_string()),
+        vec![
+            Label::primary(&exp_l_il.span, format!("left operand has type '{text_l}'")),
+            Label::primary(&exp_r_il.span, format!("right operand has type '{text_r}'")),
+        ],
+        Vec::new(),
+    )
 }
 
 const EXPRESSION_TYPE_MISMATCH: &str = "elab/expression-type-mismatch";

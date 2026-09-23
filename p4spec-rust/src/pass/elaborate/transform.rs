@@ -562,7 +562,7 @@ fn infer_un_exp(ctx: &mut Context, span: &Span, op: el::UnOp, exp: &el::Exp) -> 
             mismatch!(_) => {}
         }
     }
-    mismatch!(error: error::operator_operand_type_mismatch(&op, &exp_il, None))
+    mismatch!(error: error::operator_unop_type_mismatch(&op, &exp_il))
 }
 
 // - Binary expression inference
@@ -634,7 +634,7 @@ fn infer_bin_exp(
         };
         return success!(exp_il);
     }
-    mismatch!(error: error::operator_operand_type_mismatch(&op, &exp_l_il, Some(&exp_r_il)))
+    mismatch!(error: error::operator_binop_type_mismatch(&op, &exp_l_il, &exp_r_il))
 }
 
 // - Comparison expression inference
@@ -708,7 +708,7 @@ fn infer_cmp_exp(
                 };
                 return success!(exp_il);
             }
-            mismatch!(error: error::operator_operand_type_mismatch(&op, &exp_l_il, Some(&exp_r_il)))
+            mismatch!(error: error::operator_cmpop_type_mismatch(&op, &exp_l_il, &exp_r_il))
         }
     }
 }

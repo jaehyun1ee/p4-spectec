@@ -903,7 +903,7 @@ error[elab/function-undefined]: function `missing` is undefined
 
 ---
 === notation-argument-operator.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
   ┌─ elab/notation-argument-operator.watsup:4:19
   │
 1 │ relation F: nat |- int : int
@@ -991,7 +991,7 @@ error[elab/notation-argument-type-mismatch]: argument 0 of relation 'F' expects 
 
 ---
 === notation-alias-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
   ┌─ elab/notation-alias-inner.watsup:4:15
   │
 2 │ relation F: foo |- bool
@@ -1002,7 +1002,7 @@ error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'boo
 
 ---
 === notation-iteration-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
   ┌─ elab/notation-iteration-inner.watsup:3:15
   │
 1 │ relation F: nat* |- bool
@@ -1024,7 +1024,7 @@ error[elab/notation-argument-type-mismatch]: argument 0 of relation 'F' expects 
 
 ---
 === notation-list-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
   ┌─ elab/notation-list-inner.watsup:3:16
   │
 1 │ relation F: nat* |- bool
@@ -1067,7 +1067,7 @@ error[elab/notation-argument-type-mismatch]: argument 0 of notation expects 'nat
 === notation-empty-valid.watsup ===
 ---
 === notation-singleton-tuple-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
   ┌─ elab/notation-singleton-tuple-inner.watsup:3:16
   │
 1 │ relation F: (nat, nat)* |- bool
@@ -1089,7 +1089,7 @@ error[elab/notation-argument-type-mismatch]: argument 1 of relation 'F' expects 
 
 ---
 === notation-option-list-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
   ┌─ elab/notation-option-list-inner.watsup:3:16
   │
 1 │ relation F: nat? |- bool
@@ -1100,7 +1100,7 @@ error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'boo
 
 ---
 === notation-alias-list-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
   ┌─ elab/notation-alias-list-inner.watsup:4:16
   │
 2 │ relation F: foo |- bool
@@ -1283,7 +1283,7 @@ error[elab/expression-cast-invalid]: expected 'nat', but found 'bool'
 
 ---
 === operator-unary-type.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
   ┌─ elab/operator-unary-type.watsup:2:11
   │
 1 │ dec $f : nat
@@ -1293,7 +1293,7 @@ error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'boo
 
 ---
 === operator-not-type.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '~' is not defined for 'nat'
+error[elab/operator-unop-type-mismatch]: operator '~' is not defined for 'nat'
   ┌─ elab/operator-not-type.watsup:2:11
   │
 1 │ dec $f : bool
@@ -1303,7 +1303,7 @@ error[elab/operator-operand-type-mismatch]: operator '~' is not defined for 'nat
 
 ---
 === operator-binary-left-type.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '+' is not defined for 'bool' and 'nat'
+error[elab/operator-binop-type-mismatch]: operator '+' is not defined for 'bool' and 'nat'
   ┌─ elab/operator-binary-left-type.watsup:2:10
   │
 1 │ dec $f : nat
@@ -1315,7 +1315,7 @@ error[elab/operator-operand-type-mismatch]: operator '+' is not defined for 'boo
 
 ---
 === operator-binary-right-type.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '+' is not defined for 'nat' and 'bool'
+error[elab/operator-binop-type-mismatch]: operator '+' is not defined for 'nat' and 'bool'
   ┌─ elab/operator-binary-right-type.watsup:2:10
   │
 1 │ dec $f : nat
@@ -1327,7 +1327,7 @@ error[elab/operator-operand-type-mismatch]: operator '+' is not defined for 'nat
 
 ---
 === operator-logical-type.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '/\' is not defined for 'bool' and 'nat'
+error[elab/operator-binop-type-mismatch]: operator '/\' is not defined for 'bool' and 'nat'
   ┌─ elab/operator-logical-type.watsup:2:10
   │
 1 │ dec $f : bool
@@ -1339,7 +1339,7 @@ error[elab/operator-operand-type-mismatch]: operator '/\' is not defined for 'bo
 
 ---
 === operator-comparison-type.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '<' is not defined for 'bool' and 'nat'
+error[elab/operator-cmpop-type-mismatch]: operator '<' is not defined for 'bool' and 'nat'
   ┌─ elab/operator-comparison-type.watsup:2:12
   │
 1 │ dec $f : bool
@@ -1351,7 +1351,7 @@ error[elab/operator-operand-type-mismatch]: operator '<' is not defined for 'boo
 
 ---
 === operator-argument-type.watsup ===
-error[elab/operator-operand-type-mismatch]: operator '+' is not defined for 'bool' and 'nat'
+error[elab/operator-binop-type-mismatch]: operator '+' is not defined for 'bool' and 'nat'
   ┌─ elab/operator-argument-type.watsup:3:16
   │
 1 │ dec $take(nat) : nat
