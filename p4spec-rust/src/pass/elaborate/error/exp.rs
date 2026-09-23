@@ -359,7 +359,7 @@ pub(in crate::pass::elaborate) fn expected_type_mismatch(
     }
 }
 
-/// Links existing causes to the expected type's declaration without wrapping.
+/// Links causes and representatives to the expected type's declaration.
 pub(in crate::pass::elaborate) fn annotate_expected_type(
     expect: &ExpExpect<'_>,
     reports: &mut [Report],
@@ -372,7 +372,8 @@ pub(in crate::pass::elaborate) fn annotate_expected_type(
     // Preserve each cause and avoid repeated labels from recursive calls
     let mut reports_pending: Vec<_> = reports.iter_mut().collect();
     while let Some(report) = reports_pending.pop() {
-        if let ReportKind::Cause(diagnostic) = &mut report.kind
+        if let ReportKind::Cause(diagnostic) | ReportKind::Alternatives(diagnostic) =
+            &mut report.kind
             && !diagnostic.labels.contains(&label)
         {
             diagnostic.labels.push(label.clone());

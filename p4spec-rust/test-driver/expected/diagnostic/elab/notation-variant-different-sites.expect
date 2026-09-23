@@ -1,0 +1,30 @@
+note: expression does not match any variant case
+  ┌─ elab/notation-variant-different-sites.watsup:3:10
+  │
+3 │ def $f = GO 0 STOP
+  │          ---------
+
+├─ error[elab/notation-token-mismatch]: expected 'A', but found 'GO'
+│    ┌─ elab/notation-variant-different-sites.watsup:3:10
+│    │
+│  1 │ syntax choice = A nat STOP | GO nat B
+│    │                 - expected token declared here
+│  2 │ dec $f : choice
+│    │          ------ return value of function '$f' expects 'choice'
+│  3 │ def $f = GO 0 STOP
+│    │          ^^ unexpected token
+│    │
+│    = expected notation: A nat STOP
+│
+└─ error[elab/notation-token-mismatch]: expected 'B', but found 'STOP'
+     ┌─ elab/notation-variant-different-sites.watsup:3:15
+     │
+   1 │ syntax choice = A nat STOP | GO nat B
+     │                                     - expected token declared here
+   2 │ dec $f : choice
+     │          ------ return value of function '$f' expects 'choice'
+   3 │ def $f = GO 0 STOP
+     │               ^^^^ unexpected token
+     │
+     = expected notation: GO nat B
+

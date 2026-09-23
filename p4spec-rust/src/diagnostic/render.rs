@@ -57,6 +57,14 @@ fn trace_prefix(ancestors: &[bool], vertical: &str) -> String {
     prefix
 }
 
+/// Hides retained alternatives after their representative has been rendered.
+fn visible_children(report: &Report) -> &[Report] {
+    match &report.kind {
+        ReportKind::Alternatives(_) => &[],
+        _ => &report.children,
+    }
+}
+
 /// Adds tree connections to every line without changing diagnostic colors.
 struct TraceWriter<'a> {
     buffer: &'a mut Buffer,
@@ -361,7 +369,9 @@ impl Renderer {
                 Ok(rendered)
             }
             // Keep each cause's code, severity, labels, and notes
-            ReportKind::Cause(diagnostic) => self.convert_diagnostic(diagnostic),
+            ReportKind::Cause(diagnostic) | ReportKind::Alternatives(diagnostic) => {
+                self.convert_diagnostic(diagnostic)
+            }
         }
     }
 
@@ -397,7 +407,7 @@ impl Renderer {
             ("├─ ", "└─ ", "│  ")
         };
         // Store cursors and ancestor continuations without recursive rendering
-        let mut pending = vec![report.children.iter()];
+        let mut pending = vec![visible_children(report).iter()];
         let mut ancestors = Vec::new();
         let mut count = 0;
         while let Some(children) = pending.last_mut() {
@@ -431,7 +441,7 @@ impl Renderer {
             };
             term::emit_to_write_style(&mut writer, &self.config.snippet, &self.files, &diagnostic)?;
             ancestors.push(has_next);
-            pending.push(child.children.iter());
+            pending.push(visible_children(child).iter());
         }
         Ok(())
     }

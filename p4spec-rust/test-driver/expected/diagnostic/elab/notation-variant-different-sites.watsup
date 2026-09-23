@@ -1,0 +1,3 @@
+syntax choice = A nat STOP | GO nat B
+dec $f : choice
+def $f = GO 0 STOP

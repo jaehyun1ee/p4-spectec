@@ -1,0 +1,13 @@
+error[elab/notation-token-mismatch]: expected 'ac', but found 'ad'
+  ┌─ elab/notation-variant-matched-prefix.watsup:4:17
+  │
+2 │ syntax choice = head 'ab' | PREFIX 'ac'
+  │                                    ---- expected token declared here
+3 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
+4 │ def $f = PREFIX 'ad'
+  │                 ^^^^ unexpected token
+  │
+  = expected notation: PREFIX 'ac'
+  = other expected notations for 'choice': head 'ab'
+

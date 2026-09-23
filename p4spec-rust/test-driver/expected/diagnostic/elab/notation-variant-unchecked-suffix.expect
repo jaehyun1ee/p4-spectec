@@ -1,0 +1,13 @@
+error[elab/notation-token-mismatch]: expected 'ac', but found 'ad'
+  ┌─ elab/notation-variant-unchecked-suffix.watsup:3:12
+  │
+1 │ syntax choice = nat 'ac' nat nat | nat 'ab' END LONG
+  │                     ---- expected token declared here
+2 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
+3 │ def $f = 0 'ad' END LONG
+  │            ^^^^ unexpected token
+  │
+  = expected notation: nat 'ac' nat nat
+  = other expected notations for 'choice': nat 'ab' END LONG
+

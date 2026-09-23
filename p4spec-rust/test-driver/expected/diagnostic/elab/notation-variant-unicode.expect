@@ -1,0 +1,12 @@
+error[elab/notation-token-mismatch]: expected 'λx', but found 'λz'
+  ┌─ elab/notation-variant-unicode.watsup:3:10
+  │
+1 │ syntax choice = 'λx' | 'λy' | 'abc'
+  │                 ---- expected token declared here
+2 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
+3 │ def $f = 'λz'
+  │          ^^^^ unexpected token
+  │
+  = other expected notations for 'choice': 'λy'; 'abc'
+

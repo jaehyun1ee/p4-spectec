@@ -15,15 +15,15 @@ use super::{context::Context, error, error::ElabError};
 
 /// A successful elaboration, unavailable rule, mismatch, or fatal failure.
 #[derive(Debug)]
-pub(super) enum Backtrack<T> {
+pub(super) enum Backtrack<T, F = Vec<Report>> {
     /// The operation produced a value.
     Success(T),
     /// The rule's prerequisites did not hold; another candidate may be tried.
-    Unavailable(Vec<Report>),
+    Unavailable(F),
     /// An applicable rule failed; another candidate may be tried.
-    Mismatch(Vec<Report>),
+    Mismatch(F),
     /// The operation failed and no alternative may be tried.
-    Fatal(Vec<Report>),
+    Fatal(F),
 }
 
 // == Macros
@@ -99,7 +99,7 @@ macro_rules! unwrap_from_result {
     ($result:expr) => {
         match $result {
             Ok(value) => value,
-            Err(error) => return $crate::pass::elaborate::backtrack::fatal!(vec![*error]),
+            Err(error) => return $crate::pass::elaborate::backtrack::fatal!(vec![*error].into()),
         }
     };
 }
@@ -107,14 +107,24 @@ pub(super) use unwrap_from_result;
 
 // == Propagation and context
 
-impl<T> Backtrack<T> {
+impl<T, F> Backtrack<T, F> {
     /// Maps a successful value while preserving each failure state.
-    pub(super) fn map<U>(self, map: impl FnOnce(T) -> U) -> Backtrack<U> {
+    pub(super) fn map<U>(self, map: impl FnOnce(T) -> U) -> Backtrack<U, F> {
         match self {
             success!(value) => success!(map(value)),
             unavailable!(reports) => unavailable!(reports),
             fatal!(reports) => fatal!(reports),
             mismatch!(reports) => mismatch!(reports),
+        }
+    }
+
+    /// Maps a failure payload without changing its recovery state.
+    pub(super) fn map_failure<G>(self, map: impl FnOnce(F) -> G) -> Backtrack<T, G> {
+        match self {
+            success!(value) => success!(value),
+            unavailable!(reports) => unavailable!(map(reports)),
+            mismatch!(reports) => mismatch!(map(reports)),
+            fatal!(reports) => fatal!(map(reports)),
         }
     }
 
@@ -133,7 +143,9 @@ impl<T> Backtrack<T> {
             result => result,
         }
     }
+}
 
+impl<T> Backtrack<T> {
     /// Wraps a recoverable failure under operation context.
     ///
     /// Fatal reports pass through unchanged so their direct cause is retained.
@@ -222,7 +234,7 @@ fn finish_reports(mut reports: Vec<Report>) -> ElabError {
 fn report_span(report: &Report) -> Option<Span> {
     let span = match &report.kind {
         ReportKind::Frame { span, .. } => span,
-        ReportKind::Cause(diagnostic) => diagnostic
+        ReportKind::Cause(diagnostic) | ReportKind::Alternatives(diagnostic) => diagnostic
             .labels
             .iter()
             .find(|label| label.style == LabelStyle::Primary)

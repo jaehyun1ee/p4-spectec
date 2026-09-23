@@ -1,0 +1,13 @@
+error[elab/notation-token-mismatch]: expected ':', but found ','
+  ┌─ elab/notation-variant-delimiters.watsup:3:16
+  │
+1 │ syntax choice = TAG nat ':' | TAG nat ';'
+  │                         --- expected token declared here
+2 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
+3 │ def $f = TAG 0 ','
+  │                ^^^ unexpected token
+  │
+  = expected notation: TAG nat ':'
+  = other expected notations for 'choice': TAG nat ';'
+

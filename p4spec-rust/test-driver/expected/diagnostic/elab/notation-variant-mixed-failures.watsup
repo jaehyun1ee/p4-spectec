@@ -1,0 +1,3 @@
+syntax choice = TAG nat | BAD bool
+dec $f : choice
+def $f = TAG true

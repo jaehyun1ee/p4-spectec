@@ -1,0 +1,16 @@
+error[elab/notation-token-mismatch]: expected '!', but found '!l'
+  ┌─ elab/notation-variant-alias.watsup:5:10
+  │
+1 │ syntax unop = '~' | '!' | '-' | '+'
+  │                     --- expected token declared here
+2 │ syntax op = unop
+3 │ syntax choice = D nat | op nat
+  │                         -- argument 0 of notation expects 'op'
+4 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
+5 │ def $f = '!l' 0
+  │          ^^^^ unexpected token
+  │
+  = other expected notations for 'unop': '~'; '-'; '+'
+  = other expected notations for 'choice': D nat
+
