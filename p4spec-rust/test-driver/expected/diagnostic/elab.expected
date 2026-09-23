@@ -1376,3 +1376,296 @@ error[elab/function-undefined]: function `missing` is undefined
 ---
 === operator-types-valid.watsup ===
 ---
+=== struct-field-count.watsup ===
+error[elab/struct-field-arity-mismatch]: expected 2 struct fields, but found 1
+  ┌─ elab/struct-field-count.watsup:3:10
+  │
+1 │ syntax record = { COUNT nat, FLAG bool }
+  │                 ------------------------ struct declared here
+2 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+3 │ def $f = { COUNT 1 }
+  │          ^^^^^^^^^^^
+  │
+  = expected fields in declaration order: COUNT, FLAG
+
+---
+=== struct-field-extra.watsup ===
+error[elab/struct-field-arity-mismatch]: expected 1 struct field, but found 2
+  ┌─ elab/struct-field-extra.watsup:3:10
+  │
+1 │ syntax record = { COUNT nat }
+  │                 ------------- struct declared here
+2 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+3 │ def $f = { COUNT 1, FLAG true }
+  │          ^^^^^^^^^^^^^^^^^^^^^^
+  │
+  = expected fields in declaration order: COUNT
+
+---
+=== struct-field-name.watsup ===
+error[elab/struct-field-name-mismatch]: expected field 'COUNT', but found 'VALUE'
+  ┌─ elab/struct-field-name.watsup:3:12
+  │
+1 │ syntax record = { COUNT nat }
+  │                   ----- expected field declared here
+2 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+3 │ def $f = { VALUE 1 }
+  │            ^^^^^ unexpected field
+  │
+  = Struct fields must appear in declaration order.
+
+---
+=== struct-field-order.watsup ===
+error[elab/struct-field-name-mismatch]: expected field 'COUNT', but found 'FLAG'
+  ┌─ elab/struct-field-order.watsup:3:12
+  │
+1 │ syntax record = { COUNT nat, FLAG bool }
+  │                   ----- expected field declared here
+2 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+3 │ def $f = { FLAG true, COUNT 1 }
+  │            ^^^^ unexpected field
+  │
+  = Struct fields must appear in declaration order.
+
+---
+=== struct-field-type.watsup ===
+error[elab/struct-field-type-mismatch]: field 'COUNT' expects 'nat', but found 'bool'
+  ┌─ elab/struct-field-type.watsup:3:18
+  │
+1 │ syntax record = { COUNT nat }
+  │                         --- field 'COUNT' expects 'nat'
+2 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+3 │ def $f = { COUNT true }
+  │                  ^^^^
+
+---
+=== struct-field-polymorphic.watsup ===
+error[elab/struct-field-type-mismatch]: field 'VALUE' expects 'nat', but found 'bool'
+  ┌─ elab/struct-field-polymorphic.watsup:3:18
+  │
+1 │ syntax record<T> = { VALUE T }
+  │                            - field 'VALUE' expects 'nat'
+2 │ dec $f : record<nat>
+  │          ----------- return value of function '$f' expects 'record<nat>'
+3 │ def $f = { VALUE true }
+  │                  ^^^^
+
+---
+=== struct-field-inner.watsup ===
+error[elab/expression-cast-invalid]: expected 'nat', but found 'bool'
+  ┌─ elab/struct-field-inner.watsup:3:23
+  │
+1 │ syntax record = { COUNT nat* }
+  │                         ---- field 'COUNT' expects 'nat*'
+2 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+3 │ def $f = { COUNT ([_, true]) }
+  │                       ^^^^
+
+---
+=== struct-field-undefined.watsup ===
+error[elab/struct-field-undefined]: type 'record' has no field 'MISSING'
+  ┌─ elab/struct-field-undefined.watsup:3:24
+  │
+1 │ syntax record = { COUNT nat, FLAG bool }
+  │                 ------------------------ struct declared here
+2 │ dec $f(record) : nat
+  │                  --- return value of function '$f' expects 'nat'
+3 │ def $f(record) = record.MISSING
+  │                        ^^^^^^^^ unknown field
+  │
+  = available fields: COUNT, FLAG
+
+---
+=== struct-update-field-undefined.watsup ===
+error[elab/struct-field-undefined]: type 'record' has no field 'MISSING'
+  ┌─ elab/struct-update-field-undefined.watsup:3:25
+  │
+1 │ syntax record = { COUNT nat, FLAG bool }
+  │                 ------------------------ struct declared here
+2 │ dec $f(record) : record
+  │                  ------ return value of function '$f' expects 'record'
+3 │ def $f(record) = record[.MISSING = 1]
+  │                         ^^^^^^^^ unknown field
+  │
+  = available fields: COUNT, FLAG
+
+---
+=== struct-nested-field-undefined.watsup ===
+error[elab/struct-field-undefined]: type 'inner' has no field 'MISSING'
+  ┌─ elab/struct-nested-field-undefined.watsup:4:29
+  │
+1 │ syntax inner = { COUNT nat }
+  │                ------------- struct declared here
+2 │ syntax outer = { INNER inner }
+3 │ dec $f(outer) : outer
+  │                 ----- return value of function '$f' expects 'outer'
+4 │ def $f(outer) = outer[.INNER.MISSING = 1]
+  │                             ^^^^^^^^ unknown field
+  │
+  = available fields: COUNT
+
+---
+=== struct-types-valid.watsup ===
+---
+=== struct-polymorphic-valid.watsup ===
+---
+=== struct-field-alias.watsup ===
+error[elab/struct-field-type-mismatch]: field 'COUNT' expects 'count', but found 'bool'
+  ┌─ elab/struct-field-alias.watsup:4:18
+  │
+2 │ syntax record = { COUNT count }
+  │                         ----- field 'COUNT' expects 'count'
+3 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+4 │ def $f = { COUNT true }
+  │                  ^^^^
+
+---
+=== struct-field-fatal.watsup ===
+error[elab/function-undefined]: function `missing` is undefined
+  ┌─ elab/struct-field-fatal.watsup:3:19
+  │
+1 │ syntax record = { COUNT nat }
+  │                         --- field 'COUNT' expects 'nat'
+2 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+3 │ def $f = { COUNT $missing }
+  │                   ^^^^^^^
+
+---
+=== tuple-arity.watsup ===
+error[elab/tuple-arity-mismatch]: expected 3 tuple elements, but found 2
+  ┌─ elab/tuple-arity.watsup:2:10
+  │
+1 │ dec $f : (nat, nat, nat)
+  │          --------------- return value of function '$f' expects '(nat, nat, nat)'
+2 │ def $f = (1, 2)
+  │          ^^^^^^
+
+---
+=== tuple-arity-contextual.watsup ===
+error[elab/tuple-arity-mismatch]: expected 3 tuple elements, but found 2
+  ┌─ elab/tuple-arity-contextual.watsup:2:10
+  │
+1 │ dec $f : (nat, nat, nat)
+  │          --------------- return value of function '$f' expects '(nat, nat, nat)'
+2 │ def $f = (_, 2)
+  │          ^^^^^^
+
+---
+=== tuple-arity-extra.watsup ===
+error[elab/tuple-arity-mismatch]: expected 2 tuple elements, but found 3
+  ┌─ elab/tuple-arity-extra.watsup:2:10
+  │
+1 │ dec $f : (nat, nat)
+  │          ---------- return value of function '$f' expects '(nat, nat)'
+2 │ def $f = (1, 2, 3)
+  │          ^^^^^^^^^
+
+---
+=== tuple-arity-alias.watsup ===
+error[elab/tuple-arity-mismatch]: expected 3 tuple elements, but found 2
+  ┌─ elab/tuple-arity-alias.watsup:3:10
+  │
+2 │ dec $f : triple
+  │          ------ return value of function '$f' expects 'triple'
+3 │ def $f = (1, 2)
+  │          ^^^^^^
+
+---
+=== tuple-types-valid.watsup ===
+---
+=== list-element-type.watsup ===
+error[elab/list-element-type-mismatch]: list element 1 has type 'bool', but element 0 has type 'nat'
+  ┌─ elab/list-element-type.watsup:2:14
+  │
+1 │ dec $f : bool
+  │          ---- return value of function '$f' expects 'bool'
+2 │ def $f = [1, true]
+  │           -  ^^^^ element 1 has type 'bool'
+  │           │   
+  │           element 0 has type 'nat'
+
+---
+=== list-element-third.watsup ===
+error[elab/list-element-type-mismatch]: list element 2 has type 'bool', but element 0 has type 'nat'
+  ┌─ elab/list-element-third.watsup:2:17
+  │
+1 │ dec $f : bool
+  │          ---- return value of function '$f' expects 'bool'
+2 │ def $f = [1, 2, true]
+  │           -     ^^^^ element 2 has type 'bool'
+  │           │      
+  │           element 0 has type 'nat'
+
+---
+=== list-element-contextual.watsup ===
+error[elab/expression-cast-invalid]: expected 'nat', but found 'bool'
+  ┌─ elab/list-element-contextual.watsup:2:14
+  │
+1 │ dec $f : nat*
+  │          ---- return value of function '$f' expects 'nat*'
+2 │ def $f = [1, true]
+  │              ^^^^
+
+---
+=== list-element-fatal.watsup ===
+error[elab/function-undefined]: function `missing` is undefined
+  ┌─ elab/list-element-fatal.watsup:2:15
+  │
+1 │ dec $f : nat*
+  │          ---- return value of function '$f' expects 'nat*'
+2 │ def $f = [1, $missing]
+  │               ^^^^^^^
+
+---
+=== list-types-valid.watsup ===
+---
+=== tuple-arity-inferred-alias.watsup ===
+error[elab/tuple-arity-mismatch]: expected 3 tuple elements, but found 2
+  ┌─ elab/tuple-arity-inferred-alias.watsup:4:16
+  │
+3 │ dec $f(pair) : triple
+  │                ------ return value of function '$f' expects 'triple'
+4 │ def $f(pair) = pair
+  │                ^^^^
+
+---
+=== tuple-arity-parenthesized.watsup ===
+error[elab/tuple-arity-mismatch]: expected 3 tuple elements, but found 2
+  ┌─ elab/tuple-arity-parenthesized.watsup:2:11
+  │
+1 │ dec $f : (nat, nat, nat)
+  │          --------------- return value of function '$f' expects '(nat, nat, nat)'
+2 │ def $f = ((_, 2))
+  │           ^^^^^^
+
+---
+=== struct-field-tuple-arity.watsup ===
+error[elab/tuple-arity-mismatch]: expected 3 tuple elements, but found 2
+  ┌─ elab/struct-field-tuple-arity.watsup:3:20
+  │
+1 │ syntax record = { VALUES (nat, nat, nat) }
+  │                          --------------- field 'VALUES' expects '(nat, nat, nat)'
+2 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+3 │ def $f = { VALUES ((_, 2)) }
+  │                    ^^^^^^
+
+---
+=== tuple-arity-fatal.watsup ===
+error[elab/function-undefined]: function `missing` is undefined
+  ┌─ elab/tuple-arity-fatal.watsup:2:12
+  │
+1 │ dec $f : (nat, nat, nat)
+  │          --------------- return value of function '$f' expects '(nat, nat, nat)'
+2 │ def $f = ($missing, 2)
+  │            ^^^^^^^
+
+---

@@ -1,6 +1,6 @@
 //! Source inputs for diagnostic snapshot acceptance
 //!
-//! Reference fixtures keep their pinned order; Rust notation regressions follow.
+//! Reference fixtures keep their pinned order; Rust elaboration regressions follow.
 //! Rendered output is compared with the matching diagnostic expected file.
 
 /// Pins the OCaml inputs represented by the diagnostic cases.
@@ -30,7 +30,7 @@ pub const PARSE: &[&str] = &[
     "parse-directory-io-error",
 ];
 
-/// Lists reference elaboration fixtures followed by notation regressions.
+/// Lists reference elaboration fixtures followed by elaboration regressions.
 pub const ELAB: &[&str] = &[
     "ctx-builtin-dec-redefined.watsup",
     "ctx-builtin-dec-tparam-duplicate.watsup",
@@ -164,4 +164,32 @@ pub const ELAB: &[&str] = &[
     "operator-argument-type.watsup",
     "operator-inner-cause.watsup",
     "operator-types-valid.watsup",
+    "struct-field-count.watsup",
+    "struct-field-extra.watsup",
+    "struct-field-name.watsup",
+    "struct-field-order.watsup",
+    "struct-field-type.watsup",
+    "struct-field-polymorphic.watsup",
+    "struct-field-inner.watsup",
+    "struct-field-undefined.watsup",
+    "struct-update-field-undefined.watsup",
+    "struct-nested-field-undefined.watsup",
+    "struct-types-valid.watsup",
+    "struct-polymorphic-valid.watsup",
+    "struct-field-alias.watsup",
+    "struct-field-fatal.watsup",
+    "tuple-arity.watsup",
+    "tuple-arity-contextual.watsup",
+    "tuple-arity-extra.watsup",
+    "tuple-arity-alias.watsup",
+    "tuple-types-valid.watsup",
+    "list-element-type.watsup",
+    "list-element-third.watsup",
+    "list-element-contextual.watsup",
+    "list-element-fatal.watsup",
+    "list-types-valid.watsup",
+    "tuple-arity-inferred-alias.watsup",
+    "tuple-arity-parenthesized.watsup",
+    "struct-field-tuple-arity.watsup",
+    "tuple-arity-fatal.watsup",
 ];

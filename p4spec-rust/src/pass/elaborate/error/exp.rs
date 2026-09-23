@@ -124,14 +124,117 @@ pub(in crate::pass::elaborate) fn expression_iteration_mismatch(
     cause(EXPRESSION_ITERATION_MISMATCH, message, vec![Label::primary(span, "")], Vec::new())
 }
 
-const EXPRESSION_ARITY_MISMATCH: &str = "elab/expression-arity-mismatch";
+const STRUCT_FIELD_ARITY_MISMATCH: &str = "elab/struct-field-arity-mismatch";
+const STRUCT_FIELD_NAME_MISMATCH: &str = "elab/struct-field-name-mismatch";
+const STRUCT_FIELD_TYPE_MISMATCH: &str = "elab/struct-field-type-mismatch";
+const STRUCT_FIELD_UNDEFINED: &str = "elab/struct-field-undefined";
+const TUPLE_ARITY_MISMATCH: &str = "elab/tuple-arity-mismatch";
+const LIST_ELEMENT_TYPE_MISMATCH: &str = "elab/list-element-type-mismatch";
 
-/// Reports a tuple, struct, or notation expression with the wrong arity.
-pub(in crate::pass::elaborate) fn expression_arity_mismatch(
+/// Reports a struct literal's field count with the declared field order.
+pub(in crate::pass::elaborate) fn struct_field_arity_mismatch(
+    typ_fields_il: &[il::TypField],
+    fields_len: usize,
     span: &Span,
-    message: impl Into<String>,
+    span_declaration: &Span,
 ) -> ElabError {
-    cause(EXPRESSION_ARITY_MISMATCH, message, vec![Label::primary(span, "")], Vec::new())
+    let fields_len_expect = typ_fields_il.len();
+    let text_suffix = if fields_len_expect == 1 { "" } else { "s" };
+    cause(
+        STRUCT_FIELD_ARITY_MISMATCH,
+        format!("expected {fields_len_expect} struct field{text_suffix}, but found {fields_len}"),
+        vec![Label::primary(span, ""), Label::secondary(span_declaration, "struct declared here")],
+        vec![format!("expected fields in declaration order: {}", field_names(typ_fields_il))],
+    )
+}
+
+/// Reports the field names at the same position in the literal and declaration.
+pub(in crate::pass::elaborate) fn struct_field_name_mismatch(
+    atom_expect: &il::Atom,
+    atom: &il::Atom,
+) -> ElabError {
+    cause(
+        STRUCT_FIELD_NAME_MISMATCH,
+        format!("expected field '{}', but found '{}'", atom_expect.to_string(), atom.to_string()),
+        vec![
+            Label::primary(&atom.span, "unexpected field"),
+            Label::secondary(&atom_expect.span, "expected field declared here"),
+        ],
+        vec!["Struct fields must appear in declaration order.".to_owned()],
+    )
+}
+
+/// Reports an unknown field with the available fields and their declaration.
+pub(in crate::pass::elaborate) fn struct_field_undefined(
+    typ_il: &il::Typ,
+    atom: &il::Atom,
+    typ_fields_il: &[il::TypField],
+    span_declaration: &Span,
+) -> ElabError {
+    cause(
+        STRUCT_FIELD_UNDEFINED,
+        format!("type '{}' has no field '{}'", typ_il.to_string(), atom.to_string()),
+        vec![
+            Label::primary(&atom.span, "unknown field"),
+            Label::secondary(span_declaration, "struct declared here"),
+        ],
+        vec![format!("available fields: {}", field_names(typ_fields_il))],
+    )
+}
+
+fn field_names(typ_fields_il: &[il::TypField]) -> String {
+    typ_fields_il
+        .iter()
+        .map(|field_il| field_il.atom.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn field_subject(atom: &il::Atom) -> String {
+    format!("field '{}'", atom.to_string())
+}
+
+/// Reports tuple component counts at the expression and expected type.
+pub(in crate::pass::elaborate) fn tuple_arity_mismatch(
+    len_expect: usize,
+    len_actual: usize,
+    span: &Span,
+    expect: &ExpExpect<'_>,
+) -> ElabError {
+    let text_suffix = if len_expect == 1 { "" } else { "s" };
+    cause(
+        TUPLE_ARITY_MISMATCH,
+        format!("expected {len_expect} tuple element{text_suffix}, but found {len_actual}"),
+        vec![Label::primary(span, ""), expected_type_label(expect)],
+        Vec::new(),
+    )
+}
+
+/// Labels the first inferred list element and the first incompatible element.
+pub(in crate::pass::elaborate) fn list_element_type_mismatch(
+    idx: usize,
+    typ_base_il: &il::Typ,
+    typ_il: &il::Typ,
+) -> ElabError {
+    cause(
+        LIST_ELEMENT_TYPE_MISMATCH,
+        format!(
+            "list element {idx} has type '{}', but element 0 has type '{}'",
+            typ_il.to_string(),
+            typ_base_il.to_string()
+        ),
+        vec![
+            Label::primary(
+                &typ_il.span,
+                format!("element {idx} has type '{}'", typ_il.to_string()),
+            ),
+            Label::secondary(
+                &typ_base_il.span,
+                format!("element 0 has type '{}'", typ_base_il.to_string()),
+            ),
+        ],
+        Vec::new(),
+    )
 }
 
 const VARIANT_EXPRESSION_MATCH_REPEATED: &str = "elab/variant-expression-match-repeated";
@@ -210,6 +313,12 @@ pub(in crate::pass::elaborate) fn expected_type_mismatch(
         ExpExpectKind::FuncArg { id_func, idx, .. } => {
             super::arg::function_argument_type_mismatch(idx, id_func, expect.typ_il, typ_infer_il)
         }
+        ExpExpectKind::Field { atom, .. } => super::type_mismatch(
+            STRUCT_FIELD_TYPE_MISMATCH,
+            field_subject(atom),
+            expect.typ_il,
+            typ_infer_il,
+        ),
         ExpExpectKind::FuncReturn { id_func, .. } => {
             super::decl::function_return_type_mismatch(id_func, expect.typ_il, typ_infer_il)
         }
@@ -222,22 +331,10 @@ pub(in crate::pass::elaborate) fn annotate_expected_type(
     reports: &mut [Report],
 ) {
     // Ordinary expression checks add no declaration label
-    let (subject, typ_decl_il, span_declaration) = match expect.kind {
-        ExpExpectKind::Plain => return,
-        ExpExpectKind::NotArg { not_kind, idx, typ_decl_il, span_declaration } => {
-            (super::not::notation_argument_subject(idx, not_kind), typ_decl_il, span_declaration)
-        }
-        ExpExpectKind::FuncArg { id_func, idx, typ_decl_il, span_declaration } => {
-            (super::arg::function_argument_subject(idx, id_func), typ_decl_il, span_declaration)
-        }
-        ExpExpectKind::FuncReturn { id_func, typ_decl_il, span_declaration } => {
-            (super::decl::function_return_subject(id_func), typ_decl_il, span_declaration)
-        }
-    };
-    let label = Label::secondary(
-        span_declaration,
-        format!("{subject} expects '{}'", typ_decl_il.to_string()),
-    );
+    if matches!(expect.kind, ExpExpectKind::Plain) {
+        return;
+    }
+    let label = expected_type_label(expect);
     // Preserve each cause and avoid repeated labels from recursive calls
     let mut reports_pending: Vec<_> = reports.iter_mut().collect();
     while let Some(report) = reports_pending.pop() {
@@ -248,4 +345,29 @@ pub(in crate::pass::elaborate) fn annotate_expected_type(
         }
         reports_pending.extend(&mut report.children);
     }
+}
+
+/// Describes the declaration slot, or the expected type for an ordinary check.
+fn expected_type_label(expect: &ExpExpect<'_>) -> Label {
+    let (subject, typ_decl_il, span_declaration) = match expect.kind {
+        ExpExpectKind::Plain => {
+            return Label::secondary(
+                &expect.typ_il.span,
+                format!("expected type: {}", expect.typ_il.to_string()),
+            );
+        }
+        ExpExpectKind::NotArg { not_kind, idx, typ_decl_il, span_declaration } => {
+            (super::not::notation_argument_subject(idx, not_kind), typ_decl_il, span_declaration)
+        }
+        ExpExpectKind::FuncArg { id_func, idx, typ_decl_il, span_declaration } => {
+            (super::arg::function_argument_subject(idx, id_func), typ_decl_il, span_declaration)
+        }
+        ExpExpectKind::Field { atom, typ_decl_il, span_declaration } => {
+            (field_subject(atom), typ_decl_il, span_declaration)
+        }
+        ExpExpectKind::FuncReturn { id_func, typ_decl_il, span_declaration } => {
+            (super::decl::function_return_subject(id_func), typ_decl_il, span_declaration)
+        }
+    };
+    Label::secondary(span_declaration, format!("{subject} expects '{}'", typ_decl_il.to_string()))
 }

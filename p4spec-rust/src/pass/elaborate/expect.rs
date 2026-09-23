@@ -32,6 +32,8 @@ pub(super) enum ExpExpectKind<'a> {
     },
     /// Counts function parameters from zero after call-site instantiation.
     FuncArg { id_func: &'a Id, idx: usize, typ_decl_il: &'a il::Typ, span_declaration: &'a Span },
+    /// Checks a struct field against its instantiated declaration type.
+    Field { atom: &'a il::Atom, typ_decl_il: &'a il::Typ, span_declaration: &'a Span },
     /// Checks a function body against the declared return type.
     FuncReturn { id_func: &'a Id, typ_decl_il: &'a il::Typ, span_declaration: &'a Span },
 }
@@ -69,6 +71,18 @@ impl<'a> ExpExpect<'a> {
                 idx,
                 typ_decl_il: typ_il,
                 span_declaration: span_decl,
+            },
+        }
+    }
+
+    /// Creates a field expectation retaining its pre-substitution type span.
+    pub(super) fn field(field_decl_il: &'a il::TypField, typ_il: &'a il::Typ) -> Self {
+        Self {
+            typ_il,
+            kind: ExpExpectKind::Field {
+                atom: &field_decl_il.atom,
+                typ_decl_il: typ_il,
+                span_declaration: &field_decl_il.typ.span,
             },
         }
     }

@@ -129,7 +129,7 @@ fn as_list_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<il::Typ> {
 }
 
 /// Destructs the expanded type into the fields of the struct type it names.
-fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<Vec<il::TypField>> {
+fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(Vec<il::TypField>, Span)> {
     let typ_il = unwrap_from_result!(
         expand_typ(&ctx.tdenv, typ_il)
             .map_err(|error| { error::type_operation_invalid("cannot expand type", error) })
@@ -142,7 +142,9 @@ fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<Vec<il::TypField>
         return mismatch!(error: error::type_shape_mismatch("a struct", &typ_il.span));
     };
     match &def_typ_il.node {
-        il::DefTypKind::Struct(typ_fields_il) => success!(typ_fields_il.clone()),
+        il::DefTypKind::Struct(typ_fields_il) => {
+            success!((typ_fields_il.clone(), def_typ_il.span.clone()))
+        }
         _ => mismatch!(error: error::type_shape_mismatch("a struct", &typ_il.span)),
     }
 }
@@ -738,14 +740,14 @@ fn infer_list_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Backtrack
         phrase!(node: exp_first_il.note.as_ref().clone(), span: exp_first_il.span.clone());
     let mut exps_rest_il = unwrap!(infer_exps(ctx, exps_rest));
     // Remaining elements must have an equivalent type
-    for exp_il in &exps_rest_il {
+    for (idx, exp_il) in exps_rest_il.iter().enumerate() {
         let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
         let equivalent =
             unwrap_from_result!(equiv_typ(&ctx.tdenv, &typ_first_il, &typ_il).map_err(|error| {
                 error::type_operation_invalid("cannot compare list element types", error)
             }));
         if !equivalent {
-            return fail_infer(span, "list with heterogeneous elements");
+            return mismatch!(error: error::list_element_type_mismatch(idx + 1, &typ_first_il, &typ_il));
         }
     }
     let mut exps_il = vec![exp_first_il];
@@ -1020,12 +1022,12 @@ fn infer_dot_exp(
     let exp_il = unwrap!(infer_exp(ctx, exp));
     let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
     // The field must exist in the struct type
-    let typ_fields_il = unwrap!(as_struct_typ(ctx, &typ_il));
+    let (typ_fields_il, span_declaration) = unwrap!(as_struct_typ(ctx, &typ_il));
     let Some(il::TypField { typ: typ_field_il, .. }) = typ_fields_il
         .iter()
         .find(|il::TypField { atom: atom_field, .. }| atom_field.node == atom.node)
     else {
-        return fail_infer(&atom.span, "field");
+        return mismatch!(error: error::struct_field_undefined(&typ_il, atom, &typ_fields_il, &span_declaration));
     };
     let exp_il = note_phrase! {
         node: il::ExpKind::Dot(Box::new(exp_il), atom.clone()),
@@ -1227,6 +1229,17 @@ fn cast_exp(ctx: &Context, expect: &ExpExpect<'_>, exp_il: il::Exp) -> Backtrack
             span: span,
         };
         return success!(exp_il);
+    }
+    // Refine a failed tuple cast without changing the cast or failure state
+    if let Ok(typ_infer_expanded_il) = expand_typ(&ctx.tdenv, &typ_infer_il)
+        && let il::TypKind::Tuple(typs_infer_il) = &typ_infer_expanded_il.node
+        && let Ok(typ_expanded_il) = expand_typ(&ctx.tdenv, typ_expect_il)
+        && let il::TypKind::Tuple(typs_expect_il) = &typ_expanded_il.node
+        && typs_expect_il.len() != typs_infer_il.len()
+    {
+        return mismatch!(error: error::tuple_arity_mismatch(
+            typs_expect_il.len(), typs_infer_il.len(), &exp_il.span, expect,
+        ));
     }
     // Diagnose the failed type relationship before discarding inference data
     let error = error::expected_type_mismatch(expect, &typ_infer_il);
@@ -1494,8 +1507,21 @@ fn elab_exp_normal_fallback(
                 if matches!(exp.node, el::ExpKind::Str(_)) {
                     reports_infer.clear();
                 }
+                // A non-literal retains its inference cause without a shape trace
+                if !matches!(exp.node, el::ExpKind::Str(_)) && !reports_infer.is_empty() {
+                    return mismatch!(Vec::new());
+                }
                 *check = ExpCheck::Contextual;
-                return elab_struct_exp(ctx, typ_expect_il, &typ_fields_subst_il, exp);
+                let typ_fields_decl_il = typ_fields_il.clone();
+                let span_declaration = def_typ_il.span.clone();
+                return elab_struct_exp(
+                    ctx,
+                    typ_expect_il,
+                    &typ_fields_decl_il,
+                    &typ_fields_subst_il,
+                    &span_declaration,
+                    exp,
+                );
             }
             // Variant: match exactly one case
             il::DefTypKind::Variant(typ_cases_il) => {
@@ -1549,10 +1575,8 @@ fn elab_exp_normal_fallback(
         | (il::TypKind::Iter(_, _), el::ExpKind::Cons(_, _) | el::ExpKind::Cat(_, _)) => {
             ExpCheck::Contextual
         }
-        // Matching tuple arity rechecks the components
-        (il::TypKind::Tuple(typs_il), el::ExpKind::Tuple(exps)) if typs_il.len() == exps.len() => {
-            ExpCheck::Contextual
-        }
+        // A tuple checks its arity before rechecking components
+        (il::TypKind::Tuple(_), el::ExpKind::Tuple(_)) => ExpCheck::Contextual,
         // Matching iteration kinds recheck the body
         (il::TypKind::Iter(_, iter_expect), el::ExpKind::Iter(_, iter)) if iter_expect == iter => {
             ExpCheck::Contextual
@@ -1582,7 +1606,7 @@ fn elab_exp_normal_fallback(
         reports_infer.clear();
     }
     // Other constructs are shaped by the expected type alone
-    elab_plain_exp(ctx, typ_expect_il, exp)
+    elab_plain_exp(ctx, expect, exp)
 }
 
 // - Wildcard expression elaboration
@@ -1603,7 +1627,8 @@ fn elab_wildcard_exp(
 // - Plain expression elaboration
 
 /// Elaborates constructs whose shape is fixed by the expected type.
-fn elab_plain_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Backtrack<il::Exp> {
+fn elab_plain_exp(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> Backtrack<il::Exp> {
+    let typ_expect_il = expect.typ_il;
     let exp_kind_il = match &exp.node {
         el::ExpKind::Eps => unwrap!(elab_eps_exp(ctx, typ_expect_il)),
         el::ExpKind::List(exps) => unwrap!(elab_list_exp(ctx, typ_expect_il, exps)),
@@ -1611,8 +1636,8 @@ fn elab_plain_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> 
             unwrap!(elab_cons_exp(ctx, typ_expect_il, exp_head, exp_tail))
         }
         el::ExpKind::Cat(exp_l, exp_r) => unwrap!(elab_cat_exp(ctx, typ_expect_il, exp_l, exp_r)),
-        el::ExpKind::Tuple(exps) => unwrap!(elab_tuple_exp(ctx, typ_expect_il, exps)),
-        el::ExpKind::Paren(exp_inner) => unwrap!(elab_paren_exp(ctx, typ_expect_il, exp_inner)),
+        el::ExpKind::Tuple(exps) => unwrap!(elab_tuple_exp(ctx, expect, &exp.span, exps)),
+        el::ExpKind::Paren(exp_inner) => unwrap!(elab_paren_exp(ctx, expect, exp_inner)),
         el::ExpKind::Iter(exp_inner, iter) => {
             unwrap!(elab_iter_exp(ctx, typ_expect_il, exp_inner, *iter))
         }
@@ -1715,15 +1740,15 @@ fn elab_cat_exp(
 /// Elaborates a tuple component-wise against an expected tuple type.
 fn elab_tuple_exp(
     ctx: &mut Context,
-    typ_expect_il: &il::Typ,
+    expect: &ExpExpect<'_>,
+    span: &Span,
     exps: &[el::Exp],
 ) -> Backtrack<il::ExpKind> {
     // Component count must match the tuple type
-    let typs_expect_il = unwrap!(as_tuple_typ(ctx, typ_expect_il));
+    let typs_expect_il = unwrap!(as_tuple_typ(ctx, expect.typ_il));
     if typs_expect_il.len() != exps.len() {
-        return mismatch!(error: error::expression_arity_mismatch(
-            &typ_expect_il.span,
-            "tuple expression arity does not match",
+        return mismatch!(error: error::tuple_arity_mismatch(
+            typs_expect_il.len(), exps.len(), span, expect,
         ));
     }
     let mut exps_il = Vec::with_capacity(exps.len());
@@ -1737,10 +1762,10 @@ fn elab_tuple_exp(
 
 fn elab_paren_exp(
     ctx: &mut Context,
-    typ_expect_il: &il::Typ,
+    expect: &ExpExpect<'_>,
     exp: &el::Exp,
 ) -> Backtrack<il::ExpKind> {
-    let exp_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(typ_expect_il), exp));
+    let exp_il = unwrap!(elab_exp(ctx, expect, exp));
     success!(exp_il.node)
 }
 
@@ -1917,7 +1942,9 @@ fn notation_shape_matches(mixfix: &Mixfix<il::Typ>, exp: &el::Exp) -> bool {
 fn elab_struct_exp(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
+    typ_fields_decl_il: &[il::TypField],
     typ_fields_il: &[il::TypField],
+    span_declaration: &Span,
     exp: &el::Exp,
 ) -> Backtrack<il::Exp> {
     let el::ExpKind::Str(exp_fields) = &exp.node else {
@@ -1925,23 +1952,22 @@ fn elab_struct_exp(
     };
     // Field count must match the struct type
     if typ_fields_il.len() != exp_fields.len() {
-        return mismatch!(error: error::expression_arity_mismatch(
-            &exp.span,
-            "struct field count does not match",
+        return mismatch!(error: error::struct_field_arity_mismatch(
+            typ_fields_decl_il, exp_fields.len(), &exp.span, span_declaration,
         ));
     }
     let mut exp_fields_il = Vec::with_capacity(exp_fields.len());
-    for (il::TypField { atom: atom_expect, typ: typ_il }, (atom, exp_field)) in
-        typ_fields_il.iter().zip(exp_fields)
+    for ((field_decl_il, il::TypField { atom: atom_expect, typ: typ_il }), (atom, exp_field)) in
+        typ_fields_decl_il.iter().zip(typ_fields_il).zip(exp_fields)
     {
         // Fields must appear in declaration order
         if atom_expect.node != atom.node {
-            return mismatch!(error: error::expression_type_mismatch(
-                &atom.span,
-                "struct field does not match",
+            return mismatch!(error: error::struct_field_name_mismatch(
+                atom_expect, atom,
             ));
         }
-        let exp_field_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(typ_il), exp_field));
+        let exp_field_il =
+            unwrap!(elab_exp(ctx, &ExpExpect::field(field_decl_il, typ_il), exp_field));
         exp_fields_il.push(il::ExpField { atom: atom_expect.clone(), exp: exp_field_il });
     }
     success!(note_phrase! {
@@ -2150,17 +2176,17 @@ fn elab_dot_path(
     let path_inner_il = unwrap!(elab_path(ctx, typ_expect_il, path_inner));
     let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
     // The field must exist in the struct type
-    let typ_fields_il = unwrap!(as_struct_typ(ctx, &typ_inner_il));
+    let (typ_fields_il, span_declaration) = unwrap!(as_struct_typ(ctx, &typ_inner_il));
     let Some(il::TypField { typ: typ_field_il, .. }) = typ_fields_il
-        .into_iter()
+        .iter()
         .find(|il::TypField { atom: atom_field, .. }| atom_field.node == atom.node)
     else {
-        return fail_infer(&atom.span, "field");
+        return mismatch!(error: error::struct_field_undefined(&typ_inner_il, atom, &typ_fields_il, &span_declaration));
     };
     let path_kind_il = il::PathKind::Dot(Box::new(path_inner_il), atom.clone());
     success!(note_phrase! {
         node: path_kind_il,
-        note: typ_field_il.node,
+        note: typ_field_il.node.clone(),
         span: span.clone(),
     })
 }
