@@ -129,7 +129,7 @@ fn as_list_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<il::Typ> {
 }
 
 /// Destructs the expanded type into the fields of the struct type it names.
-fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(Vec<il::TypField>, Span)> {
+fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(Span, Vec<il::TypField>)> {
     let typ_il = unwrap_from_result!(
         expand_typ(&ctx.tdenv, typ_il)
             .map_err(|error| { error::type_operation_invalid("cannot expand type", error) })
@@ -143,7 +143,7 @@ fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(Vec<il::TypField
     };
     match &def_typ_il.node {
         il::DefTypKind::Struct(typ_fields_il) => {
-            success!((typ_fields_il.clone(), def_typ_il.span.clone()))
+            success!((def_typ_il.span.clone(), typ_fields_il.clone()))
         }
         _ => mismatch!(error: error::type_shape_mismatch("a struct", &typ_il.span)),
     }
@@ -1022,7 +1022,7 @@ fn infer_dot_exp(
     let exp_il = unwrap!(infer_exp(ctx, exp));
     let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
     // The field must exist in the struct type
-    let (typ_fields_il, span_declaration) = unwrap!(as_struct_typ(ctx, &typ_il));
+    let (span_declaration, typ_fields_il) = unwrap!(as_struct_typ(ctx, &typ_il));
     let Some(il::TypField { typ: typ_field_il, .. }) = typ_fields_il
         .iter()
         .find(|il::TypField { atom: atom_field, .. }| atom_field.node == atom.node)
@@ -2176,7 +2176,7 @@ fn elab_dot_path(
     let path_inner_il = unwrap!(elab_path(ctx, typ_expect_il, path_inner));
     let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
     // The field must exist in the struct type
-    let (typ_fields_il, span_declaration) = unwrap!(as_struct_typ(ctx, &typ_inner_il));
+    let (span_declaration, typ_fields_il) = unwrap!(as_struct_typ(ctx, &typ_inner_il));
     let Some(il::TypField { typ: typ_field_il, .. }) = typ_fields_il
         .iter()
         .find(|il::TypField { atom: atom_field, .. }| atom_field.node == atom.node)
