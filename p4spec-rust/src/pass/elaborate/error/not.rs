@@ -74,6 +74,9 @@ pub(in crate::pass::elaborate) fn notation_token_mismatch(
     )
 }
 
+/// Keeps each note line within 80 columns after the renderer's `  = ` prefix.
+const NOTE_WIDTH: usize = 76;
+
 /// Lists alternative notations in one type scope without merging candidates.
 pub(in crate::pass::elaborate) fn other_expected_notations(
     typ_il: &il::Typ,
@@ -83,38 +86,40 @@ pub(in crate::pass::elaborate) fn other_expected_notations(
         .iter()
         .map(|not_typ_il| not_typ_il.to_string())
         .collect();
-    let mut text = format!("other expected notations for '{}':", typ_il.to_string());
-    let mut columns = text.chars().count();
-    for (idx, (text_not, not_typ_il)) in texts.iter().zip(not_typs_il).enumerate() {
-        // Identical spelling does not erase distinct candidate declarations
-        let text_not = if texts
+    // Identical spelling does not erase distinct candidate declarations
+    let texts_listed = texts.iter().zip(not_typs_il).map(|(text, not_typ_il)| {
+        if texts
             .iter()
-            .filter(|text_other| *text_other == text_not)
+            .filter(|text_other| *text_other == text)
             .count()
             > 1
         {
             let pos = &not_typ_il.span.left;
-            format!("{text_not} ({}:{}:{})", pos.file, pos.line, pos.column + 1)
+            format!("{text} ({}:{}:{})", pos.file, pos.line, pos.column + 1)
         } else {
-            text_not.clone()
-        };
-        // Wrap only between complete notations, keeping semicolon separators
+            text.clone()
+        }
+    });
+    let mut note = format!("other expected notations for '{}':", typ_il.to_string());
+    let mut width = note.chars().count();
+    // Wrap only between complete notations, keeping semicolon separators
+    for (idx, text_listed) in texts_listed.enumerate() {
         if idx != 0 {
-            text.push(';');
-            columns += 1;
+            note.push(';');
+            width += 1;
         }
-        let len = text_not.chars().count();
-        if columns + 1 + len > 76 {
-            text.push_str("\n  ");
-            columns = 2;
+        let len = text_listed.chars().count();
+        if width + 1 + len > NOTE_WIDTH {
+            note.push_str("\n  ");
+            width = 2;
         } else {
-            text.push(' ');
-            columns += 1;
+            note.push(' ');
+            width += 1;
         }
-        text.push_str(&text_not);
-        columns += len;
+        note.push_str(&text_listed);
+        width += len;
     }
-    text
+    note
 }
 
 /// Names the owner of a complete notation declaration.
