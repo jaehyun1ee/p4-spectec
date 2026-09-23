@@ -45,7 +45,7 @@ use super::{
     context::{Context, FuncSignature},
     dimension,
     error::{self, ElabError},
-    expect::{ExpExpect, ExpExpectKind, NotExpect, NotExpectKind},
+    expect::{ExpExpect, NotExpect},
 };
 
 // == Checks
@@ -1476,7 +1476,8 @@ fn elab_exp_normal_fallback(
                     }));
                 // Alias checking repeats inference on the same expression
                 reports_infer.clear();
-                return elab_exp_normal(ctx, &expect.with_typ(&typ_il), exp, check);
+                let expect = ExpExpect { typ_il: &typ_il, ..*expect };
+                return elab_exp_normal(ctx, &expect, exp, check);
             }
             // Struct: match the fields
             il::DefTypKind::Struct(typ_fields_il) => {
@@ -1784,15 +1785,7 @@ fn elab_not_exp_inner(
     match (mixfix, &exp.node) {
         // Count only argument slots and retain a nested failure's own cause
         (Mixfix::Arg(typ_il), _) => {
-            let exp_expect = ExpExpect {
-                typ_il,
-                kind: ExpExpectKind::NotArg {
-                    idx: *arg_idx,
-                    not_kind: expect.kind,
-                    typ_decl_il: typ_il,
-                    span_declaration: &typ_il.span,
-                },
-            };
+            let exp_expect = ExpExpect::not_arg(expect.kind, *arg_idx, typ_il);
             *arg_idx += 1;
             match elab_exp_inner(ctx, &exp_expect, exp) {
                 // Rebuild the elaborated argument
@@ -1973,18 +1966,15 @@ fn elab_variant_exp(
     let mut reports_mismatch = Vec::new();
     for il::TypCase { not_typ: not_typ_il, typ_origin: typ_origin_il, .. } in typ_cases_il {
         let mut ctx_candidate = ctx_match.clone();
-        let not_exp_il = match elab_not_exp(
-            &mut ctx_candidate,
-            &NotExpect { not_typ_il, kind: NotExpectKind::Variant },
-            exp,
-        ) {
-            success!(not_exp_il) => not_exp_il,
-            fatal!(reports) => return fatal!(reports),
-            mismatch!(mut reports) => {
-                reports_mismatch.append(&mut reports);
-                continue;
-            }
-        };
+        let not_exp_il =
+            match elab_not_exp(&mut ctx_candidate, &NotExpect::variant(not_typ_il), exp) {
+                success!(not_exp_il) => not_exp_il,
+                fatal!(reports) => return fatal!(reports),
+                mismatch!(mut reports) => {
+                    reports_mismatch.append(&mut reports);
+                    continue;
+                }
+            };
         let typ_case_kind_il =
             il::TypKind::Var(typ_origin_il.node.id.clone(), typ_origin_il.node.targs.clone());
         let typ_case_il = phrase!(node: typ_case_kind_il, span: typ_origin_il.span.clone());
@@ -2253,15 +2243,7 @@ fn elab_arg(
     match (&param_il.node, &arg.node) {
         // Expression arguments elaborate against the parameter type
         (il::ParamKind::Exp(typ_il), el::ArgKind::Exp(exp)) => {
-            let expect = ExpExpect {
-                typ_il,
-                kind: ExpExpectKind::FuncArg {
-                    idx,
-                    id_func,
-                    typ_decl_il: typ_il,
-                    span_declaration: &param_il.span,
-                },
-            };
+            let expect = ExpExpect::func_arg(id_func, idx, typ_il, &param_il.span);
             let exp_il = unwrap!(elab_exp(ctx, &expect, exp).mismatch_as_failure());
             let arg_il = il::ArgKind::Exp(Box::new(exp_il));
             let arg_il = phrase!(node: arg_il, span: arg.span.clone());
@@ -2503,12 +2485,7 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Backtrack<il::PremK
         Err(error) => return fatal!(error: error),
     };
     let not_exp_il = unwrap!(
-        elab_not_exp(
-            ctx,
-            &NotExpect { not_typ_il: &not_typ_il, kind: NotExpectKind::Rel(&prem.id) },
-            &prem.exp
-        )
-        .mismatch_as_failure()
+        elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp).mismatch_as_failure()
     );
     let exps_il = not_exp_il.args();
     let conditional = match input::is_conditional(&input_hint, &exps_il) {
@@ -2538,12 +2515,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il
         Err(error) => return fatal!(error: error),
     };
     let not_exp_il = unwrap!(
-        elab_not_exp(
-            ctx,
-            &NotExpect { not_typ_il: &not_typ_il, kind: NotExpectKind::Rel(&prem.id) },
-            &prem.exp
-        )
-        .mismatch_as_failure()
+        elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp).mismatch_as_failure()
     );
     let exps_il = not_exp_il.args();
     let (_, exps_output_il) = match input::split(&input_hint, exps_il) {
@@ -2624,11 +2596,8 @@ fn elab_rule(
     ctx_local.reset_frees();
     let frees = rule.free_ids();
     ctx_local.add_frees(&frees);
-    let not_exp_il = finish(elab_not_exp(
-        &mut ctx_local,
-        &NotExpect { not_typ_il, kind: NotExpectKind::Rel(id_rel) },
-        exp,
-    ))?;
+    let not_exp_il =
+        finish(elab_not_exp(&mut ctx_local, &NotExpect::rel(id_rel, not_typ_il), exp))?;
     let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, prems, &id_rule.span))?;
     let rule_kind_il = il::RuleKind { id: id_rule.clone(), not_exp: not_exp_il, prems: prems_il };
     let rule_il = phrase!(node: rule_kind_il, span: rule.span.clone());
@@ -2768,14 +2737,7 @@ fn elab_clause(
         &span_declaration,
     ))?;
     let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, &def.prems, span))?;
-    let expect = ExpExpect {
-        typ_il: &typ_ret_il,
-        kind: ExpExpectKind::FuncReturn {
-            id_func: &def.id,
-            typ_decl_il: &typ_ret_il,
-            span_declaration: &typ_ret_il.span,
-        },
-    };
+    let expect = ExpExpect::func_return(&def.id, &typ_ret_il);
     let exp_il = finish(elab_exp(&mut ctx_local, &expect, &def.exp))?;
     let clause_kind_il = il::ClauseKind { args: args_il, exp: exp_il, prems: prems_il };
     let clause_il = phrase!(node: clause_kind_il, span: span.clone());
@@ -3314,14 +3276,7 @@ fn elab_table_def(ctx: &mut Context, def: &el::TableDef) -> Result<(), ElabError
                 &def.id,
                 &span_declaration,
             ))?;
-            let expect = ExpExpect {
-                typ_il: &typ_il,
-                kind: ExpExpectKind::FuncReturn {
-                    id_func: &def.id,
-                    typ_decl_il: &typ_il,
-                    span_declaration: &typ_il.span,
-                },
-            };
+            let expect = ExpExpect::func_return(&def.id, &typ_il);
             let exp_body_il = finish(elab_exp(&mut ctx_local, &expect, exp_body))?;
             (args_il, exp_body_il)
         };

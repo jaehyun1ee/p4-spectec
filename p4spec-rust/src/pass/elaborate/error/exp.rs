@@ -204,10 +204,10 @@ pub(in crate::pass::elaborate) fn expected_type_mismatch(
 ) -> ElabError {
     match expect.kind {
         ExpExpectKind::Plain => expression_cast_invalid(expect.typ_il, typ_infer_il),
-        ExpExpectKind::NotArg { idx, not_kind, .. } => {
+        ExpExpectKind::NotArg { not_kind, idx, .. } => {
             super::not::notation_argument_type_mismatch(idx, not_kind, expect.typ_il, typ_infer_il)
         }
-        ExpExpectKind::FuncArg { idx, id_func, .. } => {
+        ExpExpectKind::FuncArg { id_func, idx, .. } => {
             super::arg::function_argument_type_mismatch(idx, id_func, expect.typ_il, typ_infer_il)
         }
         ExpExpectKind::FuncReturn { id_func, .. } => {
@@ -224,10 +224,10 @@ pub(in crate::pass::elaborate) fn annotate_expected_type(
     // Ordinary expression checks add no declaration label
     let (subject, typ_decl_il, span_declaration) = match expect.kind {
         ExpExpectKind::Plain => return,
-        ExpExpectKind::NotArg { idx, not_kind, typ_decl_il, span_declaration } => {
+        ExpExpectKind::NotArg { not_kind, idx, typ_decl_il, span_declaration } => {
             (super::not::notation_argument_subject(idx, not_kind), typ_decl_il, span_declaration)
         }
-        ExpExpectKind::FuncArg { idx, id_func, typ_decl_il, span_declaration } => {
+        ExpExpectKind::FuncArg { id_func, idx, typ_decl_il, span_declaration } => {
             (super::arg::function_argument_subject(idx, id_func), typ_decl_il, span_declaration)
         }
         ExpExpectKind::FuncReturn { id_func, typ_decl_il, span_declaration } => {

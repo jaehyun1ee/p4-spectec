@@ -18,18 +18,6 @@ pub(super) struct ExpExpect<'a> {
     pub kind: ExpExpectKind<'a>,
 }
 
-impl<'a> ExpExpect<'a> {
-    /// Creates an expectation without declaration context.
-    pub(super) fn plain(typ_il: &'a il::Typ) -> Self {
-        Self { typ_il, kind: ExpExpectKind::Plain }
-    }
-
-    /// Replaces the checking type while retaining the declaration context.
-    pub(super) fn with_typ<'b>(&'b self, typ_il: &'b il::Typ) -> ExpExpect<'b> {
-        ExpExpect { typ_il, kind: self.kind }
-    }
-}
-
 /// Identifies the source of an expression's expected type.
 #[derive(Clone, Copy)]
 pub(super) enum ExpExpectKind<'a> {
@@ -37,15 +25,65 @@ pub(super) enum ExpExpectKind<'a> {
     Plain,
     /// Counts notation argument slots from zero, excluding literal tokens.
     NotArg {
-        idx: usize,
         not_kind: NotExpectKind<'a>,
+        idx: usize,
         typ_decl_il: &'a il::Typ,
         span_declaration: &'a Span,
     },
     /// Counts function parameters from zero after call-site instantiation.
-    FuncArg { idx: usize, id_func: &'a Id, typ_decl_il: &'a il::Typ, span_declaration: &'a Span },
+    FuncArg { id_func: &'a Id, idx: usize, typ_decl_il: &'a il::Typ, span_declaration: &'a Span },
     /// Checks a function body against the declared return type.
     FuncReturn { id_func: &'a Id, typ_decl_il: &'a il::Typ, span_declaration: &'a Span },
+}
+
+impl<'a> ExpExpect<'a> {
+    /// Creates an expectation without declaration context.
+    pub(super) fn plain(typ_il: &'a il::Typ) -> Self {
+        Self { typ_il, kind: ExpExpectKind::Plain }
+    }
+
+    /// Creates an expectation for a zero-based notation argument slot.
+    pub(super) fn not_arg(not_kind: NotExpectKind<'a>, idx: usize, typ_il: &'a il::Typ) -> Self {
+        Self {
+            typ_il,
+            kind: ExpExpectKind::NotArg {
+                not_kind,
+                idx,
+                typ_decl_il: typ_il,
+                span_declaration: &typ_il.span,
+            },
+        }
+    }
+
+    /// Creates an argument expectation with its pre-substitution declaration span.
+    pub(super) fn func_arg(
+        id_func: &'a Id,
+        idx: usize,
+        typ_il: &'a il::Typ,
+        span_decl: &'a Span,
+    ) -> Self {
+        Self {
+            typ_il,
+            kind: ExpExpectKind::FuncArg {
+                id_func,
+                idx,
+                typ_decl_il: typ_il,
+                span_declaration: span_decl,
+            },
+        }
+    }
+
+    /// Creates an expectation for a function's declared return type.
+    pub(super) fn func_return(id_func: &'a Id, typ_il: &'a il::Typ) -> Self {
+        Self {
+            typ_il,
+            kind: ExpExpectKind::FuncReturn {
+                id_func,
+                typ_decl_il: typ_il,
+                span_declaration: &typ_il.span,
+            },
+        }
+    }
 }
 
 /// Retains a complete notation declaration during subtree matching.
@@ -64,4 +102,16 @@ pub(super) enum NotExpectKind<'a> {
     Rel(&'a Id),
     /// Checks a case of a variant type.
     Variant,
+}
+
+impl<'a> NotExpect<'a> {
+    /// Creates an expectation for a relation's complete notation.
+    pub(super) fn rel(id_rel: &'a Id, not_typ_il: &'a il::NotTyp) -> Self {
+        Self { not_typ_il, kind: NotExpectKind::Rel(id_rel) }
+    }
+
+    /// Creates an expectation for a variant case's complete notation.
+    pub(super) fn variant(not_typ_il: &'a il::NotTyp) -> Self {
+        Self { not_typ_il, kind: NotExpectKind::Variant }
+    }
 }
