@@ -42,7 +42,7 @@ use super::{
     backtrack::{
         Backtrack, choose_sequential, fatal, finish, mismatch, success, unwrap, unwrap_from_result,
     },
-    context::{Context, FuncSignature},
+    context::Context,
     dimension,
     error::{self, ElabError},
     expect::{ExpExpect, NotExpect},
@@ -1082,7 +1082,7 @@ fn infer_call_exp(
     args: &[el::Arg],
 ) -> Backtrack<il::Exp> {
     let (span_declaration, tparams_il, params_il, typ_ret_il) = match ctx.find_func_signature(id) {
-        Ok(FuncSignature { id: id_declaration, tparams, params, typ_ret }) => {
+        Ok((id_declaration, tparams, params, typ_ret)) => {
             (id_declaration.span.clone(), tparams.to_vec(), params.to_vec(), typ_ret.clone())
         }
         Err(error) => return fatal!(error: error),
@@ -2304,15 +2304,11 @@ fn elab_arg(
             il::ParamKind::Def(id_param, tparams_il, params_il, typ_ret_il),
             el::ArgKind::Def(id_arg),
         ) => {
-            let FuncSignature {
-                id: id_arg_declaration,
-                tparams: tparams_arg_il,
-                params: params_arg_il,
-                typ_ret: typ_ret_arg_il,
-            } = match ctx.find_func_signature(id_arg) {
-                Ok(signature) => signature,
-                Err(error) => return fatal!(error: error),
-            };
+            let (id_arg_declaration, tparams_arg_il, params_arg_il, typ_ret_arg_il) =
+                match ctx.find_func_signature(id_arg) {
+                    Ok(signature) => signature,
+                    Err(error) => return fatal!(error: error),
+                };
             let span_arg_declaration = &id_arg_declaration.span;
             if tparams_il.len() != tparams_arg_il.len() {
                 return fatal!(error: error::function_argument_type_parameter_arity_mismatch(

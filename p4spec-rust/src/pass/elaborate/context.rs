@@ -44,18 +44,6 @@ pub(super) struct Context {
     pub(super) fenv: FEnv,
 }
 
-/// Borrows a function declaration and its signature from the environment.
-pub(super) struct FuncSignature<'a> {
-    /// Retains the identifier and span of the declaration.
-    pub id: &'a Id,
-    /// Borrows the declared type parameters.
-    pub tparams: &'a [ast::TParam],
-    /// Borrows the declared value and function parameters.
-    pub params: &'a [ast::Param],
-    /// Borrows the declared return type.
-    pub typ_ret: &'a ast::Typ,
-}
-
 impl Context {
     // == Constructors
 
@@ -190,7 +178,10 @@ impl Context {
     }
 
     /// Finds the declaration identifier and signature of any function.
-    pub(super) fn find_func_signature_opt(&self, id: &Id) -> Option<FuncSignature<'_>> {
+    pub(super) fn find_func_signature_opt(
+        &self,
+        id: &Id,
+    ) -> Option<(&Id, &[ast::TParam], &[ast::Param], &ast::Typ)> {
         let (id_declaration, func_il) = self.fenv.get_key_value(id)?;
         let (tparams, params, typ_ret) = match func_il {
             ast::MetaFuncDef::Extern(func_il) => {
@@ -205,11 +196,14 @@ impl Context {
                 (func_il.tparams.as_slice(), func_il.params.as_slice(), &func_il.typ)
             }
         };
-        Some(FuncSignature { id: id_declaration, tparams, params, typ_ret })
+        Some((id_declaration, tparams, params, typ_ret))
     }
 
     /// Finds a signature or reports the undefined function at its use.
-    pub(super) fn find_func_signature(&self, id: &Id) -> Result<FuncSignature<'_>, ElabError> {
+    pub(super) fn find_func_signature(
+        &self,
+        id: &Id,
+    ) -> Result<(&Id, &[ast::TParam], &[ast::Param], &ast::Typ), ElabError> {
         self.find_func_signature_opt(id)
             .ok_or_else(|| error::function_undefined(id))
     }
