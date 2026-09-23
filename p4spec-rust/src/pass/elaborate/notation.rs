@@ -90,7 +90,7 @@ impl NotationReport {
     }
 }
 
-/// Counts character edits between corresponding tokens, including Unicode.
+/// Counts character edits between corresponding tokens.
 fn token_distance(text_expect: &str, text: &str) -> usize {
     let chars: Vec<_> = text.chars().collect();
     let mut distances: Vec<_> = (0..=chars.len()).collect();

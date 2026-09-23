@@ -1,3 +1,0 @@
-syntax choice = 'λx' | 'λy' | 'abc'
-dec $f : choice
-def $f = 'λz'

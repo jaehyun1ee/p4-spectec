@@ -208,7 +208,6 @@ pub const ELAB: &[&str] = &[
     "notation-variant-fatal.watsup",
     "notation-variant-mixed-failures.watsup",
     "notation-variant-closest-valid.watsup",
-    "notation-variant-unicode.watsup",
     "notation-variant-matched-prefix.watsup",
     "notation-variant-unchecked-suffix.watsup",
     "notation-variant-alias.watsup",
