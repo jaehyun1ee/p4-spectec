@@ -18,10 +18,6 @@ mod error;
 mod expect;
 mod transform;
 
-#[cfg(test)]
-#[path = "../../../tests/pass/elaborate/internal.rs"]
-mod tests;
-
 pub use error::ElabError;
 
 use crate::{

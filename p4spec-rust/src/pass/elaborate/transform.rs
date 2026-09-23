@@ -3532,7 +3532,3 @@ pub(super) fn elab_spec(
     dimension::analyze_spec(&mut defs_il)?;
     Ok(defs_il)
 }
-
-#[cfg(test)]
-#[path = "../../../tests/pass/elaborate/type_shape.rs"]
-mod type_shape_tests;

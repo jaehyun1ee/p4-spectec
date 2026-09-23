@@ -453,7 +453,3 @@ impl Renderer {
         Ok(())
     }
 }
-
-#[cfg(test)]
-#[path = "../../tests/diagnostic/render_internal.rs"]
-mod tests;

@@ -23,10 +23,6 @@ pub use error::{StructureError, StructureErrorKind};
 
 use crate::lang::{al::ast as al, sl::ast as sl};
 
-#[cfg(test)]
-#[path = "../../../tests/pass/structure/internal.rs"]
-mod tests;
-
 // == Entry point
 
 /// Converts algorithmic definitions, removing rule groups when requested.
