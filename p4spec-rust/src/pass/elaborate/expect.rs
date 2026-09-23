@@ -61,7 +61,7 @@ pub(super) struct NotExpect<'a> {
 #[derive(Clone, Copy)]
 pub(super) enum NotExpectKind<'a> {
     /// Names the relation being checked.
-    Relation(&'a Id),
+    Rel(&'a Id),
     /// Checks a case of a variant type.
     Variant,
 }

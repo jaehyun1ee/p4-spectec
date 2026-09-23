@@ -2234,12 +2234,12 @@ fn typ_of_param(param_il: &il::Param) -> il::Typ {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ArgMode {
     Call,
-    Definition,
+    Def,
 }
 
 /// Elaborates an argument against its parameter.
 ///
-/// A function argument in a defining clause (`ArgMode::Definition`)
+/// A function argument in a defining clause (`ArgMode::Def`)
 /// declares the parameter as a local function;
 /// elsewhere it must name a function with an equivalent signature.
 fn elab_arg(
@@ -2271,7 +2271,7 @@ fn elab_arg(
         (
             il::ParamKind::Def(id_param, tparams_il, params_il, typ_ret_il),
             el::ArgKind::Def(id_arg),
-        ) if mode == ArgMode::Definition => {
+        ) if mode == ArgMode::Def => {
             if id_param.node != id_arg.node {
                 return fatal!(error: error::function_argument_name_mismatch(id_arg, id_param));
             }
@@ -2505,7 +2505,7 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Backtrack<il::PremK
     let not_exp_il = unwrap!(
         elab_not_exp(
             ctx,
-            &NotExpect { not_typ_il: &not_typ_il, kind: NotExpectKind::Relation(&prem.id) },
+            &NotExpect { not_typ_il: &not_typ_il, kind: NotExpectKind::Rel(&prem.id) },
             &prem.exp
         )
         .mismatch_as_failure()
@@ -2540,7 +2540,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il
     let not_exp_il = unwrap!(
         elab_not_exp(
             ctx,
-            &NotExpect { not_typ_il: &not_typ_il, kind: NotExpectKind::Relation(&prem.id) },
+            &NotExpect { not_typ_il: &not_typ_il, kind: NotExpectKind::Rel(&prem.id) },
             &prem.exp
         )
         .mismatch_as_failure()
@@ -2626,7 +2626,7 @@ fn elab_rule(
     ctx_local.add_frees(&frees);
     let not_exp_il = finish(elab_not_exp(
         &mut ctx_local,
-        &NotExpect { not_typ_il, kind: NotExpectKind::Relation(id_rel) },
+        &NotExpect { not_typ_il, kind: NotExpectKind::Rel(id_rel) },
         exp,
     ))?;
     let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, prems, &id_rule.span))?;
@@ -2762,7 +2762,7 @@ fn elab_clause(
         &mut ctx_local,
         &params_il,
         &def.args,
-        ArgMode::Definition,
+        ArgMode::Def,
         span,
         &def.id,
         &span_declaration,
@@ -3309,7 +3309,7 @@ fn elab_table_def(ctx: &mut Context, def: &el::TableDef) -> Result<(), ElabError
                 &mut ctx_local,
                 &params_il,
                 &args,
-                ArgMode::Definition,
+                ArgMode::Def,
                 &row.span,
                 &def.id,
                 &span_declaration,

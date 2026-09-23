@@ -69,7 +69,7 @@ pub(in crate::pass::elaborate) fn notation_token_mismatch(
 /// Names the owner of a complete notation declaration.
 fn notation_subject(kind: NotExpectKind<'_>) -> String {
     match kind {
-        NotExpectKind::Relation(id) => format!("notation of relation '{}'", id.node),
+        NotExpectKind::Rel(id) => format!("notation of relation '{}'", id.node),
         NotExpectKind::Variant => "notation".to_owned(),
     }
 }
@@ -77,7 +77,7 @@ fn notation_subject(kind: NotExpectKind<'_>) -> String {
 /// Names a notation argument using its zero-based position.
 pub(super) fn notation_argument_subject(idx: usize, kind: NotExpectKind<'_>) -> String {
     let subject = match kind {
-        NotExpectKind::Relation(id) => format!("relation '{}'", id.node),
+        NotExpectKind::Rel(id) => format!("relation '{}'", id.node),
         NotExpectKind::Variant => "notation".to_owned(),
     };
     format!("argument {idx} of {subject}")
