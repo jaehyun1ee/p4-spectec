@@ -4,7 +4,7 @@
 //! uncoded attempt frames until one alternative succeeds or elaboration finishes.
 
 use crate::diagnostic::Label;
-use crate::lang::common::source::Span;
+use crate::lang::{common::source::Span, il::ast as il, traits::print::Print};
 
 use super::{ElabError, cause};
 
@@ -48,11 +48,18 @@ pub(in crate::pass::elaborate) fn expression_type_mismatch(
 const EXPRESSION_CAST_INVALID: &str = "elab/expression-cast-invalid";
 
 /// Reports a failed implicit cast from an inferred to an expected type.
-pub(in crate::pass::elaborate) fn expression_cast_invalid(span: &Span) -> ElabError {
+pub(in crate::pass::elaborate) fn expression_cast_invalid(
+    typ_expect_il: &il::Typ,
+    typ_infer_il: &il::Typ,
+) -> ElabError {
     cause(
         EXPRESSION_CAST_INVALID,
-        "cannot cast inferred expression to expected type",
-        vec![Label::primary(span, "")],
+        format!(
+            "expected '{}', but found '{}'",
+            typ_expect_il.to_string(),
+            typ_infer_il.to_string()
+        ),
+        vec![Label::primary(&typ_infer_il.span, "")],
         Vec::new(),
     )
 }

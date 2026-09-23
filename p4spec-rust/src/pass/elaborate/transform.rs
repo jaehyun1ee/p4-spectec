@@ -1215,15 +1215,15 @@ fn infer_sub_exp(
 
 /// Accepts an inferred expression at the expected type, upcasting if needed.
 fn cast_exp(ctx: &Context, typ_expect_il: &il::Typ, exp_il: il::Exp) -> Backtrack<il::Exp> {
-    cast_exp_with_argument(ctx, typ_expect_il, exp_il, None)
+    cast_exp_with_context(ctx, typ_expect_il, exp_il, None)
 }
 
-/// Checks a cast, using notation slot context only for a type mismatch.
-fn cast_exp_with_argument(
+/// Checks a cast, using declaration context only for a type mismatch.
+fn cast_exp_with_context(
     ctx: &Context,
     typ_expect_il: &il::Typ,
     exp_il: il::Exp,
-    arg: Option<&error::NotationArgument<'_>>,
+    expected: Option<&error::ExpectedType<'_>>,
 ) -> Backtrack<il::Exp> {
     let typ_infer_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
     // Equivalent types need no cast
@@ -1249,9 +1249,9 @@ fn cast_exp_with_argument(
         return success!(exp_il);
     }
     // Diagnose the failed type relationship before discarding inference data
-    let error = match arg {
-        Some(arg) => arg.type_mismatch(typ_expect_il, &typ_infer_il),
-        None => error::expression_cast_invalid(&exp_il.span),
+    let error = match expected {
+        Some(expected) => expected.type_mismatch(typ_expect_il, &typ_infer_il),
+        None => error::expression_cast_invalid(typ_expect_il, &typ_infer_il),
     };
     mismatch!(error: error)
 }
@@ -1272,25 +1272,42 @@ fn respan_parenthesized_exp(exp_il: &mut il::Exp, span: &Span) {
 /// A single cause passes through unchanged;
 /// multiple mismatches share one frame for the whole expression.
 fn elab_exp(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Backtrack<il::Exp> {
+    elab_exp_with_context(ctx, typ_expect_il, exp, None)
+}
+
+/// Checks an expression and links any inner cause to its declaration.
+fn elab_exp_with_context(
+    ctx: &mut Context,
+    typ_expect_il: &il::Typ,
+    exp: &el::Exp,
+    expected: Option<&error::ExpectedType<'_>>,
+) -> Backtrack<il::Exp> {
     // A parenthesized result takes the span of the parentheses
     let parenthesized = matches!(exp.node, el::ExpKind::Paren(_));
     let span = exp.span.clone();
-    let result = elab_exp_inner(ctx, typ_expect_il, exp).map(move |mut exp_il| {
+    let result = elab_exp_inner(ctx, typ_expect_il, exp, expected).map(move |mut exp_il| {
         if parenthesized {
             respan_parenthesized_exp(&mut exp_il, &span);
         }
         exp_il
     });
+    // Preserve the failure state while connecting causes to the declaration
+    let result = match (result, expected) {
+        (fatal!(mut reports), Some(expected)) => {
+            expected.annotate(&mut reports);
+            fatal!(reports)
+        }
+        (mismatch!(mut reports), Some(expected)) => {
+            expected.annotate(&mut reports);
+            mismatch!(reports)
+        }
+        (result, _) => result,
+    };
     // A single cause already identifies the failed expression
     match result {
         mismatch!(reports) if reports.len() == 1 => mismatch!(reports),
         result => result.nest(exp.span.clone(), "expression elaboration failed"),
     }
-}
-
-/// Tries the singleton reading first when an iteration type is expected.
-fn elab_exp_inner(ctx: &mut Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Backtrack<il::Exp> {
-    elab_exp_with_argument(ctx, typ_expect_il, exp, None)
 }
 
 /// Identifies the checking rule used to select diagnostics after both readings.
@@ -1303,20 +1320,27 @@ enum ExpCheck {
     Unavailable,
 }
 
-/// Preserves expression alternatives while carrying notation diagnostics.
-fn elab_exp_with_argument(
+/// Preserves expression alternatives while carrying expected-type diagnostics.
+fn elab_exp_inner(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
     exp: &el::Exp,
-    arg: Option<&error::NotationArgument<'_>>,
+    expected: Option<&error::ExpectedType<'_>>,
 ) -> Backtrack<il::Exp> {
     // Keep the singleton candidate ahead of the normal reading
     match as_iter_typ(ctx, typ_expect_il) {
-        success!((typ_base_il, iter_expect_il)) => {
-            elab_iter_exp_alternatives(ctx, typ_expect_il, &typ_base_il, iter_expect_il, exp, arg)
-        }
+        success!((typ_base_il, iter_expect_il)) => elab_iter_exp_alternatives(
+            ctx,
+            typ_expect_il,
+            &typ_base_il,
+            iter_expect_il,
+            exp,
+            expected,
+        ),
         fatal!(reports) => fatal!(reports),
-        mismatch!(_) => elab_exp_normal(ctx, typ_expect_il, exp, arg, &mut ExpCheck::Inference),
+        mismatch!(_) => {
+            elab_exp_normal(ctx, typ_expect_il, exp, expected, &mut ExpCheck::Inference)
+        }
     }
 }
 
@@ -1327,7 +1351,7 @@ fn elab_iter_exp_alternatives(
     typ_base_il: &il::Typ,
     iter_expect_il: il::Iter,
     exp: &el::Exp,
-    arg: Option<&error::NotationArgument<'_>>,
+    expected: Option<&error::ExpectedType<'_>>,
 ) -> Backtrack<il::Exp> {
     // Commit only a successful singleton candidate and stop on fatal errors
     let mut ctx_candidate = ctx.clone();
@@ -1351,7 +1375,7 @@ fn elab_iter_exp_alternatives(
     // Retry the normal reading from the original context
     let mut ctx_candidate = ctx.clone();
     let mut check = ExpCheck::Inference;
-    match elab_exp_normal(&mut ctx_candidate, typ_expect_il, exp, arg, &mut check) {
+    match elab_exp_normal(&mut ctx_candidate, typ_expect_il, exp, expected, &mut check) {
         // Commit only the successful normal reading
         success!(exp_il) => {
             *ctx = ctx_candidate;
@@ -1412,7 +1436,7 @@ fn elab_exp_normal(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
     exp: &el::Exp,
-    arg: Option<&error::NotationArgument<'_>>,
+    expected: Option<&error::ExpectedType<'_>>,
     check: &mut ExpCheck,
 ) -> Backtrack<il::Exp> {
     // Try inference first, keeping its context only on success
@@ -1420,7 +1444,7 @@ fn elab_exp_normal(
     let mut ctx_candidate = ctx.clone();
     match infer_exp(&mut ctx_candidate, exp) {
         success!(exp_il) => {
-            match cast_exp_with_argument(&ctx_candidate, typ_expect_il, exp_il, arg) {
+            match cast_exp_with_context(&ctx_candidate, typ_expect_il, exp_il, expected) {
                 success!(exp_il) => {
                     *ctx = ctx_candidate;
                     success!(exp_il)
@@ -1432,8 +1456,14 @@ fn elab_exp_normal(
         fatal!(reports) => fatal!(reports),
         mismatch!(mut reports_infer) => {
             // Retain inference diagnostics if contextual elaboration also fails
-            match elab_exp_normal_fallback(ctx, typ_expect_il, exp, arg, &mut reports_infer, check)
-            {
+            match elab_exp_normal_fallback(
+                ctx,
+                typ_expect_il,
+                exp,
+                expected,
+                &mut reports_infer,
+                check,
+            ) {
                 success!(exp_il) => success!(exp_il),
                 fatal!(reports) => fatal!(reports),
                 mismatch!(mut reports) => {
@@ -1468,7 +1498,7 @@ fn elab_exp_normal_fallback(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
     exp: &el::Exp,
-    arg: Option<&error::NotationArgument<'_>>,
+    expected: Option<&error::ExpectedType<'_>>,
     reports_infer: &mut Vec<Report>,
     check: &mut ExpCheck,
 ) -> Backtrack<il::Exp> {
@@ -1503,7 +1533,7 @@ fn elab_exp_normal_fallback(
                     }));
                 // Alias checking repeats inference on the same expression
                 reports_infer.clear();
-                return elab_exp_normal(ctx, &typ_il, exp, arg, check);
+                return elab_exp_normal(ctx, &typ_il, exp, expected, check);
             }
             // Struct: match the fields
             il::DefTypKind::Struct(typ_fields_il) => {
@@ -1817,9 +1847,13 @@ fn elab_not_exp_inner(
     match (mixfix, &exp.node) {
         // Count only argument slots and retain a nested failure's own cause
         (Mixfix::Arg(typ_il), _) => {
-            let arg = error::NotationArgument { idx: *arg_idx, id_rel, typ_il };
+            let arg = error::ExpectedType {
+                subject: error::TypeSubject::NotationArgument { idx: *arg_idx, id_rel },
+                typ_il,
+                span_declaration: &typ_il.span,
+            };
             *arg_idx += 1;
-            match elab_exp_with_argument(ctx, typ_il, exp, Some(&arg)) {
+            match elab_exp_inner(ctx, typ_il, exp, Some(&arg)) {
                 // Rebuild the elaborated argument
                 success!(exp_il) => success!(Mixfix::Arg(exp_il)),
                 // Preserve a fatal inner cause with its declaration context
@@ -2267,11 +2301,19 @@ fn elab_arg(
     param_il: &il::Param,
     arg: &el::Arg,
     as_def: bool,
+    callee: Option<(&Id, usize)>,
 ) -> Backtrack<il::Arg> {
     match (&param_il.node, &arg.node) {
         // Expression arguments elaborate against the parameter type
         (il::ParamKind::Exp(typ_il), el::ArgKind::Exp(exp)) => {
-            let exp_il = unwrap!(elab_exp(ctx, typ_il, exp).mismatch_as_failure());
+            let expected = callee.map(|(id_func, idx)| error::ExpectedType {
+                subject: error::TypeSubject::FunctionArgument { idx, id_func },
+                typ_il,
+                span_declaration: &param_il.span,
+            });
+            let exp_il = unwrap!(
+                elab_exp_with_context(ctx, typ_il, exp, expected.as_ref()).mismatch_as_failure()
+            );
             let arg_il = il::ArgKind::Exp(Box::new(exp_il));
             let arg_il = phrase!(node: arg_il, span: arg.span.clone());
             success!(arg_il)
@@ -2408,8 +2450,8 @@ fn elab_args(
         ));
     }
     let mut args_il = Vec::with_capacity(args.len());
-    for (param_il, arg) in params_il.iter().zip(args) {
-        let arg_il = unwrap!(elab_arg(ctx, param_il, arg, as_def));
+    for (idx, (param_il, arg)) in params_il.iter().zip(args).enumerate() {
+        let arg_il = unwrap!(elab_arg(ctx, param_il, arg, as_def, callee.map(|(id, _)| (id, idx))));
         args_il.push(arg_il);
     }
     success!(args_il)
@@ -2748,9 +2790,22 @@ fn elab_clause(
     let frees = def.free_ids();
     ctx_local.add_frees(&frees);
     ctx_local.add_tparams(&def.tparams)?;
-    let args_il = finish(elab_args(&mut ctx_local, &params_il, &def.args, true, span, None))?;
+    let args_il = finish(elab_args(
+        &mut ctx_local,
+        &params_il,
+        &def.args,
+        true,
+        span,
+        Some((&def.id, Some(&span_declaration))),
+    ))?;
     let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, &def.prems, span))?;
-    let exp_il = finish(elab_exp(&mut ctx_local, &typ_ret_il, &def.exp))?;
+    let expected = error::ExpectedType {
+        subject: error::TypeSubject::FunctionReturn { id_func: &def.id },
+        typ_il: &typ_ret_il,
+        span_declaration: &typ_ret_il.span,
+    };
+    let exp_il =
+        finish(elab_exp_with_context(&mut ctx_local, &typ_ret_il, &def.exp, Some(&expected)))?;
     let clause_kind_il = il::ClauseKind { args: args_il, exp: exp_il, prems: prems_il };
     let clause_il = phrase!(node: clause_kind_il, span: span.clone());
     Ok((clause_il, is_else))
@@ -3291,7 +3346,13 @@ fn elab_table_def(ctx: &mut Context, def: &el::TableDef) -> Result<(), ElabError
                 &row.span,
                 Some((&def.id, Some(&span_declaration))),
             ))?;
-            let exp_body_il = finish(elab_exp(&mut ctx_local, &typ_il, exp_body))?;
+            let expected = error::ExpectedType {
+                subject: error::TypeSubject::FunctionReturn { id_func: &def.id },
+                typ_il: &typ_il,
+                span_declaration: &typ_il.span,
+            };
+            let exp_body_il =
+                finish(elab_exp_with_context(&mut ctx_local, &typ_il, exp_body, Some(&expected)))?;
             (args_il, exp_body_il)
         };
         let row_il = phrase!(node: il::TableRowKind { args: args_il, exp: exp_body_il }, span: row.span.clone());

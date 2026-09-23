@@ -42,6 +42,8 @@ error[elab/function-type-parameter-repeated]: type parameter `U` was already def
 error[elab/function-undefined]: function `missing` is undefined
   ┌─ elab/ctx-dec-undefined.watsup:6:19
   │
+5 │ dec $caller(nat) : nat
+  │                    --- return value of function '$caller' expects 'nat'
 6 │ def $caller(n) = $missing(n)
   │                   ^^^^^^^^
 
@@ -472,7 +474,9 @@ error[elab/function-call-argument-arity-mismatch]: function `f` expects 2 argume
   │
 3 │ dec $f(nat, nat) : nat
   │      -- function declared here
-  ·
+4 │ 
+5 │ dec $g : nat
+  │          --- return value of function '$g' expects 'nat'
 6 │ def $g = $f(0)
   │          ^^^^^
 
@@ -483,7 +487,9 @@ error[elab/function-call-type-argument-arity-mismatch]: function `f` expects 1 t
   │
 3 │ dec $f<T>(T) : T
   │      -- function declared here
-  ·
+4 │ 
+5 │ dec $g : nat
+  │          --- return value of function '$g' expects 'nat'
 6 │ def $g = $f<nat, nat>(0)
   │                  ^^^
 
@@ -607,7 +613,9 @@ error[elab/function-argument-kind-mismatch]: expected an expression argument, bu
   │
 6 │ dec $caller(nat) : nat
   │             --- parameter declared here
-  ·
+7 │ 
+8 │ dec $main : nat
+  │             --- return value of function '$main' expects 'nat'
 9 │ def $main = $caller(def $g)
   │                     ^^^^^^
 
@@ -619,6 +627,8 @@ error[elab/function-argument-kind-mismatch]: expected a function argument, but g
 4 │ dec $caller(def $f(nat) : nat) : nat
   │             ----------------- parameter declared here
   ·
+7 │ dec $main : nat
+  │             --- return value of function '$main' expects 'nat'
 8 │ def $main = $caller(0)
   │                     ^
 
@@ -644,7 +654,9 @@ error[elab/function-argument-signature-mismatch]: passed function `h` must have 
 2 │ 
 3 │ dec $caller(def $f(nat) : nat) : nat
   │                  -- function parameter declared here
-  ·
+4 │ 
+5 │ dec $main : nat
+  │             --- return value of function '$main' expects 'nat'
 6 │ def $main = $caller(def $h)
   │                     ^^^^^^
   │
@@ -659,7 +671,9 @@ error[elab/function-argument-parameter-arity-mismatch]: function parameter `h` h
   │      -- passed function declared here
 5 │ dec $caller(def $h(nat, nat) : nat) : nat
   │                  -- function parameter declared here
-  ·
+6 │ 
+7 │ dec $bad : nat
+  │            --- return value of function '$bad' expects 'nat'
 8 │ def $bad = $caller(def $g)
   │                    ^^^^^^
   │
@@ -674,7 +688,9 @@ error[elab/function-argument-type-parameter-arity-mismatch]: function parameter 
   │      -- passed function declared here
 5 │ dec $caller(def $h<U, V>(nat) : nat) : nat
   │                  -- function parameter declared here
-  ·
+6 │ 
+7 │ dec $bad : nat
+  │            --- return value of function '$bad' expects 'nat'
 8 │ def $bad = $caller(def $g)
   │                    ^^^^^^
   │
@@ -685,6 +701,8 @@ error[elab/function-argument-type-parameter-arity-mismatch]: function parameter 
 error[elab/fuse-outside-hint-unsupported]: token concatenation `#` is not allowed outside a hint
   ┌─ elab/type-fuse-outside-hint.watsup:5:12
   │
+4 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
 5 │ def $f = 0 # 1
   │            ^
   │
@@ -695,6 +713,8 @@ error[elab/fuse-outside-hint-unsupported]: token concatenation `#` is not allowe
 error[elab/hole-outside-hint-unsupported]: hole is not allowed outside a hint
   ┌─ elab/type-hole-outside-hint.watsup:5:10
   │
+4 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
 5 │ def $f = %0
   │          ^^
   │
@@ -705,6 +725,8 @@ error[elab/hole-outside-hint-unsupported]: hole is not allowed outside a hint
 error[elab/latex-outside-hint-unsupported]: LaTeX literals are not allowed outside a hint
   ┌─ elab/type-latex-outside-hint.watsup:5:10
   │
+4 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
 5 │ def $f = %latex("hello")
   │          ^^^^^^^^^^^^^^^
   │
@@ -775,6 +797,8 @@ error[elab/type-undefined]: type `nope` is undefined
 error[elab/unparen-outside-hint-unsupported]: unparenthesizing operator `##` is not allowed outside a hint
   ┌─ elab/type-unparen-outside-hint.watsup:5:10
   │
+4 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
 5 │ def $f = ## 0
   │          ^^^^
   │
@@ -937,6 +961,7 @@ error[elab/notation-argument-type-mismatch]: argument 0 of notation expects 'nat
 1 │ syntax choice = TAG nat
   │                     --- argument 0 of notation expects 'nat'
 2 │ dec $take(choice) : bool
+  │           ------ argument 0 of function '$take' expects 'choice'
 3 │ def $take(TAG true) = true
   │               ^^^^
 
@@ -1083,5 +1108,177 @@ error[elab/operator-operand-type-mismatch]: operator is not defined for the oper
 3 │   hint(input %0 %1)
 4 │ rule F/base: [-true] |- true
   │               ^^^^^
+
+---
+=== function-return-type.watsup ===
+error[elab/function-return-type-mismatch]: return value of function '$f' expects 'nat', but found 'bool'
+  ┌─ elab/function-return-type.watsup:2:10
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = true
+  │          ^^^^
+
+---
+=== function-argument-type.watsup ===
+error[elab/function-argument-type-mismatch]: argument 0 of function '$f' expects 'nat', but found 'bool'
+  ┌─ elab/function-argument-type.watsup:3:13
+  │
+1 │ dec $f(nat) : nat
+  │        --- argument 0 of function '$f' expects 'nat'
+2 │ dec $g : nat
+  │          --- return value of function '$g' expects 'nat'
+3 │ def $g = $f(true)
+  │             ^^^^
+
+---
+=== function-argument-second.watsup ===
+error[elab/function-argument-type-mismatch]: argument 1 of function '$f' expects 'int', but found 'bool'
+  ┌─ elab/function-argument-second.watsup:3:16
+  │
+1 │ dec $f(nat, int) : nat
+  │             --- argument 1 of function '$f' expects 'int'
+2 │ dec $g : nat
+  │          --- return value of function '$g' expects 'nat'
+3 │ def $g = $f(1, false)
+  │                ^^^^^
+
+---
+=== function-argument-polymorphic.watsup ===
+error[elab/function-argument-type-mismatch]: argument 0 of function '$f' expects 'nat', but found 'bool'
+  ┌─ elab/function-argument-polymorphic.watsup:3:18
+  │
+1 │ dec $f<T>(T) : T
+  │           - argument 0 of function '$f' expects 'nat'
+2 │ dec $g : nat
+  │          --- return value of function '$g' expects 'nat'
+3 │ def $g = $f<nat>(true)
+  │                  ^^^^
+
+---
+=== function-clause-argument-type.watsup ===
+error[elab/function-argument-type-mismatch]: argument 0 of function '$f' expects 'nat', but found 'bool'
+  ┌─ elab/function-clause-argument-type.watsup:2:8
+  │
+1 │ dec $f(nat) : nat
+  │        --- argument 0 of function '$f' expects 'nat'
+2 │ def $f(true) = 0
+  │        ^^^^
+
+---
+=== function-return-inner.watsup ===
+error[elab/function-undefined]: function `missing` is undefined
+  ┌─ elab/function-return-inner.watsup:2:11
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = $missing()
+  │           ^^^^^^^^
+
+---
+=== function-argument-inner.watsup ===
+error[elab/function-undefined]: function `missing` is undefined
+  ┌─ elab/function-argument-inner.watsup:3:14
+  │
+1 │ dec $f(nat) : nat
+  │        --- argument 0 of function '$f' expects 'nat'
+2 │ dec $g : nat
+  │          --- return value of function '$g' expects 'nat'
+3 │ def $g = $f($missing())
+  │              ^^^^^^^^
+
+---
+=== function-argument-nested.watsup ===
+error[elab/function-argument-type-mismatch]: argument 0 of function '$g' expects 'nat', but found 'bool'
+  ┌─ elab/function-argument-nested.watsup:4:16
+  │
+1 │ dec $f(nat) : nat
+  │        --- argument 0 of function '$f' expects 'nat'
+2 │ dec $g(nat) : nat
+  │        --- argument 0 of function '$g' expects 'nat'
+3 │ dec $h : nat
+  │          --- return value of function '$h' expects 'nat'
+4 │ def $h = $f($g(true))
+  │                ^^^^
+
+---
+=== function-table-return-type.watsup ===
+error[elab/function-return-type-mismatch]: return value of function '$f' expects 'bool', but found 'nat'
+  ┌─ elab/function-table-return-type.watsup:3:10
+  │
+1 │ tbl dec $f(nat) : bool
+  │                   ---- return value of function '$f' expects 'bool'
+2 │ tbl def $f =
+3 │   | 0 => 1
+  │          ^
+
+---
+=== function-table-argument-type.watsup ===
+error[elab/function-argument-type-mismatch]: argument 0 of function '$f' expects 'nat', but found 'bool'
+  ┌─ elab/function-table-argument-type.watsup:3:5
+  │
+1 │ tbl dec $f(nat) : bool
+  │            --- argument 0 of function '$f' expects 'nat'
+2 │ tbl def $f =
+3 │   | true => false
+  │     ^^^^
+
+---
+=== function-types-valid.watsup ===
+---
+=== function-return-alias.watsup ===
+error[elab/function-return-type-mismatch]: return value of function '$f' expects 'n', but found 'bool'
+  ┌─ elab/function-return-alias.watsup:3:10
+  │
+2 │ dec $f : n
+  │          - return value of function '$f' expects 'n'
+3 │ def $f = true
+  │          ^^^^
+
+---
+=== function-argument-recursive.watsup ===
+error[elab/function-argument-type-mismatch]: argument 0 of function '$f' expects 'nat', but found 'bool'
+  ┌─ elab/function-argument-recursive.watsup:2:19
+  │
+1 │ dec $f(nat) : nat
+  │        ---    --- return value of function '$f' expects 'nat'
+  │        │       
+  │        argument 0 of function '$f' expects 'nat'
+2 │ def $f(_) = $f($f(true))
+  │                   ^^^^
+
+---
+=== function-argument-list-inner.watsup ===
+error[elab/expression-cast-invalid]: expected 'nat', but found 'bool'
+  ┌─ elab/function-argument-list-inner.watsup:3:17
+  │
+1 │ dec $f(nat*) : nat
+  │        ---- argument 0 of function '$f' expects 'nat*'
+2 │ dec $g : nat
+  │          --- return value of function '$g' expects 'nat'
+3 │ def $g = $f([_, true])
+  │                 ^^^^
+
+---
+=== function-argument-tuple-inner.watsup ===
+error[elab/expression-cast-invalid]: expected 'nat', but found 'bool'
+  ┌─ elab/function-argument-tuple-inner.watsup:3:17
+  │
+1 │ dec $f((nat, nat)) : nat
+  │        ---------- argument 0 of function '$f' expects '(nat, nat)'
+2 │ dec $g : nat
+  │          --- return value of function '$g' expects 'nat'
+3 │ def $g = $f((_, true))
+  │                 ^^^^
+
+---
+=== function-return-list-inner.watsup ===
+error[elab/expression-cast-invalid]: expected 'nat', but found 'bool'
+  ┌─ elab/function-return-list-inner.watsup:2:14
+  │
+1 │ dec $f : nat*
+  │          ---- return value of function '$f' expects 'nat*'
+2 │ def $f = [_, true]
+  │              ^^^^
 
 ---
