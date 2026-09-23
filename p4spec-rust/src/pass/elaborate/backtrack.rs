@@ -1,8 +1,8 @@
-//! Three-state results for elaboration alternatives
+//! Four-state results for elaboration alternatives
 //!
-//! A mismatch permits another candidate to run on the original context.
+//! Unavailable rules and mismatches permit another candidate on the original context.
 //! A fatal failure stops the search immediately.
-//! Both failure states retain complete reports in source candidate order.
+//! Every failure retains complete reports in source candidate order.
 
 use crate::{
     diagnostic::{LabelStyle, Report, ReportKind},
@@ -13,15 +13,17 @@ use super::{context::Context, error, error::ElabError};
 
 // == Result
 
-/// A successful elaboration, fatal failure, or recoverable mismatch.
+/// A successful elaboration, unavailable rule, mismatch, or fatal failure.
 #[derive(Debug)]
 pub(super) enum Backtrack<T> {
     /// The operation produced a value.
     Success(T),
+    /// The rule's prerequisites did not hold; another candidate may be tried.
+    Unavailable(Vec<Report>),
+    /// An applicable rule failed; another candidate may be tried.
+    Mismatch(Vec<Report>),
     /// The operation failed and no alternative may be tried.
     Fatal(Vec<Report>),
-    /// The candidate did not apply and another candidate may be tried.
-    Mismatch(Vec<Report>),
 }
 
 // == Macros
@@ -33,6 +35,20 @@ macro_rules! success {
     };
 }
 pub(super) use success;
+
+/// Builds [`Backtrack::Unavailable`] from a report list.
+macro_rules! unavailable {
+    (error: $error:expr $(,)?) => {
+        $crate::pass::elaborate::backtrack::Backtrack::Unavailable(vec![*$error])
+    };
+    (report: $report:expr $(,)?) => {
+        $crate::pass::elaborate::backtrack::Backtrack::Unavailable(vec![$report])
+    };
+    ($($reports:tt)*) => {
+        $crate::pass::elaborate::backtrack::Backtrack::Unavailable($($reports)*)
+    };
+}
+pub(super) use unavailable;
 
 /// Builds [`Backtrack::Fatal`] from a report list.
 macro_rules! fatal {
@@ -59,11 +75,14 @@ macro_rules! mismatch {
 }
 pub(super) use mismatch;
 
-/// Returns early while preserving fatal and mismatch states.
+/// Returns early while preserving each failure state.
 macro_rules! unwrap {
     ($result:expr) => {
         match $result {
             $crate::pass::elaborate::backtrack::success!(value) => value,
+            $crate::pass::elaborate::backtrack::unavailable!(reports) => {
+                return $crate::pass::elaborate::backtrack::unavailable!(reports)
+            }
             $crate::pass::elaborate::backtrack::fatal!(reports) => {
                 return $crate::pass::elaborate::backtrack::fatal!(reports)
             }
@@ -89,28 +108,38 @@ pub(super) use unwrap_from_result;
 // == Propagation and context
 
 impl<T> Backtrack<T> {
-    /// Maps a successful value while preserving either failure state.
+    /// Maps a successful value while preserving each failure state.
     pub(super) fn map<U>(self, map: impl FnOnce(T) -> U) -> Backtrack<U> {
         match self {
             success!(value) => success!(map(value)),
+            unavailable!(reports) => unavailable!(reports),
             fatal!(reports) => fatal!(reports),
             mismatch!(reports) => mismatch!(reports),
         }
     }
 
-    /// Promotes a mismatch to fatal at a non-backtracking boundary.
-    pub(super) fn mismatch_as_failure(self) -> Self {
+    /// Marks an unavailable child as a mismatch of its applicable parent rule.
+    pub(super) fn unavailable_as_mismatch(self) -> Self {
         match self {
-            mismatch!(reports) => fatal!(reports),
+            unavailable!(reports) => mismatch!(reports),
             result => result,
         }
     }
 
-    /// Wraps a recoverable mismatch under operation context.
+    /// Promotes either recoverable failure at a non-backtracking boundary.
+    pub(super) fn recoverable_as_failure(self) -> Self {
+        match self {
+            unavailable!(reports) | mismatch!(reports) => fatal!(reports),
+            result => result,
+        }
+    }
+
+    /// Wraps a recoverable failure under operation context.
     ///
     /// Fatal reports pass through unchanged so their direct cause is retained.
     pub(super) fn nest(self, span: Span, message: impl Into<String>) -> Self {
         match self {
+            unavailable!(children) => unavailable!(vec![Report::frame(span, message, children)]),
             mismatch!(children) => mismatch!(vec![Report::frame(span, message, children)]),
             result => result,
         }
@@ -119,7 +148,7 @@ impl<T> Backtrack<T> {
 
 // == Choice
 
-/// Tries the second alternative only when the first mismatches.
+/// Tries the second alternative after either recoverable failure.
 ///
 /// Each candidate starts from the original context;
 /// only the successful candidate is committed.
@@ -130,7 +159,9 @@ pub(super) fn choose_sequential<T>(
 ) -> Backtrack<T> {
     // Run the first alternative on a copy of the context
     let mut ctx_first = ctx.clone();
-    match first(&mut ctx_first) {
+    let result_first = first(&mut ctx_first);
+    let first_unavailable = matches!(&result_first, unavailable!(_));
+    match result_first {
         // Commit the context of the successful alternative
         success!(value) => {
             *ctx = ctx_first;
@@ -138,7 +169,7 @@ pub(super) fn choose_sequential<T>(
         }
         // Stop without committing the failed candidate
         fatal!(reports) => fatal!(reports),
-        mismatch!(reports) => {
+        unavailable!(reports) | mismatch!(reports) => {
             // Retry the second alternative from the original context
             let mut ctx_second = ctx.clone();
             match second(&mut ctx_second) {
@@ -147,6 +178,11 @@ pub(super) fn choose_sequential<T>(
                     success!(value)
                 }
                 fatal!(reports) => fatal!(reports),
+                unavailable!(mut reports_second) => {
+                    let mut reports = reports;
+                    reports.append(&mut reports_second);
+                    if first_unavailable { unavailable!(reports) } else { mismatch!(reports) }
+                }
                 mismatch!(mut reports_second) => {
                     let mut reports = reports;
                     reports.append(&mut reports_second);
@@ -163,7 +199,9 @@ pub(super) fn choose_sequential<T>(
 pub(super) fn finish<T>(result: Backtrack<T>) -> Result<T, ElabError> {
     match result {
         success!(value) => Ok(value),
-        fatal!(reports) | mismatch!(reports) => Err(finish_reports(reports)),
+        unavailable!(reports) | mismatch!(reports) | fatal!(reports) => {
+            Err(finish_reports(reports))
+        }
     }
 }
 

@@ -40,7 +40,8 @@ use crate::{
 
 use super::{
     backtrack::{
-        Backtrack, choose_sequential, fatal, finish, mismatch, success, unwrap, unwrap_from_result,
+        Backtrack, choose_sequential, fatal, finish, mismatch, success, unavailable, unwrap,
+        unwrap_from_result,
     },
     context::Context,
     dimension,
@@ -82,7 +83,7 @@ fn as_text_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<()> {
     );
     match &typ_il.node {
         il::TypKind::Text => success!(()),
-        _ => mismatch!(error: error::typ::type_shape_mismatch("text", &typ_il.span)),
+        _ => unavailable!(error: error::typ::type_shape_mismatch("text", &typ_il.span)),
     }
 }
 
@@ -95,7 +96,7 @@ fn as_iter_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(il::Typ, il::Iter)
     .into_owned();
     let span = typ_il.span;
     let il::TypKind::Iter(typ_inner_il, iter_il) = typ_il.node else {
-        return mismatch!(error: error::typ::type_shape_mismatch("an iteration", &span));
+        return unavailable!(error: error::typ::type_shape_mismatch("an iteration", &span));
     };
     success!((*typ_inner_il, iter_il))
 }
@@ -109,7 +110,7 @@ fn as_tuple_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<Vec<il::Typ>> {
     .into_owned();
     let span = typ_il.span;
     let il::TypKind::Tuple(typs_il) = typ_il.node else {
-        return mismatch!(error: error::typ::type_shape_mismatch("a tuple", &span));
+        return unavailable!(error: error::typ::type_shape_mismatch("a tuple", &span));
     };
     success!(typs_il)
 }
@@ -123,7 +124,7 @@ fn as_list_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<il::Typ> {
     .into_owned();
     let span = typ_il.span;
     let il::TypKind::Iter(typ_inner_il, il::Iter::List) = typ_il.node else {
-        return mismatch!(error: error::typ::type_shape_mismatch("a list", &span));
+        return unavailable!(error: error::typ::type_shape_mismatch("a list", &span));
     };
     success!(*typ_inner_il)
 }
@@ -136,16 +137,16 @@ fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(Span, Vec<il::Ty
     );
     // Struct types are always named types with a definition
     let il::TypKind::Var(id, _) = &typ_il.node else {
-        return mismatch!(error: error::typ::type_shape_mismatch("a struct", &typ_il.span));
+        return unavailable!(error: error::typ::type_shape_mismatch("a struct", &typ_il.span));
     };
     let Some(TypeDef::Defined(_, def_typ_il)) = ctx.find_typdef_opt(id) else {
-        return mismatch!(error: error::typ::type_shape_mismatch("a struct", &typ_il.span));
+        return unavailable!(error: error::typ::type_shape_mismatch("a struct", &typ_il.span));
     };
     match &def_typ_il.node {
         il::DefTypKind::Struct(typ_fields_il) => {
             success!((def_typ_il.span.clone(), typ_fields_il.clone()))
         }
-        _ => mismatch!(error: error::typ::type_shape_mismatch("a struct", &typ_il.span)),
+        _ => unavailable!(error: error::typ::type_shape_mismatch("a struct", &typ_il.span)),
     }
 }
 
@@ -416,7 +417,7 @@ fn typ_at(typ_kind_il: il::TypKind, span: &Span) -> il::Typ {
 
 /// Fails inference of a construct whose type cannot be synthesized.
 fn fail_infer<T>(span: &Span, construct: &str) -> Backtrack<T> {
-    mismatch!(error: error::exp::expression_inference_invalid(span, construct))
+    unavailable!(error: error::exp::expression_inference_invalid(span, construct))
 }
 
 /// Synthesizes the type of an expression bottom-up.
@@ -424,17 +425,17 @@ fn fail_infer<T>(span: &Span, construct: &str) -> Backtrack<T> {
 /// Constructs such as `eps`, structs, and notation
 /// only elaborate against an expected type and fail here.
 fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Backtrack<il::Exp> {
-    match &exp.node {
+    let result = match &exp.node {
         // Inferable constructs dispatch to their rule
         el::ExpKind::Bool(value) => infer_bool_exp(ctx, &exp.span, *value),
         el::ExpKind::Num(_, value) => infer_num_exp(ctx, &exp.span, value),
         el::ExpKind::Text(value) => infer_text_exp(ctx, &exp.span, value),
-        el::ExpKind::Id(id) => infer_id_exp(ctx, &exp.span, id),
+        el::ExpKind::Id(id) => return infer_id_exp(ctx, &exp.span, id),
         el::ExpKind::Un(op, exp_inner) => infer_un_exp(ctx, &exp.span, *op, exp_inner),
         el::ExpKind::Bin(exp_l, op, exp_r) => infer_bin_exp(ctx, &exp.span, exp_l, *op, exp_r),
         el::ExpKind::Cmp(exp_l, op, exp_r) => infer_cmp_exp(ctx, &exp.span, exp_l, *op, exp_r),
         el::ExpKind::Arith(exp_inner) => infer_arith_exp(ctx, &exp.span, exp_inner),
-        el::ExpKind::List(exps) => infer_list_exp(ctx, &exp.span, exps),
+        el::ExpKind::List(exps) => return infer_list_exp(ctx, &exp.span, exps),
         el::ExpKind::Cons(exp_head, exp_tail) => infer_cons_exp(ctx, &exp.span, exp_head, exp_tail),
         el::ExpKind::Cat(exp_l, exp_r) => infer_cat_exp(ctx, &exp.span, exp_l, exp_r),
         el::ExpKind::Idx(exp_base, exp_idx) => infer_idx_exp(ctx, &exp.span, exp_base, exp_idx),
@@ -448,19 +449,19 @@ fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Backtrack<il::Exp> {
         el::ExpKind::Upd(exp_base, path, exp_field) => {
             infer_upd_exp(ctx, &exp.span, exp_base, path, exp_field)
         }
-        el::ExpKind::Paren(exp_inner) => infer_paren_exp(ctx, &exp.span, exp_inner),
+        el::ExpKind::Paren(exp_inner) => return infer_paren_exp(ctx, &exp.span, exp_inner),
         el::ExpKind::Call(id, targs, args) => infer_call_exp(ctx, &exp.span, id, targs, args),
         el::ExpKind::Sub(exp_inner, plain_typ) => {
             infer_sub_exp(ctx, &exp.span, exp_inner, plain_typ)
         }
         el::ExpKind::Iter(exp_inner, iter) => infer_iter_exp(ctx, &exp.span, exp_inner, *iter),
         // Constructs that need an expected type cannot be inferred
-        el::ExpKind::Eps => fail_infer(&exp.span, "empty sequence"),
-        el::ExpKind::Str(_) => fail_infer(&exp.span, "struct expression"),
-        el::ExpKind::Atom(_) => fail_infer(&exp.span, "atom"),
-        el::ExpKind::Seq(_) => fail_infer(&exp.span, "sequence expression"),
-        el::ExpKind::Infix(_, _, _) => fail_infer(&exp.span, "infix expression"),
-        el::ExpKind::Brack(_, _, _) => fail_infer(&exp.span, "bracket expression"),
+        el::ExpKind::Eps => return fail_infer(&exp.span, "empty sequence"),
+        el::ExpKind::Str(_) => return fail_infer(&exp.span, "struct expression"),
+        el::ExpKind::Atom(_) => return fail_infer(&exp.span, "atom"),
+        el::ExpKind::Seq(_) => return fail_infer(&exp.span, "sequence expression"),
+        el::ExpKind::Infix(_, _, _) => return fail_infer(&exp.span, "infix expression"),
+        el::ExpKind::Brack(_, _, _) => return fail_infer(&exp.span, "bracket expression"),
         el::ExpKind::Hole(_) => fatal!(error: error::exp::hole_outside_hint_unsupported(&exp.span)),
         el::ExpKind::Fuse(_, op, _) => {
             fatal!(error: error::exp::fuse_outside_hint_unsupported(&op.span))
@@ -471,7 +472,9 @@ fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Backtrack<il::Exp> {
         el::ExpKind::Latex(_) => {
             fatal!(error: error::exp::latex_outside_hint_unsupported(&exp.span))
         }
-    }
+    };
+    // A selected inference rule owns failures from its operands
+    result.unavailable_as_mismatch()
 }
 
 fn infer_exps(ctx: &mut Context, exps: &[el::Exp]) -> Backtrack<Vec<il::Exp>> {
@@ -523,7 +526,7 @@ fn infer_id_exp(ctx: &mut Context, span: &Span, id: &Id) -> Backtrack<il::Exp> {
     // The suffix is dropped to find the governing meta-variable
     let tid = id.strip_suffix();
     let Some(typ_il) = ctx.find_metavar_opt(&tid) else {
-        return fail_infer(&id.span, "variable");
+        return mismatch!(error: error::exp::expression_inference_invalid(&id.span, "variable"));
     };
     let exp_il = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id.clone()), note: typ_il.node.clone(), span: span.clone());
     success!(exp_il)
@@ -565,7 +568,7 @@ fn infer_un_exp(ctx: &mut Context, span: &Span, op: el::UnOp, exp: &el::Exp) -> 
                 return success!(exp_il);
             }
             fatal!(reports) => return fatal!(reports),
-            mismatch!(_) => {}
+            unavailable!(_) | mismatch!(_) => {}
         }
     }
     mismatch!(error: error::exp::operator_unop_type_mismatch(&op, &exp_il))
@@ -626,12 +629,12 @@ fn infer_bin_exp(
         let exp_l_il = match cast_exp(ctx, &ExpExpect::plain(&typ_expect_l_il), exp_l_il.clone()) {
             success!(exp_l_il) => exp_l_il,
             fatal!(reports) => return fatal!(reports),
-            mismatch!(_) => continue,
+            unavailable!(_) | mismatch!(_) => continue,
         };
         let exp_r_il = match cast_exp(ctx, &ExpExpect::plain(&typ_expect_r_il), exp_r_il.clone()) {
             success!(exp_r_il) => exp_r_il,
             fatal!(reports) => return fatal!(reports),
-            mismatch!(_) => continue,
+            unavailable!(_) | mismatch!(_) => continue,
         };
         let exp_il = note_phrase! {
             node: il::ExpKind::Bin(op, op_typ_il, Box::new(exp_l_il), Box::new(exp_r_il)),
@@ -701,13 +704,13 @@ fn infer_cmp_exp(
                     match cast_exp(ctx, &ExpExpect::plain(&typ_expect_l_il), exp_l_il.clone()) {
                         success!(exp_l_il) => exp_l_il,
                         fatal!(reports) => return fatal!(reports),
-                        mismatch!(_) => continue,
+                        unavailable!(_) | mismatch!(_) => continue,
                     };
                 let exp_r_il =
                     match cast_exp(ctx, &ExpExpect::plain(&typ_expect_r_il), exp_r_il.clone()) {
                         success!(exp_r_il) => exp_r_il,
                         fatal!(reports) => return fatal!(reports),
-                        mismatch!(_) => continue,
+                        unavailable!(_) | mismatch!(_) => continue,
                     };
                 let exp_il = note_phrase! {
                     node: il::ExpKind::Cmp(op, op_typ_il, Box::new(exp_l_il), Box::new(exp_r_il)),
@@ -738,10 +741,10 @@ fn infer_list_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Backtrack
         return fail_infer(span, "empty list");
     };
     // The element type comes from the first element
-    let exp_first_il = unwrap!(infer_exp(ctx, exp_first));
+    let exp_first_il = unwrap!(infer_exp(ctx, exp_first).unavailable_as_mismatch());
     let typ_first_il =
         phrase!(node: exp_first_il.note.as_ref().clone(), span: exp_first_il.span.clone());
-    let mut exps_rest_il = unwrap!(infer_exps(ctx, exps_rest));
+    let mut exps_rest_il = unwrap!(infer_exps(ctx, exps_rest).unavailable_as_mismatch());
     // Remaining elements must have an equivalent type
     for (idx, exp_il) in exps_rest_il.iter().enumerate() {
         let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
@@ -1273,6 +1276,10 @@ fn elab_exp(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> Backtra
     });
     // Preserve the failure state while connecting causes to the declaration
     let result = match result {
+        unavailable!(mut reports) => {
+            error::exp::annotate_expected_type(expect, &mut reports);
+            unavailable!(reports)
+        }
         fatal!(mut reports) => {
             error::exp::annotate_expected_type(expect, &mut reports);
             fatal!(reports)
@@ -1285,19 +1292,10 @@ fn elab_exp(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> Backtra
     };
     // A single cause already identifies the failed expression
     match result {
+        unavailable!(reports) if reports.len() == 1 => unavailable!(reports),
         mismatch!(reports) if reports.len() == 1 => mismatch!(reports),
         result => result.nest(exp.span.clone(), "expression elaboration failed"),
     }
-}
-
-/// Identifies the checking rule used to select diagnostics after both readings.
-///
-/// This evidence never determines success, failure state, or candidate order.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ExpCheck {
-    Inference,
-    Contextual,
-    Unavailable,
 }
 
 /// Preserves expression alternatives while carrying expected-type diagnostics.
@@ -1309,7 +1307,7 @@ fn elab_exp_inner(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> B
             elab_iter_exp_alternatives(ctx, expect, &typ_base_il, iter_expect_il, exp)
         }
         fatal!(reports) => fatal!(reports),
-        mismatch!(_) => elab_exp_normal(ctx, expect, exp, &mut ExpCheck::Inference),
+        unavailable!(_) | mismatch!(_) => elab_exp_normal(ctx, expect, exp),
     }
 }
 
@@ -1324,7 +1322,7 @@ fn elab_iter_exp_alternatives(
     let typ_expect_il = expect.typ_il;
     // Commit only a successful singleton candidate and stop on fatal errors
     let mut ctx_candidate = ctx.clone();
-    let reports_singleton = match elab_singleton_iter_exp(
+    let result_singleton = match elab_singleton_iter_exp(
         &mut ctx_candidate,
         typ_expect_il,
         typ_base_il,
@@ -1338,29 +1336,27 @@ fn elab_iter_exp_alternatives(
         }
         // A fatal singleton failure forbids the normal reading
         fatal!(reports) => return fatal!(reports),
-        // Save the singleton cause until the normal checking rule is known
-        mismatch!(reports) => reports,
+        result => result,
     };
     // Retry the normal reading from the original context
     let mut ctx_candidate = ctx.clone();
-    let mut check = ExpCheck::Inference;
-    match elab_exp_normal(&mut ctx_candidate, expect, exp, &mut check) {
+    match elab_exp_normal(&mut ctx_candidate, expect, exp) {
         // Commit only the successful normal reading
         success!(exp_il) => {
             *ctx = ctx_candidate;
             success!(exp_il)
         }
-        // Preserve a fatal failure from the normal reading
-        fatal!(reports) => fatal!(reports),
-        // Select diagnostics after both candidates mismatch
-        mismatch!(reports) => {
-            // Keep the singleton cause when normal checking is unavailable
-            if check == ExpCheck::Unavailable && !reports_singleton.is_empty() {
-                mismatch!(reports_singleton)
-            } else {
-                mismatch!(reports)
+        // An unavailable normal rule leaves the singleton's cause applicable
+        unavailable!(reports) => match result_singleton {
+            unavailable!(reports_singleton) | mismatch!(reports_singleton)
+                if reports_singleton.is_empty() =>
+            {
+                unavailable!(reports)
             }
-        }
+            result => result,
+        },
+        // Applicable mismatches and fatal errors keep their original state
+        result => result,
     }
 }
 
@@ -1379,9 +1375,10 @@ fn elab_singleton_iter_exp(
         || matches!(&exp.node, el::ExpKind::Eps)
         || matches!(&exp.node, el::ExpKind::List(exps) if exps.is_empty())
     {
-        return mismatch!(vec![]);
+        return unavailable!(vec![]);
     }
-    let exp_inner_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(typ_base_il), exp));
+    let exp_inner_il =
+        unwrap!(elab_exp(ctx, &ExpExpect::plain(typ_base_il), exp).unavailable_as_mismatch());
     let exp_kind_il = match iter_expect_il {
         il::Iter::Opt => il::ExpKind::Opt(Some(Box::new(exp_inner_il))),
         il::Iter::List => il::ExpKind::List(vec![exp_inner_il]),
@@ -1401,14 +1398,8 @@ fn elab_singleton_iter_exp(
 /// a wildcard becomes a fresh variable,
 /// a named expected type is unfolded into its plain, struct, or variant body,
 /// and other constructs elaborate against the expected type directly.
-fn elab_exp_normal(
-    ctx: &mut Context,
-    expect: &ExpExpect<'_>,
-    exp: &el::Exp,
-    check: &mut ExpCheck,
-) -> Backtrack<il::Exp> {
+fn elab_exp_normal(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> Backtrack<il::Exp> {
     // Try inference first, keeping its context only on success
-    *check = ExpCheck::Inference;
     let mut ctx_candidate = ctx.clone();
     match infer_exp(&mut ctx_candidate, exp) {
         success!(exp_il) => match cast_exp(&ctx_candidate, expect, exp_il) {
@@ -1416,39 +1407,20 @@ fn elab_exp_normal(
                 *ctx = ctx_candidate;
                 success!(exp_il)
             }
-            fatal!(reports) => fatal!(reports),
-            mismatch!(reports) => mismatch!(reports),
+            result => result,
         },
+        // Fatal inference forbids contextual retry
         fatal!(reports) => fatal!(reports),
-        mismatch!(mut reports_infer) => {
-            // Retain inference diagnostics if contextual elaboration also fails
-            match elab_exp_normal_fallback(ctx, expect, exp, &mut reports_infer, check) {
-                success!(exp_il) => success!(exp_il),
-                fatal!(reports) => fatal!(reports),
-                mismatch!(mut reports) => {
-                    // Preserve nested inference if contextual checking cannot apply
-                    let infers_children = match &exp.node {
-                        // Empty lists fail before inferring any element
-                        el::ExpKind::List(exps) => !exps.is_empty(),
-                        // These constructs propagate child inference failures
-                        el::ExpKind::Cons(_, _)
-                        | el::ExpKind::Cat(_, _)
-                        | el::ExpKind::Tuple(_)
-                        | el::ExpKind::Iter(_, _) => true,
-                        // Other syntax does not retry child inference here
-                        _ => false,
-                    };
-                    if *check == ExpCheck::Unavailable
-                        && infers_children
-                        && !reports_infer.is_empty()
-                    {
-                        return mismatch!(reports_infer);
-                    }
-                    reports_infer.append(&mut reports);
-                    mismatch!(reports_infer)
-                }
-            }
-        }
+        // An unavailable fallback must not obscure an inference cause
+        mismatch!(reports_infer) => match elab_exp_normal_fallback(ctx, expect, exp) {
+            unavailable!(_) => mismatch!(reports_infer),
+            result => result,
+        },
+        // A contextual rule supersedes the absence of an inference rule
+        unavailable!(reports_infer) => match elab_exp_normal_fallback(ctx, expect, exp) {
+            unavailable!(reports) if reports.is_empty() => unavailable!(reports_infer),
+            result => result,
+        },
     }
 }
 
@@ -1457,8 +1429,6 @@ fn elab_exp_normal_fallback(
     ctx: &mut Context,
     expect: &ExpExpect<'_>,
     exp: &el::Exp,
-    reports_infer: &mut Vec<Report>,
-    check: &mut ExpCheck,
 ) -> Backtrack<il::Exp> {
     let typ_expect_il = expect.typ_il;
     // A wildcard `_` becomes a fresh variable of the expected type
@@ -1490,10 +1460,8 @@ fn elab_exp_normal_fallback(
                     unwrap_from_result!(subst_typ(&|id| theta.get(id), typ_il).map_err(|error| {
                         error::typ::type_operation_invalid("cannot instantiate type alias", error)
                     }));
-                // Alias checking repeats inference on the same expression
-                reports_infer.clear();
                 let expect = ExpExpect { typ_il: &typ_il, ..*expect };
-                return elab_exp_normal(ctx, &expect, exp, check);
+                return elab_exp_normal(ctx, &expect, exp);
             }
             // Struct: match the fields
             il::DefTypKind::Struct(typ_fields_il) => {
@@ -1511,15 +1479,6 @@ fn elab_exp_normal_fallback(
                     typ_fields_subst_il
                         .push((span_declaration, il::TypField { atom: atom.clone(), typ: typ_il }));
                 }
-                // A struct literal has no independent inference rule
-                if matches!(exp.node, el::ExpKind::Str(_)) {
-                    reports_infer.clear();
-                }
-                // A non-literal retains its inference cause without a shape trace
-                if !matches!(exp.node, el::ExpKind::Str(_)) && !reports_infer.is_empty() {
-                    return mismatch!(Vec::new());
-                }
-                *check = ExpCheck::Contextual;
                 let expect = StructExpect {
                     typ_il: typ_expect_il,
                     span_declaration: def_typ_il.span.clone(),
@@ -1560,59 +1519,10 @@ fn elab_exp_normal_fallback(
                         hints: hints.clone(),
                     });
                 }
-                // Notation syntax has no independent inference rule
-                if matches!(
-                    exp.node,
-                    el::ExpKind::Atom(_)
-                        | el::ExpKind::Seq(_)
-                        | el::ExpKind::Infix(_, _, _)
-                        | el::ExpKind::Brack(_, _, _)
-                ) {
-                    reports_infer.clear();
-                }
-                *check = ExpCheck::Contextual;
                 return elab_variant_exp(ctx, typ_expect_il, &typ_cases_subst_il, exp);
             }
         }
     }
-    // Classify the contextual rule from syntax and the unfolded expected type
-    *check = match (&typ_expect_il.node, &exp.node) {
-        // These iteration constructs recheck their elements
-        (il::TypKind::Iter(_, il::Iter::List), el::ExpKind::List(_))
-        | (il::TypKind::Iter(_, _), el::ExpKind::Cons(_, _) | el::ExpKind::Cat(_, _)) => {
-            ExpCheck::Contextual
-        }
-        // A tuple checks its arity before rechecking components
-        (il::TypKind::Tuple(_), el::ExpKind::Tuple(_)) => ExpCheck::Contextual,
-        // Matching iteration kinds recheck the body
-        (il::TypKind::Iter(_, iter_expect), el::ExpKind::Iter(_, iter)) if iter_expect == iter => {
-            ExpCheck::Contextual
-        }
-        // Parentheses recheck the same expression
-        (_, el::ExpKind::Paren(_)) => ExpCheck::Contextual,
-        // These syntax forms cannot be checked against this type's shape
-        (
-            _,
-            el::ExpKind::Eps
-            | el::ExpKind::List(_)
-            | el::ExpKind::Cons(_, _)
-            | el::ExpKind::Cat(_, _)
-            | el::ExpKind::Tuple(_)
-            | el::ExpKind::Iter(_, _)
-            | el::ExpKind::Str(_)
-            | el::ExpKind::Atom(_)
-            | el::ExpKind::Seq(_)
-            | el::ExpKind::Infix(_, _, _)
-            | el::ExpKind::Brack(_, _, _),
-        ) => ExpCheck::Unavailable,
-        // Other constructs retain the inference failure that caused fallback
-        _ => ExpCheck::Inference,
-    };
-    // A matching contextual rule checks the same children more precisely
-    if *check == ExpCheck::Contextual {
-        reports_infer.clear();
-    }
-    // Other constructs are shaped by the expected type alone
     elab_plain_exp(ctx, expect, exp)
 }
 
@@ -1650,7 +1560,7 @@ fn elab_plain_exp(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> B
         }
         // Anything else needed inference
         _ => {
-            return mismatch!(Vec::new());
+            return unavailable!(Vec::new());
         }
     };
     success!(note_phrase! {
@@ -1682,14 +1592,16 @@ fn elab_list_exp(
     let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
     // A list literal needs a list type, not an option
     if iter_expect_il != il::Iter::List {
-        return mismatch!(error: error::exp::expression_iteration_mismatch(
+        return unavailable!(error: error::exp::expression_iteration_mismatch(
             &typ_expect_il.span,
             "list expression has optional expected type",
         ));
     }
     let mut exps_il = Vec::with_capacity(exps.len());
     for exp in exps {
-        exps_il.push(unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_base_il), exp)));
+        exps_il.push(unwrap!(
+            elab_exp(ctx, &ExpExpect::plain(&typ_base_il), exp).unavailable_as_mismatch()
+        ));
     }
     success!(il::ExpKind::List(exps_il))
 }
@@ -1704,10 +1616,12 @@ fn elab_cons_exp(
     exp_tail: &el::Exp,
 ) -> Backtrack<il::ExpKind> {
     let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
-    let exp_head_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_base_il), exp_head));
+    let exp_head_il =
+        unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_base_il), exp_head).unavailable_as_mismatch());
     let typ_tail_kind_il = il::TypKind::Iter(Box::new(typ_base_il), iter_expect_il);
     let typ_tail_il = phrase!(node: typ_tail_kind_il, span: typ_expect_il.span.clone());
-    let exp_tail_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_tail_il), exp_tail));
+    let exp_tail_il =
+        unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_tail_il), exp_tail).unavailable_as_mismatch());
     success!(il::ExpKind::Cons(Box::new(exp_head_il), Box::new(exp_tail_il)))
 }
 
@@ -1727,16 +1641,24 @@ fn elab_cat_exp(
             let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
             let typ_iter_kind_il = il::TypKind::Iter(Box::new(typ_base_il.clone()), iter_expect_il);
             let typ_iter_il = phrase!(node: typ_iter_kind_il, span: typ_base_il.span);
-            let exp_l_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_iter_il), exp_l));
-            let exp_r_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_iter_il), exp_r));
+            let exp_l_il = unwrap!(
+                elab_exp(ctx, &ExpExpect::plain(&typ_iter_il), exp_l).unavailable_as_mismatch()
+            );
+            let exp_r_il = unwrap!(
+                elab_exp(ctx, &ExpExpect::plain(&typ_iter_il), exp_r).unavailable_as_mismatch()
+            );
             success!(il::ExpKind::Cat(Box::new(exp_l_il), Box::new(exp_r_il)))
         },
         // Texts
         |ctx| {
             let typ_text_il = typ_at(il::TypKind::Text, &exp_l.span);
-            let exp_l_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_text_il), exp_l));
+            let exp_l_il = unwrap!(
+                elab_exp(ctx, &ExpExpect::plain(&typ_text_il), exp_l).unavailable_as_mismatch()
+            );
             let typ_text_il = typ_at(il::TypKind::Text, &exp_r.span);
-            let exp_r_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_text_il), exp_r));
+            let exp_r_il = unwrap!(
+                elab_exp(ctx, &ExpExpect::plain(&typ_text_il), exp_r).unavailable_as_mismatch()
+            );
             success!(il::ExpKind::Cat(Box::new(exp_l_il), Box::new(exp_r_il)))
         },
     )
@@ -1760,7 +1682,9 @@ fn elab_tuple_exp(
     }
     let mut exps_il = Vec::with_capacity(exps.len());
     for (typ_expect_il, exp) in typs_expect_il.iter().zip(exps) {
-        exps_il.push(unwrap!(elab_exp(ctx, &ExpExpect::plain(typ_expect_il), exp)));
+        exps_il.push(unwrap!(
+            elab_exp(ctx, &ExpExpect::plain(typ_expect_il), exp).unavailable_as_mismatch()
+        ));
     }
     success!(il::ExpKind::Tuple(exps_il))
 }
@@ -1789,9 +1713,10 @@ fn elab_iter_exp(
     // The iteration must match the expected one
     let iter_il = iter;
     if iter_il != iter_expect_il {
-        return mismatch!(error: error::exp::expression_iteration_mismatch(&exp.span, "iteration mismatch"));
+        return unavailable!(error: error::exp::expression_iteration_mismatch(&exp.span, "iteration mismatch"));
     }
-    let exp_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_base_il), exp));
+    let exp_il =
+        unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_base_il), exp).unavailable_as_mismatch());
     success!(il::ExpKind::Iter(Box::new(exp_il), il::ExpIter { iter: iter_il, vars: vec![] }))
 }
 
@@ -1828,7 +1753,7 @@ fn elab_not_exp_inner(
                     fatal!(reports)
                 }
                 // Preserve mismatches for later notation candidates
-                mismatch!(mut reports) => {
+                unavailable!(mut reports) | mismatch!(mut reports) => {
                     error::exp::annotate_expected_type(&exp_expect, &mut reports);
                     mismatch!(reports)
                 }
@@ -1841,7 +1766,7 @@ fn elab_not_exp_inner(
         // Sequences match element-wise without guessing omitted positions
         (Mixfix::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
             if not_typs_il.len() != exps.len() {
-                return mismatch!(error: error::not::notation_shape_mismatch(&exp.span, expect));
+                return unavailable!(error: error::not::notation_shape_mismatch(&exp.span, expect));
             }
             let mut not_exps_il = Vec::with_capacity(exps.len());
             for (mixfix, exp) in not_typs_il.iter().zip(exps) {
@@ -1904,7 +1829,9 @@ fn elab_not_exp_inner(
                     error::not::notation_token_mismatch(atom_expect, atom, expect)
                 }
                 // Different tree shapes do not establish a missing token
-                _ => error::not::notation_shape_mismatch(&exp.span, expect),
+                _ => {
+                    return unavailable!(error: error::not::notation_shape_mismatch(&exp.span, expect));
+                }
             };
             mismatch!(error: error)
         }
@@ -1952,7 +1879,7 @@ fn elab_struct_exp(
     exp: &el::Exp,
 ) -> Backtrack<il::Exp> {
     let el::ExpKind::Str(exp_fields) = &exp.node else {
-        return mismatch!(report: Report::frame(exp.span.clone(), "expression is not a struct", Vec::new()));
+        return unavailable!(Vec::new());
     };
     // Field count must match the struct type
     if expect.typ_fields_il.len() != exp_fields.len() {
@@ -1970,11 +1897,10 @@ fn elab_struct_exp(
                 atom_expect, atom,
             ));
         }
-        let exp_field_il = unwrap!(elab_exp(
-            ctx,
-            &ExpExpect::struct_field(atom_expect, typ_il, span_decl),
-            exp_field
-        ));
+        let exp_field_il = unwrap!(
+            elab_exp(ctx, &ExpExpect::struct_field(atom_expect, typ_il, span_decl), exp_field)
+                .unavailable_as_mismatch()
+        );
         exp_fields_il.push(il::ExpField { atom: atom_expect.clone(), exp: exp_field_il });
     }
     success!(note_phrase! {
@@ -1997,13 +1923,19 @@ fn elab_variant_exp(
     let mut ctx_match = ctx.clone();
     let mut exps_match_il = Vec::new();
     let mut reports_mismatch = Vec::new();
+    let mut has_mismatch = false;
     for il::TypCase { not_typ: not_typ_il, typ_origin: typ_origin_il, .. } in typ_cases_il {
         let mut ctx_candidate = ctx_match.clone();
         let not_exp_il =
             match elab_not_exp(&mut ctx_candidate, &NotExpect::variant(not_typ_il), exp) {
                 success!(not_exp_il) => not_exp_il,
                 fatal!(reports) => return fatal!(reports),
+                unavailable!(mut reports) => {
+                    reports_mismatch.append(&mut reports);
+                    continue;
+                }
                 mismatch!(mut reports) => {
+                    has_mismatch = true;
                     reports_mismatch.append(&mut reports);
                     continue;
                 }
@@ -2021,7 +1953,9 @@ fn elab_variant_exp(
         let exp_case_il =
             match cast_exp(&ctx_candidate, &ExpExpect::plain(typ_expect_il), exp_case_il) {
                 success!(exp_case_il) => exp_case_il,
-                fatal!(reports) | mismatch!(reports) => return fatal!(reports),
+                unavailable!(reports) | fatal!(reports) | mismatch!(reports) => {
+                    return fatal!(reports);
+                }
             };
         ctx_match = ctx_candidate;
         exps_match_il.push(exp_case_il);
@@ -2032,12 +1966,20 @@ fn elab_variant_exp(
             *ctx = ctx_match;
             success!(exps_match_il.pop().expect("single variant match"))
         }
-        0 if reports_mismatch.is_empty() => {
-            mismatch!(report: Report::frame(exp.span.clone(), "expression does not match any variant case", Vec::new()))
+        0 => {
+            // Keep every candidate cause and record whether a rule applied
+            let count = reports_mismatch.len();
+            let result = if has_mismatch {
+                mismatch!(reports_mismatch)
+            } else {
+                unavailable!(reports_mismatch)
+            };
+            if count == 1 {
+                result
+            } else {
+                result.nest(exp.span.clone(), "expression does not match any variant case")
+            }
         }
-        0 if reports_mismatch.len() == 1 => mismatch!(reports_mismatch),
-        0 => mismatch!(reports_mismatch)
-            .nest(exp.span.clone(), "expression does not match any variant case"),
         _ => mismatch!(error: error::exp::variant_expression_match_repeated(&exp.span)),
     }
 }
@@ -2277,7 +2219,7 @@ fn elab_arg(
         // Expression arguments elaborate against the parameter type
         (il::ParamKind::Exp(typ_il), el::ArgKind::Exp(exp)) => {
             let expect = ExpExpect::func_arg(id_func, idx, typ_il, &param_il.span);
-            let exp_il = unwrap!(elab_exp(ctx, &expect, exp).mismatch_as_failure());
+            let exp_il = unwrap!(elab_exp(ctx, &expect, exp).recoverable_as_failure());
             let arg_il = il::ArgKind::Exp(Box::new(exp_il));
             let arg_il = phrase!(node: arg_il, span: arg.span.clone());
             success!(arg_il)
@@ -2514,7 +2456,8 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Backtrack<il::PremK
         Err(error) => return fatal!(error: error),
     };
     let not_exp_il = unwrap!(
-        elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp).mismatch_as_failure()
+        elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp)
+            .recoverable_as_failure()
     );
     let exps_il = not_exp_il.args();
     let conditional = match input::is_conditional(&input_hint, &exps_il) {
@@ -2544,7 +2487,8 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il
         Err(error) => return fatal!(error: error),
     };
     let not_exp_il = unwrap!(
-        elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp).mismatch_as_failure()
+        elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp)
+            .recoverable_as_failure()
     );
     let exps_il = not_exp_il.args();
     let (_, exps_output_il) = match input::split(&input_hint, exps_il) {
@@ -2572,7 +2516,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il
 fn elab_if_prem(ctx: &mut Context, prem: &el::IfPrem) -> Backtrack<il::PremKind> {
     let typ_bool_il = typ_at(il::TypKind::Bool, &prem.exp.span);
     let exp_il =
-        unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_bool_il), &prem.exp).mismatch_as_failure());
+        unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_bool_il), &prem.exp).recoverable_as_failure());
     success!(il::PremKind::If(il::IfPrem { exp: exp_il }))
 }
 
@@ -2601,7 +2545,7 @@ fn elab_iter_prem(ctx: &mut Context, prem: &el::IterPrem) -> Backtrack<il::PremK
 // - Debug premise elaboration
 
 fn elab_debug_prem(ctx: &mut Context, prem: &el::DebugPrem) -> Backtrack<il::PremKind> {
-    let exp_il = unwrap!(infer_exp(ctx, &prem.exp).mismatch_as_failure());
+    let exp_il = unwrap!(infer_exp(ctx, &prem.exp).recoverable_as_failure());
     success!(il::PremKind::Debug(il::DebugPrem { exp: exp_il }))
 }
 

@@ -1669,3 +1669,69 @@ error[elab/function-undefined]: function `missing` is undefined
   │            ^^^^^^^
 
 ---
+=== list-concat-inner.watsup ===
+note: expression elaboration failed
+  ┌─ elab/list-concat-inner.watsup:2:10
+  │
+2 │ def $f = eps ++ MISSING
+  │          --------------
+
+trace[0]:
+error[elab/expression-inference-invalid]: cannot infer type of atom
+  ┌─ elab/list-concat-inner.watsup:2:17
+  │
+1 │ dec $f : nat*
+  │          ---- return value of function '$f' expects 'nat*'
+2 │ def $f = eps ++ MISSING
+  │                 ^^^^^^^
+
+trace[0]:
+error[elab/type-shape-mismatch]: cannot destruct type as an iteration
+  ┌─ elab/list-concat-inner.watsup:2:10
+  │
+1 │ dec $f : nat*
+  │          ---- return value of function '$f' expects 'nat*'
+2 │ def $f = eps ++ MISSING
+  │          ^^^
+
+---
+=== notation-variant-operator-inner.watsup ===
+error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
+  ┌─ elab/notation-variant-operator-inner.watsup:3:11
+  │
+2 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
+3 │ def $f = -true
+  │           ^^^^ operand has type 'bool'
+
+---
+=== struct-nonliteral-variable-inner.watsup ===
+error[elab/expression-inference-invalid]: cannot infer type of variable
+  ┌─ elab/struct-nonliteral-variable-inner.watsup:3:10
+  │
+2 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+3 │ def $f = missing
+  │          ^^^^^^^
+
+---
+=== struct-nonliteral-atom-inner.watsup ===
+error[elab/expression-inference-invalid]: cannot infer type of atom
+  ┌─ elab/struct-nonliteral-atom-inner.watsup:3:10
+  │
+2 │ dec $f : record
+  │          ------ return value of function '$f' expects 'record'
+3 │ def $f = BAD
+  │          ^^^
+
+---
+=== notation-variant-variable-inner.watsup ===
+error[elab/expression-inference-invalid]: cannot infer type of variable
+  ┌─ elab/notation-variant-variable-inner.watsup:3:10
+  │
+2 │ dec $f : choice
+  │          ------ return value of function '$f' expects 'choice'
+3 │ def $f = missing
+  │          ^^^^^^^
+
+---

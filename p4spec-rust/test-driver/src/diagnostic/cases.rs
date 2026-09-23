@@ -192,4 +192,9 @@ pub const ELAB: &[&str] = &[
     "tuple-arity-parenthesized.watsup",
     "struct-field-tuple-arity.watsup",
     "tuple-arity-fatal.watsup",
+    "list-concat-inner.watsup",
+    "notation-variant-operator-inner.watsup",
+    "struct-nonliteral-variable-inner.watsup",
+    "struct-nonliteral-atom-inner.watsup",
+    "notation-variant-variable-inner.watsup",
 ];
