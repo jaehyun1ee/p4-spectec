@@ -903,14 +903,14 @@ error[elab/function-undefined]: function `missing` is undefined
 
 ---
 === notation-argument-operator.watsup ===
-error[elab/operator-operand-type-mismatch]: operator is not defined for the operand types
-  ┌─ elab/notation-argument-operator.watsup:4:18
+error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+  ┌─ elab/notation-argument-operator.watsup:4:19
   │
 1 │ relation F: nat |- int : int
   │                          --- argument 2 of relation 'F' expects 'int'
   ·
 4 │   -- F: 1 |- 0 : -true
-  │                  ^^^^^
+  │                   ^^^^ operand has type 'bool'
 
 ---
 === notation-parenthesized-valid.watsup ===
@@ -991,25 +991,25 @@ error[elab/notation-argument-type-mismatch]: argument 0 of relation 'F' expects 
 
 ---
 === notation-alias-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator is not defined for the operand types
-  ┌─ elab/notation-alias-inner.watsup:4:14
+error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+  ┌─ elab/notation-alias-inner.watsup:4:15
   │
 2 │ relation F: foo |- bool
   │             --- argument 0 of relation 'F' expects 'foo'
 3 │   hint(input %0 %1)
 4 │ rule F/base: -true |- true
-  │              ^^^^^
+  │               ^^^^ operand has type 'bool'
 
 ---
 === notation-iteration-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator is not defined for the operand types
-  ┌─ elab/notation-iteration-inner.watsup:3:14
+error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+  ┌─ elab/notation-iteration-inner.watsup:3:15
   │
 1 │ relation F: nat* |- bool
   │             ---- argument 0 of relation 'F' expects 'nat*'
 2 │   hint(input %0 %1)
 3 │ rule F/base: -true |- true
-  │              ^^^^^
+  │               ^^^^ operand has type 'bool'
 
 ---
 === notation-iteration-type.watsup ===
@@ -1024,14 +1024,14 @@ error[elab/notation-argument-type-mismatch]: argument 0 of relation 'F' expects 
 
 ---
 === notation-list-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator is not defined for the operand types
-  ┌─ elab/notation-list-inner.watsup:3:15
+error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+  ┌─ elab/notation-list-inner.watsup:3:16
   │
 1 │ relation F: nat* |- bool
   │             ---- argument 0 of relation 'F' expects 'nat*'
 2 │   hint(input %0 %1)
 3 │ rule F/base: [-true] |- true
-  │               ^^^^^
+  │                ^^^^ operand has type 'bool'
 
 ---
 === notation-bracket-shape.watsup ===
@@ -1067,14 +1067,14 @@ error[elab/notation-argument-type-mismatch]: argument 0 of notation expects 'nat
 === notation-empty-valid.watsup ===
 ---
 === notation-singleton-tuple-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator is not defined for the operand types
-  ┌─ elab/notation-singleton-tuple-inner.watsup:3:15
+error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+  ┌─ elab/notation-singleton-tuple-inner.watsup:3:16
   │
 1 │ relation F: (nat, nat)* |- bool
   │             ----------- argument 0 of relation 'F' expects '(nat, nat)*'
 2 │   hint(input %0 %1)
 3 │ rule F/base: (-true, 1) |- true
-  │               ^^^^^
+  │                ^^^^ operand has type 'bool'
 
 ---
 === notation-sequence-type.watsup ===
@@ -1089,25 +1089,25 @@ error[elab/notation-argument-type-mismatch]: argument 1 of relation 'F' expects 
 
 ---
 === notation-option-list-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator is not defined for the operand types
-  ┌─ elab/notation-option-list-inner.watsup:3:15
+error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+  ┌─ elab/notation-option-list-inner.watsup:3:16
   │
 1 │ relation F: nat? |- bool
   │             ---- argument 0 of relation 'F' expects 'nat?'
 2 │   hint(input %0 %1)
 3 │ rule F/base: [-true] |- true
-  │               ^^^^^
+  │                ^^^^ operand has type 'bool'
 
 ---
 === notation-alias-list-inner.watsup ===
-error[elab/operator-operand-type-mismatch]: operator is not defined for the operand types
-  ┌─ elab/notation-alias-list-inner.watsup:4:15
+error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+  ┌─ elab/notation-alias-list-inner.watsup:4:16
   │
 2 │ relation F: foo |- bool
   │             --- argument 0 of relation 'F' expects 'foo'
 3 │   hint(input %0 %1)
 4 │ rule F/base: [-true] |- true
-  │               ^^^^^
+  │                ^^^^ operand has type 'bool'
 
 ---
 === function-return-type.watsup ===
@@ -1281,4 +1281,98 @@ error[elab/expression-cast-invalid]: expected 'nat', but found 'bool'
 2 │ def $f = [_, true]
   │              ^^^^
 
+---
+=== operator-unary-type.watsup ===
+error[elab/operator-operand-type-mismatch]: operator '-' is not defined for 'bool'
+  ┌─ elab/operator-unary-type.watsup:2:11
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = -true
+  │           ^^^^ operand has type 'bool'
+
+---
+=== operator-not-type.watsup ===
+error[elab/operator-operand-type-mismatch]: operator '~' is not defined for 'nat'
+  ┌─ elab/operator-not-type.watsup:2:11
+  │
+1 │ dec $f : bool
+  │          ---- return value of function '$f' expects 'bool'
+2 │ def $f = ~1
+  │           ^ operand has type 'nat'
+
+---
+=== operator-binary-left-type.watsup ===
+error[elab/operator-operand-type-mismatch]: operator '+' is not defined for 'bool' and 'nat'
+  ┌─ elab/operator-binary-left-type.watsup:2:10
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = true + 1
+  │          ^^^^   ^ right operand has type 'nat'
+  │          │       
+  │          left operand has type 'bool'
+
+---
+=== operator-binary-right-type.watsup ===
+error[elab/operator-operand-type-mismatch]: operator '+' is not defined for 'nat' and 'bool'
+  ┌─ elab/operator-binary-right-type.watsup:2:10
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = 1 + false
+  │          ^   ^^^^^ right operand has type 'bool'
+  │          │    
+  │          left operand has type 'nat'
+
+---
+=== operator-logical-type.watsup ===
+error[elab/operator-operand-type-mismatch]: operator '/\' is not defined for 'bool' and 'nat'
+  ┌─ elab/operator-logical-type.watsup:2:10
+  │
+1 │ dec $f : bool
+  │          ---- return value of function '$f' expects 'bool'
+2 │ def $f = true /\ 1
+  │          ^^^^    ^ right operand has type 'nat'
+  │          │        
+  │          left operand has type 'bool'
+
+---
+=== operator-comparison-type.watsup ===
+error[elab/operator-operand-type-mismatch]: operator '<' is not defined for 'bool' and 'nat'
+  ┌─ elab/operator-comparison-type.watsup:2:12
+  │
+1 │ dec $f : bool
+  │          ---- return value of function '$f' expects 'bool'
+2 │ def $f = $(true < 1)
+  │            ^^^^   ^ right operand has type 'nat'
+  │            │       
+  │            left operand has type 'bool'
+
+---
+=== operator-argument-type.watsup ===
+error[elab/operator-operand-type-mismatch]: operator '+' is not defined for 'bool' and 'nat'
+  ┌─ elab/operator-argument-type.watsup:3:16
+  │
+1 │ dec $take(nat) : nat
+  │           --- argument 0 of function '$take' expects 'nat'
+2 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+3 │ def $f = $take(true + 1)
+  │                ^^^^   ^ right operand has type 'nat'
+  │                │       
+  │                left operand has type 'bool'
+
+---
+=== operator-inner-cause.watsup ===
+error[elab/function-undefined]: function `missing` is undefined
+  ┌─ elab/operator-inner-cause.watsup:2:15
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = 1 + $missing()
+  │               ^^^^^^^^
+
+---
+=== operator-types-valid.watsup ===
 ---

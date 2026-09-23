@@ -523,12 +523,6 @@ fn infer_id_exp(ctx: &mut Context, span: &Span, id: &Id) -> Backtrack<il::Exp> {
     success!(exp_il)
 }
 
-// - Operator inference failures
-
-fn operator_error<T>(span: Span) -> Backtrack<T> {
-    mismatch!(error: error::operator_operand_type_mismatch(&span))
-}
-
 // - Unary expression inference
 
 /// Infers a unary expression by trying each operand type the operator accepts.
@@ -568,7 +562,7 @@ fn infer_un_exp(ctx: &mut Context, span: &Span, op: el::UnOp, exp: &el::Exp) -> 
             mismatch!(_) => {}
         }
     }
-    operator_error(span.clone())
+    mismatch!(error: error::operator_operand_type_mismatch(&op, &exp_il, None))
 }
 
 // - Binary expression inference
@@ -640,7 +634,7 @@ fn infer_bin_exp(
         };
         return success!(exp_il);
     }
-    operator_error(span.clone())
+    mismatch!(error: error::operator_operand_type_mismatch(&op, &exp_l_il, Some(&exp_r_il)))
 }
 
 // - Comparison expression inference
@@ -714,7 +708,7 @@ fn infer_cmp_exp(
                 };
                 return success!(exp_il);
             }
-            operator_error(span.clone())
+            mismatch!(error: error::operator_operand_type_mismatch(&op, &exp_l_il, Some(&exp_r_il)))
         }
     }
 }

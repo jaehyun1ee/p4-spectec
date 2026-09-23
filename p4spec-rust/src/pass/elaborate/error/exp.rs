@@ -26,13 +26,39 @@ pub(in crate::pass::elaborate) fn expression_inference_invalid(
 const OPERATOR_OPERAND_TYPE_MISMATCH: &str = "elab/operator-operand-type-mismatch";
 
 /// Reports an operator with unsupported operand types.
-pub(in crate::pass::elaborate) fn operator_operand_type_mismatch(span: &Span) -> ElabError {
-    cause(
-        OPERATOR_OPERAND_TYPE_MISMATCH,
-        "operator is not defined for the operand types",
-        vec![Label::primary(span, "")],
-        Vec::new(),
-    )
+pub(in crate::pass::elaborate) fn operator_operand_type_mismatch(
+    op: &impl Print,
+    exp_l_il: &il::Exp,
+    exp_r_il: Option<&il::Exp>,
+) -> ElabError {
+    let typ_l_il =
+        crate::phrase!(node: exp_l_il.note.as_ref().clone(), span: exp_l_il.span.clone());
+    let text_l = typ_l_il.to_string();
+    // Use the inferred types before any unsuccessful candidate casts
+    let (message, labels) = match exp_r_il {
+        // Binary operators identify both operand positions
+        Some(exp_r_il) => {
+            let typ_r_il =
+                crate::phrase!(node: exp_r_il.note.as_ref().clone(), span: exp_r_il.span.clone());
+            let text_r = typ_r_il.to_string();
+            (
+                format!(
+                    "operator '{}' is not defined for '{text_l}' and '{text_r}'",
+                    op.to_string()
+                ),
+                vec![
+                    Label::primary(&exp_l_il.span, format!("left operand has type '{text_l}'")),
+                    Label::primary(&exp_r_il.span, format!("right operand has type '{text_r}'")),
+                ],
+            )
+        }
+        // Unary operators identify their single operand
+        None => (
+            format!("operator '{}' is not defined for '{text_l}'", op.to_string()),
+            vec![Label::primary(&exp_l_il.span, format!("operand has type '{text_l}'"))],
+        ),
+    };
+    cause(OPERATOR_OPERAND_TYPE_MISMATCH, message, labels, Vec::new())
 }
 
 const EXPRESSION_TYPE_MISMATCH: &str = "elab/expression-type-mismatch";

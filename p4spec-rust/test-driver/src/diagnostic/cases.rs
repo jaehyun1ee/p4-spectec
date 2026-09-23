@@ -155,4 +155,13 @@ pub const ELAB: &[&str] = &[
     "function-argument-list-inner.watsup",
     "function-argument-tuple-inner.watsup",
     "function-return-list-inner.watsup",
+    "operator-unary-type.watsup",
+    "operator-not-type.watsup",
+    "operator-binary-left-type.watsup",
+    "operator-binary-right-type.watsup",
+    "operator-logical-type.watsup",
+    "operator-comparison-type.watsup",
+    "operator-argument-type.watsup",
+    "operator-inner-cause.watsup",
+    "operator-types-valid.watsup",
 ];

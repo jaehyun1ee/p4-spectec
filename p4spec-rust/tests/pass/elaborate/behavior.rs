@@ -145,3 +145,23 @@ fn test_notation_type_mismatch_retries_the_next_variant() {
     let text = p4spec_rust::lang::traits::print::Print::to_string(&spec_il);
     assert!(text.contains("TAG true GOOD"), "{text}");
 }
+
+#[test]
+fn test_numeric_operators_keep_integer_candidate_and_operand_upcast() {
+    for text in ["dec $f : int\ndef $f = 1 + (1 - 2)", "dec $f : bool\ndef $f = $(1 < (1 - 2))"] {
+        let spec_el = crate::spec_fixture::parse(text).expect("parse mixed numeric operands");
+        let spec_il = elaborate::convert(spec_el).expect("select the integer candidate");
+        let ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(defined_func_il)) = &spec_il[0].node
+        else {
+            panic!("expected defined function");
+        };
+        let exp_il = &defined_func_il.clauses[0].node.exp;
+        let (exp_l_il, exp_r_il) = match &exp_il.node {
+            ast::ExpKind::Bin(_, ast::OpTyp::Int, exp_l_il, exp_r_il)
+            | ast::ExpKind::Cmp(_, ast::OpTyp::Int, exp_l_il, exp_r_il) => (exp_l_il, exp_r_il),
+            _ => panic!("expected integer operator, got {:?}", exp_il.node),
+        };
+        assert!(matches!(exp_l_il.node, ast::ExpKind::UpCast(_, _)));
+        assert!(matches!(exp_r_il.node, ast::ExpKind::Bin(_, ast::OpTyp::Int, _, _)));
+    }
+}
