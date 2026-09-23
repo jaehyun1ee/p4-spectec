@@ -4,21 +4,18 @@
 //! spans available at its semantic check. Attempt frames remain uncoded context;
 //! terminal causes keep their complete diagnostic payload in [`Report`].
 
-use crate::diagnostic::{Diagnostic, Label, Report, Severity};
+use crate::{
+    diagnostic::{Diagnostic, Label, Report, Severity},
+    lang::{il::ast as il, traits::print::Print},
+};
 
-mod arg;
-mod decl;
-mod dim;
-mod exp;
-mod prem;
-mod typ;
-
-pub(super) use arg::*;
-pub(super) use decl::*;
-pub(super) use dim::*;
-pub(super) use exp::*;
-pub(super) use prem::*;
-pub(super) use typ::*;
+pub(super) mod arg;
+pub(super) mod decl;
+pub(super) mod dim;
+pub(super) mod exp;
+pub(super) mod not;
+pub(super) mod prem;
+pub(super) mod typ;
 
 /// Names a structured elaboration failure without adding a wrapper.
 pub type ElabError = Box<Report>;
@@ -52,4 +49,23 @@ fn warning(
     notes: Vec<String>,
 ) -> Report {
     diagnostic(Severity::Warning, code, message, labels, notes).into()
+}
+
+/// Creates a type mismatch for a named declaration slot.
+fn type_mismatch(
+    code: &str,
+    subject: String,
+    typ_expect_il: &il::Typ,
+    typ_infer_il: &il::Typ,
+) -> ElabError {
+    cause(
+        code,
+        format!(
+            "{subject} expects '{}', but found '{}'",
+            typ_expect_il.to_string(),
+            typ_infer_il.to_string()
+        ),
+        vec![Label::primary(&typ_infer_il.span, "")],
+        Vec::new(),
+    )
 }

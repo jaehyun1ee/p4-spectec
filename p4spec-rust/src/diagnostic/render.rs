@@ -3,17 +3,23 @@
 //! A renderer caches successful and unavailable source loads for its lifetime.
 //! Explicit text overrides replace cached disk contents.
 //! Reports keep their original spans even when source text is unavailable.
+//! Child snippets follow tree connections; distant ancestor levels are folded
+//! to keep indentation bounded without hiding their reports.
 //! Rendering prepares output before writing stderr so invalid spans cannot
 //! leave a partially printed diagnostic.
 
-use std::{collections::HashMap, fs, io::Write};
+use std::{
+    collections::HashMap,
+    fs,
+    io::{self, Write},
+};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic as CodeDiagnostic, Label as CodeLabel},
     files::{self, Files, SimpleFiles},
     term::{
         self,
-        termcolor::{Buffer, BufferWriter},
+        termcolor::{Buffer, BufferWriter, ColorSpec, WriteColor},
     },
 };
 
@@ -35,6 +41,71 @@ fn span_location(span: &Span) -> String {
         loc(&span.left)
     } else {
         format!("{}-{}", loc(&span.left), loc(&span.right))
+    }
+}
+
+// = Tree presentation
+
+/// Builds ancestor connections while folding distant levels of deep trees.
+fn trace_prefix(ancestors: &[bool], vertical: &str) -> String {
+    // Bound indentation so deep reports do not produce quadratic output
+    let start = ancestors.len().saturating_sub(8);
+    let mut prefix = if start == 0 { String::new() } else { format!("[{start} ancestors] ") };
+    for has_next in &ancestors[start..] {
+        prefix.push_str(if *has_next { vertical } else { "   " });
+    }
+    prefix
+}
+
+/// Adds tree connections to every line without changing diagnostic colors.
+struct TraceWriter<'a> {
+    buffer: &'a mut Buffer,
+    prefix_first: String,
+    prefix_rest: String,
+    first_line: bool,
+    line_start: bool,
+    color: ColorSpec,
+}
+
+impl Write for TraceWriter<'_> {
+    /// Prefixes each physical line even when codespan writes it in pieces.
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        for line in bytes.split_inclusive(|byte| *byte == b'\n') {
+            // Draw connections without inheriting a source or severity color
+            if self.line_start {
+                let prefix = if self.first_line { &self.prefix_first } else { &self.prefix_rest };
+                self.buffer.reset()?;
+                let prefix = if line == b"\n" { prefix.trim_end() } else { prefix };
+                self.buffer.write_all(prefix.as_bytes())?;
+                self.buffer.set_color(&self.color)?;
+                self.line_start = false;
+                self.first_line = false;
+            }
+            // A newline in this write starts a new prefixed line next time
+            self.buffer.write_all(line)?;
+            self.line_start = line.ends_with(b"\n");
+        }
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.buffer.flush()
+    }
+}
+
+impl WriteColor for TraceWriter<'_> {
+    fn supports_color(&self) -> bool {
+        self.buffer.supports_color()
+    }
+
+    fn set_color(&mut self, color: &ColorSpec) -> io::Result<()> {
+        self.color.clone_from(color);
+        self.buffer.set_color(color)
+    }
+
+    fn reset(&mut self) -> io::Result<()> {
+        self.color.clear();
+        self.buffer.reset()
     }
 }
 
@@ -319,27 +390,48 @@ impl Renderer {
         let diagnostic = self.convert_report_kind(&report.kind)?;
         term::emit_to_write_style(buffer, &self.config.snippet, &self.files, &diagnostic)?;
 
-        // Store traversal cursors instead of recursing or cloning reports
-        let mut pending = vec![(report.children.iter(), 0usize)];
+        // Match the snippet character set for terminals using ASCII borders
+        let (branch, last, vertical) = if self.config.snippet.chars.source_border_left.is_ascii() {
+            ("|- ", "`- ", "|  ")
+        } else {
+            ("├─ ", "└─ ", "│  ")
+        };
+        // Store cursors and ancestor continuations without recursive rendering
+        let mut pending = vec![report.children.iter()];
+        let mut ancestors = Vec::new();
         let mut count = 0;
-        while let Some((children, depth)) = pending.last_mut() {
+        while let Some(children) = pending.last_mut() {
             let Some(child) = children.next() else {
                 pending.pop();
+                ancestors.pop();
                 continue;
             };
-            let depth = *depth;
-            // Truncation affects output only, leaving every stored cause intact
+            let prefix = trace_prefix(&ancestors, vertical);
+            // Close each remaining branch at the limit without changing reports
             if count == self.config.trace_limit {
-                writeln!(buffer, "trace truncated after {count} nodes")
-                    .map_err(files::Error::from)?;
-                break;
+                writeln!(
+                    buffer,
+                    "{prefix}{last}... further reports omitted (trace limit: {count})"
+                )
+                .map_err(files::Error::from)?;
+                *children = [].iter();
+                continue;
             }
             count += 1;
-            writeln!(buffer, "trace[{depth}]:").map_err(files::Error::from)?;
-
+            let has_next = !children.as_slice().is_empty();
             let diagnostic = self.convert_report_kind(&child.kind)?;
-            term::emit_to_write_style(buffer, &self.config.snippet, &self.files, &diagnostic)?;
-            pending.push((child.children.iter(), depth + 1));
+            // Keep snippets and multiline notes connected to the same branch
+            let mut writer = TraceWriter {
+                buffer,
+                prefix_first: format!("{prefix}{}", if has_next { branch } else { last }),
+                prefix_rest: format!("{prefix}{}", if has_next { vertical } else { "   " }),
+                first_line: true,
+                line_start: true,
+                color: ColorSpec::new(),
+            };
+            term::emit_to_write_style(&mut writer, &self.config.snippet, &self.files, &diagnostic)?;
+            ancestors.push(has_next);
+            pending.push(child.children.iter());
         }
         Ok(())
     }
@@ -348,7 +440,7 @@ impl Renderer {
     pub fn render_to_string(&mut self, report: &Report) -> Result<String, RenderError> {
         let mut buffer = Buffer::no_color();
         self.render_to_buffer(&mut buffer, report)?;
-        // Codespan and trace headings write only UTF-8 text
+        // Codespan and tree connections write only UTF-8 text
         Ok(String::from_utf8(buffer.into_inner()).expect("diagnostic output is UTF-8"))
     }
 

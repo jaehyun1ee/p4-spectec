@@ -4,7 +4,10 @@
 //! then uses these constructors with the offending use and declaration spans.
 
 use crate::diagnostic::Label;
-use crate::lang::common::{Id, source::Span};
+use crate::lang::{
+    common::{Id, source::Span},
+    il::ast as il,
+};
 
 use super::{ElabError, cause};
 
@@ -65,17 +68,14 @@ const FUNCTION_ARGUMENT_SIGNATURE_MISMATCH: &str = "elab/function-argument-signa
 
 fn function_signature_labels(
     id_param: &Id,
-    span_arg_declaration: Option<&Span>,
+    span_arg_declaration: &Span,
     span: &Span,
 ) -> Vec<crate::diagnostic::Label> {
-    let mut labels = vec![
+    vec![
         Label::primary(span, ""),
         Label::secondary(&id_param.span, "function parameter declared here"),
-    ];
-    if let Some(span_arg_declaration) = span_arg_declaration {
-        labels.push(Label::secondary(span_arg_declaration, "passed function declared here"));
-    }
-    labels
+        Label::secondary(span_arg_declaration, "passed function declared here"),
+    ]
 }
 
 fn function_signature_note() -> Vec<String> {
@@ -96,7 +96,7 @@ pub(in crate::pass::elaborate) fn function_argument_type_parameter_arity_mismatc
     tparams_len_expect: usize,
     tparams_len_actual: usize,
     span: &Span,
-    span_arg_declaration: Option<&Span>,
+    span_arg_declaration: &Span,
 ) -> ElabError {
     let text_suffix = if tparams_len_expect == 1 { "" } else { "s" };
     cause(
@@ -119,7 +119,7 @@ pub(in crate::pass::elaborate) fn function_argument_parameter_arity_mismatch(
     params_len_expect: usize,
     params_len_actual: usize,
     span: &Span,
-    span_arg_declaration: Option<&Span>,
+    span_arg_declaration: &Span,
 ) -> ElabError {
     let text_suffix = if params_len_expect == 1 { "" } else { "s" };
     cause(
@@ -140,7 +140,7 @@ pub(in crate::pass::elaborate) fn function_argument_signature_mismatch(
     id_param: &Id,
     id_arg: &Id,
     span: &Span,
-    span_arg_declaration: Option<&Span>,
+    span_arg_declaration: &Span,
 ) -> ElabError {
     cause(
         FUNCTION_ARGUMENT_SIGNATURE_MISMATCH,
@@ -180,30 +180,21 @@ const FUNCTION_CALL_ARGUMENT_ARITY_MISMATCH: &str = "elab/function-call-argument
 
 /// Reports an argument list whose count differs from its parameter list.
 pub(in crate::pass::elaborate) fn function_call_argument_arity_mismatch(
-    id: Option<&Id>,
+    id: &Id,
     args_len_expect: usize,
     args_len_actual: usize,
     span: &Span,
-    span_declaration: Option<&Span>,
+    span_declaration: &Span,
 ) -> ElabError {
     let text_suffix = if args_len_expect == 1 { "" } else { "s" };
-    let message = match id {
-        Some(id) => {
-            format!(
-                "function `{}` expects {args_len_expect} \
-                argument{text_suffix}, but got {args_len_actual}",
-                id.node
-            )
-        }
-        None => format!(
-            "expected {args_len_expect} argument{text_suffix}, but got \
-            {args_len_actual}"
-        ),
-    };
-    let mut labels = vec![Label::primary(span, "")];
-    if let Some(span_declaration) = span_declaration {
-        labels.push(Label::secondary(span_declaration, "function declared here"));
-    }
+    let message = format!(
+        "function `{}` expects {args_len_expect} argument{text_suffix}, but got {args_len_actual}",
+        id.node,
+    );
+    let labels = vec![
+        Label::primary(span, ""),
+        Label::secondary(span_declaration, "function declared here"),
+    ];
     cause(FUNCTION_CALL_ARGUMENT_ARITY_MISMATCH, message, labels, Vec::new())
 }
 
@@ -216,13 +207,13 @@ pub(in crate::pass::elaborate) fn function_call_type_argument_arity_mismatch(
     targs_len_expect: usize,
     targs_len_actual: usize,
     span: &Span,
-    span_declaration: Option<&Span>,
+    span_declaration: &Span,
 ) -> ElabError {
     let text_suffix = if targs_len_expect == 1 { "" } else { "s" };
-    let mut labels = vec![Label::primary(span, "")];
-    if let Some(span_declaration) = span_declaration {
-        labels.push(Label::secondary(span_declaration, "function declared here"));
-    }
+    let labels = vec![
+        Label::primary(span, ""),
+        Label::secondary(span_declaration, "function declared here"),
+    ];
     cause(
         FUNCTION_CALL_TYPE_ARGUMENT_ARITY_MISMATCH,
         format!(
@@ -309,5 +300,27 @@ pub(in crate::pass::elaborate) fn function_clause_type_parameter_mismatch(
             )
             .to_owned(),
         ],
+    )
+}
+
+/// Names a function argument using its zero-based position.
+pub(super) fn function_argument_subject(idx: usize, id_func: &Id) -> String {
+    format!("argument {idx} of function '${}'", id_func.node)
+}
+
+const FUNCTION_ARGUMENT_TYPE_MISMATCH: &str = "elab/function-argument-type-mismatch";
+
+/// Reports a function argument that cannot be cast to its parameter type.
+pub(super) fn function_argument_type_mismatch(
+    idx: usize,
+    id_func: &Id,
+    typ_expect_il: &il::Typ,
+    typ_infer_il: &il::Typ,
+) -> ElabError {
+    super::type_mismatch(
+        FUNCTION_ARGUMENT_TYPE_MISMATCH,
+        function_argument_subject(idx, id_func),
+        typ_expect_il,
+        typ_infer_il,
     )
 }

@@ -29,7 +29,7 @@ fn collect_suite(
     use_excludes: bool,
 ) -> Result<RunSuite> {
     let path_expected = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("expected")
+        .join("expected/run")
         .join(name_expected);
     Ok(RunSuite {
         paths: corpus::collect(Path::new(path_dir), ".p4")?,
@@ -41,8 +41,8 @@ fn collect_suite(
 
 pub fn run() -> Result<()> {
     let suites = [
-        collect_suite("p4c/testdata/p4_16_samples", "Program_inst", "run-pos-al.expected", true),
-        collect_suite("p4c/testdata/p4_16_errors", "Program_ok", "run-neg-al.expected", true),
+        collect_suite("p4c/testdata/p4_16_samples", "Program_inst", "pos-al.expected", true),
+        collect_suite("p4c/testdata/p4_16_errors", "Program_ok", "neg-al.expected", true),
     ]
     .into_iter()
     .collect::<Result<Vec<_>>>()?;
@@ -58,8 +58,8 @@ pub fn run() -> Result<()> {
 pub fn run_sl(det: bool) -> Result<()> {
     // The OCaml SL outcomes are byte-identical to these AL expectation files
     let suites = [
-        collect_suite("p4c/testdata/p4_16_samples", "Program_inst", "run-pos-al.expected", true),
-        collect_suite("p4c/testdata/p4_16_errors", "Program_ok", "run-neg-al.expected", true),
+        collect_suite("p4c/testdata/p4_16_samples", "Program_inst", "pos-al.expected", true),
+        collect_suite("p4c/testdata/p4_16_errors", "Program_ok", "neg-al.expected", true),
     ]
     .into_iter()
     .collect::<Result<Vec<_>>>()?;
@@ -74,8 +74,8 @@ pub fn run_sl(det: bool) -> Result<()> {
 /// Runs the PL execution suites against source-derived expected results.
 pub fn run_pl(det: bool) -> Result<()> {
     let suites = [
-        collect_suite("p4c/testdata/p4_16_samples", "Program_inst", "run-pos-al.expected", true),
-        collect_suite("p4c/testdata/p4_16_errors", "Program_ok", "run-neg-al.expected", true),
+        collect_suite("p4c/testdata/p4_16_samples", "Program_inst", "pos-al.expected", true),
+        collect_suite("p4c/testdata/p4_16_errors", "Program_ok", "neg-al.expected", true),
     ]
     .into_iter()
     .collect::<Result<Vec<_>>>()?;

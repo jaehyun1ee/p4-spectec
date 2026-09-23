@@ -33,7 +33,7 @@ fn test_runtime_type_failure_keeps_its_category_and_source_span() {
 
     assert_eq!(type_error.kind, TypeErrorKind::UndefinedType("Missing".to_owned()));
     assert_eq!(type_error.span, span);
-    let report = error::type_operation_invalid("expand type", type_error);
+    let report = error::typ::type_operation_invalid("expand type", type_error);
     let ReportKind::Cause(diagnostic) = &report.kind else { panic!("expected type cause") };
     assert_eq!(diagnostic.code.as_deref(), Some("elab/type-operation-invalid"));
     assert_eq!(diagnostic.labels[0].span, span);
@@ -204,4 +204,137 @@ fn test_nesting_does_not_wrap_a_fatal_report() {
     let ReportKind::Cause(diagnostic) = &report.kind else { panic!("expected direct cause") };
     assert_eq!(diagnostic.message, "fatal");
     assert!(report.children.is_empty());
+}
+
+#[test]
+fn test_unavailable_alternative_rolls_back_before_successful_retry() {
+    let id_failed = crate::phrase!(node: "failed".to_owned(), span: Span::default());
+    let id_winner = crate::phrase!(node: "winner".to_owned(), span: Span::default());
+    let mut ctx = Context::new();
+    let result = choose_sequential(
+        &mut ctx,
+        |ctx| {
+            ctx.frees.insert(id_failed.clone());
+            Backtrack::Unavailable(vec![*foreign_report()])
+        },
+        |ctx| {
+            assert!(!ctx.frees.contains(&id_failed));
+            ctx.frees.insert(id_winner.clone());
+            Backtrack::Success(7)
+        },
+    );
+    assert!(matches!(result, Backtrack::Success(7)));
+    assert!(!ctx.frees.contains(&id_failed));
+    assert!(ctx.frees.contains(&id_winner));
+}
+
+#[test]
+fn test_recoverable_alternatives_preserve_state_causes_and_context() {
+    for first_unavailable in [true, false] {
+        for second_unavailable in [true, false] {
+            let id = crate::phrase!(node: "failed".to_owned(), span: Span::default());
+            let mut ctx = Context::new();
+            let result = choose_sequential(
+                &mut ctx,
+                |ctx| {
+                    ctx.frees.insert(id.clone());
+                    let reports = vec![failure("first", Span::default())];
+                    if first_unavailable {
+                        Backtrack::<()>::Unavailable(reports)
+                    } else {
+                        Backtrack::Mismatch(reports)
+                    }
+                },
+                |ctx| {
+                    assert!(!ctx.frees.contains(&id));
+                    ctx.frees.insert(id.clone());
+                    let reports = vec![failure("second", Span::default())];
+                    if second_unavailable {
+                        Backtrack::Unavailable(reports)
+                    } else {
+                        Backtrack::Mismatch(reports)
+                    }
+                },
+            );
+            assert_eq!(
+                matches!(&result, Backtrack::Unavailable(_)),
+                first_unavailable && second_unavailable,
+            );
+            assert!(!ctx.frees.contains(&id));
+            let report = finish(result).unwrap_err();
+            assert_eq!(report.children.len(), 2);
+            for (report, text) in report.children.iter().zip(["first", "second"]) {
+                let ReportKind::Cause(diagnostic) = &report.kind else {
+                    panic!("expected original cause")
+                };
+                assert_eq!(diagnostic.message, text);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_fatal_retry_rolls_back_after_unavailable_rule() {
+    let id = crate::phrase!(node: "failed".to_owned(), span: Span::default());
+    let mut ctx = Context::new();
+    let result = choose_sequential(
+        &mut ctx,
+        |ctx| {
+            ctx.frees.insert(id.clone());
+            Backtrack::<()>::Unavailable(vec![])
+        },
+        |ctx| {
+            assert!(!ctx.frees.contains(&id));
+            ctx.frees.insert(id.clone());
+            Backtrack::Fatal(vec![*foreign_report()])
+        },
+    );
+    assert!(matches!(&result, Backtrack::Fatal(_)));
+    assert!(!ctx.frees.contains(&id));
+    assert_preserved(&finish(result).unwrap_err());
+}
+
+#[test]
+fn test_unwrap_preserves_every_failure_state() {
+    use crate::pass::elaborate::backtrack::{success, unwrap};
+
+    fn propagate(result: Backtrack<usize>) -> Backtrack<usize> {
+        let value = unwrap!(result);
+        success!(value + 1)
+    }
+
+    assert!(matches!(propagate(Backtrack::Success(7)), Backtrack::Success(8)));
+    let result = propagate(Backtrack::Unavailable(vec![*foreign_report()]));
+    assert!(matches!(&result, Backtrack::Unavailable(_)));
+    assert_preserved(&finish(result).unwrap_err());
+    let result = propagate(Backtrack::Mismatch(vec![*foreign_report()]));
+    assert!(matches!(&result, Backtrack::Mismatch(_)));
+    assert_preserved(&finish(result).unwrap_err());
+    let result = propagate(Backtrack::Fatal(vec![*foreign_report()]));
+    assert!(matches!(&result, Backtrack::Fatal(_)));
+    assert_preserved(&finish(result).unwrap_err());
+}
+
+#[test]
+fn test_unavailable_promotion_keeps_causes_and_fatal_barriers() {
+    let result = Backtrack::<()>::Unavailable(vec![*foreign_report()]).unavailable_as_mismatch();
+    assert!(matches!(&result, Backtrack::Mismatch(_)));
+    assert_preserved(&finish(result).unwrap_err());
+    let result = Backtrack::<()>::Fatal(vec![*foreign_report()]).unavailable_as_mismatch();
+    assert!(matches!(&result, Backtrack::Fatal(_)));
+    assert_preserved(&finish(result).unwrap_err());
+    let result = Backtrack::<()>::Unavailable(vec![*foreign_report()]).recoverable_as_failure();
+    assert!(matches!(&result, Backtrack::Fatal(_)));
+    assert_preserved(&finish(result).unwrap_err());
+}
+
+#[test]
+fn test_unavailable_mapping_and_nesting_preserve_state() {
+    let result = Backtrack::<usize>::Unavailable(vec![*foreign_report()])
+        .map(|_| panic!("unavailable result was mapped"))
+        .nest(Span::default(), "outer attempt");
+    assert!(matches!(&result, Backtrack::Unavailable(_)));
+    let report = finish(result).unwrap_err();
+    assert_eq!(report.children.len(), 1);
+    assert_preserved(&report.children[0]);
 }

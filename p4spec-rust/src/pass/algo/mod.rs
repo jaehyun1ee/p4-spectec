@@ -12,10 +12,6 @@
 mod error;
 mod sidecondition;
 
-#[cfg(test)]
-#[path = "../../../tests/pass/algo/internal.rs"]
-mod tests;
-
 mod binding;
 
 pub use error::*;

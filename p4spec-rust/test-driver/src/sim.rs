@@ -162,8 +162,8 @@ struct Results {
 impl Results {
     fn new(name: &str) -> Self {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("expected")
-            .join(format!("sim-{name}.expected"));
+            .join("expected/sim")
+            .join(format!("{name}.expected"));
         Self { expected: expect_file![path], records: BTreeMap::new() }
     }
 

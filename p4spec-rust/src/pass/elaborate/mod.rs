@@ -15,11 +15,8 @@ mod backtrack;
 mod context;
 mod dimension;
 mod error;
+mod expect;
 mod transform;
-
-#[cfg(test)]
-#[path = "../../../tests/pass/elaborate/internal.rs"]
-mod tests;
 
 pub use error::ElabError;
 

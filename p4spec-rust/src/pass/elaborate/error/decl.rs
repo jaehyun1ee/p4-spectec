@@ -7,7 +7,10 @@
 use super::{ElabError, cause, warning};
 use crate::{
     diagnostic::{Label, Report},
-    lang::common::{Id, source::Span},
+    lang::{
+        common::{Id, source::Span},
+        il::ast as il,
+    },
 };
 
 // == Type
@@ -311,4 +314,25 @@ const TABLE_ROW_MISSING: &str = "elab/table-row-missing";
 pub(crate) fn table_row_missing(id: &Id, span: &Span) -> Report {
     let message = format!("table `{}` has no rows defined", id.node);
     warning(TABLE_ROW_MISSING, message, vec![Label::primary(span, "")], Vec::new())
+}
+
+/// Names the return value of a function declaration.
+pub(super) fn function_return_subject(id_func: &Id) -> String {
+    format!("return value of function '${}'", id_func.node)
+}
+
+const FUNCTION_RETURN_TYPE_MISMATCH: &str = "elab/function-return-type-mismatch";
+
+/// Reports a function body that cannot be cast to its declared return type.
+pub(super) fn function_return_type_mismatch(
+    id_func: &Id,
+    typ_expect_il: &il::Typ,
+    typ_infer_il: &il::Typ,
+) -> ElabError {
+    super::type_mismatch(
+        FUNCTION_RETURN_TYPE_MISMATCH,
+        function_return_subject(id_func),
+        typ_expect_il,
+        typ_infer_il,
+    )
 }

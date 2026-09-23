@@ -123,7 +123,10 @@ fn test_prose_command_prints_annotated_rule_groups() {
 fn test_prose_command_reports_pipeline_errors_on_stderr() {
     for (path, message) in [
         ("frontend/negative/malformed-token.watsup", "error[parse/character-invalid]"),
-        ("elaboration/operator_not_defined.watsup", "operator is not defined"),
+        (
+            "elaboration/operator_not_defined.watsup",
+            "operator '+' is not defined for 'bool' and 'bool'",
+        ),
         ("algorithmic/impure_else_premises.watsup", "otherwise branch contains an impure premise"),
     ] {
         let output = binary().arg("prose").arg(fixture(path)).output().unwrap();
@@ -138,7 +141,10 @@ fn test_prose_command_reports_pipeline_errors_on_stderr() {
 fn test_struct_command_reports_pipeline_errors_on_stderr() {
     for (path, message) in [
         ("frontend/negative/malformed-token.watsup", "error[parse/character-invalid]"),
-        ("elaboration/operator_not_defined.watsup", "operator is not defined"),
+        (
+            "elaboration/operator_not_defined.watsup",
+            "operator '+' is not defined for 'bool' and 'bool'",
+        ),
         ("algorithmic/impure_else_premises.watsup", "otherwise branch contains an impure premise"),
     ] {
         let output = binary().arg("struct").arg(fixture(path)).output().unwrap();
@@ -196,7 +202,7 @@ fn test_elab_command_reports_elaboration_errors_on_stderr() {
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
-            .contains("operator is not defined")
+            .contains("operator '+' is not defined for 'bool' and 'bool'")
     );
 }
 
