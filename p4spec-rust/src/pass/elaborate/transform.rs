@@ -45,7 +45,7 @@ use super::{
     context::Context,
     dimension,
     error::{self, ElabError},
-    expect::{ExpExpect, NotExpect},
+    expect::{ExpExpect, NotExpect, StructExpect},
 };
 
 // == Checks
@@ -1496,12 +1496,14 @@ fn elab_exp_normal_fallback(
             il::DefTypKind::Struct(typ_fields_il) => {
                 let mut typ_fields_subst_il = Vec::with_capacity(typ_fields_il.len());
                 for il::TypField { atom, typ: typ_il } in typ_fields_il {
+                    let span_declaration = typ_il.span.clone();
                     let typ_il = unwrap_from_result!(
                         subst_typ(&|id| theta.get(id), typ_il).map_err(|error| {
                             error::type_operation_invalid("cannot instantiate struct field", error)
                         })
                     );
-                    typ_fields_subst_il.push(il::TypField { atom: atom.clone(), typ: typ_il });
+                    typ_fields_subst_il
+                        .push((span_declaration, il::TypField { atom: atom.clone(), typ: typ_il }));
                 }
                 // A struct literal has no independent inference rule
                 if matches!(exp.node, el::ExpKind::Str(_)) {
@@ -1512,16 +1514,12 @@ fn elab_exp_normal_fallback(
                     return mismatch!(Vec::new());
                 }
                 *check = ExpCheck::Contextual;
-                let typ_fields_decl_il = typ_fields_il.clone();
-                let span_declaration = def_typ_il.span.clone();
-                return elab_struct_exp(
-                    ctx,
-                    typ_expect_il,
-                    &typ_fields_decl_il,
-                    &typ_fields_subst_il,
-                    &span_declaration,
-                    exp,
-                );
+                let expect = StructExpect {
+                    typ_il: typ_expect_il,
+                    span_declaration: def_typ_il.span.clone(),
+                    typ_fields_il: typ_fields_subst_il,
+                };
+                return elab_struct_exp(ctx, &expect, exp);
             }
             // Variant: match exactly one case
             il::DefTypKind::Variant(typ_cases_il) => {
@@ -1941,24 +1939,21 @@ fn notation_shape_matches(mixfix: &Mixfix<il::Typ>, exp: &el::Exp) -> bool {
 /// Elaborates a struct literal field by field in declaration order.
 fn elab_struct_exp(
     ctx: &mut Context,
-    typ_expect_il: &il::Typ,
-    typ_fields_decl_il: &[il::TypField],
-    typ_fields_il: &[il::TypField],
-    span_declaration: &Span,
+    expect: &StructExpect<'_>,
     exp: &el::Exp,
 ) -> Backtrack<il::Exp> {
     let el::ExpKind::Str(exp_fields) = &exp.node else {
         return mismatch!(report: Report::frame(exp.span.clone(), "expression is not a struct", Vec::new()));
     };
     // Field count must match the struct type
-    if typ_fields_il.len() != exp_fields.len() {
+    if expect.typ_fields_il.len() != exp_fields.len() {
         return mismatch!(error: error::struct_field_arity_mismatch(
-            typ_fields_decl_il, exp_fields.len(), &exp.span, span_declaration,
+            expect, exp_fields.len(), &exp.span,
         ));
     }
     let mut exp_fields_il = Vec::with_capacity(exp_fields.len());
-    for ((field_decl_il, il::TypField { atom: atom_expect, typ: typ_il }), (atom, exp_field)) in
-        typ_fields_decl_il.iter().zip(typ_fields_il).zip(exp_fields)
+    for ((span_decl, il::TypField { atom: atom_expect, typ: typ_il }), (atom, exp_field)) in
+        expect.typ_fields_il.iter().zip(exp_fields)
     {
         // Fields must appear in declaration order
         if atom_expect.node != atom.node {
@@ -1966,13 +1961,16 @@ fn elab_struct_exp(
                 atom_expect, atom,
             ));
         }
-        let exp_field_il =
-            unwrap!(elab_exp(ctx, &ExpExpect::field(field_decl_il, typ_il), exp_field));
+        let exp_field_il = unwrap!(elab_exp(
+            ctx,
+            &ExpExpect::struct_field(atom_expect, typ_il, span_decl),
+            exp_field
+        ));
         exp_fields_il.push(il::ExpField { atom: atom_expect.clone(), exp: exp_field_il });
     }
     success!(note_phrase! {
         node: il::ExpKind::Str(exp_fields_il),
-        note: typ_expect_il.node.clone(),
+        note: expect.typ_il.node.clone(),
         span: exp.span.clone(),
     })
 }
