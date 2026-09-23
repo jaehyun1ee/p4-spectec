@@ -3,9 +3,10 @@
 //! Expression attempts create these terminal causes and keep them beneath
 //! uncoded attempt frames until one alternative succeeds or elaboration finishes.
 
-use crate::diagnostic::Label;
+use crate::diagnostic::{Label, Report, ReportKind};
 use crate::lang::{common::source::Span, il::ast as il, traits::print::Print};
 
+use super::super::expect::{ExpExpect, ExpExpectKind};
 use super::{ElabError, cause};
 
 const EXPRESSION_INFERENCE_INVALID: &str = "elab/expression-inference-invalid";
@@ -194,4 +195,57 @@ pub(in crate::pass::elaborate) fn latex_outside_hint_unsupported(span: &Span) ->
         vec![Label::primary(span, "")],
         vec!["A `%latex(\"...\")` literal embeds raw LaTeX only inside a hint.".to_owned()],
     )
+}
+
+/// Selects a type diagnostic from the check's declaration context.
+pub(in crate::pass::elaborate) fn expected_type_mismatch(
+    expect: &ExpExpect<'_>,
+    typ_infer_il: &il::Typ,
+) -> ElabError {
+    match expect.kind {
+        ExpExpectKind::Plain => expression_cast_invalid(expect.typ_il, typ_infer_il),
+        ExpExpectKind::NotArg { idx, not_kind, .. } => {
+            super::not::notation_argument_type_mismatch(idx, not_kind, expect.typ_il, typ_infer_il)
+        }
+        ExpExpectKind::FuncArg { idx, id_func, .. } => {
+            super::arg::function_argument_type_mismatch(idx, id_func, expect.typ_il, typ_infer_il)
+        }
+        ExpExpectKind::FuncReturn { id_func, .. } => {
+            super::decl::function_return_type_mismatch(id_func, expect.typ_il, typ_infer_il)
+        }
+    }
+}
+
+/// Links existing causes to the expected type's declaration without wrapping.
+pub(in crate::pass::elaborate) fn annotate_expected_type(
+    expect: &ExpExpect<'_>,
+    reports: &mut [Report],
+) {
+    // Ordinary expression checks add no declaration label
+    let (subject, typ_decl_il, span_declaration) = match expect.kind {
+        ExpExpectKind::Plain => return,
+        ExpExpectKind::NotArg { idx, not_kind, typ_decl_il, span_declaration } => {
+            (super::not::notation_argument_subject(idx, not_kind), typ_decl_il, span_declaration)
+        }
+        ExpExpectKind::FuncArg { idx, id_func, typ_decl_il, span_declaration } => {
+            (super::arg::function_argument_subject(idx, id_func), typ_decl_il, span_declaration)
+        }
+        ExpExpectKind::FuncReturn { id_func, typ_decl_il, span_declaration } => {
+            (super::decl::function_return_subject(id_func), typ_decl_il, span_declaration)
+        }
+    };
+    let label = Label::secondary(
+        span_declaration,
+        format!("{subject} expects '{}'", typ_decl_il.to_string()),
+    );
+    // Preserve each cause and avoid repeated labels from recursive calls
+    let mut reports_pending: Vec<_> = reports.iter_mut().collect();
+    while let Some(report) = reports_pending.pop() {
+        if let ReportKind::Cause(diagnostic) = &mut report.kind
+            && !diagnostic.labels.contains(&label)
+        {
+            diagnostic.labels.push(label.clone());
+        }
+        reports_pending.extend(&mut report.children);
+    }
 }

@@ -15,6 +15,7 @@ mod backtrack;
 mod context;
 mod dimension;
 mod error;
+mod expect;
 mod transform;
 
 #[cfg(test)]
