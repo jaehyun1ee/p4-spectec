@@ -1676,23 +1676,21 @@ note: expression elaboration failed
 2 │ def $f = eps ++ MISSING
   │          --------------
 
-trace[0]:
-error[elab/expression-inference-invalid]: cannot infer type of atom
-  ┌─ elab/list-concat-inner.watsup:2:17
-  │
-1 │ dec $f : nat*
-  │          ---- return value of function '$f' expects 'nat*'
-2 │ def $f = eps ++ MISSING
-  │                 ^^^^^^^
-
-trace[0]:
-error[elab/type-shape-mismatch]: cannot destruct type as an iteration
-  ┌─ elab/list-concat-inner.watsup:2:10
-  │
-1 │ dec $f : nat*
-  │          ---- return value of function '$f' expects 'nat*'
-2 │ def $f = eps ++ MISSING
-  │          ^^^
+├─ error[elab/expression-inference-invalid]: cannot infer type of atom
+│    ┌─ elab/list-concat-inner.watsup:2:17
+│    │
+│  1 │ dec $f : nat*
+│    │          ---- return value of function '$f' expects 'nat*'
+│  2 │ def $f = eps ++ MISSING
+│    │                 ^^^^^^^
+│
+└─ error[elab/type-shape-mismatch]: cannot destruct type as an iteration
+     ┌─ elab/list-concat-inner.watsup:2:10
+     │
+   1 │ dec $f : nat*
+     │          ---- return value of function '$f' expects 'nat*'
+   2 │ def $f = eps ++ MISSING
+     │          ^^^
 
 ---
 === notation-variant-operator-inner.watsup ===
@@ -1754,27 +1752,25 @@ note: expression does not match any variant case
 3 │ def $f = missing ',' 1
   │          -------------
 
-trace[0]:
-error[elab/expression-inference-invalid]: cannot infer type of variable
-  ┌─ elab/notation-variant-multiple-mismatches.watsup:3:10
-  │
-1 │ syntax choice = A | nat ',' nat | bool ';' bool
-  │                     --- argument 0 of notation expects 'nat'
-2 │ dec $f : choice
-  │          ------ return value of function '$f' expects 'choice'
-3 │ def $f = missing ',' 1
-  │          ^^^^^^^
-
-trace[0]:
-error[elab/expression-inference-invalid]: cannot infer type of variable
-  ┌─ elab/notation-variant-multiple-mismatches.watsup:3:10
-  │
-1 │ syntax choice = A | nat ',' nat | bool ';' bool
-  │                                   ---- argument 0 of notation expects 'bool'
-2 │ dec $f : choice
-  │          ------ return value of function '$f' expects 'choice'
-3 │ def $f = missing ',' 1
-  │          ^^^^^^^
+├─ error[elab/expression-inference-invalid]: cannot infer type of variable
+│    ┌─ elab/notation-variant-multiple-mismatches.watsup:3:10
+│    │
+│  1 │ syntax choice = A | nat ',' nat | bool ';' bool
+│    │                     --- argument 0 of notation expects 'nat'
+│  2 │ dec $f : choice
+│    │          ------ return value of function '$f' expects 'choice'
+│  3 │ def $f = missing ',' 1
+│    │          ^^^^^^^
+│
+└─ error[elab/expression-inference-invalid]: cannot infer type of variable
+     ┌─ elab/notation-variant-multiple-mismatches.watsup:3:10
+     │
+   1 │ syntax choice = A | nat ',' nat | bool ';' bool
+     │                                   ---- argument 0 of notation expects 'bool'
+   2 │ dec $f : choice
+     │          ------ return value of function '$f' expects 'choice'
+   3 │ def $f = missing ',' 1
+     │          ^^^^^^^
 
 ---
 === notation-variant-unavailable-shapes.watsup ===
@@ -1784,30 +1780,28 @@ note: expression does not match any variant case
 3 │ def $f = 1 ',' 2
   │          -------
 
-trace[0]:
-error[elab/notation-shape-mismatch]: expression does not match notation
-  ┌─ elab/notation-variant-unavailable-shapes.watsup:3:10
-  │
-1 │ syntax choice = A | B
-  │                 - notation declared here
-2 │ dec $f : choice
-  │          ------ return value of function '$f' expects 'choice'
-3 │ def $f = 1 ',' 2
-  │          ^^^^^^^
-  │
-  = expected notation: A
-
-trace[0]:
-error[elab/notation-shape-mismatch]: expression does not match notation
-  ┌─ elab/notation-variant-unavailable-shapes.watsup:3:10
-  │
-1 │ syntax choice = A | B
-  │                     - notation declared here
-2 │ dec $f : choice
-  │          ------ return value of function '$f' expects 'choice'
-3 │ def $f = 1 ',' 2
-  │          ^^^^^^^
-  │
-  = expected notation: B
+├─ error[elab/notation-shape-mismatch]: expression does not match notation
+│    ┌─ elab/notation-variant-unavailable-shapes.watsup:3:10
+│    │
+│  1 │ syntax choice = A | B
+│    │                 - notation declared here
+│  2 │ dec $f : choice
+│    │          ------ return value of function '$f' expects 'choice'
+│  3 │ def $f = 1 ',' 2
+│    │          ^^^^^^^
+│    │
+│    = expected notation: A
+│
+└─ error[elab/notation-shape-mismatch]: expression does not match notation
+     ┌─ elab/notation-variant-unavailable-shapes.watsup:3:10
+     │
+   1 │ syntax choice = A | B
+     │                     - notation declared here
+   2 │ dec $f : choice
+     │          ------ return value of function '$f' expects 'choice'
+   3 │ def $f = 1 ',' 2
+     │          ^^^^^^^
+     │
+     = expected notation: B
 
 ---

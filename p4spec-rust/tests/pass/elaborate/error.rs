@@ -19,7 +19,7 @@ fn test_unmatched_variant_displays_its_notation_declaration() {
 
     assert!(diagnostic.contains("expected 'YES', but found 'NO'"));
     assert!(diagnostic.contains("expected notation: YES"));
-    assert!(!diagnostic.contains("trace["));
+    assert!(error.children.is_empty());
 }
 
 #[test]

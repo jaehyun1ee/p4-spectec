@@ -59,6 +59,8 @@ fn deep_mixed_traces_render_and_drop_on_a_small_stack() {
                 Renderer::new(RenderConfig { trace_limit: 20_001, ..Default::default() });
             let text = renderer.render_to_string(&report).unwrap();
             assert!(text.contains("leaf"));
+            assert!(text.contains("ancestors]"));
+            assert!(text.len() < 10_000_000, "deep indentation must stay bounded");
             assert!(format!("{report:?}").len() < 1_000);
             drop(report);
         })
@@ -77,7 +79,7 @@ fn trace_limit_preserves_branches_and_the_underlying_reports() {
     let text = renderer.render_to_string(&report).unwrap();
     assert!(text.contains("first branch"));
     assert!(!text.contains("second branch"));
-    assert!(text.contains("truncated"));
+    assert!(text.contains("└─ ... further reports omitted (trace limit: 1)"));
     assert_eq!(report.children.len(), 2);
     let text = Renderer::new(RenderConfig::default())
         .render_to_string(&report)
@@ -101,10 +103,10 @@ fn root_frames_and_mixed_branches_preserve_depth_and_order() {
         text,
         concat!(
             "note: execution\n\n",
-            "trace[0]:\nnote: call\n\n",
-            "trace[1]:\nerror[test/failure]: argument\n\n",
-            "trace[2]:\nerror[test/failure]: type\n\n",
-            "trace[0]:\nerror[test/failure]: alternative\n\n",
+            "├─ note: call\n│\n",
+            "│  └─ error[test/failure]: argument\n│\n",
+            "│     └─ error[test/failure]: type\n│\n",
+            "└─ error[test/failure]: alternative\n\n",
         )
     );
     assert_eq!(report.to_string(), "note: execution");
@@ -131,39 +133,41 @@ fn cause_roots_preserve_nested_metadata_and_source_snippets() {
     renderer.insert_source("frame", "frame");
     renderer.insert_source("cause", "cause");
     let text = renderer.render_to_string(&report).unwrap();
-    let sections = text.split("trace[").collect::<Vec<_>>();
-    assert_eq!(sections.len(), 4, "{text}");
-    for (section, heading, loc, source, underline) in [
-        (
-            sections[0],
-            "error[parse/text-escape-invalid]",
-            "root:1:1",
-            "1 │ root",
-            "^^^^ invalid escape",
-        ),
-        (sections[1], "0]:\nnote: trying candidate", "frame:1:1", "1 │ frame", "-----"),
-        (
-            sections[2],
-            "1]:\nwarning: invalid escape",
-            "cause:1:1",
-            "1 │ cause",
-            "^^^^^ invalid escape",
-        ),
-    ] {
-        for part in [heading, loc, source, underline] {
-            assert!(section.contains(part), "missing {part:?}: {text}");
-        }
-    }
-    assert!(sections[2].contains("= use a supported escape"), "{text}");
-    assert!(sections[2].contains("= source: nested"), "{text}");
-    assert_eq!(sections[3], "0]:\nnote: next candidate\n\n");
+    assert_eq!(
+        text,
+        concat!(
+            "error[parse/text-escape-invalid]: invalid escape in text literal\n",
+            "  ┌─ root:1:1\n",
+            "  │\n",
+            "1 │ root\n",
+            "  │ ^^^^ invalid escape\n",
+            "  │\n",
+            "  = use a supported escape\n\n",
+            "├─ note: trying candidate\n",
+            "│    ┌─ frame:1:1\n",
+            "│    │\n",
+            "│  1 │ frame\n",
+            "│    │ -----\n",
+            "│\n",
+            "│  └─ warning: invalid escape in text literal\n",
+            "│       ┌─ cause:1:1\n",
+            "│       │\n",
+            "│     1 │ cause\n",
+            "│       │ ^^^^^ invalid escape\n",
+            "│       │\n",
+            "│       = use a supported escape\n",
+            "│       = source: nested\n",
+            "│\n",
+            "└─ note: next candidate\n\n",
+        )
+    );
 
     // The same frame retains its snippet when promoted to the root
     let text = renderer.render_to_string(&report.children[0]).unwrap();
     assert!(text.starts_with("note: trying candidate"), "{text}");
     assert!(text.contains("frame:1:1"), "{text}");
     assert!(text.contains("1 │ frame"), "{text}");
-    assert!(text.contains("trace[0]:\nwarning:"), "{text}");
+    assert!(text.contains("└─ warning:"), "{text}");
 }
 
 #[test]
@@ -176,7 +180,7 @@ fn zero_trace_budget_keeps_either_root_kind_and_all_stored_children() {
             .render_to_string(&report)
             .unwrap();
         assert!(text.starts_with(&report.to_string()), "{text}");
-        assert!(text.contains("trace truncated after 0 nodes"), "{text}");
+        assert!(text.contains("└─ ... further reports omitted (trace limit: 0)"), "{text}");
         assert!(!text.contains("child"), "{text}");
         assert_eq!(report.children.len(), 1);
     }
@@ -185,4 +189,63 @@ fn zero_trace_budget_keeps_either_root_kind_and_all_stored_children() {
         .render_to_string(&report)
         .unwrap();
     assert_eq!(text, "note: root\n\n");
+}
+
+#[test]
+fn truncation_closes_each_unfinished_branch() {
+    let report = frame(
+        "root",
+        vec![
+            frame("parent", vec![failure("shown", vec![]), failure("hidden", vec![])]),
+            failure("sibling", vec![]),
+        ],
+    );
+    let text = Renderer::new(RenderConfig { trace_limit: 2, ..Default::default() })
+        .render_to_string(&report)
+        .unwrap();
+    assert_eq!(
+        text,
+        concat!(
+            "note: root\n\n",
+            "├─ note: parent\n│\n",
+            "│  ├─ error[test/failure]: shown\n│  │\n",
+            "│  └─ ... further reports omitted (trace limit: 2)\n",
+            "└─ ... further reports omitted (trace limit: 2)\n",
+        )
+    );
+    assert_eq!(report.children.len(), 2);
+    assert_eq!(report.children[0].children.len(), 2);
+}
+
+#[test]
+fn ascii_snippets_use_ascii_tree_connections() {
+    let report = frame("root", vec![frame("first", vec![]), failure("last", vec![])]);
+    let mut config = RenderConfig::default();
+    config.snippet.chars = codespan_reporting::term::Chars::ascii();
+    let text = Renderer::new(config).render_to_string(&report).unwrap();
+    assert_eq!(
+        text,
+        concat!("note: root\n\n", "|- note: first\n|\n", "`- error[test/failure]: last\n\n",)
+    );
+}
+
+#[test]
+fn multiline_messages_and_notes_stay_on_their_branch() {
+    let mut report_inner = failure("first line\nsecond line", vec![]);
+    let ReportKind::Cause(diagnostic) = &mut report_inner.kind else { unreachable!() };
+    diagnostic
+        .notes
+        .push("first note\ncontinued note".to_owned());
+    let report = frame("root", vec![report_inner, frame("last", vec![])]);
+    let text = Renderer::new(RenderConfig::default())
+        .render_to_string(&report)
+        .unwrap();
+    assert!(text.contains("├─ error[test/failure]: first line"), "{text}");
+    assert!(text.contains("│  second line"), "{text}");
+    let section = text.split("└─ note: last").next().unwrap();
+    for line in section.lines().skip(3) {
+        assert!(line.starts_with('│'), "disconnected line: {line:?}\n{text}");
+    }
+    assert!(section.contains("first note"), "{text}");
+    assert!(section.contains("continued note"), "{text}");
 }
