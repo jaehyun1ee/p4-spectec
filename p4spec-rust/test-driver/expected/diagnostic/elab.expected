@@ -1067,14 +1067,14 @@ error[elab/notation-argument-type-mismatch]: argument 0 of notation expects 'nat
 === notation-empty-valid.watsup ===
 ---
 === notation-singleton-tuple-inner.watsup ===
-error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
-  ┌─ elab/notation-singleton-tuple-inner.watsup:3:16
+error[elab/expression-type-shape-mismatch]: expected '(nat, nat)*', but found '(-true, 1)'
+  ┌─ elab/notation-singleton-tuple-inner.watsup:3:14
   │
 1 │ relation F: (nat, nat)* |- bool
   │             ----------- argument 0 of relation 'F' expects '(nat, nat)*'
 2 │   hint(input %0 %1)
 3 │ rule F/base: (-true, 1) |- true
-  │                ^^^^ operand has type 'bool'
+  │              ^^^^^^^^^^
 
 ---
 === notation-sequence-type.watsup ===
@@ -1089,25 +1089,25 @@ error[elab/notation-argument-type-mismatch]: argument 1 of relation 'F' expects 
 
 ---
 === notation-option-list-inner.watsup ===
-error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
-  ┌─ elab/notation-option-list-inner.watsup:3:16
+error[elab/expression-type-shape-mismatch]: expected 'nat?', but found '[-true]'
+  ┌─ elab/notation-option-list-inner.watsup:3:14
   │
 1 │ relation F: nat? |- bool
   │             ---- argument 0 of relation 'F' expects 'nat?'
 2 │   hint(input %0 %1)
 3 │ rule F/base: [-true] |- true
-  │                ^^^^ operand has type 'bool'
+  │              ^^^^^^^
 
 ---
 === notation-alias-list-inner.watsup ===
-error[elab/operator-unop-type-mismatch]: operator '-' is not defined for 'bool'
-  ┌─ elab/notation-alias-list-inner.watsup:4:16
+error[elab/expression-type-shape-mismatch]: expected 'nat', but found '[-true]'
+  ┌─ elab/notation-alias-list-inner.watsup:4:14
   │
 2 │ relation F: foo |- bool
   │             --- argument 0 of relation 'F' expects 'foo'
 3 │   hint(input %0 %1)
 4 │ rule F/base: [-true] |- true
-  │                ^^^^ operand has type 'bool'
+  │              ^^^^^^^
 
 ---
 === function-return-type.watsup ===
@@ -1582,27 +1582,23 @@ error[elab/tuple-arity-mismatch]: expected 3 tuple elements, but found 2
 === tuple-types-valid.watsup ===
 ---
 === list-element-type.watsup ===
-error[elab/list-element-type-mismatch]: list element 1 has type 'bool', but element 0 has type 'nat'
-  ┌─ elab/list-element-type.watsup:2:14
+error[elab/expression-type-shape-mismatch]: expected 'bool', but found '[1, true]'
+  ┌─ elab/list-element-type.watsup:2:10
   │
 1 │ dec $f : bool
   │          ---- return value of function '$f' expects 'bool'
 2 │ def $f = [1, true]
-  │           -  ^^^^ element 1 has type 'bool'
-  │           │   
-  │           element 0 has type 'nat'
+  │          ^^^^^^^^^
 
 ---
 === list-element-third.watsup ===
-error[elab/list-element-type-mismatch]: list element 2 has type 'bool', but element 0 has type 'nat'
-  ┌─ elab/list-element-third.watsup:2:17
+error[elab/expression-type-shape-mismatch]: expected 'bool', but found '[1, 2, true]'
+  ┌─ elab/list-element-third.watsup:2:10
   │
 1 │ dec $f : bool
   │          ---- return value of function '$f' expects 'bool'
 2 │ def $f = [1, 2, true]
-  │           -     ^^^^ element 2 has type 'bool'
-  │           │      
-  │           element 0 has type 'nat'
+  │          ^^^^^^^^^^^^
 
 ---
 === list-element-contextual.watsup ===
@@ -1684,7 +1680,7 @@ note: expression elaboration failed
 │  2 │ def $f = eps ++ MISSING
 │    │                 ^^^^^^^
 │
-└─ error[elab/type-shape-mismatch]: cannot destruct type as an iteration
+└─ error[elab/expression-type-shape-mismatch]: expected 'text', but found 'eps'
      ┌─ elab/list-concat-inner.watsup:2:10
      │
    1 │ dec $f : nat*
@@ -1803,5 +1799,159 @@ note: expression does not match any variant case
      │          ^^^^^^^
      │
      = expected notation: B
+
+---
+=== type-shape-struct-operand.watsup ===
+error[elab/expression-type-shape-mismatch]: expected a struct type, but found 'nat'
+  ┌─ elab/type-shape-struct-operand.watsup:2:15
+  │
+1 │ dec $f(nat) : nat
+  │               --- return value of function '$f' expects 'nat'
+2 │ def $f(nat) = nat.COUNT
+  │               ^^^
+
+---
+=== type-shape-list-operand.watsup ===
+note: expression elaboration failed
+  ┌─ elab/type-shape-list-operand.watsup:2:10
+  │
+2 │ def $f = (1)[0]
+  │          ------
+
+├─ error[elab/expression-type-shape-mismatch]: expected a list type, but found 'nat'
+│    ┌─ elab/type-shape-list-operand.watsup:2:10
+│    │
+│  1 │ dec $f : nat
+│    │          --- return value of function '$f' expects 'nat'
+│  2 │ def $f = (1)[0]
+│    │          ^^^
+│
+└─ error[elab/expression-cast-invalid]: expected 'text', but found 'nat'
+     ┌─ elab/type-shape-list-operand.watsup:2:10
+     │
+   1 │ dec $f : nat
+     │          --- return value of function '$f' expects 'nat'
+   2 │ def $f = (1)[0]
+     │          ^^^
+
+---
+=== type-shape-eps-expected.watsup ===
+error[elab/expression-type-shape-mismatch]: expected 'nat', but found 'eps'
+  ┌─ elab/type-shape-eps-expected.watsup:2:10
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = eps
+  │          ^^^
+
+---
+=== type-shape-tuple-expected.watsup ===
+error[elab/expression-type-shape-mismatch]: expected 'nat', but found '(missing, 1)'
+  ┌─ elab/type-shape-tuple-expected.watsup:2:10
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = (missing, 1)
+  │          ^^^^^^^^^^^^
+
+---
+=== type-shape-struct-alias.watsup ===
+error[elab/expression-type-shape-mismatch]: expected a struct type, but found 'number'
+  ┌─ elab/type-shape-struct-alias.watsup:3:18
+  │
+2 │ dec $f(number) : nat
+  │                  --- return value of function '$f' expects 'nat'
+3 │ def $f(number) = number.COUNT
+  │                  ^^^^^^
+
+---
+=== type-shape-text-alternative-valid.watsup ===
+---
+=== type-shape-index-path.watsup ===
+note: expression elaboration failed
+  ┌─ elab/type-shape-index-path.watsup:2:15
+  │
+2 │ def $f(nat) = nat[[0] = 1]
+  │               ------------
+
+├─ error[elab/expression-type-shape-mismatch]: expected a list type, but found 'nat'
+│    ┌─ elab/type-shape-index-path.watsup:2:19
+│    │
+│  1 │ dec $f(nat) : nat
+│    │               --- return value of function '$f' expects 'nat'
+│  2 │ def $f(nat) = nat[[0] = 1]
+│    │                   ^
+│
+└─ error[elab/expression-type-shape-mismatch]: expected text type, but found 'nat'
+     ┌─ elab/type-shape-index-path.watsup:2:19
+     │
+   1 │ dec $f(nat) : nat
+     │               --- return value of function '$f' expects 'nat'
+   2 │ def $f(nat) = nat[[0] = 1]
+     │                   ^
+
+---
+=== type-shape-text-path-valid.watsup ===
+---
+=== type-shape-list-expected.watsup ===
+error[elab/expression-type-shape-mismatch]: expected 'nat', but found '[]'
+  ┌─ elab/type-shape-list-expected.watsup:2:10
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = []
+  │          ^^
+
+---
+=== type-shape-list-option.watsup ===
+error[elab/expression-type-shape-mismatch]: expected 'nat?', but found '[]'
+  ┌─ elab/type-shape-list-option.watsup:2:10
+  │
+1 │ dec $f : nat?
+  │          ---- return value of function '$f' expects 'nat?'
+2 │ def $f = []
+  │          ^^
+
+---
+=== type-shape-tuple-inner.watsup ===
+error[elab/expression-cast-invalid]: expected 'nat', but found 'bool'
+  ┌─ elab/type-shape-tuple-inner.watsup:2:14
+  │
+1 │ dec $f : (nat, nat)
+  │          ---------- return value of function '$f' expects '(nat, nat)'
+2 │ def $f = (_, true)
+  │              ^^^^
+
+---
+=== type-shape-tuple-contextual-valid.watsup ===
+---
+=== type-shape-cons-expected.watsup ===
+error[elab/expression-type-shape-mismatch]: expected 'nat', but found '_ :: eps'
+  ┌─ elab/type-shape-cons-expected.watsup:2:10
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = _ :: eps
+  │          ^^^^^^^^
+
+---
+=== type-shape-iteration-expected.watsup ===
+error[elab/expression-type-shape-mismatch]: expected 'nat', but found '(_)*'
+  ┌─ elab/type-shape-iteration-expected.watsup:2:10
+  │
+1 │ dec $f : nat
+  │          --- return value of function '$f' expects 'nat'
+2 │ def $f = (_)*
+  │          ^^^^
+
+---
+=== type-shape-iteration-kind.watsup ===
+error[elab/expression-iteration-mismatch]: expected iteration '?', but found '*'
+  ┌─ elab/type-shape-iteration-kind.watsup:2:10
+  │
+1 │ dec $f : nat?
+  │          ---- return value of function '$f' expects 'nat?'
+2 │ def $f = (_)*
+  │          ^^^^
 
 ---

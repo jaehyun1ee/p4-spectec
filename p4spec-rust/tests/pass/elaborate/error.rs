@@ -335,3 +335,34 @@ fn test_later_ordinary_rule_is_primary_when_otherwise_rule_comes_first() {
     assert_eq!(diagnostic.labels[1].style, LabelStyle::Secondary);
     assert_eq!(diagnostic.labels[1].span.left.line, 5);
 }
+
+#[test]
+fn test_field_access_reports_the_operand_type_at_the_use() {
+    let text = "dec $f(nat) : nat\ndef $f(nat) = nat.COUNT\n";
+    let spec_el = parse_text("field-target.watsup".into(), text).unwrap();
+    let report = elaborate::convert(spec_el).unwrap_err();
+    let mut renderer = Renderer::new(RenderConfig::default());
+    renderer.insert_source("field-target.watsup", text);
+    let text = renderer.render_to_string(&report).unwrap();
+    assert!(text.contains("expected a struct type, but found 'nat'"), "{text}");
+    assert!(text.contains("field-target.watsup:2:15"), "{text}");
+    assert!(!text.contains("cannot destruct"), "{text}");
+}
+
+#[test]
+fn test_contextual_type_requirements_select_the_fallback_diagnostic() {
+    for (text, message) in [
+        ("dec $f : nat\ndef $f = []\n", "expected 'nat', but found '[]'"),
+        ("dec $f : nat\ndef $f = (missing, 1)\n", "expected 'nat', but found '(missing, 1)'"),
+        ("dec $f : (nat, nat)\ndef $f = (_, true)\n", "expected 'nat', but found 'bool'"),
+    ] {
+        let spec_el = parse_text("contextual-shape.watsup".into(), text).unwrap();
+        let report = elaborate::convert(spec_el).unwrap_err();
+        let mut renderer = Renderer::new(RenderConfig::default());
+        renderer.insert_source("contextual-shape.watsup", text);
+        let text = renderer.render_to_string(&report).unwrap();
+        assert!(text.contains(message), "{text}");
+        assert!(text.contains("contextual-shape.watsup:2:"), "{text}");
+        assert!(!text.contains("cannot infer type of variable"), "{text}");
+    }
+}

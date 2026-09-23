@@ -4,7 +4,7 @@
 //! uncoded attempt frames until one alternative succeeds or elaboration finishes.
 
 use crate::diagnostic::{Label, Report, ReportKind};
-use crate::lang::{common::source::Span, il::ast as il, traits::print::Print};
+use crate::lang::{common::source::Span, el::ast as el, il::ast as il, traits::print::Print};
 
 use super::super::expect::{ExpExpect, ExpExpectKind, StructExpect};
 use super::{ElabError, cause};
@@ -93,6 +93,35 @@ pub(in crate::pass::elaborate) fn expression_type_mismatch(
     message: impl Into<String>,
 ) -> ElabError {
     cause(EXPRESSION_TYPE_MISMATCH, message, vec![Label::primary(span, "")], Vec::new())
+}
+
+const EXPRESSION_TYPE_SHAPE_MISMATCH: &str = "elab/expression-type-shape-mismatch";
+
+/// Reports an incompatible type shape at the expression or path using it.
+pub(in crate::pass::elaborate) fn expression_type_shape_mismatch(
+    span: &Span,
+    typ_il: &il::Typ,
+    description_shape: &str,
+) -> ElabError {
+    cause(
+        EXPRESSION_TYPE_SHAPE_MISMATCH,
+        format!("expected {description_shape} type, but found '{}'", typ_il.to_string()),
+        vec![Label::primary(span, "")],
+        Vec::new(),
+    )
+}
+
+/// Reports an expression that cannot be checked against the expected type shape.
+pub(in crate::pass::elaborate) fn expected_expression_mismatch(
+    typ_expect_il: &il::Typ,
+    exp: &el::Exp,
+) -> ElabError {
+    cause(
+        EXPRESSION_TYPE_SHAPE_MISMATCH,
+        format!("expected '{}', but found '{}'", typ_expect_il.to_string(), exp.to_string()),
+        vec![Label::primary(&exp.span, "")],
+        Vec::new(),
+    )
 }
 
 const EXPRESSION_CAST_INVALID: &str = "elab/expression-cast-invalid";

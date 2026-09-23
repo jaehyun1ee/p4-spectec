@@ -76,7 +76,7 @@ fn find_repeated_tparam(tparams: &[el::TParam]) -> Option<(&Id, &Span)> {
 // - Type destructuring
 
 /// Requires the expanded type to be `text`.
-fn as_text_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<()> {
+fn as_text_typ_unavailable(ctx: &Context, typ_il: &il::Typ) -> Backtrack<()> {
     let typ_il = unwrap_from_result!(
         expand_typ(&ctx.tdenv, typ_il)
             .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
@@ -87,8 +87,20 @@ fn as_text_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<()> {
     }
 }
 
+/// Requires text type, using the caller's diagnostic on mismatch.
+fn as_text_typ_mismatch(
+    ctx: &Context,
+    typ_il: &il::Typ,
+    on_mismatch: impl FnOnce() -> ElabError,
+) -> Backtrack<()> {
+    match as_text_typ_unavailable(ctx, typ_il) {
+        unavailable!(_) => mismatch!(error: on_mismatch()),
+        result => result,
+    }
+}
+
 /// Destructs the expanded type into its element type and iteration.
-fn as_iter_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(il::Typ, il::Iter)> {
+fn as_iter_typ_unavailable(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(il::Typ, il::Iter)> {
     let typ_il = unwrap_from_result!(
         expand_typ(&ctx.tdenv, typ_il)
             .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
@@ -101,8 +113,20 @@ fn as_iter_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(il::Typ, il::Iter)
     success!((*typ_inner_il, iter_il))
 }
 
+/// Requires an iteration type, using the caller's diagnostic on mismatch.
+fn as_iter_typ_mismatch(
+    ctx: &Context,
+    typ_il: &il::Typ,
+    on_mismatch: impl FnOnce() -> ElabError,
+) -> Backtrack<(il::Typ, il::Iter)> {
+    match as_iter_typ_unavailable(ctx, typ_il) {
+        unavailable!(_) => mismatch!(error: on_mismatch()),
+        result => result,
+    }
+}
+
 /// Destructs the expanded type into its tuple component types.
-fn as_tuple_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<Vec<il::Typ>> {
+fn as_tuple_typ_unavailable(ctx: &Context, typ_il: &il::Typ) -> Backtrack<Vec<il::Typ>> {
     let typ_il = unwrap_from_result!(
         expand_typ(&ctx.tdenv, typ_il)
             .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
@@ -115,8 +139,20 @@ fn as_tuple_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<Vec<il::Typ>> {
     success!(typs_il)
 }
 
+/// Requires a tuple type, using the caller's diagnostic on mismatch.
+fn as_tuple_typ_mismatch(
+    ctx: &Context,
+    typ_il: &il::Typ,
+    on_mismatch: impl FnOnce() -> ElabError,
+) -> Backtrack<Vec<il::Typ>> {
+    match as_tuple_typ_unavailable(ctx, typ_il) {
+        unavailable!(_) => mismatch!(error: on_mismatch()),
+        result => result,
+    }
+}
+
 /// Destructs the expanded type into the element type of a list.
-fn as_list_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<il::Typ> {
+fn as_list_typ_unavailable(ctx: &Context, typ_il: &il::Typ) -> Backtrack<il::Typ> {
     let typ_il = unwrap_from_result!(
         expand_typ(&ctx.tdenv, typ_il)
             .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
@@ -129,8 +165,23 @@ fn as_list_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<il::Typ> {
     success!(*typ_inner_il)
 }
 
+/// Requires a list type, using the caller's diagnostic on mismatch.
+fn as_list_typ_mismatch(
+    ctx: &Context,
+    typ_il: &il::Typ,
+    on_mismatch: impl FnOnce() -> ElabError,
+) -> Backtrack<il::Typ> {
+    match as_list_typ_unavailable(ctx, typ_il) {
+        unavailable!(_) => mismatch!(error: on_mismatch()),
+        result => result,
+    }
+}
+
 /// Destructs the expanded type into the fields of the struct type it names.
-fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(Span, Vec<il::TypField>)> {
+fn as_struct_typ_unavailable(
+    ctx: &Context,
+    typ_il: &il::Typ,
+) -> Backtrack<(Span, Vec<il::TypField>)> {
     let typ_il = unwrap_from_result!(
         expand_typ(&ctx.tdenv, typ_il)
             .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
@@ -147,6 +198,18 @@ fn as_struct_typ(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(Span, Vec<il::Ty
             success!((def_typ_il.span.clone(), typ_fields_il.clone()))
         }
         _ => unavailable!(error: error::typ::type_shape_mismatch("a struct", &typ_il.span)),
+    }
+}
+
+/// Requires a struct type, using the caller's diagnostic on mismatch.
+fn as_struct_typ_mismatch(
+    ctx: &Context,
+    typ_il: &il::Typ,
+    on_mismatch: impl FnOnce() -> ElabError,
+) -> Backtrack<(Span, Vec<il::TypField>)> {
+    match as_struct_typ_unavailable(ctx, typ_il) {
+        unavailable!(_) => mismatch!(error: on_mismatch()),
+        result => result,
     }
 }
 
@@ -806,7 +869,9 @@ fn infer_cat_exp(
             let exp_l_il = unwrap!(infer_exp(ctx, exp_l));
             let typ_l_il =
                 phrase!(node: exp_l_il.note.as_ref().clone(), span: exp_l_il.span.clone());
-            let typ_base_il = unwrap!(as_list_typ(ctx, &typ_l_il));
+            let typ_base_il = unwrap!(as_list_typ_mismatch(ctx, &typ_l_il, || {
+                error::exp::expression_type_shape_mismatch(&typ_l_il.span, &typ_l_il, "a list")
+            }));
             let typ_list_kind_il = il::TypKind::Iter(Box::new(typ_base_il.clone()), il::Iter::List);
             let typ_list_il = phrase!(node: typ_list_kind_il, span: typ_base_il.span);
             let exp_r_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_list_il), exp_r));
@@ -860,7 +925,9 @@ fn infer_len_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Backtrack<il:
         |ctx| {
             let exp_il = unwrap!(infer_exp(ctx, exp));
             let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
-            unwrap!(as_list_typ(ctx, &typ_il));
+            unwrap!(as_list_typ_mismatch(ctx, &typ_il, || {
+                error::exp::expression_type_shape_mismatch(&typ_il.span, &typ_il, "a list")
+            }));
             let exp_il = note_phrase! {
                 node: il::ExpKind::Len(Box::new(exp_il)),
                 note: il::TypKind::Num(prim::num::Typ::Nat),
@@ -915,7 +982,9 @@ fn infer_mem_exp(
             let exp_set_il = unwrap!(infer_exp(ctx, exp_set));
             let typ_set_il =
                 phrase!(node: exp_set_il.note.as_ref().clone(), span: exp_set_il.span.clone());
-            let typ_elem_il = unwrap!(as_list_typ(ctx, &typ_set_il));
+            let typ_elem_il = unwrap!(as_list_typ_mismatch(ctx, &typ_set_il, || {
+                error::exp::expression_type_shape_mismatch(&typ_set_il.span, &typ_set_il, "a list")
+            }));
             let exp_elem_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_elem_il), exp_elem));
             let exp_il = note_phrase! {
                 node: il::ExpKind::Mem(Box::new(exp_elem_il), Box::new(exp_set_il)),
@@ -943,7 +1012,13 @@ fn infer_idx_exp(
             let exp_base_il = unwrap!(infer_exp(ctx, exp_base));
             let typ_base_il =
                 phrase!(node: exp_base_il.note.as_ref().clone(), span: exp_base_il.span.clone());
-            let typ_elem_il = unwrap!(as_list_typ(ctx, &typ_base_il));
+            let typ_elem_il = unwrap!(as_list_typ_mismatch(ctx, &typ_base_il, || {
+                error::exp::expression_type_shape_mismatch(
+                    &typ_base_il.span,
+                    &typ_base_il,
+                    "a list",
+                )
+            }));
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
             let exp_idx_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_nat_il), exp_idx));
             let exp_il = note_phrase! {
@@ -986,7 +1061,13 @@ fn infer_slice_exp(
             let exp_base_il = unwrap!(infer_exp(ctx, exp_base));
             let typ_base_il =
                 phrase!(node: exp_base_il.note.as_ref().clone(), span: exp_base_il.span.clone());
-            unwrap!(as_list_typ(ctx, &typ_base_il));
+            unwrap!(as_list_typ_mismatch(ctx, &typ_base_il, || {
+                error::exp::expression_type_shape_mismatch(
+                    &typ_base_il.span,
+                    &typ_base_il,
+                    "a list",
+                )
+            }));
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
             let exp_idx_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_nat_il), exp_idx));
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_len.span);
@@ -1028,7 +1109,9 @@ fn infer_dot_exp(
     let exp_il = unwrap!(infer_exp(ctx, exp));
     let typ_il = phrase!(node: exp_il.note.as_ref().clone(), span: exp_il.span.clone());
     // The field must exist in the struct type
-    let (span_declaration, typ_fields_il) = unwrap!(as_struct_typ(ctx, &typ_il));
+    let (span_declaration, typ_fields_il) = unwrap!(as_struct_typ_mismatch(ctx, &typ_il, || {
+        error::exp::expression_type_shape_mismatch(&typ_il.span, &typ_il, "a struct")
+    }));
     let Some(il::TypField { typ: typ_field_il, .. }) = typ_fields_il
         .iter()
         .find(|il::TypField { atom: atom_field, .. }| atom_field.node == atom.node)
@@ -1302,7 +1385,7 @@ fn elab_exp(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> Backtra
 fn elab_exp_inner(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> Backtrack<il::Exp> {
     let typ_expect_il = expect.typ_il;
     // Keep the singleton candidate ahead of the normal reading
-    match as_iter_typ(ctx, typ_expect_il) {
+    match as_iter_typ_unavailable(ctx, typ_expect_il) {
         success!((typ_base_il, iter_expect_il)) => {
             elab_iter_exp_alternatives(ctx, expect, &typ_base_il, iter_expect_il, exp)
         }
@@ -1547,16 +1630,16 @@ fn elab_wildcard_exp(
 fn elab_plain_exp(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> Backtrack<il::Exp> {
     let typ_expect_il = expect.typ_il;
     let exp_kind_il = match &exp.node {
-        el::ExpKind::Eps => unwrap!(elab_eps_exp(ctx, typ_expect_il)),
-        el::ExpKind::List(exps) => unwrap!(elab_list_exp(ctx, typ_expect_il, exps)),
+        el::ExpKind::Eps => unwrap!(elab_eps_exp(ctx, typ_expect_il, exp)),
+        el::ExpKind::List(exps) => unwrap!(elab_list_exp(ctx, typ_expect_il, exp, exps)),
         el::ExpKind::Cons(exp_head, exp_tail) => {
-            unwrap!(elab_cons_exp(ctx, typ_expect_il, exp_head, exp_tail))
+            unwrap!(elab_cons_exp(ctx, typ_expect_il, exp, exp_head, exp_tail))
         }
         el::ExpKind::Cat(exp_l, exp_r) => unwrap!(elab_cat_exp(ctx, typ_expect_il, exp_l, exp_r)),
-        el::ExpKind::Tuple(exps) => unwrap!(elab_tuple_exp(ctx, expect, &exp.span, exps)),
+        el::ExpKind::Tuple(exps) => unwrap!(elab_tuple_exp(ctx, expect, exp, exps)),
         el::ExpKind::Paren(exp_inner) => unwrap!(elab_paren_exp(ctx, expect, exp_inner)),
         el::ExpKind::Iter(exp_inner, iter) => {
-            unwrap!(elab_iter_exp(ctx, typ_expect_il, exp_inner, *iter))
+            unwrap!(elab_iter_exp(ctx, typ_expect_il, exp, exp_inner, *iter))
         }
         // Anything else needed inference
         _ => {
@@ -1573,8 +1656,10 @@ fn elab_plain_exp(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> B
 // - Epsilon expression elaboration
 
 /// Elaborates `eps` as the empty option or list the expected type requires.
-fn elab_eps_exp(ctx: &Context, typ_expect_il: &il::Typ) -> Backtrack<il::ExpKind> {
-    let (_, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
+fn elab_eps_exp(ctx: &Context, typ_expect_il: &il::Typ, exp: &el::Exp) -> Backtrack<il::ExpKind> {
+    let (_, iter_expect_il) = unwrap!(as_iter_typ_mismatch(ctx, typ_expect_il, || {
+        error::exp::expected_expression_mismatch(typ_expect_il, exp)
+    }));
     success!(match iter_expect_il {
         il::Iter::Opt => il::ExpKind::Opt(None),
         il::Iter::List => il::ExpKind::List(vec![]),
@@ -1587,16 +1672,13 @@ fn elab_eps_exp(ctx: &Context, typ_expect_il: &il::Typ) -> Backtrack<il::ExpKind
 fn elab_list_exp(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
+    exp: &el::Exp,
     exps: &[el::Exp],
 ) -> Backtrack<il::ExpKind> {
-    let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
-    // A list literal needs a list type, not an option
-    if iter_expect_il != il::Iter::List {
-        return unavailable!(error: error::exp::expression_iteration_mismatch(
-            &typ_expect_il.span,
-            "list expression has optional expected type",
-        ));
-    }
+    // A list literal requires a list rather than an optional type
+    let typ_base_il = unwrap!(as_list_typ_mismatch(ctx, typ_expect_il, || {
+        error::exp::expected_expression_mismatch(typ_expect_il, exp)
+    }));
     let mut exps_il = Vec::with_capacity(exps.len());
     for exp in exps {
         exps_il.push(unwrap!(
@@ -1612,10 +1694,13 @@ fn elab_list_exp(
 fn elab_cons_exp(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
+    exp: &el::Exp,
     exp_head: &el::Exp,
     exp_tail: &el::Exp,
 ) -> Backtrack<il::ExpKind> {
-    let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
+    let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ_mismatch(ctx, typ_expect_il, || {
+        error::exp::expected_expression_mismatch(typ_expect_il, exp)
+    }));
     let exp_head_il =
         unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_base_il), exp_head).unavailable_as_mismatch());
     let typ_tail_kind_il = il::TypKind::Iter(Box::new(typ_base_il), iter_expect_il);
@@ -1638,7 +1723,8 @@ fn elab_cat_exp(
         ctx,
         // Iterations: both sides at the expected type
         |ctx| {
-            let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
+            let (typ_base_il, iter_expect_il) =
+                unwrap!(as_iter_typ_unavailable(ctx, typ_expect_il));
             let typ_iter_kind_il = il::TypKind::Iter(Box::new(typ_base_il.clone()), iter_expect_il);
             let typ_iter_il = phrase!(node: typ_iter_kind_il, span: typ_base_il.span);
             let exp_l_il = unwrap!(
@@ -1670,14 +1756,16 @@ fn elab_cat_exp(
 fn elab_tuple_exp(
     ctx: &mut Context,
     expect: &ExpExpect<'_>,
-    span: &Span,
+    exp: &el::Exp,
     exps: &[el::Exp],
 ) -> Backtrack<il::ExpKind> {
     // Component count must match the tuple type
-    let typs_expect_il = unwrap!(as_tuple_typ(ctx, expect.typ_il));
+    let typs_expect_il = unwrap!(as_tuple_typ_mismatch(ctx, expect.typ_il, || {
+        error::exp::expected_expression_mismatch(expect.typ_il, exp)
+    }));
     if typs_expect_il.len() != exps.len() {
         return mismatch!(error: error::exp::tuple_arity_mismatch(
-            typs_expect_il.len(), exps.len(), span, expect,
+            typs_expect_il.len(), exps.len(), &exp.span, expect,
         ));
     }
     let mut exps_il = Vec::with_capacity(exps.len());
@@ -1707,16 +1795,23 @@ fn elab_iter_exp(
     ctx: &mut Context,
     typ_expect_il: &il::Typ,
     exp: &el::Exp,
+    exp_inner: &el::Exp,
     iter: el::Iter,
 ) -> Backtrack<il::ExpKind> {
-    let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ(ctx, typ_expect_il));
+    let (typ_base_il, iter_expect_il) = unwrap!(as_iter_typ_mismatch(ctx, typ_expect_il, || {
+        error::exp::expected_expression_mismatch(typ_expect_il, exp)
+    }));
     // The iteration must match the expected one
     let iter_il = iter;
     if iter_il != iter_expect_il {
-        return unavailable!(error: error::exp::expression_iteration_mismatch(&exp.span, "iteration mismatch"));
+        return mismatch!(error: error::exp::expression_iteration_mismatch(
+            &exp.span,
+            format!("expected iteration '{}', but found '{}'", iter_expect_il.to_string(), iter_il.to_string()),
+        ));
     }
-    let exp_il =
-        unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_base_il), exp).unavailable_as_mismatch());
+    let exp_il = unwrap!(
+        elab_exp(ctx, &ExpExpect::plain(&typ_base_il), exp_inner).unavailable_as_mismatch()
+    );
     success!(il::ExpKind::Iter(Box::new(exp_il), il::ExpIter { iter: iter_il, vars: vec![] }))
 }
 
@@ -2032,7 +2127,13 @@ fn elab_idx_path(
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
             let exp_idx_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_nat_il), exp_idx));
             let path_kind_il = il::PathKind::Idx(Box::new(path_inner_il), Box::new(exp_idx_il));
-            let typ_elem_il = unwrap!(as_list_typ(ctx, &typ_inner_il));
+            let typ_elem_il = unwrap!(as_list_typ_mismatch(ctx, &typ_inner_il, || {
+                error::exp::expression_type_shape_mismatch(
+                    &typ_inner_il.span,
+                    &typ_inner_il,
+                    "a list",
+                )
+            }));
             success!(note_phrase! {
                 node: path_kind_il,
                 note: typ_elem_il.node,
@@ -2046,7 +2147,13 @@ fn elab_idx_path(
             let typ_nat_il = typ_at(il::TypKind::Num(prim::num::Typ::Nat), &exp_idx.span);
             let exp_idx_il = unwrap!(elab_exp(ctx, &ExpExpect::plain(&typ_nat_il), exp_idx));
             let path_kind_il = il::PathKind::Idx(Box::new(path_inner_il), Box::new(exp_idx_il));
-            unwrap!(as_text_typ(ctx, &typ_inner_il));
+            unwrap!(as_text_typ_mismatch(ctx, &typ_inner_il, || {
+                error::exp::expression_type_shape_mismatch(
+                    &typ_inner_il.span,
+                    &typ_inner_il,
+                    "text",
+                )
+            }));
             success!(note_phrase! {
                 node: path_kind_il,
                 note: typ_inner_il.node,
@@ -2082,7 +2189,13 @@ fn elab_slice_path(
                 Box::new(exp_idx_il),
                 Box::new(exp_len_il),
             );
-            unwrap!(as_list_typ(ctx, &typ_inner_il));
+            unwrap!(as_list_typ_mismatch(ctx, &typ_inner_il, || {
+                error::exp::expression_type_shape_mismatch(
+                    &typ_inner_il.span,
+                    &typ_inner_il,
+                    "a list",
+                )
+            }));
             success!(note_phrase! {
                 node: path_kind_il,
                 note: typ_inner_il.node,
@@ -2102,7 +2215,13 @@ fn elab_slice_path(
                 Box::new(exp_idx_il),
                 Box::new(exp_len_il),
             );
-            unwrap!(as_text_typ(ctx, &typ_inner_il));
+            unwrap!(as_text_typ_mismatch(ctx, &typ_inner_il, || {
+                error::exp::expression_type_shape_mismatch(
+                    &typ_inner_il.span,
+                    &typ_inner_il,
+                    "text",
+                )
+            }));
             success!(note_phrase! {
                 node: path_kind_il,
                 note: typ_inner_il.node,
@@ -2125,7 +2244,14 @@ fn elab_dot_path(
     let path_inner_il = unwrap!(elab_path(ctx, typ_expect_il, path_inner));
     let typ_inner_il = typ_at(path_inner_il.note.as_ref().clone(), &path_inner_il.span);
     // The field must exist in the struct type
-    let (span_declaration, typ_fields_il) = unwrap!(as_struct_typ(ctx, &typ_inner_il));
+    let (span_declaration, typ_fields_il) =
+        unwrap!(as_struct_typ_mismatch(ctx, &typ_inner_il, || {
+            error::exp::expression_type_shape_mismatch(
+                &typ_inner_il.span,
+                &typ_inner_il,
+                "a struct",
+            )
+        }));
     let Some(il::TypField { typ: typ_field_il, .. }) = typ_fields_il
         .iter()
         .find(|il::TypField { atom: atom_field, .. }| atom_field.node == atom.node)
@@ -3406,3 +3532,7 @@ pub(super) fn elab_spec(
     dimension::analyze_spec(&mut defs_il)?;
     Ok(defs_il)
 }
+
+#[cfg(test)]
+#[path = "../../../tests/pass/elaborate/type_shape.rs"]
+mod type_shape_tests;
