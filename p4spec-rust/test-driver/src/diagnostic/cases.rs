@@ -197,4 +197,7 @@ pub const ELAB: &[&str] = &[
     "struct-nonliteral-variable-inner.watsup",
     "struct-nonliteral-atom-inner.watsup",
     "notation-variant-variable-inner.watsup",
+    "notation-variant-applicable-inner.watsup",
+    "notation-variant-multiple-mismatches.watsup",
+    "notation-variant-unavailable-shapes.watsup",
 ];

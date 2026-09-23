@@ -416,7 +416,7 @@ fn typ_at(typ_kind_il: il::TypKind, span: &Span) -> il::Typ {
 // - Expression type inference
 
 /// Fails inference of a construct whose type cannot be synthesized.
-fn fail_infer<T>(span: &Span, construct: &str) -> Backtrack<T> {
+fn unavailable_infer<T>(span: &Span, construct: &str) -> Backtrack<T> {
     unavailable!(error: error::exp::expression_inference_invalid(span, construct))
 }
 
@@ -456,12 +456,12 @@ fn infer_exp(ctx: &mut Context, exp: &el::Exp) -> Backtrack<il::Exp> {
         }
         el::ExpKind::Iter(exp_inner, iter) => infer_iter_exp(ctx, &exp.span, exp_inner, *iter),
         // Constructs that need an expected type cannot be inferred
-        el::ExpKind::Eps => return fail_infer(&exp.span, "empty sequence"),
-        el::ExpKind::Str(_) => return fail_infer(&exp.span, "struct expression"),
-        el::ExpKind::Atom(_) => return fail_infer(&exp.span, "atom"),
-        el::ExpKind::Seq(_) => return fail_infer(&exp.span, "sequence expression"),
-        el::ExpKind::Infix(_, _, _) => return fail_infer(&exp.span, "infix expression"),
-        el::ExpKind::Brack(_, _, _) => return fail_infer(&exp.span, "bracket expression"),
+        el::ExpKind::Eps => return unavailable_infer(&exp.span, "empty sequence"),
+        el::ExpKind::Str(_) => return unavailable_infer(&exp.span, "struct expression"),
+        el::ExpKind::Atom(_) => return unavailable_infer(&exp.span, "atom"),
+        el::ExpKind::Seq(_) => return unavailable_infer(&exp.span, "sequence expression"),
+        el::ExpKind::Infix(_, _, _) => return unavailable_infer(&exp.span, "infix expression"),
+        el::ExpKind::Brack(_, _, _) => return unavailable_infer(&exp.span, "bracket expression"),
         el::ExpKind::Hole(_) => fatal!(error: error::exp::hole_outside_hint_unsupported(&exp.span)),
         el::ExpKind::Fuse(_, op, _) => {
             fatal!(error: error::exp::fuse_outside_hint_unsupported(&op.span))
@@ -738,7 +738,7 @@ fn infer_arith_exp(ctx: &mut Context, span: &Span, exp: &el::Exp) -> Backtrack<i
 /// Infers a non-empty list from its first element; the rest must agree.
 fn infer_list_exp(ctx: &mut Context, span: &Span, exps: &[el::Exp]) -> Backtrack<il::Exp> {
     let Some((exp_first, exps_rest)) = exps.split_first() else {
-        return fail_infer(span, "empty list");
+        return unavailable_infer(span, "empty list");
     };
     // The element type comes from the first element
     let exp_first_il = unwrap!(infer_exp(ctx, exp_first).unavailable_as_mismatch());
@@ -1722,6 +1722,38 @@ fn elab_iter_exp(
 
 // - Notation expression elaboration
 
+/// Checks token correspondence without elaborating or accepting input.
+fn notation_shape_matches(mixfix: &Mixfix<il::Typ>, exp: &el::Exp) -> bool {
+    // Match the same transparent parentheses as notation elaboration
+    if let el::ExpKind::Paren(exp) = &exp.node {
+        return notation_shape_matches(mixfix, exp);
+    }
+    match (mixfix, &exp.node) {
+        // Argument types are checked only by elaboration
+        (Mixfix::Arg(_), _) => true,
+        // Token spelling does not affect structural correspondence
+        (Mixfix::Atom(_), el::ExpKind::Atom(_)) => true,
+        // Every sequence position must have a corresponding subtree
+        (Mixfix::Seq(mixfixes), el::ExpKind::Seq(exps)) => {
+            mixfixes.len() == exps.len()
+                && mixfixes
+                    .iter()
+                    .zip(exps)
+                    .all(|(mixfix, exp)| notation_shape_matches(mixfix, exp))
+        }
+        // Both infix operands must correspond
+        (Mixfix::Infix(mixfix_l, _, mixfix_r), el::ExpKind::Infix(exp_l, _, exp_r)) => {
+            notation_shape_matches(mixfix_l, exp_l) && notation_shape_matches(mixfix_r, exp_r)
+        }
+        // Bracket contents must correspond
+        (Mixfix::Brack(_, mixfix, _), el::ExpKind::Brack(_, exp, _)) => {
+            notation_shape_matches(mixfix, exp)
+        }
+        // Other syntax does not establish token correspondence
+        _ => false,
+    }
+}
+
 /// Elaborates notation with its declaration and zero-based argument positions.
 fn elab_not_exp(ctx: &mut Context, expect: &NotExpect<'_>, exp: &el::Exp) -> Backtrack<il::NotExp> {
     elab_not_exp_inner(ctx, &expect.not_typ_il.node, exp, expect, &mut 0)
@@ -1838,38 +1870,6 @@ fn elab_not_exp_inner(
     }
 }
 
-/// Checks token correspondence without elaborating or accepting input.
-fn notation_shape_matches(mixfix: &Mixfix<il::Typ>, exp: &el::Exp) -> bool {
-    // Match the same transparent parentheses as notation elaboration
-    if let el::ExpKind::Paren(exp) = &exp.node {
-        return notation_shape_matches(mixfix, exp);
-    }
-    match (mixfix, &exp.node) {
-        // Argument types are checked only by elaboration
-        (Mixfix::Arg(_), _) => true,
-        // Token spelling does not affect structural correspondence
-        (Mixfix::Atom(_), el::ExpKind::Atom(_)) => true,
-        // Every sequence position must have a corresponding subtree
-        (Mixfix::Seq(mixfixes), el::ExpKind::Seq(exps)) => {
-            mixfixes.len() == exps.len()
-                && mixfixes
-                    .iter()
-                    .zip(exps)
-                    .all(|(mixfix, exp)| notation_shape_matches(mixfix, exp))
-        }
-        // Both infix operands must correspond
-        (Mixfix::Infix(mixfix_l, _, mixfix_r), el::ExpKind::Infix(exp_l, _, exp_r)) => {
-            notation_shape_matches(mixfix_l, exp_l) && notation_shape_matches(mixfix_r, exp_r)
-        }
-        // Bracket contents must correspond
-        (Mixfix::Brack(_, mixfix, _), el::ExpKind::Brack(_, exp, _)) => {
-            notation_shape_matches(mixfix, exp)
-        }
-        // Other syntax does not establish token correspondence
-        _ => false,
-    }
-}
-
 // - Struct expression elaboration
 
 /// Elaborates a struct literal field by field in declaration order.
@@ -1922,6 +1922,7 @@ fn elab_variant_exp(
     // Try each case on a copy of the context
     let mut ctx_match = ctx.clone();
     let mut exps_match_il = Vec::new();
+    let mut reports_unavailable = Vec::new();
     let mut reports_mismatch = Vec::new();
     let mut has_mismatch = false;
     for il::TypCase { not_typ: not_typ_il, typ_origin: typ_origin_il, .. } in typ_cases_il {
@@ -1931,7 +1932,7 @@ fn elab_variant_exp(
                 success!(not_exp_il) => not_exp_il,
                 fatal!(reports) => return fatal!(reports),
                 unavailable!(mut reports) => {
-                    reports_mismatch.append(&mut reports);
+                    reports_unavailable.append(&mut reports);
                     continue;
                 }
                 mismatch!(mut reports) => {
@@ -1967,13 +1968,12 @@ fn elab_variant_exp(
             success!(exps_match_il.pop().expect("single variant match"))
         }
         0 => {
-            // Keep every candidate cause and record whether a rule applied
-            let count = reports_mismatch.len();
-            let result = if has_mismatch {
-                mismatch!(reports_mismatch)
-            } else {
-                unavailable!(reports_mismatch)
-            };
+            // Keep all applicable candidates' failures so their causes are not
+            // buried under unrelated candidates' shape errors
+            // If none applies, keep the shape errors to show expected notations
+            let reports = if has_mismatch { reports_mismatch } else { reports_unavailable };
+            let count = reports.len();
+            let result = if has_mismatch { mismatch!(reports) } else { unavailable!(reports) };
             if count == 1 {
                 result
             } else {
