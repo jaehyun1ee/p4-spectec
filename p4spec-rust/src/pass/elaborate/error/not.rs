@@ -17,7 +17,7 @@ use crate::{
 
 use super::super::{
     expect::{NotExpect, NotExpectKind},
-    notation::NotationReport,
+    not::NotationReport,
 };
 use super::{ElabError, cause};
 

@@ -47,7 +47,7 @@ use super::{
     dimension,
     error::{self, ElabError},
     expect::{ExpExpect, NotExpect, StructExpect},
-    notation::{self, NotationBacktrack, NotationCaseReport, NotationReport},
+    not::{self, NotationBacktrack, NotationCaseReport, NotationReport},
 };
 
 // == Checks
@@ -2125,7 +2125,7 @@ fn elab_variant_exp(
             // buried under unrelated candidates' shape errors
             // If none applies, keep the shape errors to show expected notations
             let reports = if has_mismatch { reports_mismatch } else { reports_unavailable };
-            let report = notation::summarize_variant(typ_expect_il, &exp.span, reports);
+            let report = not::summarize_variant(typ_expect_il, &exp.span, reports);
             if has_mismatch { mismatch!(report) } else { unavailable!(report) }
         }
         _ => mismatch!(NotationReport::from(vec![*error::exp::variant_expression_match_repeated(
