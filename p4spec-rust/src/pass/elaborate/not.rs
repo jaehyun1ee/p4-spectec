@@ -10,7 +10,10 @@ use std::cmp::Reverse;
 use crate::{
     diagnostic::{Diagnostic, Report},
     lang::{
-        common::{notation::mixfix::AtomPhrase, source::Span},
+        common::{
+            notation::mixfix::{AtomPhrase, Mixfix},
+            source::Span,
+        },
         il::ast as il,
     },
 };
@@ -20,56 +23,57 @@ use super::{
     error,
 };
 
+// == Failure payload
+
 /// Carries notation evidence without changing elaboration recovery states.
-pub(super) type NotationBacktrack<T> = Backtrack<T, NotationReport>;
+pub(super) type NotBacktrack<T> = Backtrack<T, NotFailure>;
 
 /// Keeps a failure's reports and optional notation comparison together.
 #[derive(Debug)]
-pub(super) struct NotationReport {
+pub(super) struct NotFailure {
     /// Retains causes independently of their presentation eligibility.
     pub reports: Vec<Report>,
     /// Describes only failures reached through notation matching.
-    pub similarity: Option<NotationSimilarity>,
+    pub similarity: Option<NotSimilarity>,
 }
 
-/// Records only token comparisons reached by notation matching.
+/// Records one comparison reached by notation matching.
 #[derive(Clone, Debug)]
-pub(super) struct NotationSimilarity {
+pub(super) struct NotSimilarity {
+    /// Locates the compared expression or token.
     span: Span,
-    shape_mismatch: bool,
+    /// Marks incompatible notation trees, which rank after token mismatches.
+    is_shape_mismatch: bool,
+    /// Counts character edits between corresponding tokens.
     token_distance: usize,
+    /// Counts literals matched before the failure in enclosing notations.
     tokens_matched: usize,
 }
 
 /// Associates a failed candidate with its complete expected notation.
-pub(super) struct NotationCaseReport<'a> {
+pub(super) struct NotCaseFailure<'a> {
     /// Preserves the candidate's complete notation and declaration span.
     pub not_typ_il: &'a il::NotTyp,
     /// Keeps the candidate's reports and comparison evidence together.
-    pub report: NotationReport,
+    pub failure: NotFailure,
 }
 
-impl From<Vec<Report>> for NotationReport {
+impl From<Vec<Report>> for NotFailure {
     fn from(reports: Vec<Report>) -> Self {
         Self { reports, similarity: None }
     }
 }
 
-impl NotationReport {
-    /// Releases reports at a boundary that does not compare notations.
-    pub(super) fn into_reports(self) -> Vec<Report> {
-        self.reports
-    }
-
+impl NotFailure {
     /// Records a mismatch between corresponding literal tokens.
     pub(super) fn token(report: Report, atom_expect: &AtomPhrase, atom: &AtomPhrase) -> Self {
         let text_expect = error::not::atom_text(atom_expect);
         let text = error::not::atom_text(atom);
         Self {
             reports: vec![report],
-            similarity: Some(NotationSimilarity {
+            similarity: Some(NotSimilarity {
                 span: atom.span.clone(),
-                shape_mismatch: false,
+                is_shape_mismatch: false,
                 token_distance: token_distance(&text_expect, &text),
                 tokens_matched: 0,
             }),
@@ -80,9 +84,9 @@ impl NotationReport {
     pub(super) fn shape(report: Report, span: &Span) -> Self {
         Self {
             reports: vec![report],
-            similarity: Some(NotationSimilarity {
+            similarity: Some(NotSimilarity {
                 span: span.clone(),
-                shape_mismatch: true,
+                is_shape_mismatch: true,
                 token_distance: 0,
                 tokens_matched: 0,
             }),
@@ -90,11 +94,125 @@ impl NotationReport {
     }
 
     /// Adds literal matches preceding the failure in the enclosing notation.
-    pub(super) fn with_matched_tokens(mut self, tokens_matched: usize) -> Self {
+    pub(super) fn add_matched_tokens(mut self, tokens_matched: usize) -> Self {
         if let Some(similarity) = &mut self.similarity {
             similarity.tokens_matched += tokens_matched;
         }
         self
+    }
+}
+
+impl NotSimilarity {
+    /// Orders closer evidence first.
+    fn rank(&self) -> (bool, usize, Reverse<usize>) {
+        (self.is_shape_mismatch, self.token_distance, Reverse(self.tokens_matched))
+    }
+}
+
+// == Boundaries
+
+// Plain results enter notation matching without a comparison
+impl<T> Backtrack<T> {
+    /// Lifts reports that carry no notation comparison.
+    pub(super) fn without_similarity(self) -> NotBacktrack<T> {
+        self.map_failure(NotFailure::from)
+    }
+}
+
+impl<T> NotBacktrack<T> {
+    /// Drops notation comparison at a boundary that does not rank candidates.
+    pub(super) fn discard_similarity(self) -> Backtrack<T> {
+        self.map_failure(|failure| failure.reports)
+    }
+
+    /// Wraps a recoverable failure under operation context.
+    ///
+    /// A frame groups failures that no longer describe one comparison.
+    /// Fatal reports pass through unchanged so their direct cause is retained.
+    pub(super) fn nest(self, span: Span, message: impl Into<String>) -> Self {
+        match self {
+            unavailable!(failure) => {
+                unavailable!(report: Report::frame(span, message, failure.reports))
+            }
+            mismatch!(failure) => mismatch!(report: Report::frame(span, message, failure.reports)),
+            result => result,
+        }
+    }
+}
+
+// == Variant summaries
+
+/// Summarizes retained variant failures without reordering their reports.
+pub(super) fn summarize_variant(
+    typ_expect_il: &il::Typ,
+    mut failures: Vec<NotCaseFailure<'_>>,
+) -> NotFailure {
+    // A sole candidate already owns its complete failure context
+    if matches!(failures.as_slice(), [case] if case.failure.reports.len() == 1) {
+        return failures.pop().expect("sole notation candidate").failure;
+    }
+    // Keep the selected child's scoped notes before adding this scope's list
+    let summary = representative(&failures).map(|(idx, diagnostic)| {
+        let mut diagnostic = diagnostic.clone();
+        let not_typs_il: Vec<_> = failures
+            .iter()
+            .enumerate()
+            .filter(|(idx_other, _)| *idx_other != idx)
+            .map(|(_, case)| case.not_typ_il)
+            .collect();
+        diagnostic
+            .notes
+            .push(error::not::other_expected_notations(typ_expect_il, &not_typs_il));
+        (diagnostic, failures[idx].failure.similarity.clone())
+    });
+    let reports: Vec<_> = failures
+        .into_iter()
+        .flat_map(|case| case.failure.reports)
+        .collect();
+    match summary {
+        // Retain the full candidate tree beneath its representative
+        Some((diagnostic, similarity)) => {
+            NotFailure { reports: vec![Report::representative(diagnostic, reports)], similarity }
+        }
+        // Unsupported or differently located failures keep the original tree
+        None => NotFailure::from(reports),
+    }
+}
+
+/// Selects the closest candidate only when every failure describes one location.
+fn representative<'a>(cases: &'a [NotCaseFailure<'_>]) -> Option<(usize, &'a Diagnostic)> {
+    let span = &cases.first()?.failure.similarity.as_ref()?.span;
+    // Hide detailed diagnostics only when every candidate is comparable
+    let candidates: Vec<_> = cases
+        .iter()
+        .map(|case| {
+            let similarity = case.failure.similarity.as_ref()?;
+            let [report] = case.failure.reports.as_slice() else {
+                return None;
+            };
+            (similarity.span == *span).then_some((similarity.rank(), report.diagnostic()?))
+        })
+        .collect::<Option<_>>()?;
+    // `min_by_key` keeps declaration order among equal evidence
+    candidates
+        .into_iter()
+        .enumerate()
+        .min_by_key(|(_, (rank, _))| *rank)
+        .map(|(idx, (_, diagnostic))| (idx, diagnostic))
+}
+
+// == Token comparison
+
+/// Counts literals in notation that has already elaborated successfully.
+pub(super) fn count_atoms(not_exp_il: &il::NotExp) -> usize {
+    match not_exp_il {
+        Mixfix::Arg(_) => 0,
+        Mixfix::Atom(_) => 1,
+        Mixfix::Seq(not_exps_il) => not_exps_il.iter().map(count_atoms).sum(),
+        Mixfix::Infix(not_exp_l_il, _, not_exp_r_il) => {
+            1 + count_atoms(not_exp_l_il) + count_atoms(not_exp_r_il)
+        }
+        Mixfix::Brack(_, not_exp_il, _) => 2 + count_atoms(not_exp_il),
     }
 }
 
@@ -106,101 +224,13 @@ fn token_distance(text_expect: &str, text: &str) -> usize {
     for (idx_expect, char_expect) in text_expect.chars().enumerate() {
         let mut distance_diagonal = distances[0];
         distances[0] = idx_expect + 1;
-        for (idx, char_actual) in chars.iter().enumerate() {
+        for (idx, char) in chars.iter().enumerate() {
             let distance_previous = distances[idx + 1];
-            distances[idx + 1] = (distance_diagonal + usize::from(char_expect != *char_actual))
+            distances[idx + 1] = (distance_diagonal + usize::from(char_expect != *char))
                 .min(distances[idx] + 1)
                 .min(distance_previous + 1);
             distance_diagonal = distance_previous;
         }
     }
     distances[chars.len()]
-}
-
-/// Selects a representative only when all failures describe the same location.
-fn representative<'a>(
-    reports: &'a [NotationCaseReport<'_>],
-) -> Option<(usize, &'a Diagnostic, &'a NotationSimilarity)> {
-    let span = &reports.first()?.report.similarity.as_ref()?.span;
-    let mut closest = None;
-    // Validate every candidate before hiding any of its detailed diagnostics
-    for (idx, report) in reports.iter().enumerate() {
-        let similarity = report.report.similarity.as_ref()?;
-        if similarity.span != *span {
-            return None;
-        }
-        // A context frame or several reports have no single diagnostic to show
-        let [report_sole] = report.report.reports.as_slice() else {
-            return None;
-        };
-        let diagnostic = report_sole.diagnostic()?;
-        let key = (
-            similarity.shape_mismatch,
-            similarity.token_distance,
-            Reverse(similarity.tokens_matched),
-            idx,
-        );
-        // Keep declaration order for candidates with equal evidence
-        if closest
-            .as_ref()
-            .is_none_or(|(key_previous, _, _)| key < *key_previous)
-        {
-            closest = Some((key, diagnostic, similarity));
-        }
-    }
-    closest.map(|(key, diagnostic, similarity)| (key.3, diagnostic, similarity))
-}
-
-/// Summarizes retained variant failures without reordering their reports.
-pub(super) fn summarize_variant(
-    typ_expect_il: &il::Typ,
-    mut reports: Vec<NotationCaseReport<'_>>,
-) -> NotationReport {
-    // A sole candidate already owns its complete failure context
-    if reports.len() == 1 && reports[0].report.reports.len() == 1 {
-        return reports.pop().expect("single notation candidate").report;
-    }
-    // Keep the selected child's scoped notes before adding this scope's list
-    let summary = representative(&reports).map(|(idx, diagnostic, similarity)| {
-        let mut diagnostic = diagnostic.clone();
-        let not_typs_il: Vec<_> = reports
-            .iter()
-            .enumerate()
-            .filter(|(idx_other, _)| *idx_other != idx)
-            .map(|(_, report)| report.not_typ_il)
-            .collect();
-        diagnostic
-            .notes
-            .push(error::not::other_expected_notations(typ_expect_il, &not_typs_il));
-        (diagnostic, similarity.clone())
-    });
-    let reports: Vec<_> = reports
-        .into_iter()
-        .flat_map(|report| report.report.reports)
-        .collect();
-    match summary {
-        // Retain the full candidate tree beneath its representative
-        Some((diagnostic, similarity)) => NotationReport {
-            reports: vec![Report::representative(diagnostic, reports)],
-            similarity: Some(similarity),
-        },
-        // Unsupported or differently located failures keep the original tree
-        None => NotationReport::from(reports),
-    }
-}
-
-// Context frames group comparisons that no longer describe one location
-impl<T> NotationBacktrack<T> {
-    /// Wraps a recoverable failure under operation context.
-    ///
-    /// Fatal reports pass through unchanged so their direct cause is retained.
-    pub(super) fn nest(self, span: Span, message: impl Into<String>) -> Self {
-        match self {
-            unavailable!(failure) => {
-                unavailable!(report: Report::frame(span, message, failure.reports))
-            }
-            mismatch!(failure) => mismatch!(report: Report::frame(span, message, failure.reports)),
-            result => result,
-        }
-    }
 }

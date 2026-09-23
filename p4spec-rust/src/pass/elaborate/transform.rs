@@ -47,7 +47,7 @@ use super::{
     dimension,
     error::{self, ElabError},
     expect::{ExpExpect, NotExpect, StructExpect},
-    not::{self, NotationBacktrack, NotationCaseReport, NotationReport},
+    not::{self, NotBacktrack, NotCaseFailure, NotFailure},
 };
 
 // == Checks
@@ -1352,8 +1352,9 @@ fn elab_exp(ctx: &mut Context, expect: &ExpExpect<'_>, exp: &el::Exp) -> Backtra
     // A parenthesized result takes the span of the parentheses
     let parenthesized = matches!(exp.node, el::ExpKind::Paren(_));
     let span = exp.span.clone();
+    // Callers of a checked expression do not rank notation candidates
     let result = elab_exp_inner(ctx, expect, exp)
-        .map_failure(NotationReport::into_reports)
+        .discard_similarity()
         .map(move |mut exp_il| {
             if parenthesized {
                 respan_parenthesized_exp(&mut exp_il, &span);
@@ -1389,15 +1390,15 @@ fn elab_exp_inner(
     ctx: &mut Context,
     expect: &ExpExpect<'_>,
     exp: &el::Exp,
-) -> NotationBacktrack<il::Exp> {
+) -> NotBacktrack<il::Exp> {
     let typ_expect_il = expect.typ_il;
     // Keep the singleton candidate ahead of the normal reading
     match as_iter_typ_unavailable(ctx, typ_expect_il) {
         success!((typ_base_il, iter_expect_il)) => {
             elab_iter_exp_alternatives(ctx, expect, &typ_base_il, iter_expect_il, exp)
-                .map_failure(NotationReport::from)
+                .without_similarity()
         }
-        fatal!(reports) => fatal!(NotationReport::from(reports)),
+        fatal!(reports) => fatal!(NotFailure::from(reports)),
         unavailable!(_) | mismatch!(_) => elab_exp_normal(ctx, expect, exp),
     }
 }
@@ -1429,10 +1430,9 @@ fn elab_iter_exp_alternatives(
         fatal!(reports) => return fatal!(reports),
         result => result,
     };
-    // Retry the normal reading from the original context
+    // Retry the normal reading; comparisons do not cross the iteration
     let mut ctx_candidate = ctx.clone();
-    match elab_exp_normal(&mut ctx_candidate, expect, exp).map_failure(NotationReport::into_reports)
-    {
+    match elab_exp_normal(&mut ctx_candidate, expect, exp).discard_similarity() {
         // Commit only the successful normal reading
         success!(exp_il) => {
             *ctx = ctx_candidate;
@@ -1506,29 +1506,27 @@ fn elab_exp_normal(
     ctx: &mut Context,
     expect: &ExpExpect<'_>,
     exp: &el::Exp,
-) -> NotationBacktrack<il::Exp> {
+) -> NotBacktrack<il::Exp> {
     // Try inference first, keeping its context only on success
     let mut ctx_candidate = ctx.clone();
-    match infer_exp(&mut ctx_candidate, exp).map_failure(NotationReport::from) {
-        success!(exp_il) => {
-            match cast_exp(&ctx_candidate, expect, exp_il).map_failure(NotationReport::from) {
-                success!(exp_il) => {
-                    *ctx = ctx_candidate;
-                    success!(exp_il)
-                }
-                result => result,
+    match infer_exp(&mut ctx_candidate, exp).without_similarity() {
+        success!(exp_il) => match cast_exp(&ctx_candidate, expect, exp_il).without_similarity() {
+            success!(exp_il) => {
+                *ctx = ctx_candidate;
+                success!(exp_il)
             }
-        }
+            result => result,
+        },
         // Fatal inference forbids contextual retry
-        fatal!(report) => fatal!(report),
+        fatal!(failure) => fatal!(failure),
         // An unavailable fallback must not obscure an inference cause
-        mismatch!(report_infer) => match elab_exp_normal_fallback(ctx, expect, exp) {
-            unavailable!(_) => mismatch!(report_infer),
+        mismatch!(failure_infer) => match elab_exp_normal_fallback(ctx, expect, exp) {
+            unavailable!(_) => mismatch!(failure_infer),
             result => result,
         },
         // A contextual rule supersedes the absence of an inference rule
-        unavailable!(report_infer) => match elab_exp_normal_fallback(ctx, expect, exp) {
-            unavailable!(report) if report.reports.is_empty() => unavailable!(report_infer),
+        unavailable!(failure_infer) => match elab_exp_normal_fallback(ctx, expect, exp) {
+            unavailable!(failure) if failure.reports.is_empty() => unavailable!(failure_infer),
             result => result,
         },
     }
@@ -1539,11 +1537,11 @@ fn elab_exp_normal_fallback(
     ctx: &mut Context,
     expect: &ExpExpect<'_>,
     exp: &el::Exp,
-) -> NotationBacktrack<il::Exp> {
+) -> NotBacktrack<il::Exp> {
     let typ_expect_il = expect.typ_il;
     // A wildcard `_` becomes a fresh variable of the expected type
     if matches!(&exp.node, el::ExpKind::Id(id) if id.node == "_") {
-        return elab_wildcard_exp(ctx, typ_expect_il, exp).map_failure(NotationReport::from);
+        return elab_wildcard_exp(ctx, typ_expect_il, exp).without_similarity();
     }
     // Unfold a named expected type into its definition
     if let il::TypKind::Var(id, targs_il) = &typ_expect_il.node
@@ -1594,7 +1592,7 @@ fn elab_exp_normal_fallback(
                     span_declaration: def_typ_il.span.clone(),
                     typ_fields_il: typ_fields_subst_il,
                 };
-                return elab_struct_exp(ctx, &expect, exp).map_failure(NotationReport::from);
+                return elab_struct_exp(ctx, &expect, exp).without_similarity();
             }
             // Variant: match exactly one case
             il::DefTypKind::Variant(typ_cases_il) => {
@@ -1633,7 +1631,7 @@ fn elab_exp_normal_fallback(
             }
         }
     }
-    elab_plain_exp(ctx, expect, exp).map_failure(NotationReport::from)
+    elab_plain_exp(ctx, expect, exp).without_similarity()
 }
 
 // - Wildcard expression elaboration
@@ -1844,19 +1842,6 @@ fn elab_iter_exp(
 
 // - Notation expression elaboration
 
-/// Counts literals in notation that has already elaborated successfully.
-fn matched_notation_tokens(not_exp_il: &il::NotExp) -> usize {
-    match not_exp_il {
-        Mixfix::Arg(_) => 0,
-        Mixfix::Atom(_) => 1,
-        Mixfix::Seq(not_exps_il) => not_exps_il.iter().map(matched_notation_tokens).sum(),
-        Mixfix::Infix(not_exp_l_il, _, not_exp_r_il) => {
-            1 + matched_notation_tokens(not_exp_l_il) + matched_notation_tokens(not_exp_r_il)
-        }
-        Mixfix::Brack(_, not_exp_il, _) => 2 + matched_notation_tokens(not_exp_il),
-    }
-}
-
 /// Checks token correspondence without elaborating or accepting input.
 fn notation_shape_matches(mixfix: &Mixfix<il::Typ>, exp: &el::Exp) -> bool {
     // Match the same transparent parentheses as notation elaboration
@@ -1894,7 +1879,7 @@ fn elab_not_exp(
     ctx: &mut Context,
     expect: &NotExpect<'_>,
     exp: &el::Exp,
-) -> NotationBacktrack<il::NotExp> {
+) -> NotBacktrack<il::NotExp> {
     elab_not_exp_inner(ctx, &expect.not_typ_il.node, exp, expect, &mut 0)
 }
 
@@ -1905,7 +1890,7 @@ fn elab_not_exp_inner(
     exp: &el::Exp,
     expect: &NotExpect<'_>,
     arg_idx: &mut usize,
-) -> NotationBacktrack<il::NotExp> {
+) -> NotBacktrack<il::NotExp> {
     // Parentheses around notation are transparent
     if let el::ExpKind::Paren(exp) = &exp.node {
         return elab_not_exp_inner(ctx, mixfix, exp, expect, arg_idx);
@@ -1919,14 +1904,14 @@ fn elab_not_exp_inner(
                 // Rebuild the elaborated argument
                 success!(exp_il) => success!(Mixfix::Arg(exp_il)),
                 // Preserve a fatal inner cause with its declaration context
-                fatal!(mut report) => {
-                    error::exp::annotate_expected_type(&exp_expect, &mut report.reports);
-                    fatal!(report)
+                fatal!(mut failure) => {
+                    error::exp::annotate_expected_type(&exp_expect, &mut failure.reports);
+                    fatal!(failure)
                 }
                 // Preserve mismatches for later notation candidates
-                unavailable!(mut report) | mismatch!(mut report) => {
-                    error::exp::annotate_expected_type(&exp_expect, &mut report.reports);
-                    mismatch!(report)
+                unavailable!(mut failure) | mismatch!(mut failure) => {
+                    error::exp::annotate_expected_type(&exp_expect, &mut failure.reports);
+                    mismatch!(failure)
                 }
             }
         }
@@ -1938,16 +1923,16 @@ fn elab_not_exp_inner(
         (Mixfix::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
             if not_typs_il.len() != exps.len() {
                 let error = error::not::notation_shape_mismatch(&exp.span, expect);
-                return unavailable!(NotationReport::shape(*error, &exp.span));
+                return unavailable!(NotFailure::shape(*error, &exp.span));
             }
             let mut not_exps_il = Vec::with_capacity(exps.len());
             let mut tokens_matched = 0;
             for (mixfix, exp) in not_typs_il.iter().zip(exps) {
                 let not_exp_il = unwrap!(
                     elab_not_exp_inner(ctx, mixfix, exp, expect, arg_idx)
-                        .map_failure(|report| report.with_matched_tokens(tokens_matched))
+                        .map_failure(|failure| failure.add_matched_tokens(tokens_matched))
                 );
-                tokens_matched += matched_notation_tokens(&not_exp_il);
+                tokens_matched += not::count_atoms(&not_exp_il);
                 not_exps_il.push(not_exp_il);
             }
             success!(Mixfix::Seq(not_exps_il))
@@ -1957,14 +1942,15 @@ fn elab_not_exp_inner(
             Mixfix::Infix(not_typ_l_il, atom_expect, not_typ_r_il),
             el::ExpKind::Infix(exp_l, atom, exp_r),
         ) if atom_expect.node == atom.node => {
+            // The guard has already matched the infix atom
             let not_exp_l_il = unwrap!(
                 elab_not_exp_inner(ctx, not_typ_l_il, exp_l, expect, arg_idx)
-                    .map_failure(|report| report.with_matched_tokens(1))
+                    .map_failure(|failure| failure.add_matched_tokens(1))
             );
-            let tokens_matched = 1 + matched_notation_tokens(&not_exp_l_il);
+            let tokens_matched = 1 + not::count_atoms(&not_exp_l_il);
             let not_exp_r_il = unwrap!(
                 elab_not_exp_inner(ctx, not_typ_r_il, exp_r, expect, arg_idx)
-                    .map_failure(|report| report.with_matched_tokens(tokens_matched))
+                    .map_failure(|failure| failure.add_matched_tokens(tokens_matched))
             );
             success!(Mixfix::Infix(
                 Box::new(not_exp_l_il),
@@ -1977,9 +1963,10 @@ fn elab_not_exp_inner(
             Mixfix::Brack(atom_expect_l, not_typ_inner_il, atom_expect_r),
             el::ExpKind::Brack(atom_l, exp_inner, atom_r),
         ) if atom_expect_l.node == atom_l.node && atom_expect_r.node == atom_r.node => {
+            // The guard has already matched both bracket atoms
             let not_exp_inner_il = unwrap!(
                 elab_not_exp_inner(ctx, not_typ_inner_il, exp_inner, expect, arg_idx)
-                    .map_failure(|report| report.with_matched_tokens(2))
+                    .map_failure(|failure| failure.add_matched_tokens(2))
             );
             success!(Mixfix::Brack(
                 atom_expect_l.clone(),
@@ -2012,11 +1999,11 @@ fn elab_not_exp_inner(
                 // Different tree shapes do not establish a missing token
                 _ => {
                     let error = error::not::notation_shape_mismatch(&exp.span, expect);
-                    return unavailable!(NotationReport::shape(*error, &exp.span));
+                    return unavailable!(NotFailure::shape(*error, &exp.span));
                 }
             };
             let error = error::not::notation_token_mismatch(atom_expect, atom, expect);
-            mismatch!(NotationReport::token(*error, atom_expect, atom))
+            mismatch!(NotFailure::token(*error, atom_expect, atom))
         }
     }
 }
@@ -2069,26 +2056,26 @@ fn elab_variant_exp(
     typ_expect_il: &il::Typ,
     typ_cases_il: &[il::TypCase],
     exp: &el::Exp,
-) -> NotationBacktrack<il::Exp> {
+) -> NotBacktrack<il::Exp> {
     // Try each case on a copy of the context
     let mut ctx_match = ctx.clone();
     let mut exps_match_il = Vec::new();
-    let mut reports_unavailable = Vec::new();
-    let mut reports_mismatch = Vec::new();
+    let mut failures_unavailable = Vec::new();
+    let mut failures_mismatch = Vec::new();
     let mut has_mismatch = false;
     for il::TypCase { not_typ: not_typ_il, typ_origin: typ_origin_il, .. } in typ_cases_il {
         let mut ctx_candidate = ctx_match.clone();
         let not_exp_il =
             match elab_not_exp(&mut ctx_candidate, &NotExpect::variant(not_typ_il), exp) {
                 success!(not_exp_il) => not_exp_il,
-                fatal!(report) => return fatal!(report),
-                unavailable!(report) => {
-                    reports_unavailable.push(NotationCaseReport { not_typ_il, report });
+                fatal!(failure) => return fatal!(failure),
+                unavailable!(failure) => {
+                    failures_unavailable.push(NotCaseFailure { not_typ_il, failure });
                     continue;
                 }
-                mismatch!(report) => {
+                mismatch!(failure) => {
                     has_mismatch = true;
-                    reports_mismatch.push(NotationCaseReport { not_typ_il, report });
+                    failures_mismatch.push(NotCaseFailure { not_typ_il, failure });
                     continue;
                 }
             };
@@ -2106,7 +2093,7 @@ fn elab_variant_exp(
             match cast_exp(&ctx_candidate, &ExpExpect::plain(typ_expect_il), exp_case_il) {
                 success!(exp_case_il) => exp_case_il,
                 unavailable!(reports) | fatal!(reports) | mismatch!(reports) => {
-                    return fatal!(NotationReport::from(reports));
+                    return fatal!(NotFailure::from(reports));
                 }
             };
         ctx_match = ctx_candidate;
@@ -2122,10 +2109,10 @@ fn elab_variant_exp(
             // Keep all applicable candidates' failures so their causes are not
             // buried under unrelated candidates' shape errors
             // If none applies, keep the shape errors to show expected notations
-            let reports = if has_mismatch { reports_mismatch } else { reports_unavailable };
-            let report = not::summarize_variant(typ_expect_il, reports);
-            let count = report.reports.len();
-            let result = if has_mismatch { mismatch!(report) } else { unavailable!(report) };
+            let failures = if has_mismatch { failures_mismatch } else { failures_unavailable };
+            let failure = not::summarize_variant(typ_expect_il, failures);
+            let count = failure.reports.len();
+            let result = if has_mismatch { mismatch!(failure) } else { unavailable!(failure) };
             if count == 1 {
                 result
             } else {
@@ -2638,9 +2625,10 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Backtrack<il::PremK
         Ok((not_typ_il, input_hint)) => (not_typ_il.clone(), input_hint.clone()),
         Err(error) => return fatal!(error: error),
     };
+    // A relation has one notation, so no candidates are ranked
     let not_exp_il = unwrap!(
         elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp)
-            .map_failure(NotationReport::into_reports)
+            .discard_similarity()
             .recoverable_as_failure()
     );
     let exps_il = not_exp_il.args();
@@ -2670,9 +2658,10 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il
         Ok((not_typ_il, input_hint)) => (not_typ_il.clone(), input_hint.clone()),
         Err(error) => return fatal!(error: error),
     };
+    // A relation has one notation, so no candidates are ranked
     let not_exp_il = unwrap!(
         elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp)
-            .map_failure(NotationReport::into_reports)
+            .discard_similarity()
             .recoverable_as_failure()
     );
     let exps_il = not_exp_il.args();
@@ -2754,9 +2743,9 @@ fn elab_rule(
     ctx_local.reset_frees();
     let frees = rule.free_ids();
     ctx_local.add_frees(&frees);
+    // A relation has one notation, so no candidates are ranked
     let not_exp_il = finish(
-        elab_not_exp(&mut ctx_local, &NotExpect::rel(id_rel, not_typ_il), exp)
-            .map_failure(NotationReport::into_reports),
+        elab_not_exp(&mut ctx_local, &NotExpect::rel(id_rel, not_typ_il), exp).discard_similarity(),
     )?;
     let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, prems, &id_rule.span))?;
     let rule_kind_il = il::RuleKind { id: id_rule.clone(), not_exp: not_exp_il, prems: prems_il };
