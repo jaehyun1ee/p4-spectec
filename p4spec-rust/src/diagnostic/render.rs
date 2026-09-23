@@ -60,7 +60,7 @@ fn trace_prefix(ancestors: &[bool], vertical: &str) -> String {
 /// Hides retained alternatives after their representative has been rendered.
 fn visible_children(report: &Report) -> &[Report] {
     match &report.kind {
-        ReportKind::Alternatives(_) => &[],
+        ReportKind::Representative(_) => &[],
         _ => &report.children,
     }
 }
@@ -369,7 +369,7 @@ impl Renderer {
                 Ok(rendered)
             }
             // Keep each cause's code, severity, labels, and notes
-            ReportKind::Cause(diagnostic) | ReportKind::Alternatives(diagnostic) => {
+            ReportKind::Cause(diagnostic) | ReportKind::Representative(diagnostic) => {
                 self.convert_diagnostic(diagnostic)
             }
         }

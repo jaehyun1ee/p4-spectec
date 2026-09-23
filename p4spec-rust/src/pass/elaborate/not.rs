@@ -8,7 +8,7 @@
 use std::cmp::Reverse;
 
 use crate::{
-    diagnostic::{Diagnostic, Report, ReportKind},
+    diagnostic::{Diagnostic, Report},
     lang::{common::source::Span, il::ast as il},
 };
 
@@ -109,17 +109,6 @@ fn token_distance(text_expect: &str, text: &str) -> usize {
     distances[chars.len()]
 }
 
-/// Borrows a sole visible diagnostic without discarding a context frame.
-fn diagnostic(report: &NotationReport) -> Option<&Diagnostic> {
-    let [report] = report.reports.as_slice() else {
-        return None;
-    };
-    match &report.kind {
-        ReportKind::Cause(diagnostic) | ReportKind::Alternatives(diagnostic) => Some(diagnostic),
-        ReportKind::Frame { .. } => None,
-    }
-}
-
 /// Selects a representative only when all failures describe the same location.
 fn representative<'a>(
     reports: &'a [NotationCaseReport<'_>],
@@ -132,7 +121,11 @@ fn representative<'a>(
         if similarity.span != *span {
             return None;
         }
-        let diagnostic = diagnostic(&report.report)?;
+        // A context frame or several reports have no single diagnostic to show
+        let [report_sole] = report.report.reports.as_slice() else {
+            return None;
+        };
+        let diagnostic = report_sole.diagnostic()?;
         let key = (
             similarity.shape_mismatch,
             similarity.token_distance,
@@ -181,7 +174,7 @@ pub(super) fn summarize_variant(
     match summary {
         // Retain the full candidate tree beneath its representative
         Some((diagnostic, similarity)) => NotationReport {
-            reports: vec![Report::alternatives(diagnostic, reports)],
+            reports: vec![Report::representative(diagnostic, reports)],
             similarity: Some(similarity),
         },
         // Unsupported or differently located failures keep the original tree

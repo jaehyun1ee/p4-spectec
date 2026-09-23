@@ -3,7 +3,7 @@
 //! Expression attempts create these terminal causes and keep them beneath
 //! uncoded attempt frames until one alternative succeeds or elaboration finishes.
 
-use crate::diagnostic::{Label, Report, ReportKind};
+use crate::diagnostic::{Label, Report};
 use crate::lang::{common::source::Span, el::ast as el, il::ast as il, traits::print::Print};
 
 use super::super::expect::{ExpExpect, ExpExpectKind, StructExpect};
@@ -372,8 +372,7 @@ pub(in crate::pass::elaborate) fn annotate_expected_type(
     // Preserve each cause and avoid repeated labels from recursive calls
     let mut reports_pending: Vec<_> = reports.iter_mut().collect();
     while let Some(report) = reports_pending.pop() {
-        if let ReportKind::Cause(diagnostic) | ReportKind::Alternatives(diagnostic) =
-            &mut report.kind
+        if let Some(diagnostic) = report.diagnostic_mut()
             && !diagnostic.labels.contains(&label)
         {
             diagnostic.labels.push(label.clone());

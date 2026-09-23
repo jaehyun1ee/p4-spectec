@@ -235,7 +235,7 @@ fn finish_reports(mut reports: Vec<Report>) -> ElabError {
 fn report_span(report: &Report) -> Option<Span> {
     let span = match &report.kind {
         ReportKind::Frame { span, .. } => span,
-        ReportKind::Cause(diagnostic) | ReportKind::Alternatives(diagnostic) => diagnostic
+        ReportKind::Cause(diagnostic) | ReportKind::Representative(diagnostic) => diagnostic
             .labels
             .iter()
             .find(|label| label.style == LabelStyle::Primary)
