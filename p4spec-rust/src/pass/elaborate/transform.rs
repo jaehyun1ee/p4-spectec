@@ -1552,17 +1552,15 @@ fn elab_exp_normal_fallback(
         let theta = match Theta::from_lists(tparams, targs_il) {
             Ok(theta) => theta,
             Err(mismatch) => {
-                return fatal!(NotationReport::from(vec![
-                    *error::typ::type_argument_arity_mismatch(
-                        id,
-                        mismatch.expected,
-                        mismatch.actual,
-                        &typ_expect_il.span,
-                        ctx.tdenv
-                            .get_key_value(id)
-                            .map(|(id_declaration, _)| &id_declaration.span),
-                    )
-                ]));
+                return fatal!(error: error::typ::type_argument_arity_mismatch(
+                    id,
+                    mismatch.expected,
+                    mismatch.actual,
+                    &typ_expect_il.span,
+                    ctx.tdenv
+                        .get_key_value(id)
+                        .map(|(id_declaration, _)| &id_declaration.span),
+                ));
             }
         };
         match &def_typ_il.node {
@@ -2128,9 +2126,7 @@ fn elab_variant_exp(
             let report = not::summarize_variant(typ_expect_il, &exp.span, reports);
             if has_mismatch { mismatch!(report) } else { unavailable!(report) }
         }
-        _ => mismatch!(NotationReport::from(vec![*error::exp::variant_expression_match_repeated(
-            &exp.span
-        )])),
+        _ => mismatch!(error: error::exp::variant_expression_match_repeated(&exp.span)),
     }
 }
 

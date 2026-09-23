@@ -36,13 +36,13 @@ macro_rules! success {
 }
 pub(super) use success;
 
-/// Builds [`Backtrack::Unavailable`] from a report list.
+/// Builds [`Backtrack::Unavailable`] from a failure payload or a single report.
 macro_rules! unavailable {
     (error: $error:expr $(,)?) => {
-        $crate::pass::elaborate::backtrack::Backtrack::Unavailable(vec![*$error])
+        $crate::pass::elaborate::backtrack::Backtrack::Unavailable(vec![*$error].into())
     };
     (report: $report:expr $(,)?) => {
-        $crate::pass::elaborate::backtrack::Backtrack::Unavailable(vec![$report])
+        $crate::pass::elaborate::backtrack::Backtrack::Unavailable(vec![$report].into())
     };
     ($($reports:tt)*) => {
         $crate::pass::elaborate::backtrack::Backtrack::Unavailable($($reports)*)
@@ -50,10 +50,10 @@ macro_rules! unavailable {
 }
 pub(super) use unavailable;
 
-/// Builds [`Backtrack::Fatal`] from a report list.
+/// Builds [`Backtrack::Fatal`] from a failure payload or a single report.
 macro_rules! fatal {
     (error: $error:expr $(,)?) => {
-        $crate::pass::elaborate::backtrack::Backtrack::Fatal(vec![*$error])
+        $crate::pass::elaborate::backtrack::Backtrack::Fatal(vec![*$error].into())
     };
     ($($reports:tt)*) => {
         $crate::pass::elaborate::backtrack::Backtrack::Fatal($($reports)*)
@@ -61,13 +61,13 @@ macro_rules! fatal {
 }
 pub(super) use fatal;
 
-/// Builds [`Backtrack::Mismatch`] from a report list.
+/// Builds [`Backtrack::Mismatch`] from a failure payload or a single report.
 macro_rules! mismatch {
     (error: $error:expr $(,)?) => {
-        $crate::pass::elaborate::backtrack::Backtrack::Mismatch(vec![*$error])
+        $crate::pass::elaborate::backtrack::Backtrack::Mismatch(vec![*$error].into())
     };
     (report: $report:expr $(,)?) => {
-        $crate::pass::elaborate::backtrack::Backtrack::Mismatch(vec![$report])
+        $crate::pass::elaborate::backtrack::Backtrack::Mismatch(vec![$report].into())
     };
     ($($reports:tt)*) => {
         $crate::pass::elaborate::backtrack::Backtrack::Mismatch($($reports)*)
@@ -122,9 +122,9 @@ impl<T, F> Backtrack<T, F> {
     pub(super) fn map_failure<G>(self, map: impl FnOnce(F) -> G) -> Backtrack<T, G> {
         match self {
             success!(value) => success!(value),
-            unavailable!(reports) => unavailable!(map(reports)),
-            mismatch!(reports) => mismatch!(map(reports)),
-            fatal!(reports) => fatal!(map(reports)),
+            unavailable!(failure) => unavailable!(map(failure)),
+            mismatch!(failure) => mismatch!(map(failure)),
+            fatal!(failure) => fatal!(map(failure)),
         }
     }
 
@@ -145,6 +145,7 @@ impl<T, F> Backtrack<T, F> {
     }
 }
 
+// Context frames wrap plain report lists only
 impl<T> Backtrack<T> {
     /// Wraps a recoverable failure under operation context.
     ///
