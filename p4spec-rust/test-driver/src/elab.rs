@@ -13,7 +13,7 @@ pub fn run() -> Result<()> {
     progress.set_message("elab: full specification");
     let spec_il = p4spec_rust::elab(["spec"]).map_err(|error| Error::Invalid(error.to_string()))?;
     let actual = Print::to_string(&spec_il) + "\n";
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("expected/elab.expected");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("expected/pass/elab.expected");
     snapshot::check(expect_file![path], &actual);
     progress.finish_with_message("complete");
     eprintln!(

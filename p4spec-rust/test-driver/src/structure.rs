@@ -21,7 +21,7 @@ pub fn run() -> Result<()> {
         num_defs = spec_sl.len();
         let text_actual = Print::to_string(&spec_sl) + "\n";
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join(format!("expected/structure-{text_mode}.expected"));
+            .join(format!("expected/pass/structure-{text_mode}.expected"));
         snapshot::check(expect_file![path], &text_actual);
         progress.inc(1);
     }

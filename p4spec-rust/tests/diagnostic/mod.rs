@@ -39,7 +39,7 @@ fn cause_mut(report: &mut Report) -> &mut Diagnostic {
 #[test]
 fn parser_failures_reach_cli_with_their_codes_and_spans() {
     let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("test-driver/fixtures/diagnostic/parse");
+        .join("test-driver/expected/diagnostic/parse");
     let cases = [
         ("parse-illegal-escape.watsup", "parse/text-escape-invalid", "3:5", "^^"),
         (

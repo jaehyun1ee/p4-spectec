@@ -1,7 +1,8 @@
 //! Native diagnostic snapshot acceptance
 //!
 //! Each case executes a product API and renders its report without colors.
-//! The complete output is compared with expect-test, preserving whitespace.
+//! Each input has an adjacent `.expect` file containing its complete output.
+//! Comparisons preserve whitespace, and successful cases have empty expectations.
 
 mod cases;
 mod elab;
@@ -33,34 +34,34 @@ pub enum Suite {
 
 // = Acceptance runner
 
-/// Executes one diagnostic suite and compares its rendered output.
+/// Executes one diagnostic suite and compares each case with its expectation.
 fn run_suite(
     name_suite: &str,
     cases: &[&str],
     run_case: fn(&str) -> Result<Vec<Report>>,
 ) -> Result<()> {
     let progress = ProgressBar::new(cases.len() as u64);
-    let mut text = String::new();
+    let path_suite = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("expected/diagnostic")
+        .join(name_suite);
 
     // Render each input's diagnostics in emission order
     for name in cases {
         let reports = run_case(name)?;
-        text.push_str(&format!("=== {name} ===\n"));
+        let mut text = String::new();
         for report in reports {
             let rendered = Renderer::new(RenderConfig::default())
                 .render_to_string(&report)
                 .map_err(|error| failure(name, error))?;
             text.push_str(&rendered);
         }
-        text.push_str("---\n");
+        // Compare the complete output without trimming codespan whitespace
+        let path = path_suite.join(name).with_extension("expect");
+        expect_file![path].assert_eq(&text);
         progress.inc(1);
     }
     progress.finish_and_clear();
 
-    // Compare the complete output without trimming codespan whitespace
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("expected/diagnostic/{name_suite}.expected"));
-    expect_file![path].assert_eq(&text);
     eprintln!("diagnostics/{name_suite}: {} cases passed", cases.len());
     Ok(())
 }
@@ -68,7 +69,7 @@ fn run_suite(
 /// Executes selected diagnostic inputs and compares their rendered output.
 pub fn run(suite: Option<Suite>) -> Result<()> {
     // Keep source identities independent of the checkout location
-    std::env::set_current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/diagnostic"))?;
+    std::env::set_current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("expected/diagnostic"))?;
     eprintln!("diagnostics: OCaml reference {}", cases::REVISION);
 
     // Absence selects every active suite in stage order

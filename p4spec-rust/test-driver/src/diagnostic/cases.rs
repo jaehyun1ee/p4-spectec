@@ -1,12 +1,12 @@
 //! Source inputs for diagnostic snapshot acceptance
 //!
 //! Reference fixtures keep their pinned order; Rust elaboration regressions follow.
-//! Rendered output is compared with the matching diagnostic expected file.
+//! Each case compares its rendered output with its own `.expect` file.
 
 /// Pins the OCaml inputs represented by the diagnostic cases.
 pub const REVISION: &str = "960e2922b55288722c413732002e33ac06664e6f";
 
-/// Lists file fixtures and constructed parser inputs in snapshot order.
+/// Lists file fixtures and constructed parser inputs in execution order.
 pub const PARSE: &[&str] = &[
     "parse-hint-on-plain.watsup",
     "parse-hole-index-out-of-range.watsup",
