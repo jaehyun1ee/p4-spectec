@@ -7,6 +7,7 @@ use super::{AlgoError, cause};
 use crate::{
     diagnostic::Label,
     lang::{
+        al,
         common::{Id, source::Span},
         il::ast,
         traits::{at::At, print::Print},
@@ -60,12 +61,23 @@ pub(crate) fn table_pattern_type_invalid(
 
 const TABLE_PATTERN_OVERLAPPING: &str = "algo/table-pattern-overlapping";
 
+/// Covers row patterns, falling back to the row for zero-argument IL.
+fn table_pattern_span(row: &al::ast::TableRow) -> Span {
+    if row.node.exps_signature.is_empty() { row.at() } else { row.node.exps_signature.at() }
+}
+
 /// Relates the later overlapping pattern to the earlier row.
-pub(crate) fn table_pattern_overlapping(span: &Span, span_first: &Span) -> AlgoError {
+pub(crate) fn table_pattern_overlapping(
+    row: &al::ast::TableRow,
+    row_earlier: &al::ast::TableRow,
+) -> AlgoError {
     cause(
         TABLE_PATTERN_OVERLAPPING,
         "table row pattern overlaps an earlier row",
-        vec![Label::primary(span, ""), Label::secondary(span_first, "earlier overlapping pattern")],
+        vec![
+            Label::primary(&table_pattern_span(row), ""),
+            Label::secondary(&table_pattern_span(row_earlier), "earlier overlapping pattern"),
+        ],
         vec![],
     )
 }

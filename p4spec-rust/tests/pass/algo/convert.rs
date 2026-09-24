@@ -336,3 +336,32 @@ fn test_non_invertible_table_argument_keeps_its_diagnostic() {
     let report = algo::convert(upcast_table_patterns(spec_il)).unwrap_err();
     assert_eq!(cause(&report).code.as_deref(), Some("algo/binding-non-invertible"));
 }
+
+#[test]
+fn test_synthesized_empty_table_signatures_relate_the_overlapping_rows() {
+    let spec_el = crate::spec_fixture::parse("tbl dec $f : bool\n").unwrap();
+    let mut spec_il = elaborate::convert(spec_el).unwrap();
+    let func_il = spec_il
+        .iter_mut()
+        .find_map(|def| match &mut def.node {
+            ast::DefKind::MetaFunc(ast::MetaFuncDef::Table(func)) => Some(func),
+            _ => None,
+        })
+        .unwrap();
+    // Direct IL may contain zero-argument rows without a source pattern
+    func_il.rows = (3..6)
+        .map(|line| {
+            phrase!(
+                node: ast::TableRowKind { args: vec![], exp: bool_exp(true, line) },
+                span: span(line),
+            )
+        })
+        .collect();
+    let report = algo::convert(spec_il).unwrap_err();
+    let diagnostic = cause(&report);
+    assert_eq!(diagnostic.code.as_deref(), Some("algo/table-pattern-overlapping"));
+    assert_eq!(diagnostic.labels[0].style, LabelStyle::Primary);
+    assert_eq!(diagnostic.labels[0].span, span(4));
+    assert_eq!(diagnostic.labels[1].style, LabelStyle::Secondary);
+    assert_eq!(diagnostic.labels[1].span, span(3));
+}

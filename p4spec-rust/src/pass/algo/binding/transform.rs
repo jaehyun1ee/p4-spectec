@@ -768,15 +768,6 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<Patter
     }
 }
 
-/// Covers the argument patterns of a row, without its body.
-fn table_pattern_span(row: &al::ast::TableRow) -> Span {
-    if row.node.exps_signature.is_empty() {
-        row.span.clone()
-    } else {
-        Span::over_iter(row.node.exps_signature.iter().map(|exp| exp.span.clone()))
-    }
-}
-
 /// Checks that rows are exclusive and, without a wildcard closer, exhaustive.
 fn check_valid_table_rows(
     ctx: &Context,
@@ -809,11 +800,11 @@ fn check_valid_table_rows(
         let pattern_sets = pattern_sets.into_iter().collect();
         pattern_sets_by_row.push(pattern_sets);
     }
-    // Relate the selected pair to its original row signatures
+    // Pass the selected rows to the overlap diagnostic
     if let Some((idx, idx_other)) = pattern::find_overlap(span, &pattern_sets_by_row)? {
         return Err(error::table::table_pattern_overlapping(
-            &table_pattern_span(&rows_pattern_al[idx_other]),
-            &table_pattern_span(&rows_pattern_al[idx]),
+            &rows_pattern_al[idx_other],
+            &rows_pattern_al[idx],
         ));
     }
     // Without a closer, relate missing products to their case declarations
