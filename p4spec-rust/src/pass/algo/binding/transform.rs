@@ -184,15 +184,15 @@ fn analyze_exps_as_bound(ctx: &Context, exps: &[ast::Exp]) -> Result<(), AlgoErr
 
 // == Argument binding analysis
 
-/// A premise introduced by pattern rewriting and its source when it checks.
+/// A premise introduced by multibind or partialbind rewriting and its source.
 struct GeneratedPrem {
     prem_al: al::ast::Prem,
     origin_opt: Option<GeneratedCondition>,
 }
 
 enum GeneratedCondition {
-    Repeated { id_bound: ast::Id, id_repeated: ast::Id },
-    Pattern(partial::ConditionOrigin),
+    Multibind { id_bound: ast::Id, id_repeated: ast::Id },
+    Partialbind(partial::PartialbindConditionOrigin),
 }
 
 /// Analyzes binding arguments like `analyze_exps_as_bind`, with no iteration.
@@ -207,8 +207,8 @@ fn analyze_args_as_bind(
     let mut renv_multiple = multiple::RenameEnv::from_bindings(&benv);
     let args_al = multiple::rename_args(ctx, &mut renv_multiple, args_il);
     update_venv_multiple(&mut venv, &renv_multiple);
-    let prems_multiple_al =
-        multiple::generate_side_conditions_with_origins(&ICtx::new(), &renv_multiple);
+    let prems_multibind_al =
+        multiple::generate_multibind_side_conditions_with_origins(&ICtx::new(), &renv_multiple);
 
     // Desugar partially bound patterns
     let mut renv_partial = partial::RenameEnv::new();
@@ -216,19 +216,20 @@ fn analyze_args_as_bind(
     let args_al =
         partial::rename_args(ctx, &venv.domain(), &mut renv_partial, &mut iter_ctx_arg, args_al)?;
     update_venv_partial(&mut venv, &renv_partial);
-    let mut prems_al = partial::gen_prems_with_origins(ctx, &ICtx::new(), &renv_partial)?
-        .into_iter()
-        .map(|(prem_al, origin_opt)| GeneratedPrem {
-            prem_al,
-            origin_opt: origin_opt.map(GeneratedCondition::Pattern),
-        })
-        .collect::<Vec<_>>();
+    let mut prems_al =
+        partial::gen_partialbind_prems_with_origins(ctx, &ICtx::new(), &renv_partial)?
+            .into_iter()
+            .map(|(prem_al, origin_opt)| GeneratedPrem {
+                prem_al,
+                origin_opt: origin_opt.map(GeneratedCondition::Partialbind),
+            })
+            .collect::<Vec<_>>();
     prems_al.extend(
-        prems_multiple_al
+        prems_multibind_al
             .into_iter()
             .map(|(prem_al, id_bound, id_repeated)| GeneratedPrem {
                 prem_al,
-                origin_opt: Some(GeneratedCondition::Repeated { id_bound, id_repeated }),
+                origin_opt: Some(GeneratedCondition::Multibind { id_bound, id_repeated }),
             }),
     );
     Ok((venv, args_al, prems_al))
@@ -302,24 +303,20 @@ fn check_pure_prems_in_else(
     }
 }
 
-/// Reports a generated check at its source pattern before scanning AL premises.
+/// Reports multibind and partialbind checks before scanning AL premises.
 fn check_generated_prems_in_else(
     prems_generated: &[GeneratedPrem],
     otherwise: &ast::Otherwise,
 ) -> Result<(), AlgoError> {
     for prem_generated in prems_generated {
         let error_opt = match &prem_generated.origin_opt {
-            // Repeated binders introduce an equality
-            Some(GeneratedCondition::Repeated { id_bound, id_repeated }) => {
-                Some(error::otherwise::otherwise_repeated_pattern_invalid(
-                    id_bound,
-                    id_repeated,
-                    otherwise,
-                ))
-            }
-            // Partial patterns introduce a match or value check
-            Some(GeneratedCondition::Pattern(origin)) => {
-                Some(error::otherwise::otherwise_pattern_condition_invalid(origin, otherwise))
+            // Multibind introduces an equality for repeated binders
+            Some(GeneratedCondition::Multibind { id_bound, id_repeated }) => Some(
+                error::otherwise::otherwise_multibind_invalid(id_bound, id_repeated, otherwise),
+            ),
+            // Partialbind introduces a match or value check
+            Some(GeneratedCondition::Partialbind(origin)) => {
+                Some(error::otherwise::otherwise_partialbind_invalid(origin, otherwise))
             }
             // Binding premises do not introduce conditions
             None => None,

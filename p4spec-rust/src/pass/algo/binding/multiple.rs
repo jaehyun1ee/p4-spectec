@@ -269,14 +269,14 @@ fn generate_side_condition(
 
 /// Builds one side condition per repeated identifier.
 pub fn generate_side_conditions(iter_ctx: &ICtx, renv: &RenameEnv) -> Vec<al::ast::Prem> {
-    generate_side_conditions_with_origins(iter_ctx, renv)
+    generate_multibind_side_conditions_with_origins(iter_ctx, renv)
         .into_iter()
         .map(|(prem_al, _, _)| prem_al)
         .collect()
 }
 
-/// Builds repeated-binding checks with their first and repeated source ids.
-pub fn generate_side_conditions_with_origins(
+/// Builds multibind checks with their first and repeated source ids.
+pub fn generate_multibind_side_conditions_with_origins(
     iter_ctx: &ICtx,
     renv: &RenameEnv,
 ) -> Vec<(al::ast::Prem, Id, Id)> {

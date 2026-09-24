@@ -114,15 +114,15 @@ pub struct RenameEnv {
     pub(crate) renames: Vec<Rename>,
 }
 
-/// Source pattern and reason for a condition introduced by partial rewriting.
+/// Source pattern and reason for a condition introduced by partialbind rewriting.
 #[derive(Clone)]
-pub enum ConditionOrigin {
+pub enum PartialbindConditionOrigin {
     Equality(Span),
     Match(Span, &'static str),
     Subtype(Span),
 }
 
-/// Identifies a match test among the generated checks of one rename.
+/// Identifies a partialbind match test among the checks of one rename.
 fn is_match_check(prem: &al::ast::Prem) -> bool {
     match &prem.node {
         al::ast::PremKind::If(if_prem) => matches!(&if_prem.exp.node, ast::ExpKind::Match(_, _)),
@@ -389,16 +389,16 @@ pub fn gen_prems(
     iter_ctx_prem: &ICtx,
     renv: &RenameEnv,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
-    let prems_al = gen_prems_with_origins(ctx, iter_ctx_prem, renv)?;
+    let prems_al = gen_partialbind_prems_with_origins(ctx, iter_ctx_prem, renv)?;
     Ok(prems_al.into_iter().map(|(prem_al, _)| prem_al).collect())
 }
 
-/// Builds partial-pattern premises with the source of each generated check.
-pub fn gen_prems_with_origins(
+/// Builds partialbind premises with the source of each generated check.
+pub fn gen_partialbind_prems_with_origins(
     ctx: &Context,
     iter_ctx_prem: &ICtx,
     renv: &RenameEnv,
-) -> Result<Vec<(al::ast::Prem, Option<ConditionOrigin>)>, AlgoError> {
+) -> Result<Vec<(al::ast::Prem, Option<PartialbindConditionOrigin>)>, AlgoError> {
     let mut prems = Vec::new();
     for rename in &renv.renames {
         let prems_rename = gen_prem(ctx, rename, iter_ctx_prem)?;
@@ -412,10 +412,12 @@ pub fn gen_prems_with_origins(
                     ast::ExpKind::List(_) => "list pattern",
                     _ => "pattern",
                 };
-                ConditionOrigin::Match(exp_from.span.clone(), construct)
+                PartialbindConditionOrigin::Match(exp_from.span.clone(), construct)
             }
             // Other bound sub-patterns compare their values
-            Source::Bound { exp_from } => ConditionOrigin::Equality(exp_from.span.clone()),
+            Source::Bound { exp_from } => {
+                PartialbindConditionOrigin::Equality(exp_from.span.clone())
+            }
             // An injected pattern checks its shape before binding
             Source::BindMatch { pattern, exp_from } => {
                 let construct = match pattern {
@@ -423,10 +425,12 @@ pub fn gen_prems_with_origins(
                     ast::Pattern::List(_) => "list pattern",
                     ast::Pattern::Opt(_) => "option pattern",
                 };
-                ConditionOrigin::Match(exp_from.span.clone(), construct)
+                PartialbindConditionOrigin::Match(exp_from.span.clone(), construct)
             }
             // An injected subtype checks the downcast at runtime
-            Source::BindSub { exp_from, .. } => ConditionOrigin::Subtype(exp_from.span.clone()),
+            Source::BindSub { exp_from, .. } => {
+                PartialbindConditionOrigin::Subtype(exp_from.span.clone())
+            }
         };
         for (idx, prem_al) in prems_rename.into_iter().enumerate() {
             prems.push((prem_al, (idx == 0).then(|| origin.clone())));
