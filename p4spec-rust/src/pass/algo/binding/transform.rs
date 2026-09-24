@@ -228,8 +228,22 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
 
 // - Helpers
 
+/// Rejects the first partial operation in an otherwise body.
+fn check_pure_prems_in_else(
+    prems: &[al::ast::Prem],
+    otherwise: &ast::Otherwise,
+) -> Result<(), AlgoError> {
+    match prems
+        .iter()
+        .find_map(|prem| check_pure_prem_in_else(prem, otherwise))
+    {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
 /// Locates a forbidden operation inside a possibly iterated premise.
-fn otherwise_failure(prem: &al::ast::Prem, otherwise: &ast::Otherwise) -> Option<AlgoError> {
+fn check_pure_prem_in_else(prem: &al::ast::Prem, otherwise: &ast::Otherwise) -> Option<AlgoError> {
     match &prem.node {
         al::ast::PremKind::Rule(_)
         | al::ast::PremKind::IfHold(_)
@@ -249,21 +263,7 @@ fn otherwise_failure(prem: &al::ast::Prem, otherwise: &ast::Otherwise) -> Option
             .nested_call()
             .first()
             .map(|exp| error::otherwise::otherwise_function_call_invalid(&exp.at(), otherwise)),
-        al::ast::PremKind::Iter(prem) => otherwise_failure(&prem.prem, otherwise),
-    }
-}
-
-/// Rejects the first partial operation in an otherwise body.
-fn check_prems_in_else(
-    prems: &[al::ast::Prem],
-    otherwise: &ast::Otherwise,
-) -> Result<(), AlgoError> {
-    match prems
-        .iter()
-        .find_map(|prem| otherwise_failure(prem, otherwise))
-    {
-        Some(error) => Err(error),
-        None => Ok(()),
+        al::ast::PremKind::Iter(prem) => check_pure_prem_in_else(&prem.prem, otherwise),
     }
 }
 
@@ -591,7 +591,7 @@ fn lower_rule_path(
     let mut prems_all_al = prems_unified_al;
     prems_all_al.extend(prems_al);
     if let Some(otherwise) = otherwise_opt {
-        check_prems_in_else(&prems_all_al, otherwise)?;
+        check_pure_prems_in_else(&prems_all_al, otherwise)?;
     }
     analyze_exps_as_bound(ctx, &exps_output_il)?;
     Ok(al::ast::RulePath { id, prems: prems_all_al, exps_output: exps_output_il })
@@ -709,7 +709,7 @@ fn lower_clause(
         // Synthesized IL may omit the keyword; retain its enclosing clause location
         let otherwise =
             otherwise_opt.unwrap_or_else(|| phrase!(node: ast::OtherwiseKind, span: span.clone()));
-        check_prems_in_else(&prems_all_al, &otherwise)?;
+        check_pure_prems_in_else(&prems_all_al, &otherwise)?;
     }
     let clause_al = phrase! {
         node: al::ast::ClauseKind {
