@@ -48,6 +48,35 @@ fn cause(report: &Report) -> &p4spec_rust::diagnostic::Diagnostic {
     diagnostic
 }
 
+#[test]
+fn test_otherwise_diagnostics_relate_the_marker_in_functions_and_relations() {
+    for (source, line_else, line_condition) in [
+        ("dec $f : nat\ndef $f = 0\n  -- otherwise\n  -- if true\n", 3, 4),
+        (
+            "relation R: nat |- nat\n  hint(input %0)\nrule R/else: 0 |- 0\n  -- otherwise\n  -- if true\n",
+            4,
+            5,
+        ),
+    ] {
+        let spec_el = crate::spec_fixture::parse(source).unwrap();
+        let spec_il = elaborate::convert(spec_el).unwrap();
+        let report = algo::convert(spec_il).unwrap_err();
+        let diagnostic = cause(&report);
+        assert_eq!(diagnostic.code.as_deref(), Some("algo/otherwise-condition-invalid"));
+        assert_eq!(diagnostic.labels[0].style, LabelStyle::Primary);
+        assert_eq!(diagnostic.labels[0].span.left.line, line_condition);
+        let label_else = diagnostic
+            .labels
+            .iter()
+            .find(|label| label.style == LabelStyle::Secondary)
+            .expect("otherwise marker must be related to the forbidden operation");
+        assert_eq!(label_else.span.left.line, line_else);
+        assert_eq!(label_else.span.left.column, 5);
+        assert_eq!(label_else.span.right.line, line_else);
+        assert_eq!(label_else.span.right.column, 14);
+    }
+}
+
 fn span(line: usize) -> Span {
     let pos = Position::new("overlap.watsup", line, 0);
     Span::new(pos.clone(), pos)

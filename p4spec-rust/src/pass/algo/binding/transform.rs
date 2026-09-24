@@ -349,27 +349,28 @@ fn nested_call_path(path: &ast::Path) -> Option<&Span> {
 }
 
 /// Locates a forbidden operation inside a possibly iterated premise.
-fn otherwise_failure(prem: &al::ast::Prem) -> Option<AlgoError> {
+fn otherwise_failure(prem: &al::ast::Prem, span_else: &Span) -> Option<AlgoError> {
     match &prem.node {
         al::ast::PremKind::Rule(_)
         | al::ast::PremKind::IfHold(_)
         | al::ast::PremKind::IfNotHold(_) => {
-            Some(error::otherwise_relation_call_invalid(&prem.span))
+            Some(error::otherwise_relation_call_invalid(&prem.span, span_else))
         }
-        al::ast::PremKind::If(_) => Some(error::otherwise_condition_invalid(&prem.span)),
-        al::ast::PremKind::Let(prem) => {
-            nested_call_exp(&prem.exp_r).map(error::otherwise_function_call_invalid)
-        }
-        al::ast::PremKind::Debug(prem) => {
-            nested_call_exp(&prem.exp).map(error::otherwise_function_call_invalid)
-        }
-        al::ast::PremKind::Iter(prem) => otherwise_failure(&prem.prem),
+        al::ast::PremKind::If(_) => Some(error::otherwise_condition_invalid(&prem.span, span_else)),
+        al::ast::PremKind::Let(prem) => nested_call_exp(&prem.exp_r)
+            .map(|span| error::otherwise_function_call_invalid(span, span_else)),
+        al::ast::PremKind::Debug(prem) => nested_call_exp(&prem.exp)
+            .map(|span| error::otherwise_function_call_invalid(span, span_else)),
+        al::ast::PremKind::Iter(prem) => otherwise_failure(&prem.prem, span_else),
     }
 }
 
 /// Rejects the first partial operation in an otherwise body.
-fn check_prems_in_else(prems: &[al::ast::Prem]) -> Result<(), AlgoError> {
-    match prems.iter().find_map(otherwise_failure) {
+fn check_prems_in_else(prems: &[al::ast::Prem], span_else: &Span) -> Result<(), AlgoError> {
+    match prems
+        .iter()
+        .find_map(|prem| otherwise_failure(prem, span_else))
+    {
         Some(error) => Err(error),
         None => Ok(()),
     }
@@ -693,13 +694,13 @@ fn lower_rule_path(
     prems_unified_al: Vec<al::ast::Prem>,
     prems_il: Vec<ast::Prem>,
     exps_output_il: Vec<ast::Exp>,
-    is_else: bool,
+    span_else: Option<&Span>,
 ) -> Result<al::ast::RulePath, AlgoError> {
     let prems_al = lower_prems(ctx, prems_il)?;
     let mut prems_all_al = prems_unified_al;
     prems_all_al.extend(prems_al);
-    if is_else {
-        check_prems_in_else(&prems_all_al)?;
+    if let Some(span_else) = span_else {
+        check_prems_in_else(&prems_all_al, span_else)?;
     }
     analyze_exps_as_bound(ctx, &exps_output_il)?;
     Ok(al::ast::RulePath { id, prems: prems_all_al, exps_output: exps_output_il })
@@ -710,7 +711,7 @@ fn lower_rule_group(
     ctx: &mut Context,
     inputs: &InputHint,
     rule_group_il: ast::RuleGroup,
-    is_else: bool,
+    span_else: Option<&Span>,
 ) -> Result<al::ast::RuleGroup, AlgoError> {
     let mut ctx = ctx.clone();
     let span = rule_group_il.span;
@@ -751,7 +752,7 @@ fn lower_rule_group(
             prems_unified_al,
             prems_il,
             exps_output_il,
-            is_else,
+            span_else,
         )?);
     }
     let rule_group_al = al::ast::RuleGroupKind {
@@ -770,13 +771,13 @@ fn lower_else_group(
     else_group_il: ast::ElseGroup,
 ) -> Result<al::ast::ElseGroup, AlgoError> {
     let span = else_group_il.span;
-    let ast::ElseGroupKind { id: id_group, rule: rule_il } = else_group_il.node;
+    let ast::ElseGroupKind { id: id_group, rule: rule_il, span_else } = else_group_il.node;
     // Reuse the rule group analysis on the single rule
     let rule_group_il = phrase! {
         node: ast::RuleGroupKind { id: id_group, rules: vec![rule_il] },
         span: span.clone(),
     };
-    let rule_group_al = lower_rule_group(ctx, inputs, rule_group_il, true)?;
+    let rule_group_al = lower_rule_group(ctx, inputs, rule_group_il, Some(&span_else))?;
     let rule_path_al = rule_group_al
         .node
         .rule_paths
@@ -803,7 +804,7 @@ fn lower_clause(
     let mut ctx = ctx.clone();
     ctx.add_frees(&clause_il.free_ids());
     let span = clause_il.span;
-    let ast::ClauseKind { args: args_il, exp: exp_il, prems: prems_il } = clause_il.node;
+    let ast::ClauseKind { args: args_il, exp: exp_il, prems: prems_il, span_else } = clause_il.node;
     // Arguments bind first, then premises in order, then the body must be bound
     let (venv, args_al, prem_sideconditions_al) = analyze_args_as_bind(&mut ctx, &args_il)?;
     ctx.add_bounds(&venv);
@@ -813,7 +814,7 @@ fn lower_clause(
     prems_all_al.extend(prems_al);
     // An otherwise clause may not contain partial premises
     if is_else {
-        check_prems_in_else(&prems_all_al)?;
+        check_prems_in_else(&prems_all_al, span_else.as_ref().unwrap_or(&span))?;
     }
     let clause_al = phrase! {
         node: al::ast::ClauseKind {
@@ -1070,7 +1071,7 @@ fn lower_defined_rel(
     for rule_group_il in rule_groups {
         // The group keeps its source span
         let span = rule_group_il.span.clone();
-        let mut rule_group_al = lower_rule_group(ctx, &input_hint, rule_group_il, false)?;
+        let mut rule_group_al = lower_rule_group(ctx, &input_hint, rule_group_il, None)?;
         rule_group_al.span = span;
         rule_groups_al.push(rule_group_al);
     }

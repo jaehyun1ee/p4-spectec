@@ -2520,12 +2520,12 @@ fn elab_prem(ctx: &mut Context, prem: &el::Prem) -> Backtrack<PremInternal> {
     success!(PremInternal::Some(prem_il))
 }
 
-/// Elaborates premises in order and reports whether one was `otherwise`.
+/// Elaborates premises in order and retains the otherwise marker location.
 fn elab_prems(
     ctx: &mut Context,
     prems: &[el::Prem],
     _span: &Span,
-) -> Backtrack<(Vec<il::Prem>, bool)> {
+) -> Backtrack<(Vec<il::Prem>, Option<Span>)> {
     let mut prems_il = Vec::new();
     let mut span_else_previous = None;
     let mut span_else_repeated = None;
@@ -2549,7 +2549,7 @@ fn elab_prems(
     {
         return fatal!(error: error::prem::premise_otherwise_repeated(span_else_repeated, span_else_previous));
     }
-    success!((prems_il, span_else_previous.is_some()))
+    success!((prems_il, span_else_previous.cloned()))
 }
 
 // - Variable premise elaboration
@@ -2679,13 +2679,13 @@ fn elab_debug_prem(ctx: &mut Context, prem: &el::DebugPrem) -> Backtrack<il::Pre
 
 // - Rule elaboration
 
-/// Elaborates one rule and reports whether it is the otherwise rule.
+/// Elaborates one rule and retains its otherwise marker location.
 fn elab_rule(
     ctx: &mut Context,
     rule: &el::Rule,
     id_rel: &Id,
     not_typ_il: &il::NotTyp,
-) -> Result<(il::Rule, bool), ElabError> {
+) -> Result<(il::Rule, Option<Span>), ElabError> {
     let el::RuleKind { id_rel: id_rel_rule, id_rule, exp, prems } = &rule.node;
     if id_rel_rule.node != id_rel.node {
         return Err(error::prem::relation_rule_group_name_mismatch(id_rel_rule, id_rel));
@@ -2697,10 +2697,10 @@ fn elab_rule(
     ctx_local.add_frees(&frees);
     let not_exp_il =
         finish(elab_not_exp(&mut ctx_local, &NotExpect::rel(id_rel, not_typ_il), exp))?;
-    let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, prems, &id_rule.span))?;
+    let (prems_il, span_else) = finish(elab_prems(&mut ctx_local, prems, &id_rule.span))?;
     let rule_kind_il = il::RuleKind { id: id_rule.clone(), not_exp: not_exp_il, prems: prems_il };
     let rule_il = phrase!(node: rule_kind_il, span: rule.span.clone());
-    Ok((rule_il, is_else))
+    Ok((rule_il, span_else))
 }
 
 /// Elaborates a rule group into ordinary rules or a single otherwise rule.
@@ -2716,9 +2716,9 @@ fn elab_rule_group(
     let mut rules_else_il = Vec::new();
     // Sort the rules into ordinary and otherwise rules
     for rule in &def.rules {
-        let (rule_il, is_else) = elab_rule(ctx, rule, &def.relid, &not_typ_il)?;
-        if is_else {
-            rules_else_il.push(rule_il);
+        let (rule_il, span_else) = elab_rule(ctx, rule, &def.relid, &not_typ_il)?;
+        if let Some(span_else) = span_else {
+            rules_else_il.push((rule_il, span_else));
         } else {
             rules_il.push(rule_il);
         }
@@ -2731,17 +2731,18 @@ fn elab_rule_group(
             Ok((Some(rule_group_il), None))
         }
         1 if def.rules.len() == 1 => {
+            let (rule_il, span_else) = rules_else_il.remove(0);
             let else_group_kind_il =
-                il::ElseGroupKind { id: def.groupid.clone(), rule: rules_else_il.remove(0) };
+                il::ElseGroupKind { id: def.groupid.clone(), rule: rule_il, span_else };
             let else_group_il = phrase!(node: else_group_kind_il, span: span.clone());
             Ok((None, Some(else_group_il)))
         }
         _ if rules_else_il.len() > 1 => Err(error::prem::relation_rule_otherwise_repeated(
-            &rules_else_il[1].span,
-            &rules_else_il[0].span,
+            &rules_else_il[1].0.span,
+            &rules_else_il[0].0.span,
         )),
         _ => {
-            let rule_else_il = &rules_else_il[0];
+            let rule_else_il = &rules_else_il[0].0;
             let rule_other_il = &rules_il[0];
             if rule_else_il.span.left < rule_other_il.span.left {
                 Err(error::prem::relation_rule_otherwise_invalid(
@@ -2835,10 +2836,11 @@ fn elab_clause(
         &def.id,
         &span_declaration,
     ))?;
-    let (prems_il, is_else) = finish(elab_prems(&mut ctx_local, &def.prems, span))?;
+    let (prems_il, span_else) = finish(elab_prems(&mut ctx_local, &def.prems, span))?;
     let expect = ExpExpect::func_return(&def.id, &typ_ret_il);
     let exp_il = finish(elab_exp(&mut ctx_local, &expect, &def.exp))?;
-    let clause_kind_il = il::ClauseKind { args: args_il, exp: exp_il, prems: prems_il };
+    let is_else = span_else.is_some();
+    let clause_kind_il = il::ClauseKind { args: args_il, exp: exp_il, prems: prems_il, span_else };
     let clause_il = phrase!(node: clause_kind_il, span: span.clone());
     Ok((clause_il, is_else))
 }

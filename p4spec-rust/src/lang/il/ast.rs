@@ -12,7 +12,7 @@ use crate::lang::{
     common::{
         self,
         notation::{atom, mixfix::Mixfix, mixop},
-        source::{NotePhrase, Phrase},
+        source::{NotePhrase, Phrase, Span},
     },
     data, el,
     hints::input::InputHint,
@@ -430,6 +430,8 @@ pub type ElseGroup = Phrase<ElseGroupKind>;
 pub struct ElseGroupKind {
     pub id: Id,
     pub rule: Rule,
+    /// Source of the otherwise marker removed during elaboration.
+    pub span_else: Span,
 }
 
 // Clauses
@@ -443,6 +445,8 @@ pub struct ClauseKind {
     pub args: Vec<Arg>,
     pub exp: Exp,
     pub prems: Vec<Prem>,
+    /// Source of the otherwise marker, absent for ordinary clauses.
+    pub span_else: Option<Span>,
 }
 
 /// The otherwise clause of a function, tried when no clause matches.
