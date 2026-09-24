@@ -1,17 +1,18 @@
-//! Detection of calls contained in language syntax
+//! Calls contained in language syntax
 //!
-//! `HasCall` recursively reports whether syntax contains an expression call.
+//! `HasCall` collects located call expressions in preorder.
+//! A call precedes calls in its arguments; siblings retain their syntax order.
 
-use crate::lang::common::source::NotePhrase;
-
-/// Reports whether syntax contains an expression call.
+/// Collects call expressions contained in syntax.
 pub trait HasCall {
-    /// Whether `self` contains a call expression.
-    fn has_call(&self) -> bool;
-}
+    /// The located expression type of the language.
+    type Exp;
 
-impl<T: HasCall, N, S> HasCall for NotePhrase<T, N, S> {
+    /// Returns calls in preorder, including the receiver when it is a call.
+    fn nested_call(&self) -> Vec<&Self::Exp>;
+
+    /// Reports whether the syntax contains a call expression.
     fn has_call(&self) -> bool {
-        self.node.has_call()
+        !self.nested_call().is_empty()
     }
 }

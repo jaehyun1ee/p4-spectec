@@ -399,6 +399,15 @@ pub struct PremIter<V = Var> {
     pub vars_bind: Vec<V>,
 }
 
+// Otherwise markers
+
+/// An otherwise keyword with its source annotation.
+pub type Otherwise = Phrase<OtherwiseKind>;
+
+/// The keyword that marks a fallback rule or clause.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OtherwiseKind;
+
 // Rules
 
 /// A rule with its span.
@@ -430,6 +439,8 @@ pub type ElseGroup = Phrase<ElseGroupKind>;
 pub struct ElseGroupKind {
     pub id: Id,
     pub rule: Rule,
+    /// The otherwise keyword preserved during elaboration.
+    pub otherwise: Otherwise,
 }
 
 // Clauses
@@ -443,6 +454,8 @@ pub struct ClauseKind {
     pub args: Vec<Arg>,
     pub exp: Exp,
     pub prems: Vec<Prem>,
+    /// The source keyword, absent in ordinary or synthesized clauses.
+    pub otherwise_opt: Option<Otherwise>,
 }
 
 /// The otherwise clause of a function, tried when no clause matches.

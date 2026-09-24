@@ -4,6 +4,7 @@
 //! Each input has an adjacent `.expect` file containing its complete output.
 //! Comparisons preserve whitespace, and successful cases have empty expectations.
 
+mod algo;
 mod cases;
 mod elab;
 mod parse;
@@ -30,6 +31,7 @@ fn failure(name: &str, message: impl std::fmt::Display) -> Error {
 pub enum Suite {
     Parse,
     Elab,
+    Algo,
 }
 
 // = Acceptance runner
@@ -76,9 +78,11 @@ pub fn run(suite: Option<Suite>) -> Result<()> {
     match suite {
         Some(Suite::Parse) => run_parse(),
         Some(Suite::Elab) => run_suite("elab", cases::ELAB, elab::run),
+        Some(Suite::Algo) => run_suite("algo", cases::ALGO, algo::run),
         None => {
             run_parse()?;
-            run_suite("elab", cases::ELAB, elab::run)
+            run_suite("elab", cases::ELAB, elab::run)?;
+            run_suite("algo", cases::ALGO, algo::run)
         }
     }
 }

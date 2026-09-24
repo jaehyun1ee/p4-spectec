@@ -127,7 +127,7 @@ fn test_prose_command_reports_pipeline_errors_on_stderr() {
             "elaboration/operator_not_defined.watsup",
             "operator '+' is not defined for 'bool' and 'bool'",
         ),
-        ("algorithmic/impure_else_premises.watsup", "otherwise branch contains an impure premise"),
+        ("algorithmic/impure_else_premises.watsup", "error[algo/otherwise-condition-invalid]"),
     ] {
         let output = binary().arg("prose").arg(fixture(path)).output().unwrap();
         assert_eq!(output.status.code(), Some(1));
@@ -145,7 +145,7 @@ fn test_struct_command_reports_pipeline_errors_on_stderr() {
             "elaboration/operator_not_defined.watsup",
             "operator '+' is not defined for 'bool' and 'bool'",
         ),
-        ("algorithmic/impure_else_premises.watsup", "otherwise branch contains an impure premise"),
+        ("algorithmic/impure_else_premises.watsup", "error[algo/otherwise-condition-invalid]"),
     ] {
         let output = binary().arg("struct").arg(fixture(path)).output().unwrap();
         assert_eq!(output.status.code(), Some(1));
@@ -168,7 +168,7 @@ fn test_algo_command_reports_conversion_errors_on_stderr() {
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
-            .contains("otherwise branch contains an impure premise")
+            .contains("error[algo/otherwise-condition-invalid]")
     );
 }
 
@@ -831,7 +831,7 @@ fn test_transformation_commands_keep_warnings_before_algorithmic_failure() {
             .find("warning[elab/function-clause-missing]")
             .expect("render the elaboration warning");
         let pos_error = text
-            .find("otherwise branch contains an impure premise")
+            .find("error[algo/otherwise-condition-invalid]")
             .expect("render the algorithmic failure");
         assert!(pos_warning < pos_error, "{text}");
     }

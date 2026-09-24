@@ -320,9 +320,11 @@ fn main() -> ExitCode {
     match run(Cli::parse()) {
         // Successful commands have already written their output
         Ok(()) => ExitCode::SUCCESS,
-        // Preserve source diagnostics from both parsing and elaboration
+        // Preserve source diagnostics across the completed transformation stages
         Err(CliError::Spec(
-            p4spec_rust::Error::Frontend(report) | p4spec_rust::Error::Elab(report),
+            p4spec_rust::Error::Frontend(report)
+            | p4spec_rust::Error::Elab(report)
+            | p4spec_rust::Error::Algo(report),
         )) => {
             render_report(&report);
             ExitCode::FAILURE

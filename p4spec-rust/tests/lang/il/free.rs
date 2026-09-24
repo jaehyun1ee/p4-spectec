@@ -84,6 +84,7 @@ fn rule(head: &str, prems: Vec<ast::Prem>) -> ast::Rule {
 }
 fn clause(arg_name: &str, body: &str, prem_name: &str) -> ast::Clause {
     p4spec_rust::phrase! { node: ast::ClauseKind {
+        otherwise_opt: None,
         args: vec![arg(ast::ArgKind::Exp(Box::new(id_exp(arg_name))))],
         exp: id_exp(body),
         prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem {
@@ -394,7 +395,7 @@ fn test_free_aggregates_and_definition_omissions_follow_the_oracle() {
     assert_eq!(group.free_ids(), names(&["head", "premise"]));
     assert_eq!(std::slice::from_ref(&group).free_ids(), names(&["head", "premise"]));
     let else_group = p4spec_rust::phrase! {
-        node: ast::ElseGroupKind { id: id("else"), rule: rule.clone() },
+        node: ast::ElseGroupKind { id: id("else"), rule: rule.clone(), otherwise: p4spec_rust::phrase!(node: ast::OtherwiseKind, span: span()) },
         span: span(),
     };
     assert_eq!(else_group.free_ids(), names(&["head", "premise"]));

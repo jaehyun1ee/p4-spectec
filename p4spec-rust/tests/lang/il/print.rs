@@ -35,10 +35,11 @@ fn test_printer_renders_nested_premises_and_definition_spec_goldens() {
         span: Span::default(),
     };
     let else_group = p4spec_rust::phrase! {
-        node: ast::ElseGroupKind { id: id("fallback"), rule: rule.clone() },
+        node: ast::ElseGroupKind { id: id("fallback"), rule: rule.clone(), otherwise: p4spec_rust::phrase!(node: ast::OtherwiseKind, span: Span::default()) },
         span: Span::default(),
     };
     let clause = p4spec_rust::phrase! { node: ast::ClauseKind {
+        otherwise_opt: None,
         args: vec![arg(ast::ArgKind::Exp(Box::new(id_exp("argument"))))],
         exp: id_exp("result"),
         prems: vec![prem(ast::PremKind::Debug(ast::DebugPrem {

@@ -30,7 +30,7 @@ pub enum Error {
     Elab(ElabError),
     /// Converting IL into AL failed.
     #[error(transparent)]
-    Algo(#[from] AlgoError),
+    Algo(AlgoError),
     /// Structuring AL into SL failed.
     #[error(transparent)]
     Structure(#[from] StructureError),

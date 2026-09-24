@@ -69,8 +69,11 @@ fn pipeline_errors_preserve_the_failing_stage_and_location() {
 
     let path = fixture("algorithmic/impure_else_premises.watsup");
     let error = p4spec_rust::prosify([&path]).unwrap_err();
-    assert!(matches!(error, Error::Algo(_)));
-    assert!(error.to_string().contains(path.to_str().unwrap()));
+    let Error::Algo(report) = error else { panic!("expected algorithmic failure") };
+    let ReportKind::Cause(diagnostic) = &report.kind else { panic!("expected diagnostic cause") };
+    assert_eq!(diagnostic.code.as_deref(), Some("algo/otherwise-condition-invalid"));
+    assert_eq!(diagnostic.labels[0].span.left.file.as_ref(), path.to_str().unwrap());
+    assert_eq!(diagnostic.labels[0].span.left.line, 8);
 }
 
 #[test]

@@ -14,7 +14,7 @@ mod sidecondition;
 
 mod binding;
 
-pub use error::*;
+pub use error::AlgoError;
 
 use crate::lang::{al, il};
 

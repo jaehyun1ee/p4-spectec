@@ -11,7 +11,7 @@ use crate::lang::{
     il::ast,
 };
 
-use super::super::{AlgoError, AlgoErrorKind};
+use super::super::{AlgoError, error};
 
 // == Pattern sets
 
@@ -22,6 +22,11 @@ use super::super::{AlgoError, AlgoErrorKind};
 pub struct PatternSet(PhraseSet<ast::NotTyp>);
 
 impl PatternSet {
+    /// Iterates over notation alternatives in syntax order.
+    pub fn iter(&self) -> impl Iterator<Item = &ast::NotTyp> {
+        self.0.iter()
+    }
+
     fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -50,6 +55,13 @@ impl FromIterator<ast::NotTyp> for PatternSet {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PatternSets(Vec<PatternSet>);
 
+impl PatternSets {
+    /// Iterates over pattern sets in argument order.
+    pub fn iter(&self) -> impl Iterator<Item = &PatternSet> {
+        self.0.iter()
+    }
+}
+
 impl FromIterator<PatternSet> for PatternSets {
     fn from_iter<T: IntoIterator<Item = PatternSet>>(pattern_sets: T) -> Self {
         let pattern_sets = pattern_sets.into_iter().collect();
@@ -70,7 +82,7 @@ fn check_arity(
     if expected == actual {
         return Ok(());
     }
-    Err(AlgoError::new(AlgoErrorKind::PatternArityMismatch { expected, actual }, span.clone()))
+    Err(error::table::table_pattern_arity_mismatch(span, expected, actual))
 }
 
 /// Checks whether two rows can match the same input.
@@ -93,16 +105,18 @@ pub fn has_overlap(
     Ok(has_overlap)
 }
 
-/// Finds the first pair of rows that overlap.
-pub fn find_overlap<'a>(
+/// Finds the first overlapping pair of row indices in source order.
+pub fn find_overlap(
     span: &Span,
-    pattern_sets_by_row: &'a [PatternSets],
-) -> Result<Option<(&'a PatternSets, &'a PatternSets)>, AlgoError> {
-    for (index, pattern_sets) in pattern_sets_by_row.iter().enumerate() {
-        for pattern_sets_other in &pattern_sets_by_row[index + 1..] {
+    pattern_sets_by_row: &[PatternSets],
+) -> Result<Option<(usize, usize)>, AlgoError> {
+    // Keep the earlier row outermost so the selected pair remains deterministic
+    for (idx, pattern_sets) in pattern_sets_by_row.iter().enumerate() {
+        for (idx_other, pattern_sets_other) in pattern_sets_by_row.iter().enumerate().skip(idx + 1)
+        {
+            // Return both identities so callers can locate the original rows
             if has_overlap(span, pattern_sets, pattern_sets_other)? {
-                let overlap = (pattern_sets, pattern_sets_other);
-                return Ok(Some(overlap));
+                return Ok(Some((idx, idx_other)));
             }
         }
     }
