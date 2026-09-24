@@ -61,10 +61,14 @@ fn is_singleton_case(ctx: &Context, typ: &ast::Typ) -> Result<bool, AlgoError> {
         // Follow a plain alias with its type arguments substituted
         ast::DefTypKind::Plain(typ_inner) => {
             let theta = Theta::from_lists(tparams, targs).map_err(|mismatch| {
-                error::type_argument_arity_mismatch(&typ.span, mismatch.expected, mismatch.actual)
+                error::typ::type_argument_arity_mismatch(
+                    &typ.span,
+                    mismatch.expected,
+                    mismatch.actual,
+                )
             })?;
-            let typ_inner =
-                subst_typ(&|id| theta.get(id), typ_inner).map_err(error::type_operation_invalid)?;
+            let typ_inner = subst_typ(&|id| theta.get(id), typ_inner)
+                .map_err(error::typ::type_operation_invalid)?;
             is_singleton_case(ctx, &typ_inner)
         }
         ast::DefTypKind::Struct(_) => Ok(false),
@@ -258,7 +262,7 @@ fn gen_prem_bind_sub(
     // Compute the subtype check once
     let typ_source = phrase!(node: exp_to.note.as_ref().clone(), span: exp_to.span.clone());
     let subcheck = optimize_sub_typ(&ctx.tdenv, &typ_source, typ_sub)
-        .map_err(error::type_operation_invalid)?;
+        .map_err(error::typ::type_operation_invalid)?;
     let exp_guard_sub = note_phrase! {
         node: ast::ExpKind::Sub(
             Box::new(exp_to.clone()),

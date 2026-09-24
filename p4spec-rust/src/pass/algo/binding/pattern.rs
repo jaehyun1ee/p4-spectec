@@ -101,7 +101,7 @@ fn check_arity(
     if expected == actual {
         return Ok(());
     }
-    Err(error::table_pattern_arity_mismatch(span, expected, actual))
+    Err(error::table::table_pattern_arity_mismatch(span, expected, actual))
 }
 
 /// Checks whether two rows can match the same input.

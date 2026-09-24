@@ -71,7 +71,7 @@ use super::{
 // - Errors
 
 fn input_error(error: input::InputError, span: Span) -> AlgoError {
-    error::relation_input_hint_invalid(error, span)
+    error::rule::relation_input_hint_invalid(error, span)
 }
 
 // - Environments
@@ -140,7 +140,11 @@ fn analyze_exps_as_bind(
 /// Requires an expression in bound position to bind nothing.
 fn analyze_exp_as_bound(ctx: &Context, exp: &ast::Exp) -> Result<(), AlgoError> {
     let benv = collect::collect_exp(ctx, exp)?;
-    if benv.is_empty() { Ok(()) } else { Err(error::expression_variable_unbound(&exp.span, &benv)) }
+    if benv.is_empty() {
+        Ok(())
+    } else {
+        Err(error::binding::expression_variable_unbound(&exp.span, &benv))
+    }
 }
 
 fn analyze_exps_as_bound(ctx: &Context, exps: &[ast::Exp]) -> Result<(), AlgoError> {
@@ -186,7 +190,7 @@ fn analyze_args_as_bind_shallow(
     // Reject the first invalid shape before traversing its binders
     for arg in args_il {
         if !shallow::check_arg(arg) {
-            return Err(error::table_binding_shape_invalid(arg));
+            return Err(error::table::table_binding_shape_invalid(arg));
         }
     }
     // Reject repeated new binders in occurrence order, before renaming
@@ -235,7 +239,7 @@ fn check_repeated_table_binding(
             }
             // Keep the first source occurrence even when names sort differently
             if let Some(span_first) = seen.get(id) {
-                return Err(error::table_binding_repeated(id, span_first));
+                return Err(error::table::table_binding_repeated(id, span_first));
             }
             seen.insert(id.clone(), id.span.clone());
         }
@@ -354,13 +358,15 @@ fn otherwise_failure(prem: &al::ast::Prem, otherwise: &ast::Otherwise) -> Option
         al::ast::PremKind::Rule(_)
         | al::ast::PremKind::IfHold(_)
         | al::ast::PremKind::IfNotHold(_) => {
-            Some(error::otherwise_relation_call_invalid(&prem.span, otherwise))
+            Some(error::otherwise::otherwise_relation_call_invalid(&prem.span, otherwise))
         }
-        al::ast::PremKind::If(_) => Some(error::otherwise_condition_invalid(&prem.span, otherwise)),
+        al::ast::PremKind::If(_) => {
+            Some(error::otherwise::otherwise_condition_invalid(&prem.span, otherwise))
+        }
         al::ast::PremKind::Let(prem) => nested_call_exp(&prem.exp_r)
-            .map(|span| error::otherwise_function_call_invalid(span, otherwise)),
+            .map(|span| error::otherwise::otherwise_function_call_invalid(span, otherwise)),
         al::ast::PremKind::Debug(prem) => nested_call_exp(&prem.exp)
-            .map(|span| error::otherwise_function_call_invalid(span, otherwise)),
+            .map(|span| error::otherwise::otherwise_function_call_invalid(span, otherwise)),
         al::ast::PremKind::Iter(prem) => otherwise_failure(&prem.prem, otherwise),
     }
 }
@@ -484,7 +490,7 @@ fn lower_if_eq_prem(
         (false, true) => lower_let_prem(ctx, span, iter_ctx, exp_l_il, &benv_l, exp_r_il),
         (true, false) => lower_let_prem(ctx, span, iter_ctx, exp_r_il, &benv_r, exp_l_il),
         (false, false) => {
-            Err(error::equality_binding_invalid(&if_prem_il.exp.span, &benv_l, &benv_r))
+            Err(error::binding::equality_binding_invalid(&if_prem_il.exp.span, &benv_l, &benv_r))
         }
     }
 }
@@ -619,7 +625,7 @@ fn lower_iter_prem(
     iter_prem_il: &ast::IterPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     if !iter_prem_il.prem_iter.vars_bind.is_empty() {
-        return Err(error::iteration_binding_invalid(span));
+        return Err(error::binding::iteration_binding_invalid(span));
     }
     let mut iterations = vec![Iteration {
         iter: iter_prem_il.prem_iter.iter,
@@ -839,17 +845,17 @@ fn lower_clause(
 /// All case notations of a variant type, as the pattern space of one argument.
 fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSet, AlgoError> {
     let ast::TypKind::Var(id, _) = &typ.node else {
-        return Err(error::table_pattern_type_invalid(typ, None));
+        return Err(error::table::table_pattern_type_invalid(typ, None));
     };
     let (id_decl, typdef) = ctx
         .tdenv
         .get_key_value(id)
-        .ok_or_else(|| error::type_undefined(id))?;
+        .ok_or_else(|| error::typ::type_undefined(id))?;
     let TypeDef::Defined(_, def_typ) = typdef else {
-        return Err(error::table_pattern_type_invalid(typ, Some(&id_decl.span)));
+        return Err(error::table::table_pattern_type_invalid(typ, Some(&id_decl.span)));
     };
     let ast::DefTypKind::Variant(cases) = &def_typ.node else {
-        return Err(error::table_pattern_type_invalid(typ, Some(&id_decl.span)));
+        return Err(error::table::table_pattern_type_invalid(typ, Some(&id_decl.span)));
     };
     let pattern_set = cases
         .iter()
@@ -925,7 +931,7 @@ fn check_valid_table_rows(
     for (idx, patterns) in pattern_sets_by_row.iter().enumerate() {
         for (idx_other, patterns_other) in pattern_sets_by_row.iter().enumerate().skip(idx + 1) {
             if pattern::has_overlap(span, patterns, patterns_other)? {
-                return Err(error::table_pattern_overlapping(
+                return Err(error::table::table_pattern_overlapping(
                     &table_pattern_span(&rows_pattern_al[idx_other]),
                     &table_pattern_span(&rows_pattern_al[idx]),
                 ));
@@ -939,7 +945,7 @@ fn check_valid_table_rows(
             .last()
             .map(|row| Span::new(row.span.right.clone(), row.span.right.clone()))
             .unwrap_or_else(|| span.clone());
-        return Err(error::table_pattern_incomplete(&span, &patterns_missing));
+        return Err(error::table::table_pattern_incomplete(&span, &patterns_missing));
     }
     Ok(())
 }
@@ -990,7 +996,7 @@ fn lower_table_rows(
     for row_il in rows_il {
         // Validate public IL row widths before the wildcard-closer shortcut
         if row_il.node.args.len() != params_il.len() {
-            return Err(error::table_pattern_arity_mismatch(
+            return Err(error::table::table_pattern_arity_mismatch(
                 &row_il.span,
                 params_il.len(),
                 row_il.node.args.len(),
@@ -1002,7 +1008,7 @@ fn lower_table_rows(
     let mut typs_match_il = Vec::with_capacity(params_il.len());
     for param_il in params_il {
         let ast::ParamKind::Exp(typ_il) = &param_il.node else {
-            return Err(error::table_parameter_invalid(&param_il.span));
+            return Err(error::table::table_parameter_invalid(&param_il.span));
         };
         typs_match_il.push(typ_il.clone());
     }

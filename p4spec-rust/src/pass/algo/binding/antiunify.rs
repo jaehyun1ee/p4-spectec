@@ -242,8 +242,8 @@ fn overlap_exp_across_rules<'a>(
     for exp in exps {
         exp_template = overlap_exp(tdenv, menv, ids_free, &mut ids_unifier, &exp_template, exp)
             .map_err(|failure| match failure {
-                OverlapFailure::Mismatch => error::rule_input_mismatch(&exp.span),
-                OverlapFailure::Type(error) => error::type_operation_invalid(error),
+                OverlapFailure::Mismatch => error::rule::rule_input_mismatch(&exp.span),
+                OverlapFailure::Type(error) => error::typ::type_operation_invalid(error),
             })?;
     }
     Ok((ids_unifier, exp_template))
@@ -263,7 +263,7 @@ fn overlap_exps_across_rules(
     for exps in exps_tail {
         if exps.len() != exps_head.len() {
             let span = Span::over_iter(exps.iter().chain(exps_head).map(|exp| exp.span.clone()));
-            return Err(error::rule_input_mismatch(&span));
+            return Err(error::rule::rule_input_mismatch(&span));
         }
     }
     // A single rule is its own template

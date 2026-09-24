@@ -100,7 +100,7 @@ impl BEnv {
             let dim_l = binding_l.dim();
             let dim_r = binding_r.dim();
             if !(dim_l.sub(dim_r) && dim_r.sub(dim_l)) {
-                return Err(error::binding_dimension_mismatch(id, dim_l, dim_r));
+                return Err(error::binding::binding_dimension_mismatch(id, dim_l, dim_r));
             }
             let dim = dim_l.clone();
             self.insert(id.clone(), Binding::Multiple(dim));

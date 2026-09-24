@@ -26,7 +26,7 @@ fn reject_noninvertible(
     if benv.is_empty() {
         Ok(benv)
     } else {
-        let error = error::binding_non_invertible(&span, construct, &benv);
+        let error = error::binding::binding_non_invertible(&span, construct, &benv);
         Err(error)
     }
 }

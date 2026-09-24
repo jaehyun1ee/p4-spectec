@@ -161,7 +161,10 @@ impl ICtx {
         for entry in &self.0 {
             if entry.vars_bound.is_empty() {
                 // Binding with nothing to range over has no determinable length
-                return Err(error::iteration_loop_variable_missing(&span, &entry.vars_bind));
+                return Err(error::binding::iteration_loop_variable_missing(
+                    &span,
+                    &entry.vars_bind,
+                ));
             }
         }
         Ok(())
