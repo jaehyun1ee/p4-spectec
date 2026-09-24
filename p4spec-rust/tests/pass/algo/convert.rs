@@ -77,6 +77,25 @@ fn test_otherwise_diagnostics_relate_the_marker_in_functions_and_relations() {
     }
 }
 
+#[test]
+fn test_synthesized_otherwise_clause_retains_its_enclosing_location() {
+    let spec_el =
+        crate::spec_fixture::parse("dec $f : nat\ndef $f = 0\n  -- otherwise\n  -- if true\n")
+            .unwrap();
+    let mut spec_il = elaborate::convert(spec_el).unwrap();
+    let ast::DefKind::MetaFunc(ast::MetaFuncDef::Defined(func_il)) = &mut spec_il[0].node else {
+        panic!("expected defined function");
+    };
+    let clause_il = func_il.else_clause.as_mut().unwrap();
+    clause_il.node.otherwise_opt = None;
+    let span_clause = clause_il.span.clone();
+    let report = algo::convert(spec_il).unwrap_err();
+    let diagnostic = cause(&report);
+    assert_eq!(diagnostic.code.as_deref(), Some("algo/otherwise-condition-invalid"));
+    assert_eq!(diagnostic.labels[1].style, LabelStyle::Secondary);
+    assert_eq!(diagnostic.labels[1].span, span_clause);
+}
+
 fn span(line: usize) -> Span {
     let pos = Position::new("overlap.watsup", line, 0);
     Span::new(pos.clone(), pos)

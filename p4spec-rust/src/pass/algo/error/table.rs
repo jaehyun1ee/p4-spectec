@@ -41,10 +41,13 @@ pub(crate) fn table_binding_repeated(id: &Id, span_first: &Span) -> AlgoError {
 const TABLE_PATTERN_TYPE_INVALID: &str = "algo/table-pattern-type-invalid";
 
 /// Reports a pattern type whose declaration supplies no variant cases.
-pub(crate) fn table_pattern_type_invalid(typ: &ast::Typ, span_decl: Option<&Span>) -> AlgoError {
+pub(crate) fn table_pattern_type_invalid(
+    typ: &ast::Typ,
+    span_decl_opt: Option<&Span>,
+) -> AlgoError {
     // Keep the use primary and relate the declaration when it is named
     let mut labels = vec![Label::primary(&typ.span, "")];
-    if let Some(span_decl) = span_decl {
+    if let Some(span_decl) = span_decl_opt {
         labels.push(Label::secondary(span_decl, "type declared here"));
     }
     cause(

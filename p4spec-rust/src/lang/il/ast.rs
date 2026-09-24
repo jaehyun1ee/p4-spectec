@@ -12,7 +12,7 @@ use crate::lang::{
     common::{
         self,
         notation::{atom, mixfix::Mixfix, mixop},
-        source::{NotePhrase, Phrase, Span},
+        source::{NotePhrase, Phrase},
     },
     data, el,
     hints::input::InputHint,
@@ -399,6 +399,15 @@ pub struct PremIter<V = Var> {
     pub vars_bind: Vec<V>,
 }
 
+// Otherwise markers
+
+/// An otherwise keyword with its source annotation.
+pub type Otherwise = Phrase<OtherwiseKind>;
+
+/// The keyword that marks a fallback rule or clause.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OtherwiseKind;
+
 // Rules
 
 /// A rule with its span.
@@ -430,8 +439,8 @@ pub type ElseGroup = Phrase<ElseGroupKind>;
 pub struct ElseGroupKind {
     pub id: Id,
     pub rule: Rule,
-    /// Source of the otherwise marker removed during elaboration.
-    pub span_else: Span,
+    /// The otherwise keyword preserved during elaboration.
+    pub otherwise: Otherwise,
 }
 
 // Clauses
@@ -445,8 +454,8 @@ pub struct ClauseKind {
     pub args: Vec<Arg>,
     pub exp: Exp,
     pub prems: Vec<Prem>,
-    /// Source of the otherwise marker, absent for ordinary clauses.
-    pub span_else: Option<Span>,
+    /// The source keyword, absent in ordinary or synthesized clauses.
+    pub otherwise_opt: Option<Otherwise>,
 }
 
 /// The otherwise clause of a function, tried when no clause matches.
