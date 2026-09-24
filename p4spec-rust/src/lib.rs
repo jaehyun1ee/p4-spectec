@@ -2,10 +2,12 @@
 //!
 //! `parse`, `elab`, `algo`, `structure`, and `prosify` transform source paths
 //! into EL, IL, AL, SL, and PL through `frontend` and `pass`;
+//! `backend` renders EL as canonical LaTeX;
 //! `interp` and `runner` execute AL, SL, or PL against a P4 program,
 //! with `interface` builtins and `sim_plugin` architectures;
 //! `lang`, `runtime`, `stf`, and `util` are the shared data and codecs.
 
+pub mod backend;
 pub mod diagnostic;
 pub mod frontend;
 pub mod interface;
