@@ -14,69 +14,118 @@ use super::utils::*;
 /// Inline prose and embedded code.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Prose {
+    /// Emits AsciiDoc text verbatim, including any existing markup.
     Text(String),
+    /// Renders linked code with monospace markup around each word.
     Code(Code),
+    /// Renders linked code without adding monospace markup.
+    PlainCode(Code),
+    /// Links the body, suppressing resolved links nested inside it.
     Link(Link, Box<Prose>),
+    /// Links to an arm or group using its anchor and displayed label.
     Fallthrough(String, FallthroughLabel),
+    /// Concatenates prose without inserting separators.
     Seq(Vec<Prose>),
+    /// Emits no text and permits capitalization to continue.
     Empty,
 }
 
 /// Code tokens with optional cross-references.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Code {
+    /// Emits pre-escaped code text, coalescing adjacent compatible tokens.
     Token(String),
+    /// Links the enclosed code unless an outer link already owns the span.
     Link(Link, Box<Code>),
+    /// Concatenates code without inserting separators or span boundaries.
     Seq(Vec<Code>),
+    /// Emits no tokens and does not split a code span.
     Empty,
 }
 
 /// A concrete target or a reference resolved by the enclosing document.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Link {
+    /// Uses the target verbatim, bypassing the subject resolver.
     Direct(String),
+    /// Resolves the subject, preserving only the body if unresolved.
     Subject(Subject),
 }
 
 /// A definition referenced by prose.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Subject {
+    /// Identifies a function by its source name without the dollar prefix.
     Function(String),
+    /// Identifies a relation by its source name.
     Relation(String),
 }
 
 /// A fallthrough marker inferred from its target or supplied by a group.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FallthroughLabel {
+    /// Uses the target arm's list marker from the same serialized block.
+    ///
+    /// Block serialization panics if the target has no ordered arm anchor.
+    /// Standalone prose serialization cannot resolve derived labels.
     Derived,
+    /// Uses the supplied label, such as a group name or otherwise marker.
     Explicit(String),
 }
 
 /// A list entry, optionally defining an ordered arm anchor.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ItemKind {
+    /// Advances the ordered list, optionally defining an arm anchor.
     Ordered(Option<String>),
+    /// Emits a bullet and resets the ordered counter at this level.
     Unordered,
 }
 
 /// A document fragment with explicit list nesting and table boundaries.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Block {
+    /// Emits no text and does not advance list counters.
     Empty,
+    /// Emits AsciiDoc verbatim without inspecting links or list markers.
     Raw(String),
+    /// Renders prose without adding line breaks or a list marker.
     Inline(Prose),
-    Item(usize, ItemKind, Prose, Box<Block>),
+    /// Renders a list heading followed by a nonempty body on the next line.
+    Item {
+        /// The zero-based nesting level used for bullets and arm labels.
+        level: usize,
+        /// The list style and optional ordered arm anchor.
+        kind: ItemKind,
+        /// The prose following the list marker.
+        prose_head: Prose,
+        /// The continuation, with nested entries carrying their own levels.
+        block_body: Box<Block>,
+    },
+    /// Concatenates blocks without inserting separators.
     Concat(Vec<Block>),
+    /// Joins blocks with one newline between adjacent blocks.
     Seq(Vec<Block>),
-    Table(usize, Vec<Prose>, Vec<Vec<String>>),
+    /// Renders a table with its column count derived from the header.
+    Table {
+        /// The header cells, including their inline prose formatting.
+        header: Vec<Prose>,
+        /// Code cells resolved at serialization without monospace markup.
+        ///
+        /// Each row must have as many cells as the header.
+        rows: Vec<Vec<Code>>,
+    },
 }
 
 // == Capitalization
 
 /// Whether capitalization found text, can continue, or reached protected prose.
 enum CapStep {
+    /// Capitalized an initial letter, ending the search.
     Done,
+    /// Found no eligible initial letter, allowing the next piece to be tried.
     Skip,
+    /// Reached protected code or a link, ending the search without changes.
     Stop,
 }
 
@@ -92,7 +141,9 @@ fn capitalize_prose(prose: &mut Prose) -> CapStep {
                 CapStep::Skip
             }
         }
-        Prose::Code(_) | Prose::Link(..) | Prose::Fallthrough(..) => CapStep::Stop,
+        Prose::Code(_) | Prose::PlainCode(_) | Prose::Link(..) | Prose::Fallthrough(..) => {
+            CapStep::Stop
+        }
         Prose::Seq(proses) => {
             // Empty or punctuation-only pieces leave the next piece eligible
             for prose in proses {
@@ -118,12 +169,12 @@ fn capitalize_block(block: &mut Block) -> bool {
     match block {
         Block::Empty | Block::Raw(_) => false,
         Block::Inline(prose) => !matches!(capitalize_prose(prose), CapStep::Skip),
-        Block::Item(_, _, prose, block_body) => {
-            matches!(capitalize_prose(prose), CapStep::Done | CapStep::Stop)
+        Block::Item { prose_head, block_body, .. } => {
+            matches!(capitalize_prose(prose_head), CapStep::Done | CapStep::Stop)
                 || capitalize_block(block_body)
         }
         Block::Concat(blocks) | Block::Seq(blocks) => blocks.iter_mut().any(capitalize_block),
-        Block::Table(..) => true,
+        Block::Table { .. } => true,
     }
 }
 
@@ -167,7 +218,7 @@ fn collect_markers(
     ordinals: &mut BTreeMap<usize, usize>,
 ) {
     match block {
-        Block::Item(level, kind, _, block_body) => {
+        Block::Item { level, kind, block_body, .. } => {
             // A shallower entry starts new nested lists
             ordinals.retain(|level_inner, _| level_inner <= level);
             match kind {
@@ -192,7 +243,7 @@ fn collect_markers(
                 collect_markers(block, markers, ordinals);
             }
         }
-        Block::Empty | Block::Raw(_) | Block::Inline(_) | Block::Table(..) => {}
+        Block::Empty | Block::Raw(_) | Block::Inline(_) | Block::Table { .. } => {}
     }
 }
 
@@ -331,6 +382,7 @@ impl Serializer<'_> {
         match prose {
             Prose::Text(text) => text.clone(),
             Prose::Code(code) => self.code(code, link_ctx, lint, true),
+            Prose::PlainCode(code) => self.code(code, link_ctx, lint, false),
             Prose::Link(link, prose_inner) => {
                 // Preserve the body when the enclosing document has no target
                 let Some(target) = target_of_link(link, self.anchor) else {
@@ -384,7 +436,7 @@ impl Serializer<'_> {
                 .map(|block| self.block(block))
                 .collect::<Vec<_>>()
                 .join("\n"),
-            Block::Item(level, kind, prose, block_body) => {
+            Block::Item { level, kind, prose_head, block_body } => {
                 // Only ordered arms emit anchors
                 let (bullet, anchor) = match kind {
                     ItemKind::Unordered => (adoc_unordered_bullet(*level), String::new()),
@@ -400,7 +452,7 @@ impl Serializer<'_> {
                             .unwrap_or_default(),
                     ),
                 };
-                let mut text = format!("{bullet}{anchor}{}", self.prose(prose, None, true));
+                let mut text = format!("{bullet}{anchor}{}", self.prose(prose_head, None, true));
                 // Empty bodies leave no trailing newline
                 let text_body = self.block(block_body);
                 if !text_body.is_empty() {
@@ -409,16 +461,24 @@ impl Serializer<'_> {
                 }
                 text
             }
-            Block::Table(cols, header, rows) => {
-                // Render header links above the serialized row cells
+            Block::Table { header, rows } => {
+                // Use the header as the single source of the column count
+                let cols = header.len();
                 let text_header = header
                     .iter()
                     .map(|prose| self.prose(prose, None, true))
                     .collect::<Vec<_>>()
                     .join(" | ");
+                // Resolve cell links in the enclosing document's context
                 let text_rows = rows
                     .iter()
-                    .map(|row| format!("| {}", row.join(" | ")))
+                    .map(|row| {
+                        let cells = row
+                            .iter()
+                            .map(|code| self.code(code, None, false, false))
+                            .collect::<Vec<_>>();
+                        format!("| {}", cells.join(" | "))
+                    })
                     .collect::<Vec<_>>()
                     .join("\n");
                 format!(
@@ -478,7 +538,7 @@ pub fn ser_block_with_anchor(block: &Block, anchor: &dyn Fn(&Subject) -> Option<
 pub fn width_prose(prose: &Prose) -> usize {
     match prose {
         Prose::Text(text) => text.len(),
-        Prose::Code(code) => width_code(code),
+        Prose::Code(code) | Prose::PlainCode(code) => width_code(code),
         Prose::Link(_, prose) => width_prose(prose),
         Prose::Fallthrough(_, FallthroughLabel::Derived) | Prose::Empty => 0,
         Prose::Fallthrough(_, FallthroughLabel::Explicit(text)) => text.len() + 4,

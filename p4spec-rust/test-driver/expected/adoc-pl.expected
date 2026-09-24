@@ -4178,7 +4178,7 @@ xref:type_of_typedLvalueIR[The type of lvalue ``typedLvalueIR``]
 . Let ``+`(+`` ``typeIR`` ``+`)+`` be the note of ``typedLvalueIR``.
 . Return ``typeIR``.
 
-<<typedLvalueIR_as_typedExpressionIR,The expression form of xref:typedLvalueIR[``lvalueIR`` with note ``+`(+`` ``typeIR`` ``+`)+``]>>
+xref:typedLvalueIR_as_typedExpressionIR[The expression form of ``lvalueIR`` with note ``+`(+`` ``typeIR`` ``+`)+``]
 
 . If let ``referenceExpressionIR`` be ``lvalueIR``:
  .. Return xref:typedExpressionIR[``referenceExpressionIR`` annotated with a pair of type ``typeIR`` and compile-time known-ness ``+DYN+``].
@@ -4196,7 +4196,7 @@ xref:type_of_typedLvalueIR[The type of lvalue ``typedLvalueIR``]
   ... Let ``typedExpressionIR~base~`` be xref:option_get[*!*] xref:typedLvalueIR_as_typedExpressionIR[the expression form of ``typedLvalueIR~base~``].+++<sub class="bk-mark">[FAIL]</sub>+++
   ... Return <<typedExpressionIR,``typedExpressionIR~base~`` ``+`[+`` ``typedExpressionIR~hi~`` ``{apos}{plus}:{apos}`` ``typedExpressionIR~lo~`` ``+`]+`` annotated with a pair of type ``typeIR`` and compile-time known-ness ``+DYN+``>>.
 
-<<typedExpressionIR_as_typedLvalueIR,The l-value form of xref:typedExpressionIR[``expressionIR`` annotated with a pair of type ``typeIR`` and compile-time known-ness ``++_++``]>>
+xref:typedExpressionIR_as_typedLvalueIR[The l-value form of ``expressionIR`` annotated with a pair of type ``typeIR`` and compile-time known-ness ``++_++``]
 
 . If let ``referenceExpressionIR`` be ``expressionIR``:
  .. Return xref:typedLvalueIR[``referenceExpressionIR`` with note ``+`(+`` ``typeIR`` ``+`)+``].

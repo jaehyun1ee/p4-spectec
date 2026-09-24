@@ -1,4 +1,4 @@
-use p4spec_rust::backend::adoc::pl::document::{
+use p4spec_rust::backend::adoc::pl::doc::{
     self as doc, Block, Code, FallthroughLabel, ItemKind, Link, Prose, Subject,
 };
 
@@ -25,25 +25,25 @@ fn unresolved_subject_keeps_body_without_cross_reference() {
 
 #[test]
 fn fallthrough_labels_follow_nested_ordered_list_markers() {
-    let block = Block::Seq(vec![Block::Item(
-        0,
-        ItemKind::Ordered(None),
-        Prose::Text("Choose".into()),
-        Box::new(Block::Seq(vec![
-            Block::Item(
-                1,
-                ItemKind::Ordered(Some("one".into())),
-                Prose::Fallthrough("two".into(), FallthroughLabel::Derived),
-                Box::new(Block::Empty),
-            ),
-            Block::Item(
-                1,
-                ItemKind::Ordered(Some("two".into())),
-                Prose::Text("Done".into()),
-                Box::new(Block::Empty),
-            ),
+    let block = Block::Seq(vec![Block::Item {
+        level: 0,
+        kind: ItemKind::Ordered(None),
+        prose_head: Prose::Text("Choose".into()),
+        block_body: Box::new(Block::Seq(vec![
+            Block::Item {
+                level: 1,
+                kind: ItemKind::Ordered(Some("one".into())),
+                prose_head: Prose::Fallthrough("two".into(), FallthroughLabel::Derived),
+                block_body: Box::new(Block::Empty),
+            },
+            Block::Item {
+                level: 1,
+                kind: ItemKind::Ordered(Some("two".into())),
+                prose_head: Prose::Text("Done".into()),
+                block_body: Box::new(Block::Empty),
+            },
         ])),
-    )]);
+    }]);
     let text = doc::ser_block(&block);
     assert!(text.contains("[<a href=\"#two\">→ b</a>]"), "{text}");
     assert!(
@@ -71,11 +71,10 @@ fn link_delimiters_and_quoted_code_preserve_literal_content() {
 
 #[test]
 fn table_serialization_keeps_header_and_cell_boundaries() {
-    let block = Block::Table(
-        2,
-        vec![Prose::Text("Input".into()), Prose::Text("Output".into())],
-        vec![vec!["a".into(), "b".into()]],
-    );
+    let block = Block::Table {
+        header: vec![Prose::Text("Input".into()), Prose::Text("Output".into())],
+        rows: vec![vec![Code::Token("a".into()), Code::Token("b".into())]],
+    };
     assert_eq!(
         doc::ser_block(&block),
         "[cols=\"2\", options=\"header\"]\n|===\n| Input | Output \n\n| a | b\n\n|==="

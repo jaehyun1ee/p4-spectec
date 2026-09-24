@@ -14,7 +14,7 @@ use crate::lang::{
 };
 
 use super::{
-    document::{self, Block, Code, ItemKind, Link, Prose, Subject},
+    doc::{self, Block, Code, ItemKind, Link, Prose, Subject},
     fallthrough::{self, Anchors, Context},
     utils::{ADOC_WIDTH_SHORT, adoc_subscript, adoc_superscript, reindent_lines, unindent_lines},
 };
@@ -58,7 +58,7 @@ fn seq(blocks_body: impl IntoIterator<Item = Block>) -> Block {
 }
 
 fn ordered(level: usize, prose_head: Prose) -> Block {
-    Block::Item(level, ItemKind::Ordered(None), prose_head, Box::new(Block::Empty))
+    ordered_body(level, None, prose_head, Block::Empty)
 }
 
 fn ordered_body(
@@ -67,11 +67,16 @@ fn ordered_body(
     prose_head: Prose,
     block_body: Block,
 ) -> Block {
-    Block::Item(level, ItemKind::Ordered(anchor), prose_head, Box::new(block_body))
+    Block::Item {
+        level,
+        kind: ItemKind::Ordered(anchor),
+        prose_head,
+        block_body: Box::new(block_body),
+    }
 }
 
 fn unordered(level: usize, prose_head: Prose) -> Block {
-    Block::Item(level, ItemKind::Unordered, prose_head, Box::new(Block::Empty))
+    Block::Item { level, kind: ItemKind::Unordered, prose_head, block_body: Box::new(Block::Empty) }
 }
 
 fn subject_link(subject: Subject, prose_body: Prose) -> Prose {
@@ -86,31 +91,44 @@ fn subject_code(subject: Subject, code_body: Code) -> Code {
     Code::Link(Link::Subject(subject), Box::new(code_body))
 }
 
-/// Joins prose with an Oxford comma.
-fn prose_of_list(proses: Vec<Prose>) -> Prose {
-    match proses.as_slice() {
-        [] => Prose::Empty,
-        [prose_head] => prose_head.clone(),
-        [prose_l, prose_r] => prose([prose_l.clone(), text(" and "), prose_r.clone()]),
-        _ => {
-            // Separate the final item with an Oxford comma
-            let num_proses = proses.len();
-            prose(
-                proses
-                    .into_iter()
-                    .enumerate()
-                    .flat_map(move |(idx, prose_item)| {
-                        if idx == 0 {
-                            vec![prose_item]
-                        } else if idx + 1 == num_proses {
-                            vec![text(", and "), prose_item]
-                        } else {
-                            vec![text(", "), prose_item]
-                        }
-                    }),
-            )
+/// Interleaves items with separators selected by the following item's index.
+fn join_items<Item>(
+    items: impl IntoIterator<Item = Item>,
+    mut separator: impl FnMut(usize) -> Item,
+) -> Vec<Item> {
+    let mut items_joined = Vec::new();
+    // Move each item into one buffer without allocating intermediate lists
+    for (idx, item) in items.into_iter().enumerate() {
+        // A separator belongs only between two items
+        if idx > 0 {
+            items_joined.push(separator(idx));
         }
+        items_joined.push(item);
     }
+    items_joined
+}
+
+fn join_code(separator: &str, codes: impl IntoIterator<Item = Code>) -> Code {
+    code(join_items(codes, |_| token(separator)))
+}
+
+fn join_prose(separator: &str, proses: impl IntoIterator<Item = Prose>) -> Prose {
+    prose(join_items(proses, |_| text(separator)))
+}
+
+/// Joins owned prose with an Oxford comma without cloning its trees.
+fn prose_of_list(proses: Vec<Prose>) -> Prose {
+    let num_proses = proses.len();
+    // The final separator depends on whether the list has two or more items
+    prose(join_items(proses, |idx| {
+        text(if num_proses == 2 {
+            " and "
+        } else if idx + 1 == num_proses {
+            ", and "
+        } else {
+            ", "
+        })
+    }))
 }
 
 // == Alteration hints
@@ -136,16 +154,7 @@ impl<Item> alter::Renderer<Item> for AlterRenderer<'_, Item> {
     }
 
     fn join(&self, proses: Vec<Self::Output>) -> Self::Output {
-        prose(
-            proses
-                .into_iter()
-                .enumerate()
-                .flat_map(
-                    |(idx, prose_item)| {
-                        if idx == 0 { vec![prose_item] } else { vec![text(" "), prose_item] }
-                    },
-                ),
-        )
+        join_prose(" ", proses)
     }
 
     fn fuse(&self, output_l: Self::Output, output_r: Self::Output) -> Self::Output {
@@ -171,7 +180,7 @@ fn alternate<Item>(
 ) -> Prose {
     let prose_alternated = alter::alternate(hint, items, &AlterRenderer { base_text, render_item })
         .expect("prosify validates alteration hints");
-    if caps { document::capitalize_first_prose(prose_alternated) } else { prose_alternated }
+    if caps { doc::capitalize_first_prose(prose_alternated) } else { prose_alternated }
 }
 
 // == Atoms and identifiers
@@ -303,20 +312,17 @@ fn code_of_mixfix<T>(mixfix: &Mixfix<T>, render_arg: &dyn Fn(&T) -> Code) -> Cod
             token(" "),
             code_of_mixfix(mixfix_r, render_arg),
         ]),
-        Mixfix::Seq(mixfixes) => code(mixfixes.iter().enumerate().flat_map(|(idx, mixfix)| {
-            if idx == 0 {
-                vec![code_of_mixfix(mixfix, render_arg)]
-            } else {
-                vec![token(" "), code_of_mixfix(mixfix, render_arg)]
-            }
-        })),
+        Mixfix::Seq(mixfixes) => join_code(
+            " ",
+            mixfixes
+                .iter()
+                .map(|mixfix| code_of_mixfix(mixfix, render_arg)),
+        ),
     }
 }
 
 fn code_of_exps(exps: &[pl::Exp], separator: &str) -> Code {
-    code(exps.iter().enumerate().flat_map(|(idx, exp)| {
-        if idx == 0 { vec![code_of_exp(exp)] } else { vec![token(separator), code_of_exp(exp)] }
-    }))
+    join_code(separator, exps.iter().map(code_of_exp))
 }
 
 /// Renders a pattern in its prose-backend notation.
@@ -368,14 +374,7 @@ fn code_of_args(args: &[pl::Arg]) -> Code {
     if args.is_empty() {
         Code::Empty
     } else {
-        code(
-            std::iter::once(token("("))
-                .chain(args.iter().enumerate().flat_map(|(idx, arg)| {
-                    let arg = code_of_arg(arg);
-                    if idx == 0 { vec![arg] } else { vec![token(", "), arg] }
-                }))
-                .chain(std::iter::once(token(")"))),
-        )
+        code([token("("), join_code(", ", args.iter().map(code_of_arg)), token(")")])
     }
 }
 
@@ -422,23 +421,16 @@ fn code_of_exp(exp: &pl::Exp) -> Code {
         ExpKind::Match(exp_inner, pattern) => code_of_match(exp_inner, pattern),
         ExpKind::Tuple(exps) => code([token("( "), code_of_exps(exps, ", "), token(" )")]),
         ExpKind::Case(not_exp) => code_of_mixfix(not_exp, &code_of_exp),
-        ExpKind::Str(fields) => code(
-            std::iter::once(token("+{+"))
-                .chain(
-                    fields
-                        .iter()
-                        .enumerate()
-                        .flat_map(|(idx, (atom, exp_field))| {
-                            let code_field = code([
-                                token(string_of_atom(atom)),
-                                token(" "),
-                                code_of_exp(exp_field),
-                            ]);
-                            if idx == 0 { vec![code_field] } else { vec![token(", "), code_field] }
-                        }),
-                )
-                .chain(std::iter::once(token("+}+"))),
-        ),
+        ExpKind::Str(fields) => code([
+            token("+{+"),
+            join_code(
+                ", ",
+                fields.iter().map(|(atom, exp_field)| {
+                    code([token(string_of_atom(atom)), token(" "), code_of_exp(exp_field)])
+                }),
+            ),
+            token("+}+"),
+        ]),
         ExpKind::Opt(None) => token("·"),
         ExpKind::Opt(Some(exp_inner)) => code_of_exp(exp_inner),
         ExpKind::List(exps) if exps.is_empty() => token("·"),
@@ -484,7 +476,7 @@ fn code_of_exp(exp: &pl::Exp) -> Code {
         ExpKind::Iter(exp_inner, iter_exp) => {
             let inner = code_of_exp(exp_inner);
             let needs_parens = !matches!(exp_inner.node.node, ExpKind::Id(_) | ExpKind::Tuple(_))
-                && document::ser_code(&inner).contains(' ');
+                && doc::ser_code(&inner).contains(' ');
             if needs_parens {
                 code([token("( "), inner, token(" )"), token(code_of_iter(iter_exp.iter))])
             } else {
@@ -606,22 +598,18 @@ fn prose_of_exp(exp: &pl::Exp) -> Prose {
             code_prose(code_of_typ(typ)),
         ]),
         ExpKind::Match(exp_inner, pattern) => prose_of_match(exp_inner, pattern),
-        ExpKind::Tuple(exps) => prose([
-            text("( "),
-            prose(exps.iter().enumerate().flat_map(|(idx, exp)| {
-                if idx == 0 { vec![prose_of_exp(exp)] } else { vec![text(", "), prose_of_exp(exp)] }
-            })),
-            text(" )"),
-        ]),
+        ExpKind::Tuple(exps) => {
+            prose([text("( "), join_prose(", ", exps.iter().map(prose_of_exp)), text(" )")])
+        }
         ExpKind::Case(not_exp) => {
             if let (Some(hint), pl::TypKind::Var(id_typ, _)) = (&exp.hints.prose, &exp.node.note) {
-                let exps = not_exp.args().into_iter().cloned().collect::<Vec<_>>();
+                let exps = not_exp.args();
                 direct_link(
                     id_typ.node.clone(),
                     alternate(
                         hint,
                         &|text_body| reindent_lines(0, text_body),
-                        &prose_of_exp,
+                        &|&exp| prose_of_exp(exp),
                         &exps,
                         false,
                     ),
@@ -630,23 +618,16 @@ fn prose_of_exp(exp: &pl::Exp) -> Prose {
                 code_prose(code_of_mixfix(not_exp, &code_of_exp))
             }
         }
-        ExpKind::Str(fields) => prose(
-            std::iter::once(text("+{+"))
-                .chain(
-                    fields
-                        .iter()
-                        .enumerate()
-                        .flat_map(|(idx, (atom, exp_field))| {
-                            let prose_field = prose([
-                                text(string_of_atom(atom)),
-                                text(" "),
-                                prose_of_exp(exp_field),
-                            ]);
-                            if idx == 0 { vec![prose_field] } else { vec![text(", "), prose_field] }
-                        }),
-                )
-                .chain(std::iter::once(text("+}+"))),
-        ),
+        ExpKind::Str(fields) => prose([
+            text("+{+"),
+            join_prose(
+                ", ",
+                fields.iter().map(|(atom, exp_field)| {
+                    prose([text(string_of_atom(atom)), text(" "), prose_of_exp(exp_field)])
+                }),
+            ),
+            text("+}+"),
+        ]),
         ExpKind::Opt(Some(exp_inner)) => prose_of_exp(exp_inner),
         ExpKind::Cat(exp_l, exp_r) => {
             prose([prose_of_exp(exp_l), text(" concatenated with "), prose_of_exp(exp_r)])
@@ -712,14 +693,7 @@ fn code_of_params(params: &[pl::Param]) -> Code {
     if params.is_empty() {
         Code::Empty
     } else {
-        code(
-            std::iter::once(token("("))
-                .chain(params.iter().enumerate().flat_map(|(idx, param)| {
-                    let param = code_of_param(param);
-                    if idx == 0 { vec![param] } else { vec![token(", "), param] }
-                }))
-                .chain(std::iter::once(token(")"))),
-        )
+        code([token("("), join_code(", ", params.iter().map(code_of_param)), token(")")])
     }
 }
 
@@ -734,14 +708,7 @@ fn prose_of_params(params: &[pl::Param]) -> Prose {
     if params.is_empty() {
         Prose::Empty
     } else {
-        prose(
-            std::iter::once(text("("))
-                .chain(params.iter().enumerate().flat_map(|(idx, param)| {
-                    let param = prose_of_param(param);
-                    if idx == 0 { vec![param] } else { vec![text(", "), param] }
-                }))
-                .chain(std::iter::once(text(")"))),
-        )
+        prose([text("("), join_prose(", ", params.iter().map(prose_of_param)), text(")")])
     }
 }
 
@@ -754,15 +721,64 @@ fn prose_of_arg(arg: &pl::Arg) -> Prose {
 
 // == Rendering context
 
-/// Per-invocation state shared by every rendered fragment in one document.
-struct Renderer<'a> {
+/// Renders a document's definitions and fragments with shared arm counters.
+///
+/// Reuse one renderer when composing rule groups, dispatch, and otherwise
+/// fragments into a document. Create a new renderer for each new document.
+/// The free rendering functions each create an independent renderer.
+pub struct Renderer<'a> {
     anchors: Anchors,
     anchor: &'a dyn Fn(&Subject) -> Option<String>,
 }
 
 impl<'a> Renderer<'a> {
-    fn new(anchor: &'a dyn Fn(&Subject) -> Option<String>) -> Self {
+    /// Starts a document with fresh arm counters and a subject resolver.
+    pub fn new(anchor: &'a dyn Fn(&Subject) -> Option<String>) -> Self {
         Self { anchors: Anchors::default(), anchor }
+    }
+
+    /// Renders a rule group, reserving arm anchors within this document.
+    pub fn render_rulegroup(
+        &mut self,
+        hints: &Hints,
+        id_rel: &pl::Id,
+        signature: &pl::RelSignature,
+        exps: &[pl::Exp],
+        block: &pl::GroupBlock,
+    ) -> String {
+        render_rulegroup_inner(self, hints, id_rel, signature, exps, block)
+    }
+
+    /// Renders relation dispatch with counters shared by other fragments.
+    pub fn render_defined_rel_def_dispatch(&mut self, rel: &pl::DefinedRel) -> String {
+        render_defined_rel_dispatch_inner(self, rel)
+    }
+
+    /// Renders an otherwise fragment with counters shared by other fragments.
+    pub fn render_rulegroup_else(&mut self, id_rel: &pl::Id, block: &pl::DispatchBlock) -> String {
+        let ctx = Context { namespace: id_rel.node.clone(), next: None };
+        render_elseblock(
+            self,
+            Some(&fallthrough::anchor_of_else(&id_rel.node)),
+            &ctx,
+            render_dispatch_inline,
+            Some(block),
+        )
+        .trim()
+        .to_owned()
+    }
+
+    /// Renders a definition with counters shared by other document fragments.
+    pub fn render_def(&mut self, def: &pl::Def) -> Option<String> {
+        render_def_inner(self, def)
+    }
+
+    /// Renders definitions in order with this document's anchors and counters.
+    pub fn render_defs(&mut self, defs: &[pl::Def]) -> String {
+        defs.iter()
+            .filter_map(|def| self.render_def(def))
+            .collect::<Vec<_>>()
+            .join("\n\n")
     }
 }
 
@@ -863,8 +879,11 @@ fn is_partial_guard(guard: &pl::Guard) -> bool {
 
 /// A tier instruction ready to fold inline or nest below its enclosing head.
 enum Rendered {
+    /// Appends prose directly to the optional enclosing heading.
     Inline(Prose),
+    /// Appends a dispatch target and capitalizes the composed heading.
     InlineGoto(Prose),
+    /// Keeps a block below the heading instead of folding it into prose.
     Nested(Block),
 }
 
@@ -879,7 +898,7 @@ fn compose(block_head: Option<Block>, singleton: bool, rendered: Rendered) -> Bl
             Some(block_head) => concat([block_head, inline(prose_tail)]),
             None => inline(prose_tail),
         },
-        Rendered::InlineGoto(prose_tail) => document::capitalize_first_block(match block_head {
+        Rendered::InlineGoto(prose_tail) => doc::capitalize_first_block(match block_head {
             Some(block_head) => concat([block_head, inline(prose_tail)]),
             None => inline(prose_tail),
         }),
@@ -988,7 +1007,7 @@ fn render_elseblock<Tier>(
         .unwrap_or_default();
     format!(
         "\n\n. {text_anchor}Otherwise:{}",
-        document::ser_block_with_anchor(
+        doc::ser_block_with_anchor(
             &render_instrs(renderer, 1, None, ctx, render_tier, block),
             renderer.anchor,
         )
@@ -1013,7 +1032,7 @@ fn prose_of_in_itervars(iter: Iter, vars: &[pl::Var]) -> Prose {
     )
 }
 
-fn prose_of_out_itervars(iter: Iter, vars: &[pl::Var]) -> Prose {
+fn prose_of_out_itervars(iter: Iter, vars: &[&pl::Var]) -> Prose {
     prose_of_list(
         vars.iter()
             .filter(|var| !var.id.node.starts_with('_'))
@@ -1083,7 +1102,6 @@ fn render_iterinstrs(
             .vars_bind
             .iter()
             .filter(|var| !var.id.node.starts_with('_'))
-            .cloned()
             .collect::<Vec<_>>();
         // Render inner iteration levels before their enclosing open block
         let block_inner = go(level + 1, false, prose_fallthrough, iter_instrs_tail, render_body);
@@ -1162,12 +1180,7 @@ fn render_hold_instr<Tier>(
     hold_instr: &pl::HoldInstr<Tier>,
 ) -> Block {
     // Extract relation arguments once for hinted prose
-    let exps = hold_instr
-        .not_exp
-        .args()
-        .into_iter()
-        .cloned()
-        .collect::<Vec<_>>();
+    let exps = hold_instr.not_exp.args();
     let iter_suffix = prose_of_iterexp_suffix(&hold_instr.iter_exps);
     // Build either the positive or negative branch heading
     let make_head = |hold: bool| {
@@ -1188,7 +1201,7 @@ fn render_hold_instr<Tier>(
                     alternate(
                         hint,
                         &|text_body| reindent_lines(0, text_body),
-                        &prose_of_exp,
+                        &|&exp| prose_of_exp(exp),
                         &exps,
                         false,
                     ),
@@ -1270,10 +1283,7 @@ fn render_case_instr<Tier>(
                 let block_bind = ordered(
                     level + 1,
                     prose([
-                        document::capitalize_first_prose(prose_of_guard(
-                            &case_instr.exp,
-                            &case.guard,
-                        )),
+                        doc::capitalize_first_prose(prose_of_guard(&case_instr.exp, &case.guard)),
                         text("."),
                     ]),
                 );
@@ -1646,7 +1656,7 @@ pub fn render_rel_title_with_anchor(
     exps: &[pl::Exp],
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> String {
-    document::ser_block_with_anchor(&render_rel_title_block(hints, id_rel, signature, exps), anchor)
+    doc::ser_block_with_anchor(&render_rel_title_block(hints, id_rel, signature, exps), anchor)
 }
 
 /// Renders a relation title with definition-name anchors.
@@ -1656,7 +1666,7 @@ pub fn render_rel_title(
     signature: &pl::RelSignature,
     exps: &[pl::Exp],
 ) -> String {
-    render_rel_title_with_anchor(hints, id_rel, signature, exps, &document::subject_name)
+    render_rel_title_with_anchor(hints, id_rel, signature, exps, &doc::subject_name)
 }
 
 // == Tier renderers
@@ -1717,12 +1727,7 @@ fn render_rule_instr(
     rule_instr: &pl::RuleInstr,
 ) -> Block {
     // Split the notation into input and output expressions
-    let exps = rule_instr
-        .not_exp
-        .args()
-        .into_iter()
-        .cloned()
-        .collect::<Vec<_>>();
+    let exps = rule_instr.not_exp.args();
     let (exps_input, exps_output) =
         input::split(&rule_instr.input_hint, exps).expect("validated rule input hint");
     let fallthrough = fallthrough::prose_of_link(ctx, instr);
@@ -1737,14 +1742,20 @@ fn render_rule_instr(
         (&instr.hints.prose_in, &instr.hints.prose_out)
     {
         let prose_output =
-            alternate(hint_output, &unindent_lines, &prose_of_exp, &exps_output, false);
+            alternate(hint_output, &unindent_lines, &|&exp| prose_of_exp(exp), &exps_output, false);
         prose([
             text("Let "),
-            text(document::ser_prose_in_link(&prose_output)),
+            text(doc::ser_prose_in_link(&prose_output)),
             text(" be the result of "),
             subject_link(
                 Subject::Relation(rule_instr.id.node.clone()),
-                alternate(hint_input, &unindent_lines, &prose_of_exp, &exps_input, false),
+                alternate(
+                    hint_input,
+                    &unindent_lines,
+                    &|&exp| prose_of_exp(exp),
+                    &exps_input,
+                    false,
+                ),
             ),
         ])
     } else {
@@ -1786,7 +1797,7 @@ fn render_instr_group(
     match tier {
         pl::GroupInstr::Return(return_instr)
             if singleton
-                && document::width_prose(&prose_of_exp(&return_instr.exp)) <= ADOC_WIDTH_SHORT =>
+                && doc::width_prose(&prose_of_exp(&return_instr.exp)) <= ADOC_WIDTH_SHORT =>
         {
             Rendered::Inline(prose([
                 text(" return "),
@@ -1797,7 +1808,7 @@ fn render_instr_group(
         }
         pl::GroupInstr::Result(result_instr)
             if singleton
-                && document::width_prose(&prose_of_result(
+                && doc::width_prose(&prose_of_result(
                     &instr.hints,
                     &result_instr.rel_signature,
                     &result_instr.exps_output,
@@ -1825,7 +1836,7 @@ fn render_instr_group(
         pl::GroupInstr::Result(result_instr) => Rendered::Nested(ordered(
             level,
             prose([
-                document::capitalize_first_prose(prose_of_result(
+                doc::capitalize_first_prose(prose_of_result(
                     &instr.hints,
                     &result_instr.rel_signature,
                     &result_instr.exps_output,
@@ -1879,7 +1890,7 @@ fn render_instr_dispatch(
         ])),
         pl::DispatchInstr::Group(group_instr) => Rendered::Nested(ordered(
             level,
-            document::capitalize_first_prose(prose_of_group_dispatch(
+            doc::capitalize_first_prose(prose_of_group_dispatch(
                 &group_instr.id_rel,
                 &group_instr.id_group,
             )),
@@ -2039,12 +2050,14 @@ fn render_rulegroup_inner(
     // Serialize the linked title and body as one fragment
     format!(
         "{}:\n{}",
-        document::ser_prose_with_anchor(&prose_title, renderer.anchor),
-        document::ser_block_with_anchor(&block_body, renderer.anchor),
+        doc::ser_prose_with_anchor(&prose_title, renderer.anchor),
+        doc::ser_block_with_anchor(&block_body, renderer.anchor),
     )
 }
 
 /// Renders one rule-group fragment using caller-supplied anchors.
+///
+/// Use [`Renderer::render_rulegroup`] to compose fragments in one document.
 pub fn render_rulegroup_with_anchor(
     hints: &Hints,
     _id_group: &pl::Id,
@@ -2054,10 +2067,12 @@ pub fn render_rulegroup_with_anchor(
     block: &pl::GroupBlock,
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> String {
-    render_rulegroup_inner(&mut Renderer::new(anchor), hints, id_rel, signature, exps, block)
+    Renderer::new(anchor).render_rulegroup(hints, id_rel, signature, exps, block)
 }
 
 /// Renders one rule-group fragment with definition-name anchors.
+///
+/// Use [`Renderer::render_rulegroup`] to compose fragments in one document.
 pub fn render_rulegroup(
     hints: &Hints,
     id_group: &pl::Id,
@@ -2073,7 +2088,7 @@ pub fn render_rulegroup(
         signature,
         exps,
         block,
-        &document::subject_name,
+        &doc::subject_name,
     )
 }
 
@@ -2083,7 +2098,7 @@ fn render_defined_rel_dispatch_inner(renderer: &mut Renderer<'_>, rel: &pl::Defi
     format!(
         "{} dispatch:\n{}",
         rel.id.node,
-        document::ser_block_with_anchor(
+        doc::ser_block_with_anchor(
             &render_instrs(renderer, 0, None, &ctx, render_instr_dispatch, &rel.block),
             renderer.anchor,
         )
@@ -2091,16 +2106,20 @@ fn render_defined_rel_dispatch_inner(renderer: &mut Renderer<'_>, rel: &pl::Defi
 }
 
 /// Renders a relation dispatch fragment using caller-supplied anchors.
+///
+/// Use [`Renderer::render_defined_rel_def_dispatch`] when composing fragments.
 pub fn render_defined_rel_def_dispatch_with_anchor(
     rel: &pl::DefinedRel,
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> String {
-    render_defined_rel_dispatch_inner(&mut Renderer::new(anchor), rel)
+    Renderer::new(anchor).render_defined_rel_def_dispatch(rel)
 }
 
 /// Renders a relation dispatch fragment with definition-name anchors.
+///
+/// Use [`Renderer::render_defined_rel_def_dispatch`] when composing fragments.
 pub fn render_defined_rel_def_dispatch(rel: &pl::DefinedRel) -> String {
-    render_defined_rel_def_dispatch_with_anchor(rel, &document::subject_name)
+    render_defined_rel_def_dispatch_with_anchor(rel, &doc::subject_name)
 }
 
 /// Builds a complete relation block with source-compatible counter order.
@@ -2159,12 +2178,12 @@ pub fn render_defined_rel_def_with_anchor(
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> String {
     let mut renderer = Renderer::new(anchor);
-    document::ser_block_with_anchor(&render_defined_rel_block(&mut renderer, hints, rel), anchor)
+    doc::ser_block_with_anchor(&render_defined_rel_block(&mut renderer, hints, rel), anchor)
 }
 
 /// Renders a defined relation with definition-name anchors.
 pub fn render_defined_rel_def(hints: &Hints, rel: &pl::DefinedRel) -> String {
-    render_defined_rel_def_with_anchor(hints, rel, &document::subject_name)
+    render_defined_rel_def_with_anchor(hints, rel, &doc::subject_name)
 }
 
 /// Renders an external relation using caller-supplied anchors.
@@ -2173,7 +2192,7 @@ pub fn render_extern_rel_def_with_anchor(
     rel: &pl::ExternRel,
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> String {
-    document::ser_block_with_anchor(
+    doc::ser_block_with_anchor(
         &render_rel_title_block(hints, &rel.id, &rel.rel_signature, &rel.exps_input),
         anchor,
     )
@@ -2181,31 +2200,25 @@ pub fn render_extern_rel_def_with_anchor(
 
 /// Renders an external relation with definition-name anchors.
 pub fn render_extern_rel_def(hints: &Hints, rel: &pl::ExternRel) -> String {
-    render_extern_rel_def_with_anchor(hints, rel, &document::subject_name)
+    render_extern_rel_def_with_anchor(hints, rel, &doc::subject_name)
 }
 
 /// Renders an otherwise rule-group fragment using caller-supplied anchors.
+///
+/// Use [`Renderer::render_rulegroup_else`] when composing fragments.
 pub fn render_rulegroup_else_with_anchor(
     id_rel: &pl::Id,
     block: &pl::DispatchBlock,
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> String {
-    let mut renderer = Renderer::new(anchor);
-    let ctx = Context { namespace: id_rel.node.clone(), next: None };
-    render_elseblock(
-        &mut renderer,
-        Some(&fallthrough::anchor_of_else(&id_rel.node)),
-        &ctx,
-        render_dispatch_inline,
-        Some(block),
-    )
-    .trim()
-    .to_owned()
+    Renderer::new(anchor).render_rulegroup_else(id_rel, block)
 }
 
 /// Renders an otherwise rule-group fragment with definition-name anchors.
+///
+/// Use [`Renderer::render_rulegroup_else`] when composing fragments.
 pub fn render_rulegroup_else(id_rel: &pl::Id, block: &pl::DispatchBlock) -> String {
-    render_rulegroup_else_with_anchor(id_rel, block, &document::subject_name)
+    render_rulegroup_else_with_anchor(id_rel, block, &doc::subject_name)
 }
 
 // == Function definitions
@@ -2251,7 +2264,7 @@ fn render_func_title_block(
                         .join(", ")
                 )
             }),
-            raw(document::ser_code(&code_of_params(params))),
+            inline(Prose::PlainCode(code_of_params(params))),
         ])
     }
 }
@@ -2263,20 +2276,14 @@ fn render_func_header_block(
     tparams: &[pl::TParam],
     params: &[pl::Param],
 ) -> Block {
-    // Serialize the selected title form inside the function link
+    // Keep nested links visible to the final serializer
     let prose_body = if let Some(hint) = hints.prose_in.as_ref().or(hints.prose_true.as_ref()) {
-        text(document::ser_prose(&alternate(
-            hint,
-            &|text_body| reindent_lines(0, text_body),
-            &prose_of_param,
-            params,
-            true,
-        )))
+        alternate(hint, &|text_body| reindent_lines(0, text_body), &prose_of_param, params, true)
     } else {
-        text(format!(
-            "{}{}{}",
-            string_of_defid(id_func),
-            if tparams.is_empty() {
+        // Preserve plain signature text without pre-serializing its code
+        Prose::PlainCode(code([
+            token(string_of_defid(id_func)),
+            token(if tparams.is_empty() {
                 String::new()
             } else {
                 format!(
@@ -2287,9 +2294,9 @@ fn render_func_header_block(
                         .collect::<Vec<_>>()
                         .join(", ")
                 )
-            },
-            document::ser_code(&code_of_params(params)),
-        ))
+            }),
+            code_of_params(params),
+        ]))
     };
     inline(subject_link(Subject::Function(id_func.node.clone()), prose_body))
 }
@@ -2302,10 +2309,7 @@ pub fn render_func_title_with_anchor(
     params: &[pl::Param],
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> String {
-    document::ser_block_with_anchor(
-        &render_func_title_block(hints, id_func, tparams, params),
-        anchor,
-    )
+    doc::ser_block_with_anchor(&render_func_title_block(hints, id_func, tparams, params), anchor)
 }
 
 /// Renders a function title with definition-name anchors.
@@ -2315,7 +2319,7 @@ pub fn render_func_title(
     tparams: &[pl::TParam],
     params: &[pl::Param],
 ) -> String {
-    render_func_title_with_anchor(hints, id_func, tparams, params, &document::subject_name)
+    render_func_title_with_anchor(hints, id_func, tparams, params, &doc::subject_name)
 }
 
 /// Renders a function header using caller-supplied anchors.
@@ -2326,10 +2330,7 @@ pub fn render_func_header_with_anchor(
     params: &[pl::Param],
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> String {
-    document::ser_block_with_anchor(
-        &render_func_header_block(hints, id_func, tparams, params),
-        anchor,
-    )
+    doc::ser_block_with_anchor(&render_func_header_block(hints, id_func, tparams, params), anchor)
 }
 
 /// Renders a function header with definition-name anchors.
@@ -2339,7 +2340,7 @@ pub fn render_func_header(
     tparams: &[pl::TParam],
     params: &[pl::Param],
 ) -> String {
-    render_func_header_with_anchor(hints, id_func, tparams, params, &document::subject_name)
+    render_func_header_with_anchor(hints, id_func, tparams, params, &doc::subject_name)
 }
 
 /// Renders an external function using caller-supplied anchors.
@@ -2353,7 +2354,7 @@ pub fn render_extern_func_def_with_anchor(
 
 /// Renders an external function with definition-name anchors.
 pub fn render_extern_func_def(hints: &Hints, func: &pl::ExternFunc) -> String {
-    render_extern_func_def_with_anchor(hints, func, &document::subject_name)
+    render_extern_func_def_with_anchor(hints, func, &doc::subject_name)
 }
 
 /// Renders a builtin function using caller-supplied anchors.
@@ -2367,31 +2368,25 @@ pub fn render_builtin_func_def_with_anchor(
 
 /// Renders a builtin function with definition-name anchors.
 pub fn render_builtin_func_def(hints: &Hints, func: &pl::BuiltinFunc) -> String {
-    render_builtin_func_def_with_anchor(hints, func, &document::subject_name)
+    render_builtin_func_def_with_anchor(hints, func, &doc::subject_name)
 }
 
 /// Builds a table function with argument and result columns.
 fn render_table_func_block(hints: &Hints, func: &pl::TableFunc) -> Block {
-    // Serialize each input tuple and result into table cells
+    // Retain code links until the enclosing document resolves its anchors
     let rows_table = func
         .rows
         .iter()
-        .map(|row| {
-            vec![
-                document::ser_code(&code_of_exps(&row.exps_input, ", ")),
-                document::ser_code(&code_of_exp(&row.exp)),
-            ]
-        })
+        .map(|row| vec![code_of_exps(&row.exps_input, ", "), code_of_exp(&row.exp)])
         .collect();
     // Assemble the linked header and table with one result column
     concat([
         render_func_header_block(hints, &func.id, &[], &func.params),
         raw(":\n"),
-        Block::Table(
-            func.params.len() + 1,
-            vec![prose_of_params(&func.params), text("Result")],
-            rows_table,
-        ),
+        Block::Table {
+            header: vec![prose_of_params(&func.params), text("Result")],
+            rows: rows_table,
+        },
     ])
 }
 
@@ -2401,12 +2396,12 @@ pub fn render_table_func_def_with_anchor(
     func: &pl::TableFunc,
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> String {
-    document::ser_block_with_anchor(&render_table_func_block(hints, func), anchor)
+    doc::ser_block_with_anchor(&render_table_func_block(hints, func), anchor)
 }
 
 /// Renders a table function with definition-name anchors.
 pub fn render_table_func_def(hints: &Hints, func: &pl::TableFunc) -> String {
-    render_table_func_def_with_anchor(hints, func, &document::subject_name)
+    render_table_func_def_with_anchor(hints, func, &doc::subject_name)
 }
 
 /// Builds a function body and its optional otherwise clause.
@@ -2484,12 +2479,12 @@ pub fn render_defined_func_def_with_anchor(
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> String {
     let mut renderer = Renderer::new(anchor);
-    document::ser_block_with_anchor(&render_defined_func_block(&mut renderer, hints, func), anchor)
+    doc::ser_block_with_anchor(&render_defined_func_block(&mut renderer, hints, func), anchor)
 }
 
 /// Renders a defined function with definition-name anchors.
 pub fn render_defined_func_def(hints: &Hints, func: &pl::DefinedFunc) -> String {
-    render_defined_func_def_with_anchor(hints, func, &document::subject_name)
+    render_defined_func_def_with_anchor(hints, func, &doc::subject_name)
 }
 
 // == Definitions
@@ -2498,38 +2493,30 @@ pub fn render_defined_func_def(hints: &Hints, func: &pl::DefinedFunc) -> String 
 fn render_def_inner(renderer: &mut Renderer<'_>, def: &pl::Def) -> Option<String> {
     match &def.node.node {
         pl::DefKind::Typ(_) | pl::DefKind::Var(_) => None,
-        pl::DefKind::Rel(pl::RelDef::Extern(rel)) => Some(document::ser_block_with_anchor(
+        pl::DefKind::Rel(pl::RelDef::Extern(rel)) => Some(doc::ser_block_with_anchor(
             &render_rel_title_block(&def.hints, &rel.id, &rel.rel_signature, &rel.exps_input),
             renderer.anchor,
         )),
-        pl::DefKind::Rel(pl::RelDef::Defined(rel)) => Some(document::ser_block_with_anchor(
+        pl::DefKind::Rel(pl::RelDef::Defined(rel)) => Some(doc::ser_block_with_anchor(
             &render_defined_rel_block(renderer, &def.hints, rel),
             renderer.anchor,
         )),
-        pl::DefKind::MetaFunc(pl::MetaFuncDef::Extern(func)) => {
-            Some(document::ser_block_with_anchor(
-                &render_func_header_block(&def.hints, &func.id, &func.tparams, &func.params),
-                renderer.anchor,
-            ))
-        }
-        pl::DefKind::MetaFunc(pl::MetaFuncDef::Builtin(func)) => {
-            Some(document::ser_block_with_anchor(
-                &render_func_header_block(&def.hints, &func.id, &func.tparams, &func.params),
-                renderer.anchor,
-            ))
-        }
-        pl::DefKind::MetaFunc(pl::MetaFuncDef::Table(func)) => {
-            Some(document::ser_block_with_anchor(
-                &render_table_func_block(&def.hints, func),
-                renderer.anchor,
-            ))
-        }
-        pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(func)) => {
-            Some(document::ser_block_with_anchor(
-                &render_defined_func_block(renderer, &def.hints, func),
-                renderer.anchor,
-            ))
-        }
+        pl::DefKind::MetaFunc(pl::MetaFuncDef::Extern(func)) => Some(doc::ser_block_with_anchor(
+            &render_func_header_block(&def.hints, &func.id, &func.tparams, &func.params),
+            renderer.anchor,
+        )),
+        pl::DefKind::MetaFunc(pl::MetaFuncDef::Builtin(func)) => Some(doc::ser_block_with_anchor(
+            &render_func_header_block(&def.hints, &func.id, &func.tparams, &func.params),
+            renderer.anchor,
+        )),
+        pl::DefKind::MetaFunc(pl::MetaFuncDef::Table(func)) => Some(doc::ser_block_with_anchor(
+            &render_table_func_block(&def.hints, func),
+            renderer.anchor,
+        )),
+        pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(func)) => Some(doc::ser_block_with_anchor(
+            &render_defined_func_block(renderer, &def.hints, func),
+            renderer.anchor,
+        )),
     }
 }
 
@@ -2538,21 +2525,17 @@ pub fn render_def_with_anchor(
     def: &pl::Def,
     anchor: &dyn Fn(&Subject) -> Option<String>,
 ) -> Option<String> {
-    render_def_inner(&mut Renderer::new(anchor), def)
+    Renderer::new(anchor).render_def(def)
 }
 
 /// Renders one prose definition, omitting type and variable declarations.
 pub fn render_def(def: &pl::Def) -> Option<String> {
-    render_def_with_anchor(def, &document::subject_name)
+    render_def_with_anchor(def, &doc::subject_name)
 }
 
 /// Renders definitions with one shared fallthrough counter state.
 pub fn render_defs(defs: &[pl::Def]) -> String {
-    let mut renderer = Renderer::new(&document::subject_name);
-    defs.iter()
-        .filter_map(|def| render_def_inner(&mut renderer, def))
-        .collect::<Vec<_>>()
-        .join("\n\n")
+    Renderer::new(&doc::subject_name).render_defs(defs)
 }
 
 /// Renders a complete prose specification.

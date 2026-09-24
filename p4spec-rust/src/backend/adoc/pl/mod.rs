@@ -1,12 +1,12 @@
 //! AsciiDoc rendering for prose-language definitions
 
-pub mod document;
+pub mod doc;
 pub mod fallthrough;
 mod render;
 pub mod utils;
 
 pub use render::{
-    render_builtin_func_def, render_builtin_func_def_with_anchor, render_def,
+    Renderer, render_builtin_func_def, render_builtin_func_def_with_anchor, render_def,
     render_def_with_anchor, render_defined_func_def, render_defined_func_def_with_anchor,
     render_defined_rel_def, render_defined_rel_def_dispatch,
     render_defined_rel_def_dispatch_with_anchor, render_defined_rel_def_with_anchor, render_defs,

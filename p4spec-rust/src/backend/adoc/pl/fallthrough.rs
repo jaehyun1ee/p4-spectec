@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use crate::lang::pl::ast::{Fallthrough, Instr};
 
-use super::document::{FallthroughLabel, Prose};
+use super::doc::{FallthroughLabel, Prose};
 
 // == Context
 

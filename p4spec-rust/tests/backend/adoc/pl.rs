@@ -1,5 +1,7 @@
 use p4spec_rust::{
-    backend::adoc::pl::{document::Subject, render_def, render_def_with_anchor, render_spec},
+    backend::adoc::pl::{
+        self as adoc, doc::Subject, render_def, render_def_with_anchor, render_spec,
+    },
     lang::{
         common::{
             notation::{atom::Atom, mixfix::Mixfix},
@@ -334,4 +336,116 @@ fn test_relation_dispatch_allocates_block_anchor_before_group_bodies() {
 
     assert!(rendered.contains("id=\"bk-Rel-2-arm-1\""), "{rendered}");
     assert!(rendered.contains("id=\"bk-Rel-1-arm-1\""), "{rendered}");
+}
+
+fn table_func() -> pl::TableFunc {
+    pl::TableFunc {
+        id: id("table"),
+        params: ["x", "y"]
+            .into_iter()
+            .map(|name| {
+                p4spec_rust::phrase! {
+                    node: pl::ParamKind::Exp(typ::make::bool(), Box::new(exp_id(name))),
+                    span: Span::default(),
+                }
+            })
+            .collect(),
+        typ: typ::make::bool(),
+        rows: vec![pl::TableRow {
+            exps_input: vec![exp_bool(false), exp_bool(true)],
+            exp: exp_bool(true),
+            block: vec![],
+        }],
+    }
+}
+
+#[test]
+fn test_table_argument_tuple_always_occupies_one_column() {
+    let func = table_func();
+    let text = adoc::render_table_func_def(&Hints::default(), &func);
+    assert_eq!(
+        text,
+        concat!(
+            "xref:table[$table(x, y)]:\n",
+            "[cols=\"2\", options=\"header\"]\n",
+            "|===\n| (``x``, ``y``) | Result \n\n",
+            "| false, true | true\n\n|===",
+        )
+    );
+}
+
+#[test]
+fn test_table_cells_use_the_enclosing_anchor_resolver() {
+    let mut func = table_func();
+    func.rows[0].exp = p4spec_rust::annotated_note_phrase! {
+        node: pl::ExpKind::Call(id("inner"), vec![], vec![]),
+        note: pl::TypKind::Bool,
+        span: Span::default(),
+    };
+    let anchor = |subject: &Subject| match subject {
+        Subject::Function(id) | Subject::Relation(id) => Some(format!("custom-{id}")),
+    };
+    let text = adoc::render_table_func_def_with_anchor(&Hints::default(), &func, &anchor);
+    assert!(text.contains("| false, true | xref:custom-inner[$inner]"), "{text}");
+    let text = adoc::render_table_func_def_with_anchor(&Hints::default(), &func, &|_| None);
+    assert!(text.contains("| false, true | $inner"), "{text}");
+    assert!(!text.contains("xref:"), "{text}");
+}
+
+#[test]
+fn test_function_header_suppresses_nested_pattern_links() {
+    let mut exp = p4spec_rust::annotated_note_phrase! {
+        node: pl::ExpKind::Case(Box::new(Mixfix::Arg(exp_id("x")))),
+        note: pl::TypKind::Var(id("Value"), vec![]),
+        span: Span::default(),
+    };
+    exp.hints.prose = Some(prose_hint("value", 0, ""));
+    let param = p4spec_rust::phrase! {
+        node: pl::ParamKind::Exp(typ::make::bool(), Box::new(exp)),
+        span: Span::default(),
+    };
+    let hints = Hints { prose_in: Some(prose_hint("checking", 0, "")), ..Hints::default() };
+    let text = adoc::render_func_header(&hints, &id("check"), &[], &[param]);
+    assert_eq!(text, "xref:check[Checking value ``x``]");
+}
+
+#[test]
+fn test_rulegroup_fragments_keep_distinct_arm_anchors() {
+    let signature = pl::RelSignature {
+        not_typ: p4spec_rust::phrase! {
+            node: Mixfix::Arg(typ::make::bool()),
+            span: Span::default(),
+        },
+        input_hint: InputHint::new(vec![p4spec_rust::phrase! { node: 0, span: Span::default() }]),
+    };
+    let block = vec![backtrack_instr(vec![
+        vec![return_exp_instr(exp_bool(false), Some(pl::Fallthrough::Next))],
+        vec![return_instr(true)],
+    ])];
+    let mut renderer = adoc::Renderer::new(&adoc::doc::subject_name);
+    let text_a = renderer.render_rulegroup(
+        &Hints::default(),
+        &id("Rel"),
+        &signature,
+        &[exp_bool(true)],
+        &block,
+    );
+    let text_b = renderer.render_rulegroup(
+        &Hints::default(),
+        &id("Rel"),
+        &signature,
+        &[exp_bool(true)],
+        &block,
+    );
+    assert!(text_a.contains("id=\"bk-Rel-1-arm-1\""), "{text_a}");
+    assert!(text_b.contains("id=\"bk-Rel-2-arm-1\""), "{text_b}");
+    assert!(text_b.contains("href=\"#bk-Rel-2-arm-2\">→ 2</a>"), "{text_b}");
+    let text_fresh = adoc::Renderer::new(&adoc::doc::subject_name).render_rulegroup(
+        &Hints::default(),
+        &id("Rel"),
+        &signature,
+        &[exp_bool(true)],
+        &block,
+    );
+    assert_eq!(text_a, text_fresh);
 }
