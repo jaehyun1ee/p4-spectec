@@ -1,0 +1,6 @@
+error[algo/otherwise-function-call-invalid]: an `otherwise` body cannot call a function
+   ┌─ algo/function-otherwise-function-call.watsup:11:18
+   │
+11 │   -- debug $(1 + $identity(0))
+   │                  ^^^^^^^^^^^^
+

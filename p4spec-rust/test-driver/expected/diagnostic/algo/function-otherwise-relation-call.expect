@@ -1,0 +1,6 @@
+error[algo/otherwise-relation-call-invalid]: an `otherwise` body cannot call a relation
+   ┌─ algo/function-otherwise-relation-call.watsup:13:6
+   │
+13 │   -- R: 0 |- 0
+   │      ^^^^^^^^^
+

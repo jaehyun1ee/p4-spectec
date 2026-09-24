@@ -1,0 +1,6 @@
+error[algo/otherwise-condition-invalid]: an `otherwise` body cannot test a condition
+  ┌─ algo/function-otherwise-condition.watsup:5:6
+  │
+5 │   -- if true
+  │      ^^^^^^^
+

@@ -216,3 +216,22 @@ pub const ELAB: &[&str] = &[
     "type-shape-iteration-expected.watsup",
     "type-shape-iteration-kind.watsup",
 ];
+
+/// Lists the pinned algorithmic conversion failures.
+pub const ALGO: &[&str] = &[
+    "dataflow-bind-both-sides-of-equality.watsup",
+    "dataflow-bind-in-non-invertible.watsup",
+    "dataflow-free-variable-in-output.watsup",
+    "dataflow-iter-binding-only.watsup",
+    "dataflow-parallel-binding-dimension-mismatch.watsup",
+    "function-otherwise-condition.watsup",
+    "function-otherwise-function-call.watsup",
+    "function-otherwise-relation-call.watsup",
+    "table-non-shallow-binding.watsup",
+    "table-pattern-expected-named-variant.watsup",
+    "table-pattern-extern.watsup",
+    "table-pattern-incomplete.watsup",
+    "table-pattern-non-variant.watsup",
+    "table-pattern-overlap.watsup",
+    "table-repeated-binding.watsup",
+];
