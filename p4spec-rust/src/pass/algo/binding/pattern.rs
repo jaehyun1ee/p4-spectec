@@ -9,7 +9,6 @@
 use crate::lang::{
     common::{ds::set::PhraseSet, source::Span},
     il::ast,
-    traits::print::Print,
 };
 
 use super::super::{AlgoError, error};
@@ -23,6 +22,11 @@ use super::super::{AlgoError, error};
 pub struct PatternSet(PhraseSet<ast::NotTyp>);
 
 impl PatternSet {
+    /// Iterates over notation alternatives in syntax order.
+    pub fn iter(&self) -> impl Iterator<Item = &ast::NotTyp> {
+        self.0.iter()
+    }
+
     fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -52,32 +56,9 @@ impl FromIterator<ast::NotTyp> for PatternSet {
 pub struct PatternSets(Vec<PatternSet>);
 
 impl PatternSets {
-    /// Describes the Cartesian product of notation alternatives.
-    pub fn to_source_string(&self) -> String {
-        // Group alternatives within each argument position
-        let patterns: Vec<_> = self
-            .0
-            .iter()
-            .map(|pattern_set| {
-                let cases: Vec<_> = pattern_set.0.iter().map(Print::to_string).collect();
-                match cases.as_slice() {
-                    [case] => case.clone(),
-                    _ => format!("{{{}}}", cases.join(" | ")),
-                }
-            })
-            .collect();
-        // Separate argument positions without flattening their alternatives
-        match patterns.as_slice() {
-            [pattern] => pattern.clone(),
-            _ => format!("({})", patterns.join(", ")),
-        }
-    }
-
-    /// Iterates over the declaration spans of every case in the product.
-    pub fn case_spans(&self) -> impl Iterator<Item = Span> + '_ {
-        self.0
-            .iter()
-            .flat_map(|pattern_set| pattern_set.0.iter().map(|not_typ| not_typ.span.clone()))
+    /// Iterates over pattern sets in argument order.
+    pub fn iter(&self) -> impl Iterator<Item = &PatternSet> {
+        self.0.iter()
     }
 }
 

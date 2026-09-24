@@ -9,7 +9,7 @@ use crate::{
     lang::{
         common::{Id, source::Span},
         il::ast,
-        traits::print::Print,
+        traits::{at::At, print::Print},
     },
     pass::algo::binding::pattern::PatternSets,
 };
@@ -70,6 +70,26 @@ pub(crate) fn table_pattern_overlapping(span: &Span, span_first: &Span) -> AlgoE
     )
 }
 
+/// Describes uncovered products without flattening argument alternatives.
+fn describe_patterns(pattern_sets: &PatternSets) -> String {
+    // Group notation alternatives within each argument position
+    let patterns: Vec<_> = pattern_sets
+        .iter()
+        .map(|pattern_set| {
+            let cases: Vec<_> = pattern_set.iter().map(Print::to_string).collect();
+            match cases.as_slice() {
+                [case] => case.clone(),
+                _ => format!("{{{}}}", cases.join(" | ")),
+            }
+        })
+        .collect();
+    // Preserve the distinction between a single argument and a product
+    match patterns.as_slice() {
+        [pattern] => pattern.clone(),
+        _ => format!("({})", patterns.join(", ")),
+    }
+}
+
 const TABLE_PATTERN_INCOMPLETE: &str = "algo/table-pattern-incomplete";
 
 /// Describes missing products and relates their declared cases.
@@ -77,10 +97,18 @@ pub(crate) fn table_pattern_incomplete(span: &Span, patterns: &[PatternSets]) ->
     // Preserve the deterministic order of uncovered pattern products
     let missing: Vec<_> = patterns
         .iter()
-        .map(|patterns| format!("`{}`", patterns.to_source_string()))
+        .map(|patterns| format!("`{}`", describe_patterns(patterns)))
         .collect();
     // Relate each uncovered declaration once, in source order
-    let mut spans: Vec<_> = patterns.iter().flat_map(PatternSets::case_spans).collect();
+    let mut spans: Vec<_> = patterns
+        .iter()
+        .flat_map(|pattern_sets| {
+            pattern_sets
+                .iter()
+                .flat_map(|pattern_set| pattern_set.iter())
+        })
+        .map(At::at)
+        .collect();
     spans.sort();
     spans.dedup();
     // Attach case declarations to the position following the final row
