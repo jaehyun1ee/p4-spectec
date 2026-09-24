@@ -146,21 +146,30 @@ fn analyze_exps_as_bind(
 
 /// Requires an expression in bound position to bind nothing.
 fn analyze_exp_as_bound(ctx: &Context, exp: &ast::Exp) -> Result<(), AlgoError> {
-    analyze_exp_as_bound_with_input(ctx, exp, None)
-}
-
-/// Checks a read-only expression, retaining a relation input hint when present.
-fn analyze_exp_as_bound_with_input(
-    ctx: &Context,
-    exp: &ast::Exp,
-    input_opt: Option<(&ast::Id, &Phrase<usize>)>,
-) -> Result<(), AlgoError> {
     if let Some(var) = exp
         .free_vars()
         .iter()
         .find(|var| !ctx.venv.contains_key(&var.id))
     {
-        Err(error::binding::expression_variable_unbound(&var.id, input_opt))
+        Err(error::binding::expression_variable_unbound(&var.id))
+    } else {
+        Ok(())
+    }
+}
+
+/// Checks a relation input as a read-only expression at its input hint.
+fn analyze_relation_input_as_bound(
+    ctx: &Context,
+    exp_input_il: &ast::Exp,
+    id_relation: &ast::Id,
+    idx_input: &Phrase<usize>,
+) -> Result<(), AlgoError> {
+    if let Some(var) = exp_input_il
+        .free_vars()
+        .iter()
+        .find(|var| !ctx.venv.contains_key(&var.id))
+    {
+        Err(error::binding::relation_input_variable_unbound(&var.id, id_relation, idx_input))
     } else {
         Ok(())
     }
@@ -396,8 +405,8 @@ fn lower_rule_prem(
     // Inputs are bound, outputs are binders
     let mut idxs_input = rule_prem_il.input_hint.indices().iter().collect::<Vec<_>>();
     idxs_input.sort_by_key(|idx| idx.node);
-    for (exp, idx) in exps_input_il.iter().zip(idxs_input) {
-        analyze_exp_as_bound_with_input(ctx, exp, Some((&rule_prem_il.id, idx)))?;
+    for (exp_input_il, idx_input) in exps_input_il.iter().zip(idxs_input) {
+        analyze_relation_input_as_bound(ctx, exp_input_il, &rule_prem_il.id, idx_input)?;
     }
     let (venv, exps_output_al, prem_sideconditions_al) =
         analyze_exps_as_bind(ctx, &iter_ctx, &exps_output_il)?;

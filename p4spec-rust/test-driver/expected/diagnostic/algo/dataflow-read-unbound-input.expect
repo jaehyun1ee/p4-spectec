@@ -1,4 +1,4 @@
-error[algo/expression-variable-unbound]: `x` is not bound when this expression is evaluated
+error[algo/relation-input-variable-unbound]: `x` is not bound when this expression is evaluated
    ┌─ algo/dataflow-read-unbound-input.watsup:10:9
    │
  6 │   hint(input %0)

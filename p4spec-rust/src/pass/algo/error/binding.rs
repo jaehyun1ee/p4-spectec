@@ -35,24 +35,39 @@ fn describe_bindings(benv: &BEnv) -> String {
 const EXPRESSION_VARIABLE_UNBOUND: &str = "algo/expression-variable-unbound";
 
 /// Reports variables read before they are bound.
-pub(crate) fn expression_variable_unbound(
-    id: &Id,
-    input_opt: Option<(&Id, &Phrase<usize>)>,
-) -> AlgoError {
-    let mut labels = vec![Label::primary(&id.span, format!("`{}` is read here", id.node))];
-    if let Some((id_relation, idx)) = input_opt {
-        labels.push(Label::secondary(
-            &idx.span,
-            format!(
-                "argument %{} of relation `{}` is evaluated as input; it cannot bind `{}`",
-                idx.node, id_relation.node, id.node
-            ),
-        ));
-    }
+pub(crate) fn expression_variable_unbound(id: &Id) -> AlgoError {
     cause(
         EXPRESSION_VARIABLE_UNBOUND,
         format!("`{}` is not bound when this expression is evaluated", id.node),
-        labels,
+        vec![Label::primary(&id.span, format!("`{}` is read here", id.node))],
+        vec![
+            "Bind the variable in an earlier input pattern or premise before reading it here."
+                .into(),
+        ],
+    )
+}
+
+const RELATION_INPUT_VARIABLE_UNBOUND: &str = "algo/relation-input-variable-unbound";
+
+/// Reports an unbound variable read in a relation input.
+pub(crate) fn relation_input_variable_unbound(
+    id: &Id,
+    id_relation: &Id,
+    idx_input: &Phrase<usize>,
+) -> AlgoError {
+    cause(
+        RELATION_INPUT_VARIABLE_UNBOUND,
+        format!("`{}` is not bound when this expression is evaluated", id.node),
+        vec![
+            Label::primary(&id.span, format!("`{}` is read here", id.node)),
+            Label::secondary(
+                &idx_input.span,
+                format!(
+                    "argument %{} of relation `{}` is evaluated as input; it cannot bind `{}`",
+                    idx_input.node, id_relation.node, id.node
+                ),
+            ),
+        ],
         vec![
             "Bind the variable in an earlier input pattern or premise before reading it here."
                 .into(),
