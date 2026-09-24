@@ -573,11 +573,49 @@ impl Doc {
 
     // - TeX classification
     //
+    //   Doc::mathrel(x)             -> Mathrel(x)
     //   Doc::displaystyle(Empty)    -> Empty
+
+    pub(crate) fn group(doc: Doc) -> Doc {
+        Doc::Group(Box::new(doc))
+    }
+
+    pub(crate) fn mathbin(doc: Doc) -> Doc {
+        Doc::Mathbin(Box::new(doc))
+    }
+
+    pub(crate) fn mathrel(doc: Doc) -> Doc {
+        Doc::Mathrel(Box::new(doc))
+    }
 
     /// Omits display style around an empty document.
     pub(crate) fn displaystyle(doc: Doc) -> Doc {
         if doc.is_empty() { Doc::Empty } else { Doc::Displaystyle(Box::new(doc)) }
+    }
+
+    // - Delimiters and attachments
+    //
+    //   Doc::parenthesized(x)   -> Delimited(Paren, x)
+    //   Doc::sub(x, i)          -> Sub(x, i)
+
+    pub(crate) fn delimited(delimiter: Delimiter, doc: Doc) -> Doc {
+        Doc::Delimited(delimiter, Box::new(doc))
+    }
+
+    pub(crate) fn parenthesized(doc: Doc) -> Doc {
+        Doc::delimited(Delimiter::Paren, doc)
+    }
+
+    pub(crate) fn sub(doc_base: Doc, doc_sub: Doc) -> Doc {
+        Doc::Sub(Box::new(doc_base), Box::new(doc_sub))
+    }
+
+    pub(crate) fn sup(doc_base: Doc, doc_sup: Doc) -> Doc {
+        Doc::Sup(Box::new(doc_base), Box::new(doc_sup))
+    }
+
+    pub(crate) fn fraction(doc_num: Doc, doc_den: Doc) -> Doc {
+        Doc::Fraction(Box::new(doc_num), Box::new(doc_den))
     }
 
     // - Navigation
