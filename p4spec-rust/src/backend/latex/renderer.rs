@@ -22,7 +22,7 @@ use crate::lang::{
 
 use super::{
     error::{Error, Result},
-    precedence::{self, Assoc, Category, Side},
+    precedence::{self, Category, Prec, Side},
     render::Anchors,
     tex::{
         doc::{Alignment, Block, Delimiter, Doc, GridRow, Soft, Style, Symbol},
@@ -370,7 +370,7 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
         ExpKind::Id(id) => Ok(Term::new(tex_of_varid(id), C::Atomic)),
         ExpKind::Un(op, exp) => {
             let term = render_exp(exp, anchors)?;
-            let tex_exp = tex_of_nested_exp((C::Unary, Assoc::Right), Side::Right, term);
+            let tex_exp = tex_of_nested_exp(precedence::UNARY, Side::Right, term);
             Ok(Term::new(Doc::concat_spaced(vec![tex_of_unop(*op), tex_exp]), C::Unary))
         }
         ExpKind::Bin(exp_l, BinOp::Num(num::BinOp::Pow), exp_r) => {
@@ -384,13 +384,9 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
         ExpKind::Bin(exp_l, op, exp_r) => {
             render_binary_exp(precedence::of_binop(*op), tex_of_binop(*op), exp_l, exp_r, anchors)
         }
-        ExpKind::Cmp(exp_l, op, exp_r) => render_binary_exp(
-            (C::Comparison, Assoc::Right),
-            tex_of_cmpop(*op),
-            exp_l,
-            exp_r,
-            anchors,
-        ),
+        ExpKind::Cmp(exp_l, op, exp_r) => {
+            render_binary_exp(precedence::of_cmpop(*op), tex_of_cmpop(*op), exp_l, exp_r, anchors)
+        }
         ExpKind::Arith(exp) => render_exp(exp, anchors),
         ExpKind::Eps => Ok(Term::new(Doc::Fixed(Symbol::Epsilon), C::Atomic)),
         ExpKind::List(exps) => {
@@ -400,11 +396,11 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
         }
         ExpKind::Cons(exp_l, exp_r) => {
             let tex_op = Doc::Mathbin(Box::new(Doc::Fixed(Symbol::DoubleColon)));
-            render_binary_exp((C::Cons, Assoc::Right), tex_op, exp_l, exp_r, anchors)
+            render_binary_exp(precedence::CONS, tex_op, exp_l, exp_r, anchors)
         }
         ExpKind::Cat(exp_l, exp_r) => {
             let tex_op = Doc::Mathbin(Box::new(Doc::Fixed(Symbol::Cat)));
-            render_binary_exp((C::Additive, Assoc::Left), tex_op, exp_l, exp_r, anchors)
+            render_binary_exp(precedence::CAT, tex_op, exp_l, exp_r, anchors)
         }
         ExpKind::Idx(exp_base, exp_idx) => {
             let tex_idx = tex_of_exp(exp_idx, anchors)?;
@@ -422,13 +418,9 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
             let tex_exp = tex_of_exp(exp, anchors)?;
             Ok(Term::new(Doc::Delimited(Delimiter::Bar, Box::new(tex_exp)), C::Unary))
         }
-        ExpKind::Mem(exp_l, exp_r) => render_binary_exp(
-            (C::Comparison, Assoc::Right),
-            Doc::Fixed(Symbol::In),
-            exp_l,
-            exp_r,
-            anchors,
-        ),
+        ExpKind::Mem(exp_l, exp_r) => {
+            render_binary_exp(precedence::COMPARISON, Doc::Fixed(Symbol::In), exp_l, exp_r, anchors)
+        }
         ExpKind::Str(exp_fields) => {
             let docs = exp_fields
                 .iter()
@@ -448,7 +440,7 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
                 return render_exp(exp_base, anchors);
             }
             let term_base = render_exp(exp_base, anchors)?;
-            let tex_base = tex_of_nested_exp((C::Postfix, Assoc::Left), Side::Left, term_base);
+            let tex_base = tex_of_nested_exp(precedence::POSTFIX, Side::Left, term_base);
             Ok(Term::new(Doc::Sub(Box::new(tex_base), Box::new(tex_field)), C::Postfix))
         }
         ExpKind::Upd(exp_base, path, exp_field) => {
@@ -476,13 +468,13 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
         }
         ExpKind::Iter(exp, iter) => {
             let term = render_exp(exp, anchors)?;
-            let tex_base = tex_of_nested_exp((C::Postfix, Assoc::Left), Side::Left, term);
+            let tex_base = tex_of_nested_exp(precedence::POSTFIX, Side::Left, term);
             let tex_iter = tex_of_iter(*iter);
             Ok(Term::new(Doc::Sup(Box::new(tex_base), Box::new(tex_iter)), C::Postfix))
         }
         ExpKind::Sub(exp, plain_typ) => {
             let term = render_exp(exp, anchors)?;
-            let tex_l = tex_of_nested_exp((C::Colon, Assoc::Left), Side::Left, term);
+            let tex_l = tex_of_nested_exp(precedence::SUBTYPE, Side::Left, term);
             let tex_op = Doc::Mathrel(Box::new(Doc::concat(vec![
                 Doc::Fixed(Symbol::Less),
                 Doc::Fixed(Symbol::Colon),
@@ -511,8 +503,8 @@ fn texs_of_exps(exps: &[Exp], anchors: Option<&Anchors<'_>>) -> Result<Vec<Doc>>
 // - Operand precedence
 
 /// Parenthesizes a weaker operand or an equal-precedence associativity conflict.
-fn tex_of_nested_exp(prec: (Category, Assoc), side: Side, term: Term) -> Doc {
-    if precedence::needs_parentheses(prec.0, prec.1, side, term.category) {
+fn tex_of_nested_exp(prec_parent: Prec, side: Side, term: Term) -> Doc {
+    if precedence::needs_parentheses(prec_parent, side, term.category) {
         Doc::Delimited(Delimiter::Paren, Box::new(term.doc))
     } else {
         term.doc
@@ -523,7 +515,7 @@ fn tex_of_nested_exp(prec: (Category, Assoc), side: Side, term: Term) -> Doc {
 
 /// Preserves operand grouping and adds a break before the infix operator.
 fn render_binary_exp(
-    prec: (Category, Assoc),
+    prec: Prec,
     tex_op: Doc,
     exp_l: &Exp,
     exp_r: &Exp,
@@ -533,7 +525,7 @@ fn render_binary_exp(
     let term_r = render_exp(exp_r, anchors)?;
     let tex_l = tex_of_nested_exp(prec, Side::Left, term_l);
     let tex_r = tex_of_nested_exp(prec, Side::Right, term_r);
-    Ok(Term::new(tex_of_breakable_infix(tex_l, tex_op, tex_r), prec.0))
+    Ok(Term::new(tex_of_breakable_infix(tex_l, tex_op, tex_r), prec.category))
 }
 
 // - Postfix expression
@@ -545,7 +537,7 @@ fn render_postfix_exp(
     anchors: Option<&Anchors<'_>>,
 ) -> Result<Term> {
     let term_base = render_exp(exp_base, anchors)?;
-    let tex_base = tex_of_nested_exp((Category::Postfix, Assoc::Left), Side::Left, term_base);
+    let tex_base = tex_of_nested_exp(precedence::POSTFIX, Side::Left, term_base);
     Ok(Term::new(Doc::concat(vec![tex_base, tex_suffix]), Category::Postfix))
 }
 
@@ -557,7 +549,7 @@ fn render_seq_exp(exps: &[Exp], anchors: Option<&Anchors<'_>>) -> Result<Term> {
         .iter()
         .map(|exp| {
             let term = render_exp(exp, anchors)?;
-            Ok(tex_of_nested_exp((Category::Sequence, Assoc::Left), Side::Right, term))
+            Ok(tex_of_nested_exp(precedence::SEQUENCE, Side::Right, term))
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(Term::new(Doc::fill(0, Doc::ThinSpace, docs), Category::Sequence))
@@ -604,7 +596,7 @@ fn render_infix_exp(
     // Apply the original operator precedence to the visible operands
     let tex_l = tex_of_nested_exp(prec, Side::Left, term_l);
     let tex_r = tex_of_nested_exp(prec, Side::Right, term_r);
-    Ok(Term::new(tex_of_breakable_infix(tex_l, tex_op, tex_r), prec.0))
+    Ok(Term::new(tex_of_breakable_infix(tex_l, tex_op, tex_r), prec.category))
 }
 
 // == Paths
@@ -723,7 +715,7 @@ fn tex_of_prem(prem: &Prem, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
         PremKind::RuleNot(RuleNotPrem { id, exp }) => {
             let anchor = anchors.and_then(|anchors| (anchors.rel)(&id.node));
             let term = render_exp(exp, anchors)?;
-            let tex_exp = tex_of_nested_exp((Category::Unary, Assoc::Right), Side::Right, term);
+            let tex_exp = tex_of_nested_exp(precedence::UNARY, Side::Right, term);
             let tex_exp = tex_of_link(anchor.as_deref(), tex_exp)?;
             Ok(Doc::concat_spaced(vec![Doc::Fixed(Symbol::Neg), tex_exp]))
         }
