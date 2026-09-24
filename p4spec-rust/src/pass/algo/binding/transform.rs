@@ -187,7 +187,15 @@ fn analyze_args_as_bind_shallow(
     ctx: &mut Context,
     args_il: &[ast::Arg],
 ) -> Result<(VEnv, Vec<ast::Arg>, Vec<al::ast::Prem>), AlgoError> {
-    shallow::check_args(ctx, args_il)?;
+    // Translate shallow binding failures into table diagnostics
+    shallow::check_args(&ctx.venv, args_il).map_err(|failure| match failure {
+        shallow::ShallowFailure::InvalidShape(arg) => {
+            error::table::table_binding_shape_invalid(arg)
+        }
+        shallow::ShallowFailure::RepeatedBinding { id, id_previous } => {
+            error::table::table_binding_repeated(id, &id_previous.at())
+        }
+    })?;
 
     // Collect binders and rename repeated occurrences
     let benv = collect::collect_args(ctx, args_il)?;
