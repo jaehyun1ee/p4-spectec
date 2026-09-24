@@ -18,7 +18,7 @@ use crate::{
     runtime::{dim::Dim, envs::algo::VEnv},
 };
 
-use super::super::{AlgoError, AlgoErrorKind};
+use super::super::{AlgoError, error};
 
 /// One enclosing iteration with the variables it ranges over and binds.
 #[derive(Clone, Debug, PartialEq)]
@@ -161,12 +161,7 @@ impl ICtx {
         for entry in &self.0 {
             if entry.vars_bound.is_empty() {
                 // Binding with nothing to range over has no determinable length
-                let kind = if entry.vars_bind.is_empty() {
-                    AlgoErrorKind::EmptyIteration
-                } else {
-                    AlgoErrorKind::UndeterminedBindingDimension
-                };
-                return Err(AlgoError::new(kind, span));
+                return Err(error::iteration_loop_variable_missing(&span, &entry.vars_bind));
             }
         }
         Ok(())

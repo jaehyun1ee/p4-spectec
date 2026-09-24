@@ -9,9 +9,10 @@
 use crate::lang::{
     common::{ds::set::PhraseSet, source::Span},
     il::ast,
+    traits::print::Print,
 };
 
-use super::super::{AlgoError, AlgoErrorKind};
+use super::super::{AlgoError, error};
 
 // == Pattern sets
 
@@ -50,6 +51,36 @@ impl FromIterator<ast::NotTyp> for PatternSet {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PatternSets(Vec<PatternSet>);
 
+impl PatternSets {
+    /// Describes the Cartesian product of notation alternatives.
+    pub fn to_source_string(&self) -> String {
+        // Group alternatives within each argument position
+        let patterns: Vec<_> = self
+            .0
+            .iter()
+            .map(|pattern_set| {
+                let cases: Vec<_> = pattern_set.0.iter().map(Print::to_string).collect();
+                match cases.as_slice() {
+                    [case] => case.clone(),
+                    _ => format!("{{{}}}", cases.join(" | ")),
+                }
+            })
+            .collect();
+        // Separate argument positions without flattening their alternatives
+        match patterns.as_slice() {
+            [pattern] => pattern.clone(),
+            _ => format!("({})", patterns.join(", ")),
+        }
+    }
+
+    /// Iterates over the declaration spans of every case in the product.
+    pub fn case_spans(&self) -> impl Iterator<Item = Span> + '_ {
+        self.0
+            .iter()
+            .flat_map(|pattern_set| pattern_set.0.iter().map(|not_typ| not_typ.span.clone()))
+    }
+}
+
 impl FromIterator<PatternSet> for PatternSets {
     fn from_iter<T: IntoIterator<Item = PatternSet>>(pattern_sets: T) -> Self {
         let pattern_sets = pattern_sets.into_iter().collect();
@@ -70,7 +101,7 @@ fn check_arity(
     if expected == actual {
         return Ok(());
     }
-    Err(AlgoError::new(AlgoErrorKind::PatternArityMismatch { expected, actual }, span.clone()))
+    Err(error::table_pattern_arity_mismatch(span, expected, actual))
 }
 
 /// Checks whether two rows can match the same input.
@@ -91,22 +122,6 @@ pub fn has_overlap(
                 !intersection.is_empty()
             });
     Ok(has_overlap)
-}
-
-/// Finds the first pair of rows that overlap.
-pub fn find_overlap<'a>(
-    span: &Span,
-    pattern_sets_by_row: &'a [PatternSets],
-) -> Result<Option<(&'a PatternSets, &'a PatternSets)>, AlgoError> {
-    for (index, pattern_sets) in pattern_sets_by_row.iter().enumerate() {
-        for pattern_sets_other in &pattern_sets_by_row[index + 1..] {
-            if has_overlap(span, pattern_sets, pattern_sets_other)? {
-                let overlap = (pattern_sets, pattern_sets_other);
-                return Ok(Some(overlap));
-            }
-        }
-    }
-    Ok(None)
 }
 
 // == Exhaustiveness checks

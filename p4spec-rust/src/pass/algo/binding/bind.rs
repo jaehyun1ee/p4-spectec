@@ -15,7 +15,7 @@ use crate::{
     runtime::{dim::Dim, envs::algo::VEnv},
 };
 
-use super::super::{AlgoError, AlgoErrorKind};
+use super::super::{AlgoError, error};
 
 /// One binding occurrence or multiple parallel occurrences.
 #[derive(Clone, Debug, PartialEq)]
@@ -91,8 +91,8 @@ impl BEnv {
             let binding_l = self
                 .iter()
                 .find(|(stored, _)| stored.node == id.node)
-                .map(|(stored, binding)| (stored.span.clone(), binding.clone()));
-            let Some((span, binding_l)) = binding_l else {
+                .map(|(_, binding)| binding.clone());
+            let Some(binding_l) = binding_l else {
                 self.insert(id.clone(), binding_r.clone());
                 continue;
             };
@@ -100,7 +100,7 @@ impl BEnv {
             let dim_l = binding_l.dim();
             let dim_r = binding_r.dim();
             if !(dim_l.sub(dim_r) && dim_r.sub(dim_l)) {
-                return Err(AlgoError::new(AlgoErrorKind::InconsistentDimensions, span));
+                return Err(error::binding_dimension_mismatch(id, dim_l, dim_r));
             }
             let dim = dim_l.clone();
             self.insert(id.clone(), Binding::Multiple(dim));

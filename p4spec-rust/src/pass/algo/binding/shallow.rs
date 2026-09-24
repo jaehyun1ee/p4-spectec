@@ -39,7 +39,3 @@ pub fn check_arg(arg: &ast::Arg) -> bool {
         ast::ArgKind::Def(_) => false,
     }
 }
-
-pub fn check_args(args: &[ast::Arg]) -> bool {
-    args.iter().all(check_arg)
-}

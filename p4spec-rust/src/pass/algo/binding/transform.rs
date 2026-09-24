@@ -44,17 +44,17 @@ use crate::{
     lang::{
         al,
         common::prim,
-        common::{notation::mixop::Mixop, source::Span},
+        common::{ds::map::IdMap, notation::mixop::Mixop, source::Span},
         hints::input::{self, InputHint},
         il::ast,
-        traits::{free::FreeIds, has_call::HasCall},
+        traits::free::FreeIds,
     },
     phrase,
     runtime::{dim::Dim, envs::algo::VEnv, typdef::TypeDef},
 };
 
 use super::{
-    super::{AlgoError, AlgoErrorKind},
+    super::{AlgoError, error},
     antiunify,
     bind::BEnv,
     collect,
@@ -71,7 +71,7 @@ use super::{
 // - Errors
 
 fn input_error(error: input::InputError, span: Span) -> AlgoError {
-    AlgoError::new(AlgoErrorKind::InputHint(error), span)
+    error::relation_input_hint_invalid(error, span)
 }
 
 // - Environments
@@ -140,11 +140,7 @@ fn analyze_exps_as_bind(
 /// Requires an expression in bound position to bind nothing.
 fn analyze_exp_as_bound(ctx: &Context, exp: &ast::Exp) -> Result<(), AlgoError> {
     let benv = collect::collect_exp(ctx, exp)?;
-    if benv.is_empty() {
-        Ok(())
-    } else {
-        Err(AlgoError::new(AlgoErrorKind::FreeBindings, exp.span.clone()))
-    }
+    if benv.is_empty() { Ok(()) } else { Err(error::expression_variable_unbound(&exp.span, &benv)) }
 }
 
 fn analyze_exps_as_bound(ctx: &Context, exps: &[ast::Exp]) -> Result<(), AlgoError> {
@@ -186,14 +182,20 @@ fn analyze_args_as_bind(
 fn analyze_args_as_bind_shallow(
     ctx: &mut Context,
     args_il: &[ast::Arg],
-    span: &Span,
 ) -> Result<(VEnv, Vec<ast::Arg>, Vec<al::ast::Prem>), AlgoError> {
-    if !shallow::check_args(args_il) {
-        let span = args_il
-            .first()
-            .map(|arg| arg.span.clone())
-            .unwrap_or_else(|| span.clone());
-        return Err(AlgoError::new(AlgoErrorKind::BindingsNotShallow, span));
+    // Reject the first invalid shape before traversing its binders
+    for arg in args_il {
+        if !shallow::check_arg(arg) {
+            return Err(error::table_binding_shape_invalid(arg));
+        }
+    }
+    // Reject repeated new binders in occurrence order, before renaming
+    let mut seen = IdMap::new();
+    for arg in args_il {
+        let ast::ArgKind::Exp(exp) = &arg.node else {
+            unreachable!("shallow table validation rejects function arguments");
+        };
+        check_repeated_table_binding(ctx, &mut seen, exp)?;
     }
 
     // Collect binders and rename repeated occurrences
@@ -202,17 +204,12 @@ fn analyze_args_as_bind_shallow(
     let mut renv_multiple = multiple::RenameEnv::from_bindings(&benv);
     let args_al = multiple::rename_args(ctx, &mut renv_multiple, args_il);
     update_venv_multiple(&mut venv, &renv_multiple);
-    // Shallow patterns must not need repeated-binding side conditions
+    // Table validation rejects repeated binders before renaming
     let prem_sideconditions_al = multiple::generate_side_conditions(&ICtx::new(), &renv_multiple);
-    if !prem_sideconditions_al.is_empty() {
-        return Err(AlgoError::new(
-            AlgoErrorKind::ShallowSideConditions,
-            args_al
-                .first()
-                .map(|arg| arg.span.clone())
-                .unwrap_or_else(|| span.clone()),
-        ));
-    }
+    assert!(
+        prem_sideconditions_al.is_empty(),
+        "validated table bindings generated equality side conditions"
+    );
 
     // Desugar partially bound patterns
     let mut renv_partial = partial::RenameEnv::new();
@@ -224,16 +221,70 @@ fn analyze_args_as_bind_shallow(
     Ok((venv, args_al, prems_al))
 }
 
-/// Requires table row arguments to be shallow and bind nothing.
+/// Rejects the first repeated new binder in a validated shallow pattern.
+fn check_repeated_table_binding(
+    ctx: &Context,
+    seen: &mut IdMap<Span>,
+    exp: &ast::Exp,
+) -> Result<(), AlgoError> {
+    match &exp.node {
+        ast::ExpKind::Id(id) => {
+            // Previously bound names do not introduce table binders
+            if ctx.venv.contains_key(id) {
+                return Ok(());
+            }
+            // Keep the first source occurrence even when names sort differently
+            if let Some(span_first) = seen.get(id) {
+                return Err(error::table_binding_repeated(id, span_first));
+            }
+            seen.insert(id.clone(), id.span.clone());
+        }
+        ast::ExpKind::UpCast(_, exp) | ast::ExpKind::Iter(exp, _) => {
+            // Casts and dimensions retain the underlying binding positions
+            check_repeated_table_binding(ctx, seen, exp)?;
+        }
+        ast::ExpKind::Case(not_exp) => {
+            // Visit case arguments from left to right
+            for exp in not_exp.args() {
+                check_repeated_table_binding(ctx, seen, exp)?;
+            }
+        }
+        ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => {
+            // Upcast cases can contain invertible compound arguments
+            for exp in exps {
+                check_repeated_table_binding(ctx, seen, exp)?;
+            }
+        }
+        ast::ExpKind::Str(exp_fields) => {
+            // Preserve field occurrence order beneath an upcast case
+            for ast::ExpField { exp, .. } in exp_fields {
+                check_repeated_table_binding(ctx, seen, exp)?;
+            }
+        }
+        ast::ExpKind::Opt(Some(exp)) => {
+            // An option contributes the binders of its payload
+            check_repeated_table_binding(ctx, seen, exp)?;
+        }
+        ast::ExpKind::Cons(exp_l, exp_r) => {
+            // A cons pattern binds its head before its tail
+            check_repeated_table_binding(ctx, seen, exp_l)?;
+            check_repeated_table_binding(ctx, seen, exp_r)?;
+        }
+        _ => {
+            // Literals bind nothing; collection rejects non-invertible binders
+        }
+    }
+    Ok(())
+}
+
+/// Checks the postcondition after all row binders have entered the context.
 fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(), AlgoError> {
     for arg in args {
-        if !shallow::check_arg(arg) {
-            return Err(AlgoError::new(AlgoErrorKind::BindingsNotShallow, arg.span.clone()));
-        }
+        // Row admission validated the shapes before binding analysis
+        assert!(shallow::check_arg(arg), "validated table argument must remain shallow");
         let benv = collect::collect_arg(ctx, arg)?;
-        if !benv.is_empty() {
-            return Err(AlgoError::new(AlgoErrorKind::FreeBindings, arg.span.clone()));
-        }
+        // lower_table_row inserted every collected binder into the context
+        assert!(benv.is_empty(), "validated table binders must be bound");
     }
     Ok(())
 }
@@ -242,25 +293,85 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
 
 // - Helpers
 
-/// Rejects partial premises in an otherwise branch.
-fn check_prems_in_else(span: &Span, prems: &[al::ast::Prem]) -> Result<(), AlgoError> {
-    /// Whether a premise may fail: any check, or a let or debug that calls.
-    fn is_impure_prem(prem: &al::ast::Prem) -> bool {
-        match &prem.node {
-            al::ast::PremKind::Rule(_)
-            | al::ast::PremKind::If(_)
-            | al::ast::PremKind::IfHold(_)
-            | al::ast::PremKind::IfNotHold(_) => true,
-            al::ast::PremKind::Let(prem) => prem.exp_r.has_call(),
-            al::ast::PremKind::Iter(prem) => is_impure_prem(&prem.prem),
-            al::ast::PremKind::Debug(prem) => prem.exp.has_call(),
+/// Locates the first nested function call in evaluation order.
+fn nested_call_exp(exp: &ast::Exp) -> Option<&Span> {
+    match &exp.node {
+        ast::ExpKind::Bool(_)
+        | ast::ExpKind::Num(_)
+        | ast::ExpKind::Text(_)
+        | ast::ExpKind::Id(_) => None,
+        ast::ExpKind::Un(_, _, exp)
+        | ast::ExpKind::UpCast(_, exp)
+        | ast::ExpKind::DownCast(_, exp)
+        | ast::ExpKind::Sub(exp, _, _)
+        | ast::ExpKind::Match(exp, _)
+        | ast::ExpKind::Len(exp)
+        | ast::ExpKind::Dot(exp, _)
+        | ast::ExpKind::Iter(exp, _) => nested_call_exp(exp),
+        ast::ExpKind::Bin(_, _, exp_l, exp_r)
+        | ast::ExpKind::Cmp(_, _, exp_l, exp_r)
+        | ast::ExpKind::Cons(exp_l, exp_r)
+        | ast::ExpKind::Cat(exp_l, exp_r)
+        | ast::ExpKind::Mem(exp_l, exp_r)
+        | ast::ExpKind::Idx(exp_l, exp_r) => {
+            nested_call_exp(exp_l).or_else(|| nested_call_exp(exp_r))
         }
+        ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => {
+            exps.iter().find_map(nested_call_exp)
+        }
+        ast::ExpKind::Case(not_exp) => not_exp.args().into_iter().find_map(nested_call_exp),
+        ast::ExpKind::Str(exp_fields) => exp_fields
+            .iter()
+            .find_map(|ast::ExpField { exp, .. }| nested_call_exp(exp)),
+        ast::ExpKind::Opt(exp) => exp.as_deref().and_then(nested_call_exp),
+        ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => nested_call_exp(exp_base)
+            .or_else(|| nested_call_exp(exp_idx))
+            .or_else(|| nested_call_exp(exp_len)),
+        ast::ExpKind::Upd(exp_base, path, exp_field) => nested_call_exp(exp_base)
+            .or_else(|| nested_call_path(path))
+            .or_else(|| nested_call_exp(exp_field)),
+        ast::ExpKind::Call(..) => Some(&exp.span),
     }
+}
 
-    if prems.iter().all(|prem| !is_impure_prem(prem)) {
-        Ok(())
-    } else {
-        Err(AlgoError::new(AlgoErrorKind::ImpureElsePremises, span.clone()))
+/// Locates the first nested function call in an update path.
+fn nested_call_path(path: &ast::Path) -> Option<&Span> {
+    match &path.node {
+        ast::PathKind::Root => None,
+        ast::PathKind::Idx(path, exp_idx) => {
+            nested_call_path(path).or_else(|| nested_call_exp(exp_idx))
+        }
+        ast::PathKind::Slice(path, exp_idx, exp_len) => nested_call_path(path)
+            .or_else(|| nested_call_exp(exp_idx))
+            .or_else(|| nested_call_exp(exp_len)),
+        ast::PathKind::Dot(path, _) => nested_call_path(path),
+    }
+}
+
+/// Locates a forbidden operation inside a possibly iterated premise.
+fn otherwise_failure(prem: &al::ast::Prem) -> Option<AlgoError> {
+    match &prem.node {
+        al::ast::PremKind::Rule(_)
+        | al::ast::PremKind::IfHold(_)
+        | al::ast::PremKind::IfNotHold(_) => {
+            Some(error::otherwise_relation_call_invalid(&prem.span))
+        }
+        al::ast::PremKind::If(_) => Some(error::otherwise_condition_invalid(&prem.span)),
+        al::ast::PremKind::Let(prem) => {
+            nested_call_exp(&prem.exp_r).map(error::otherwise_function_call_invalid)
+        }
+        al::ast::PremKind::Debug(prem) => {
+            nested_call_exp(&prem.exp).map(error::otherwise_function_call_invalid)
+        }
+        al::ast::PremKind::Iter(prem) => otherwise_failure(&prem.prem),
+    }
+}
+
+/// Rejects the first partial operation in an otherwise body.
+fn check_prems_in_else(prems: &[al::ast::Prem]) -> Result<(), AlgoError> {
+    match prems.iter().find_map(otherwise_failure) {
+        Some(error) => Err(error),
+        None => Ok(()),
     }
 }
 
@@ -368,10 +479,9 @@ fn lower_if_eq_prem(
         // Both sides binding is ambiguous
         (false, true) => lower_let_prem(ctx, span, iter_ctx, exp_l_il, &benv_l, exp_r_il),
         (true, false) => lower_let_prem(ctx, span, iter_ctx, exp_r_il, &benv_r, exp_l_il),
-        (false, false) => Err(AlgoError::new(
-            AlgoErrorKind::BindingOnBothEqualitySides,
-            if_prem_il.exp.span.clone(),
-        )),
+        (false, false) => {
+            Err(error::equality_binding_invalid(&if_prem_il.exp.span, &benv_l, &benv_r))
+        }
     }
 }
 
@@ -505,7 +615,7 @@ fn lower_iter_prem(
     iter_prem_il: &ast::IterPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<al::ast::Prem>), AlgoError> {
     if !iter_prem_il.prem_iter.vars_bind.is_empty() {
-        return Err(AlgoError::new(AlgoErrorKind::UnexpectedIterationBindings, span.clone()));
+        return Err(error::iteration_binding_invalid(span));
     }
     let mut iterations = vec![Iteration {
         iter: iter_prem_il.prem_iter.iter,
@@ -589,7 +699,7 @@ fn lower_rule_path(
     let mut prems_all_al = prems_unified_al;
     prems_all_al.extend(prems_al);
     if is_else {
-        check_prems_in_else(&id.span, &prems_all_al)?;
+        check_prems_in_else(&prems_all_al)?;
     }
     analyze_exps_as_bound(ctx, &exps_output_il)?;
     Ok(al::ast::RulePath { id, prems: prems_all_al, exps_output: exps_output_il })
@@ -703,7 +813,7 @@ fn lower_clause(
     prems_all_al.extend(prems_al);
     // An otherwise clause may not contain partial premises
     if is_else {
-        check_prems_in_else(&span, &prems_all_al)?;
+        check_prems_in_else(&prems_all_al)?;
     }
     let clause_al = phrase! {
         node: al::ast::ClauseKind {
@@ -721,13 +831,17 @@ fn lower_clause(
 /// All case notations of a variant type, as the pattern space of one argument.
 fn pattern_set_covered_by_typ(ctx: &Context, typ: &ast::Typ) -> Result<PatternSet, AlgoError> {
     let ast::TypKind::Var(id, _) = &typ.node else {
-        return Err(AlgoError::new(AlgoErrorKind::NonVariantPatternType, typ.span.clone()));
+        return Err(error::table_pattern_type_invalid(typ, None));
     };
-    let TypeDef::Defined(_, def_typ) = ctx.find_typdef(id)? else {
-        return Err(AlgoError::new(AlgoErrorKind::NonVariantPatternType, typ.span.clone()));
+    let (id_decl, typdef) = ctx
+        .tdenv
+        .get_key_value(id)
+        .ok_or_else(|| error::type_undefined(id))?;
+    let TypeDef::Defined(_, def_typ) = typdef else {
+        return Err(error::table_pattern_type_invalid(typ, Some(&id_decl.span)));
     };
     let ast::DefTypKind::Variant(cases) = &def_typ.node else {
-        return Err(AlgoError::new(AlgoErrorKind::NonVariantPatternType, typ.span.clone()));
+        return Err(error::table_pattern_type_invalid(typ, Some(&id_decl.span)));
     };
     let pattern_set = cases
         .iter()
@@ -744,25 +858,26 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<Patter
             let typ = phrase!(node: exp_al.note.as_ref().clone(), span: exp_al.span.clone());
             pattern_set_covered_by_typ(ctx, &typ)
         }
-        ast::ExpKind::UpCast(_, exp_inner) if matches!(exp_inner.node, ast::ExpKind::Id(_)) => {
-            let typ = phrase!(node: exp_inner.note.as_ref().clone(), span: exp_inner.span.clone());
-            pattern_set_covered_by_typ(ctx, &typ)
-        }
+        // An upcast retains the source variable or case pattern
+        ast::ExpKind::UpCast(_, exp_inner) => pattern_set_covered_by_exp(ctx, exp_inner),
         // A case covers exactly its notation
-        ast::ExpKind::UpCast(_, exp_inner) => {
-            let ast::ExpKind::Case(not_exp) = &exp_inner.node else {
-                return Err(AlgoError::new(
-                    AlgoErrorKind::InvalidTablePattern,
-                    exp_al.span.clone(),
-                ));
-            };
+        ast::ExpKind::Case(not_exp) => {
             let not_typ =
                 not_exp.map(|exp| phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone()));
-            let not_typ = phrase!(node: not_typ, span: exp_inner.span.clone());
-            let pattern_set = [not_typ].into_iter().collect();
-            Ok(pattern_set)
+            let not_typ = phrase!(node: not_typ, span: exp_al.span.clone());
+            Ok([not_typ].into_iter().collect())
         }
-        _ => Err(AlgoError::new(AlgoErrorKind::InvalidTablePattern, exp_al.span.clone())),
+        // Row admission rejects every other top-level pattern shape
+        _ => unreachable!("validated table signature must be a variable or case"),
+    }
+}
+
+/// Covers the argument patterns of a row, without its body.
+fn table_pattern_span(row: &al::ast::TableRow) -> Span {
+    if row.node.exps_signature.is_empty() {
+        row.span.clone()
+    } else {
+        Span::over_iter(row.node.exps_signature.iter().map(|exp| exp.span.clone()))
     }
 }
 
@@ -773,6 +888,11 @@ fn check_valid_table_rows(
     typs_match_il: &[ast::Typ],
     rows_al: &[al::ast::TableRow],
 ) -> Result<(), AlgoError> {
+    // Validate declared pattern types even when a wildcard row closes the table
+    let pattern_sets_total = typs_match_il
+        .iter()
+        .map(|typ| pattern_set_covered_by_typ(ctx, typ))
+        .collect::<Result<_, _>>()?;
     // A final row of wildcards catches everything left
     let has_closer =
         if let Some(row_al) = rows_al.last() {
@@ -793,22 +913,25 @@ fn check_valid_table_rows(
         let pattern_sets = pattern_sets.into_iter().collect();
         pattern_sets_by_row.push(pattern_sets);
     }
-    // No two rows may match the same input
-    let pattern_sets_overlap = pattern::find_overlap(span, &pattern_sets_by_row)?;
-    if pattern_sets_overlap.is_some() {
-        return Err(AlgoError::new(AlgoErrorKind::OverlappingTablePatterns, span.clone()));
+    // Relate the first overlapping pair in source row order
+    for (idx, patterns) in pattern_sets_by_row.iter().enumerate() {
+        for (idx_other, patterns_other) in pattern_sets_by_row.iter().enumerate().skip(idx + 1) {
+            if pattern::has_overlap(span, patterns, patterns_other)? {
+                return Err(error::table_pattern_overlapping(
+                    &table_pattern_span(&rows_pattern_al[idx_other]),
+                    &table_pattern_span(&rows_pattern_al[idx]),
+                ));
+            }
+        }
     }
-    // Without a closer, the rows must cover the whole pattern space
-    let mut pattern_sets_total = Vec::with_capacity(typs_match_il.len());
-    for typ_il in typs_match_il {
-        let pattern_set = pattern_set_covered_by_typ(ctx, typ_il)?;
-        pattern_sets_total.push(pattern_set);
-    }
-    let pattern_sets_total = pattern_sets_total.into_iter().collect();
-    let pattern_sets_rows_missing =
-        pattern::find_missing(span, &pattern_sets_total, &pattern_sets_by_row)?;
-    if !has_closer && !pattern_sets_rows_missing.is_empty() {
-        return Err(AlgoError::new(AlgoErrorKind::MissingTablePatterns, span.clone()));
+    // Without a closer, relate missing products to their case declarations
+    let patterns_missing = pattern::find_missing(span, &pattern_sets_total, &pattern_sets_by_row)?;
+    if !has_closer && !patterns_missing.is_empty() {
+        let span = rows_al
+            .last()
+            .map(|row| Span::new(row.span.right.clone(), row.span.right.clone()))
+            .unwrap_or_else(|| span.clone());
+        return Err(error::table_pattern_incomplete(&span, &patterns_missing));
     }
     Ok(())
 }
@@ -823,14 +946,14 @@ fn lower_table_row(
     let span = row_il.span;
     let ast::TableRowKind { args: args_il, exp: exp_il } = row_il.node;
     // Arguments bind, shallowly
-    let (venv, args_input_al, prems_al) = analyze_args_as_bind_shallow(&mut ctx, &args_il, &span)?;
+    let (venv, args_input_al, prems_al) = analyze_args_as_bind_shallow(&mut ctx, &args_il)?;
     ctx.add_bounds(&venv);
     analyze_args_as_bound_shallow(&ctx, &args_il)?;
     // The signature patterns are the argument expressions themselves
     let mut exps_signature_al = Vec::with_capacity(args_il.len());
     for arg_il in args_il {
         let ast::ArgKind::Exp(exp_il) = arg_il.node else {
-            return Err(AlgoError::new(AlgoErrorKind::InvalidTablePattern, arg_il.span));
+            unreachable!("shallow table validation rejects function arguments");
         };
         exps_signature_al.push(*exp_il);
     }
@@ -857,16 +980,21 @@ fn lower_table_rows(
 ) -> Result<Vec<al::ast::TableRow>, AlgoError> {
     let mut rows_al = Vec::with_capacity(rows_il.len());
     for row_il in rows_il {
+        // Validate public IL row widths before the wildcard-closer shortcut
+        if row_il.node.args.len() != params_il.len() {
+            return Err(error::table_pattern_arity_mismatch(
+                &row_il.span,
+                params_il.len(),
+                row_il.node.args.len(),
+            ));
+        }
         rows_al.push(lower_table_row(ctx, row_il)?);
     }
     // Table parameters must be plain expressions
     let mut typs_match_il = Vec::with_capacity(params_il.len());
     for param_il in params_il {
         let ast::ParamKind::Exp(typ_il) = &param_il.node else {
-            return Err(AlgoError::new(
-                AlgoErrorKind::InvalidTableParameter,
-                param_il.span.clone(),
-            ));
+            return Err(error::table_parameter_invalid(&param_il.span));
         };
         typs_match_il.push(typ_il.clone());
     }

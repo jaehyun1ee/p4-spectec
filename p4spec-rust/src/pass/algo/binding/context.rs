@@ -19,7 +19,7 @@ use crate::{
     },
 };
 
-use super::super::{AlgoError, AlgoErrorKind};
+use super::super::{AlgoError, error};
 
 /// Bindings and environments threaded through one binding analysis.
 #[derive(Clone, Debug)]
@@ -81,7 +81,7 @@ impl Context {
 
     pub fn find_typdef(&self, id: &Id) -> Result<&TypeDef, AlgoError> {
         self.find_typdef_opt(id)
-            .ok_or_else(|| AlgoError::new(AlgoErrorKind::UndefinedType, id.span.clone()))
+            .ok_or_else(|| error::type_undefined(id))
     }
 
     // - Definition loading

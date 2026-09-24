@@ -8,7 +8,7 @@
 use crate::lang::{common::source::Span, il::ast};
 
 use super::{
-    super::{AlgoError, AlgoErrorKind},
+    super::{AlgoError, error},
     bind::BEnv,
     context::Context,
 };
@@ -26,7 +26,7 @@ fn reject_noninvertible(
     if benv.is_empty() {
         Ok(benv)
     } else {
-        let error = AlgoError::new(AlgoErrorKind::NonInvertibleBinding(construct), span);
+        let error = error::binding_non_invertible(&span, construct, &benv);
         Err(error)
     }
 }
