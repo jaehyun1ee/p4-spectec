@@ -927,16 +927,12 @@ fn check_valid_table_rows(
         let pattern_sets = pattern_sets.into_iter().collect();
         pattern_sets_by_row.push(pattern_sets);
     }
-    // Relate the first overlapping pair in source row order
-    for (idx, patterns) in pattern_sets_by_row.iter().enumerate() {
-        for (idx_other, patterns_other) in pattern_sets_by_row.iter().enumerate().skip(idx + 1) {
-            if pattern::has_overlap(span, patterns, patterns_other)? {
-                return Err(error::table::table_pattern_overlapping(
-                    &table_pattern_span(&rows_pattern_al[idx_other]),
-                    &table_pattern_span(&rows_pattern_al[idx]),
-                ));
-            }
-        }
+    // Relate the selected pair to its original row signatures
+    if let Some((idx, idx_other)) = pattern::find_overlap(span, &pattern_sets_by_row)? {
+        return Err(error::table::table_pattern_overlapping(
+            &table_pattern_span(&rows_pattern_al[idx_other]),
+            &table_pattern_span(&rows_pattern_al[idx]),
+        ));
     }
     // Without a closer, relate missing products to their case declarations
     let patterns_missing = pattern::find_missing(span, &pattern_sets_total, &pattern_sets_by_row)?;

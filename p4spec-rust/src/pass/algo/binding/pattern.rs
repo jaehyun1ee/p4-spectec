@@ -124,6 +124,24 @@ pub fn has_overlap(
     Ok(has_overlap)
 }
 
+/// Finds the first overlapping pair of row indices in source order.
+pub fn find_overlap(
+    span: &Span,
+    pattern_sets_by_row: &[PatternSets],
+) -> Result<Option<(usize, usize)>, AlgoError> {
+    // Keep the earlier row outermost so the selected pair remains deterministic
+    for (idx, pattern_sets) in pattern_sets_by_row.iter().enumerate() {
+        for (idx_other, pattern_sets_other) in pattern_sets_by_row.iter().enumerate().skip(idx + 1)
+        {
+            // Return both identities so callers can locate the original rows
+            if has_overlap(span, pattern_sets, pattern_sets_other)? {
+                return Ok(Some((idx, idx_other)));
+            }
+        }
+    }
+    Ok(None)
+}
+
 // == Exhaustiveness checks
 
 /// Removes one row's patterns from a total, returning the remaining fragments.
