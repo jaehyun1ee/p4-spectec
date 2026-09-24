@@ -175,11 +175,22 @@ fn analyze_exps_as_bound(ctx: &Context, exps: &[ast::Exp]) -> Result<(), AlgoErr
 
 // == Argument binding analysis
 
+/// A premise introduced by pattern rewriting and its source when it checks.
+struct GeneratedPrem {
+    prem_al: al::ast::Prem,
+    origin_opt: Option<GeneratedCondition>,
+}
+
+enum GeneratedCondition {
+    Repeated { id_bound: ast::Id, id_repeated: ast::Id },
+    Pattern(partial::ConditionOrigin),
+}
+
 /// Analyzes binding arguments like `analyze_exps_as_bind`, with no iteration.
 fn analyze_args_as_bind(
     ctx: &mut Context,
     args_il: &[ast::Arg],
-) -> Result<(VEnv, Vec<ast::Arg>, Vec<al::ast::Prem>), AlgoError> {
+) -> Result<(VEnv, Vec<ast::Arg>, Vec<GeneratedPrem>), AlgoError> {
     // Collect binders, then rename repeated occurrences
     let benv = collect::collect_args(ctx, args_il)?;
     let mut venv = benv.flatten();
@@ -187,8 +198,8 @@ fn analyze_args_as_bind(
     let mut renv_multiple = multiple::RenameEnv::from_bindings(&benv);
     let args_al = multiple::rename_args(ctx, &mut renv_multiple, args_il);
     update_venv_multiple(&mut venv, &renv_multiple);
-    let prem_sideconditions_multiple_al =
-        multiple::generate_side_conditions(&ICtx::new(), &renv_multiple);
+    let prems_multiple_al =
+        multiple::generate_side_conditions_with_origins(&ICtx::new(), &renv_multiple);
 
     // Desugar partially bound patterns
     let mut renv_partial = partial::RenameEnv::new();
@@ -196,8 +207,21 @@ fn analyze_args_as_bind(
     let args_al =
         partial::rename_args(ctx, &venv.domain(), &mut renv_partial, &mut iter_ctx_arg, args_al)?;
     update_venv_partial(&mut venv, &renv_partial);
-    let mut prems_al = partial::gen_prems(ctx, &ICtx::new(), &renv_partial)?;
-    prems_al.extend(prem_sideconditions_multiple_al);
+    let mut prems_al = partial::gen_prems_with_origins(ctx, &ICtx::new(), &renv_partial)?
+        .into_iter()
+        .map(|(prem_al, origin_opt)| GeneratedPrem {
+            prem_al,
+            origin_opt: origin_opt.map(GeneratedCondition::Pattern),
+        })
+        .collect::<Vec<_>>();
+    prems_al.extend(
+        prems_multiple_al
+            .into_iter()
+            .map(|(prem_al, id_bound, id_repeated)| GeneratedPrem {
+                prem_al,
+                origin_opt: Some(GeneratedCondition::Repeated { id_bound, id_repeated }),
+            }),
+    );
     Ok((venv, args_al, prems_al))
 }
 
@@ -267,6 +291,35 @@ fn check_pure_prems_in_else(
         Some(error) => Err(error),
         None => Ok(()),
     }
+}
+
+/// Reports a generated check at its source pattern before scanning AL premises.
+fn check_generated_prems_in_else(
+    prems_generated: &[GeneratedPrem],
+    otherwise: &ast::Otherwise,
+) -> Result<(), AlgoError> {
+    for prem_generated in prems_generated {
+        let error_opt = match &prem_generated.origin_opt {
+            // Repeated binders introduce an equality
+            Some(GeneratedCondition::Repeated { id_bound, id_repeated }) => {
+                Some(error::otherwise::otherwise_repeated_pattern_invalid(
+                    id_bound,
+                    id_repeated,
+                    otherwise,
+                ))
+            }
+            // Partial patterns introduce a match or value check
+            Some(GeneratedCondition::Pattern(origin)) => {
+                Some(error::otherwise::otherwise_pattern_condition_invalid(origin, otherwise))
+            }
+            // Binding premises do not introduce conditions
+            None => None,
+        };
+        if let Some(error) = error_opt {
+            return Err(error);
+        }
+    }
+    Ok(())
 }
 
 /// Locates a forbidden operation inside a possibly iterated premise.
@@ -729,18 +782,24 @@ fn lower_clause(
     let ast::ClauseKind { args: args_il, exp: exp_il, prems: prems_il, otherwise_opt } =
         clause_il.node;
     // Arguments bind first, then premises in order, then the body must be bound
-    let (venv, args_al, prem_sideconditions_al) = analyze_args_as_bind(&mut ctx, &args_il)?;
+    let (venv, args_al, prems_generated_al) = analyze_args_as_bind(&mut ctx, &args_il)?;
     ctx.add_bounds(&venv);
     let prems_al = lower_prems(&mut ctx, prems_il)?;
     analyze_exp_as_bound(&ctx, &exp_il)?;
-    let mut prems_all_al = prem_sideconditions_al;
-    prems_all_al.extend(prems_al);
+    let otherwise = is_else.then(|| {
+        otherwise_opt.unwrap_or_else(|| phrase!(node: ast::OtherwiseKind, span: span.clone()))
+    });
     // An otherwise clause may not contain partial premises
-    if is_else {
-        // Synthesized IL may omit the keyword; retain its enclosing clause location
-        let otherwise =
-            otherwise_opt.unwrap_or_else(|| phrase!(node: ast::OtherwiseKind, span: span.clone()));
-        check_pure_prems_in_else(&prems_all_al, &otherwise)?;
+    if let Some(otherwise) = &otherwise {
+        check_generated_prems_in_else(&prems_generated_al, otherwise)?;
+    }
+    let mut prems_all_al = prems_generated_al
+        .into_iter()
+        .map(|prem_generated| prem_generated.prem_al)
+        .collect::<Vec<_>>();
+    prems_all_al.extend(prems_al);
+    if let Some(otherwise) = &otherwise {
+        check_pure_prems_in_else(&prems_all_al, otherwise)?;
     }
     let clause_al = phrase! {
         node: al::ast::ClauseKind {

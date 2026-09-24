@@ -269,10 +269,25 @@ fn generate_side_condition(
 
 /// Builds one side condition per repeated identifier.
 pub fn generate_side_conditions(iter_ctx: &ICtx, renv: &RenameEnv) -> Vec<al::ast::Prem> {
+    generate_side_conditions_with_origins(iter_ctx, renv)
+        .into_iter()
+        .map(|(prem_al, _, _)| prem_al)
+        .collect()
+}
+
+/// Builds repeated-binding checks with their first and repeated source ids.
+pub fn generate_side_conditions_with_origins(
+    iter_ctx: &ICtx,
+    renv: &RenameEnv,
+) -> Vec<(al::ast::Prem, Id, Id)> {
     renv.iter()
         .filter_map(|(id, ids_rename)| {
             let dim = renv.dimension(id)?;
-            generate_side_condition(dim, iter_ctx, id, ids_rename)
+            let prem_al = generate_side_condition(dim, iter_ctx, id, ids_rename)?;
+            let id_bound = ids_rename.first()?.clone();
+            let mut id_repeated = id.clone();
+            id_repeated.span = ids_rename.last()?.span.clone();
+            Some((prem_al, id_bound, id_repeated))
         })
         .collect()
 }

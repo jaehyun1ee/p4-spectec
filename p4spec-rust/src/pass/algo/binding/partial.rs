@@ -28,7 +28,7 @@ use crate::{
     lang::{
         al,
         common::prim,
-        common::{ds::set::IdSet, notation::mixop::Mixop},
+        common::{ds::set::IdSet, notation::mixop::Mixop, source::Span},
         il::{ast, fresh, var},
         traits::free::FreeIds,
     },
@@ -112,6 +112,23 @@ pub(crate) struct Rename {
 #[derive(Debug)]
 pub struct RenameEnv {
     pub(crate) renames: Vec<Rename>,
+}
+
+/// Source pattern and reason for a condition introduced by partial rewriting.
+#[derive(Clone)]
+pub enum ConditionOrigin {
+    Equality(Span),
+    Match(Span, &'static str),
+    Subtype(Span),
+}
+
+/// Identifies a match test among the generated checks of one rename.
+fn is_match_check(prem: &al::ast::Prem) -> bool {
+    match &prem.node {
+        al::ast::PremKind::If(if_prem) => matches!(&if_prem.exp.node, ast::ExpKind::Match(_, _)),
+        al::ast::PremKind::Iter(iter_prem) => is_match_check(&iter_prem.prem),
+        _ => false,
+    }
 }
 
 impl RenameEnv {
@@ -352,9 +369,48 @@ pub fn gen_prems(
     iter_ctx_prem: &ICtx,
     renv: &RenameEnv,
 ) -> Result<Vec<al::ast::Prem>, AlgoError> {
+    let prems_al = gen_prems_with_origins(ctx, iter_ctx_prem, renv)?;
+    Ok(prems_al.into_iter().map(|(prem_al, _)| prem_al).collect())
+}
+
+/// Builds partial-pattern premises with the source of each generated check.
+pub fn gen_prems_with_origins(
+    ctx: &Context,
+    iter_ctx_prem: &ICtx,
+    renv: &RenameEnv,
+) -> Result<Vec<(al::ast::Prem, Option<ConditionOrigin>)>, AlgoError> {
     let mut prems = Vec::new();
     for rename in &renv.renames {
-        prems.extend(gen_prem(ctx, rename, iter_ctx_prem)?);
+        let prems_rename = gen_prem(ctx, rename, iter_ctx_prem)?;
+        // Every rename emits its optional check before any binding premise
+        let origin = match &rename.source {
+            // A bound sub-pattern may need a shape match
+            Source::Bound { exp_from } if prems_rename.first().is_some_and(is_match_check) => {
+                let construct = match &exp_from.node {
+                    ast::ExpKind::Case(_) => "variant case",
+                    ast::ExpKind::Opt(_) => "option pattern",
+                    ast::ExpKind::List(_) => "list pattern",
+                    _ => "pattern",
+                };
+                ConditionOrigin::Match(exp_from.span.clone(), construct)
+            }
+            // Other bound sub-patterns compare their values
+            Source::Bound { exp_from } => ConditionOrigin::Equality(exp_from.span.clone()),
+            // An injected pattern checks its shape before binding
+            Source::BindMatch { pattern, exp_from } => {
+                let construct = match pattern {
+                    ast::Pattern::Case(_) => "variant case",
+                    ast::Pattern::List(_) => "list pattern",
+                    ast::Pattern::Opt(_) => "option pattern",
+                };
+                ConditionOrigin::Match(exp_from.span.clone(), construct)
+            }
+            // An injected subtype checks the downcast at runtime
+            Source::BindSub { exp_from, .. } => ConditionOrigin::Subtype(exp_from.span.clone()),
+        };
+        for (idx, prem_al) in prems_rename.into_iter().enumerate() {
+            prems.push((prem_al, (idx == 0).then(|| origin.clone())));
+        }
     }
     Ok(prems)
 }
