@@ -24,6 +24,8 @@ use super::super::{AlgoError, error};
 #[derive(Clone, Debug, PartialEq)]
 pub struct Iteration {
     pub iter: ast::Iter,
+    /// Source iteration, absent for dimensions synthesized during rewriting.
+    pub span_opt: Option<Span>,
     /// Variables bound outside that this iteration ranges over.
     pub vars_bound: Vec<ast::Var>,
     /// Variables this iteration binds.
@@ -161,8 +163,9 @@ impl ICtx {
         for entry in &self.0 {
             if entry.vars_bound.is_empty() {
                 // Binding with nothing to range over has no determinable length
+                let span_iter = entry.span_opt.as_ref().unwrap_or(&span);
                 return Err(error::binding::iteration_loop_variable_missing(
-                    &span,
+                    span_iter,
                     &entry.vars_bind,
                 ));
             }

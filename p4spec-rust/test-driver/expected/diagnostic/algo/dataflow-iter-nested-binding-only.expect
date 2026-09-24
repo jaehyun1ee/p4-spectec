@@ -1,0 +1,11 @@
+error[algo/iteration-loop-variable-missing]: this iteration has no previously bound variable to determine its range
+   ┌─ algo/dataflow-iter-nested-binding-only.watsup:10:7
+   │
+10 │   -- ((if x = 0)*)*
+   │       ^^^^^^^^^^^
+   │       │   │
+   │       │   `x` is newly bound here
+   │       this iteration has no range source
+   │
+   = A variable bound outside the iteration must supply the values it ranges over.
+
