@@ -44,10 +44,17 @@ use crate::{
     lang::{
         al,
         common::prim,
-        common::{notation::mixop::Mixop, source::Span},
+        common::{
+            notation::mixop::Mixop,
+            source::{Phrase, Span},
+        },
         hints::input::{self, InputHint},
         il::ast,
-        traits::{at::At, free::FreeIds, has_call::HasCall},
+        traits::{
+            at::At,
+            free::{FreeIds, FreeVars},
+            has_call::HasCall,
+        },
     },
     phrase,
     runtime::{dim::Dim, envs::algo::VEnv, typdef::TypeDef},
@@ -139,11 +146,23 @@ fn analyze_exps_as_bind(
 
 /// Requires an expression in bound position to bind nothing.
 fn analyze_exp_as_bound(ctx: &Context, exp: &ast::Exp) -> Result<(), AlgoError> {
-    let benv = collect::collect_exp(ctx, exp)?;
-    if benv.is_empty() {
-        Ok(())
+    analyze_exp_as_bound_with_input(ctx, exp, None)
+}
+
+/// Checks a read-only expression, retaining a relation input hint when present.
+fn analyze_exp_as_bound_with_input(
+    ctx: &Context,
+    exp: &ast::Exp,
+    input_opt: Option<(&ast::Id, &Phrase<usize>)>,
+) -> Result<(), AlgoError> {
+    if let Some(var) = exp
+        .free_vars()
+        .iter()
+        .find(|var| !ctx.venv.contains_key(&var.id))
+    {
+        Err(error::binding::expression_variable_unbound(&var.id, input_opt))
     } else {
-        Err(error::binding::expression_variable_unbound(&exp.span, &benv))
+        Ok(())
     }
 }
 
@@ -322,7 +341,11 @@ fn lower_rule_prem(
     let (exps_input_il, exps_output_il) = input::split(&rule_prem_il.input_hint, exps_il)
         .map_err(|error| input_error(error, span.clone()))?;
     // Inputs are bound, outputs are binders
-    analyze_exps_as_bound(ctx, &exps_input_il)?;
+    let mut idxs_input = rule_prem_il.input_hint.indices().iter().collect::<Vec<_>>();
+    idxs_input.sort_by_key(|idx| idx.node);
+    for (exp, idx) in exps_input_il.iter().zip(idxs_input) {
+        analyze_exp_as_bound_with_input(ctx, exp, Some((&rule_prem_il.id, idx)))?;
+    }
     let (venv, exps_output_al, prem_sideconditions_al) =
         analyze_exps_as_bind(ctx, &iter_ctx, &exps_output_il)?;
     let exps_al =

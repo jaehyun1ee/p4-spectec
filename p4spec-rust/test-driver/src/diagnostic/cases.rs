@@ -222,6 +222,8 @@ pub const ALGO: &[&str] = &[
     "dataflow-bind-both-sides-of-equality.watsup",
     "dataflow-bind-in-non-invertible.watsup",
     "dataflow-free-variable-in-output.watsup",
+    "dataflow-read-unbound-input.watsup",
+    "dataflow-read-unbound-output.watsup",
     "dataflow-iter-binding-only.watsup",
     "dataflow-parallel-binding-dimension-mismatch.watsup",
     "function-otherwise-condition.watsup",

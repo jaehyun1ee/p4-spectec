@@ -7,7 +7,10 @@ use super::{AlgoError, cause};
 use crate::{
     diagnostic::Label,
     lang::{
-        common::{Id, source::Span},
+        common::{
+            Id,
+            source::{Phrase, Span},
+        },
         il::ast,
         traits::print::Print,
     },
@@ -32,11 +35,29 @@ fn describe_bindings(benv: &BEnv) -> String {
 const EXPRESSION_VARIABLE_UNBOUND: &str = "algo/expression-variable-unbound";
 
 /// Reports variables read before they are bound.
-pub(crate) fn expression_variable_unbound(span: &Span, benv: &BEnv) -> AlgoError {
-    cause(EXPRESSION_VARIABLE_UNBOUND,
-        format!("expression uses unbound {}", describe_bindings(benv)),
-        vec![Label::primary(span, "")],
-        vec!["Every variable here must already be bound by an earlier part of the rule, such as the relation's input or a preceding premise.".into()])
+pub(crate) fn expression_variable_unbound(
+    id: &Id,
+    input_opt: Option<(&Id, &Phrase<usize>)>,
+) -> AlgoError {
+    let mut labels = vec![Label::primary(&id.span, format!("`{}` is read here", id.node))];
+    if let Some((id_relation, idx)) = input_opt {
+        labels.push(Label::secondary(
+            &idx.span,
+            format!(
+                "argument %{} of relation `{}` is evaluated as input; it cannot bind `{}`",
+                idx.node, id_relation.node, id.node
+            ),
+        ));
+    }
+    cause(
+        EXPRESSION_VARIABLE_UNBOUND,
+        format!("`{}` is not bound when this expression is evaluated", id.node),
+        labels,
+        vec![
+            "Bind the variable in an earlier input pattern or premise before reading it here."
+                .into(),
+        ],
+    )
 }
 
 const BINDING_NON_INVERTIBLE: &str = "algo/binding-non-invertible";
