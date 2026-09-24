@@ -47,7 +47,7 @@ use crate::{
         common::{notation::mixop::Mixop, source::Span},
         hints::input::{self, InputHint},
         il::ast,
-        traits::free::FreeIds,
+        traits::{at::At, free::FreeIds, has_call::HasCall},
     },
     phrase,
     runtime::{dim::Dim, envs::algo::VEnv, typdef::TypeDef},
@@ -228,61 +228,6 @@ fn analyze_args_as_bound_shallow(ctx: &Context, args: &[ast::Arg]) -> Result<(),
 
 // - Helpers
 
-/// Locates the first nested function call in evaluation order.
-fn nested_call_exp(exp: &ast::Exp) -> Option<&Span> {
-    match &exp.node {
-        ast::ExpKind::Bool(_)
-        | ast::ExpKind::Num(_)
-        | ast::ExpKind::Text(_)
-        | ast::ExpKind::Id(_) => None,
-        ast::ExpKind::Un(_, _, exp)
-        | ast::ExpKind::UpCast(_, exp)
-        | ast::ExpKind::DownCast(_, exp)
-        | ast::ExpKind::Sub(exp, _, _)
-        | ast::ExpKind::Match(exp, _)
-        | ast::ExpKind::Len(exp)
-        | ast::ExpKind::Dot(exp, _)
-        | ast::ExpKind::Iter(exp, _) => nested_call_exp(exp),
-        ast::ExpKind::Bin(_, _, exp_l, exp_r)
-        | ast::ExpKind::Cmp(_, _, exp_l, exp_r)
-        | ast::ExpKind::Cons(exp_l, exp_r)
-        | ast::ExpKind::Cat(exp_l, exp_r)
-        | ast::ExpKind::Mem(exp_l, exp_r)
-        | ast::ExpKind::Idx(exp_l, exp_r) => {
-            nested_call_exp(exp_l).or_else(|| nested_call_exp(exp_r))
-        }
-        ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => {
-            exps.iter().find_map(nested_call_exp)
-        }
-        ast::ExpKind::Case(not_exp) => not_exp.args().into_iter().find_map(nested_call_exp),
-        ast::ExpKind::Str(exp_fields) => exp_fields
-            .iter()
-            .find_map(|ast::ExpField { exp, .. }| nested_call_exp(exp)),
-        ast::ExpKind::Opt(exp) => exp.as_deref().and_then(nested_call_exp),
-        ast::ExpKind::Slice(exp_base, exp_idx, exp_len) => nested_call_exp(exp_base)
-            .or_else(|| nested_call_exp(exp_idx))
-            .or_else(|| nested_call_exp(exp_len)),
-        ast::ExpKind::Upd(exp_base, path, exp_field) => nested_call_exp(exp_base)
-            .or_else(|| nested_call_path(path))
-            .or_else(|| nested_call_exp(exp_field)),
-        ast::ExpKind::Call(..) => Some(&exp.span),
-    }
-}
-
-/// Locates the first nested function call in an update path.
-fn nested_call_path(path: &ast::Path) -> Option<&Span> {
-    match &path.node {
-        ast::PathKind::Root => None,
-        ast::PathKind::Idx(path, exp_idx) => {
-            nested_call_path(path).or_else(|| nested_call_exp(exp_idx))
-        }
-        ast::PathKind::Slice(path, exp_idx, exp_len) => nested_call_path(path)
-            .or_else(|| nested_call_exp(exp_idx))
-            .or_else(|| nested_call_exp(exp_len)),
-        ast::PathKind::Dot(path, _) => nested_call_path(path),
-    }
-}
-
 /// Locates a forbidden operation inside a possibly iterated premise.
 fn otherwise_failure(prem: &al::ast::Prem, otherwise: &ast::Otherwise) -> Option<AlgoError> {
     match &prem.node {
@@ -294,10 +239,16 @@ fn otherwise_failure(prem: &al::ast::Prem, otherwise: &ast::Otherwise) -> Option
         al::ast::PremKind::If(_) => {
             Some(error::otherwise::otherwise_condition_invalid(&prem.span, otherwise))
         }
-        al::ast::PremKind::Let(prem) => nested_call_exp(&prem.exp_r)
-            .map(|span| error::otherwise::otherwise_function_call_invalid(span, otherwise)),
-        al::ast::PremKind::Debug(prem) => nested_call_exp(&prem.exp)
-            .map(|span| error::otherwise::otherwise_function_call_invalid(span, otherwise)),
+        al::ast::PremKind::Let(prem) => prem
+            .exp_r
+            .nested_call()
+            .first()
+            .map(|exp| error::otherwise::otherwise_function_call_invalid(&exp.at(), otherwise)),
+        al::ast::PremKind::Debug(prem) => prem
+            .exp
+            .nested_call()
+            .first()
+            .map(|exp| error::otherwise::otherwise_function_call_invalid(&exp.at(), otherwise)),
         al::ast::PremKind::Iter(prem) => otherwise_failure(&prem.prem, otherwise),
     }
 }
