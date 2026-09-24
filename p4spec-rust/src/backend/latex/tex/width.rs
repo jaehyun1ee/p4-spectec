@@ -73,7 +73,7 @@ pub(crate) fn flat(doc: &Doc) -> usize {
         | Doc::LayoutGroup(doc)
         | Doc::Nest(_, doc) => flat(doc),
         Doc::Delimited(_, doc) => DELIMITER_MARGIN + flat(doc),
-        Doc::Subscript(doc_base, doc_sub) | Doc::Superscript(doc_base, doc_sub) => {
+        Doc::Sub(doc_base, doc_sub) | Doc::Sup(doc_base, doc_sub) => {
             flat(doc_base) + flat_script_width(doc_sub)
         }
         Doc::Subsup(doc_base, doc_sub, doc_sup) => {
@@ -82,7 +82,7 @@ pub(crate) fn flat(doc: &Doc) -> usize {
         Doc::Fraction(doc_num, doc_den) => FRACTION_MARGIN + flat(doc_num).max(flat(doc_den)),
         Doc::SoftBreak(Soft::SoftCut) => 0,
         Doc::SoftBreak(Soft::SoftSpace) => 1,
-        Doc::Fill(_, separator, docs) => interspersed(separator, docs).map(flat).sum(),
+        Doc::Fill(_, separator, docs) => Doc::fill_line(separator, docs).map(flat).sum(),
         Doc::Aligned(rows) => flat_columns(&flat_column_widths(rows.iter().map(Vec::as_slice))),
         Doc::Grid(_, rows) => flat_grid_doc(rows),
         Doc::Stacked(docs) | Doc::LeftStack(docs) => docs.iter().map(flat).max().unwrap_or(0),

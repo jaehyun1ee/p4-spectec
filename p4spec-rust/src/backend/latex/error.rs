@@ -25,10 +25,6 @@ pub enum Error {
     GridCellCount { expected: usize, actual: usize },
     #[error("invalid LaTeX link target")]
     InvalidLinkTarget(String),
-    #[error("malformed grid row gap")]
-    MalformedGridGap,
-    #[error("malformed gathered document")]
-    MalformedGathered,
 }
 
 impl Error {
@@ -41,9 +37,7 @@ impl Error {
             Self::InvalidLayoutWidth
             | Self::GridWithoutColumns
             | Self::GridCellCount { .. }
-            | Self::InvalidLinkTarget(_)
-            | Self::MalformedGridGap
-            | Self::MalformedGathered => Span::default(),
+            | Self::InvalidLinkTarget(_) => Span::default(),
         }
     }
 }

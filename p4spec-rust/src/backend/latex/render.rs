@@ -18,11 +18,13 @@ pub struct Anchors<'a> {
 /// Renders one definition without a math-mode or document wrapper.
 pub fn render_def(def: &Def, anchors: Option<&Anchors<'_>>) -> Result<String> {
     let doc = renderer::tex_of_def(def, anchors)?;
-    serialize::to_string(&doc)
+    let text = serialize::to_string(&doc);
+    Ok(text)
 }
 
 /// Renders definitions in source order, aligning consecutive function clauses.
 pub fn render_defs(defs: &[Def], anchors: Option<&Anchors<'_>>) -> Result<String> {
     let doc = renderer::tex_of_defs(defs, anchors)?;
-    serialize::to_string(&doc)
+    let text = serialize::to_string(&doc);
+    Ok(text)
 }

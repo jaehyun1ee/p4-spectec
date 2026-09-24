@@ -25,7 +25,7 @@ use super::{
     precedence::{self, Assoc, Category, Side},
     render::Anchors,
     tex::{
-        doc::{self, Alignment, Block, Delimiter, Doc, GridRow, Style, Symbol},
+        doc::{Alignment, Block, Delimiter, Doc, GridRow, Soft, Style, Symbol},
         layout, link, width,
     },
 };
@@ -59,7 +59,7 @@ fn tex_of_number(op: NumOp, num: &Num) -> Doc {
         NumOp::Dec => Doc::Decimal(int_abs),
         NumOp::Hex => Doc::Hexadecimal(int_abs),
     };
-    doc::concat(vec![tex_sign, tex_abs])
+    Doc::concat(vec![tex_sign, tex_abs])
 }
 
 // - Atoms
@@ -69,16 +69,15 @@ fn tex_of_atom(atom: &Atom) -> Doc {
     use Symbol as S;
     match &atom.node {
         A::Keyword(text) => Doc::Styled(Style::Mathsf, text.clone()),
-        A::Tag(text) => Doc::Subscript(
-            Box::new(Doc::ThinSpace),
-            Box::new(Doc::Styled(Style::Mathsf, text.clone())),
-        ),
+        A::Tag(text) => {
+            Doc::Sub(Box::new(Doc::ThinSpace), Box::new(Doc::Styled(Style::Mathsf, text.clone())))
+        }
         A::Operator(text) => Doc::Mathbin(Box::new(Doc::Styled(Style::Mathtt, text.clone()))),
         A::Sub => {
-            Doc::Mathrel(Box::new(doc::concat(vec![Doc::Fixed(S::Less), Doc::Fixed(S::Colon)])))
+            Doc::Mathrel(Box::new(Doc::concat(vec![Doc::Fixed(S::Less), Doc::Fixed(S::Colon)])))
         }
         A::Sup => {
-            Doc::Mathrel(Box::new(doc::concat(vec![Doc::Fixed(S::Colon), Doc::Fixed(S::Greater)])))
+            Doc::Mathrel(Box::new(Doc::concat(vec![Doc::Fixed(S::Colon), Doc::Fixed(S::Greater)])))
         }
         A::Turnstile => Doc::Mathrel(Box::new(Doc::Fixed(S::Turnstile))),
         A::Tilesturn => Doc::Mathrel(Box::new(Doc::Fixed(S::Tilesturn))),
@@ -87,7 +86,7 @@ fn tex_of_atom(atom: &Atom) -> Doc {
         A::DoubleArrowLong => Doc::Fixed(S::Longrightarrow),
         A::SqArrow => Doc::Fixed(S::Hookrightarrow),
         A::SqArrowStar => {
-            Doc::Superscript(Box::new(Doc::Fixed(S::Hookrightarrow)), Box::new(Doc::Fixed(S::Ast)))
+            Doc::Sup(Box::new(Doc::Fixed(S::Hookrightarrow)), Box::new(Doc::Fixed(S::Ast)))
         }
         A::Dot => Doc::Group(Box::new(Doc::Fixed(S::Dot))),
         A::Dot2 => Doc::Fixed(S::Dot2),
@@ -95,7 +94,7 @@ fn tex_of_atom(atom: &Atom) -> Doc {
         A::Semicolon => Doc::Fixed(S::Semicolon),
         A::Colon => Doc::Fixed(S::Colon),
         A::ColonEq => {
-            Doc::Mathrel(Box::new(doc::concat(vec![Doc::Fixed(S::Colon), Doc::Fixed(S::Equal)])))
+            Doc::Mathrel(Box::new(Doc::concat(vec![Doc::Fixed(S::Colon), Doc::Fixed(S::Equal)])))
         }
         A::Tilde2 => Doc::Fixed(S::Sim),
         A::Backslash => Doc::Fixed(S::Setminus),
@@ -119,7 +118,7 @@ fn tex_of_bracket(atom_l: &Atom, tex_body: Doc, atom_r: &Atom) -> Doc {
         (AtomKind::LBrack, AtomKind::RBrack) => Delimiter::Bracket,
         (AtomKind::LBrace, AtomKind::RBrace) => Delimiter::Brace,
         (AtomKind::LAngle, AtomKind::RAngle) => Delimiter::Angle,
-        _ => return doc::concat(vec![tex_of_atom(atom_l), tex_body, tex_of_atom(atom_r)]),
+        _ => return Doc::concat(vec![tex_of_atom(atom_l), tex_body, tex_of_atom(atom_r)]),
     };
     Doc::Delimited(delimiter, Box::new(tex_body))
 }
@@ -180,15 +179,15 @@ fn tex_of_cmpop(op: CmpOp) -> Doc {
 /// Offers an indented break before an operator only when all terms are visible.
 fn tex_of_breakable_infix(tex_l: Doc, tex_op: Doc, tex_r: Doc) -> Doc {
     // Missing operands must not leave an empty indented continuation
-    if doc::is_empty(&tex_l) || doc::is_empty(&tex_op) || doc::is_empty(&tex_r) {
-        return doc::concat_spaced(vec![tex_l, tex_op, tex_r]);
+    if tex_l.is_empty() || tex_op.is_empty() || tex_r.is_empty() {
+        return Doc::concat_spaced(vec![tex_l, tex_op, tex_r]);
     }
 
     // Nest only the continuation so the first line retains its original width
     let tex_continuation =
-        doc::concat(vec![Doc::SoftBreak(doc::Soft::SoftSpace), tex_op, Doc::Space, tex_r]);
-    let tex_continuation = doc::nest(4, tex_continuation);
-    doc::layout_group(doc::concat(vec![tex_l, tex_continuation]))
+        Doc::concat(vec![Doc::SoftBreak(Soft::SoftSpace), tex_op, Doc::Space, tex_r]);
+    let tex_continuation = Doc::nest(4, tex_continuation);
+    Doc::layout_group(Doc::concat(vec![tex_l, tex_continuation]))
 }
 
 // - References
@@ -206,7 +205,7 @@ fn tex_of_link(anchor: Option<&str>, doc: Doc) -> Result<Doc> {
 // - Annotations
 
 fn annotate(doc: Doc, text: &str) -> Doc {
-    doc::concat_spaced(vec![doc, Doc::Quad, Doc::Styled(Style::Text, text.to_owned())])
+    Doc::concat_spaced(vec![doc, Doc::Quad, Doc::Styled(Style::Text, text.to_owned())])
 }
 
 // == Types
@@ -221,7 +220,7 @@ fn tex_of_typ(typ: &Typ) -> Doc {
 }
 
 fn tex_of_typs(typs: &[Typ]) -> Doc {
-    doc::concat_juxtaposed(typs.iter().map(tex_of_typ).collect())
+    Doc::concat_juxtaposed(typs.iter().map(tex_of_typ).collect())
 }
 
 // - Plain type
@@ -232,17 +231,17 @@ fn tex_of_plaintyp(plain_typ: &PlainTyp) -> Doc {
         PlainTypKind::Num(num::Typ::Nat) => Doc::Styled(Style::Mathbb, "N".to_owned()),
         PlainTypKind::Num(num::Typ::Int) => Doc::Styled(Style::Mathbb, "Z".to_owned()),
         PlainTypKind::Text => Doc::Styled(Style::Mathbb, "T".to_owned()),
-        PlainTypKind::Var(id, targs) => doc::concat(vec![tex_of_typid(id), tex_of_targs(targs)]),
+        PlainTypKind::Var(id, targs) => Doc::concat(vec![tex_of_typid(id), tex_of_targs(targs)]),
         PlainTypKind::Paren(plain_typ) => {
             Doc::Delimited(Delimiter::Paren, Box::new(tex_of_plaintyp(plain_typ)))
         }
         PlainTypKind::Tuple(plain_typs) => {
             let docs = plain_typs.iter().map(tex_of_plaintyp).collect();
-            let doc = doc::layout_group_soft_comma_separated(docs);
+            let doc = Doc::layout_group_soft_comma_separated(docs);
             Doc::Delimited(Delimiter::Paren, Box::new(doc))
         }
         PlainTypKind::Iter(plain_typ, iter) => {
-            Doc::Superscript(Box::new(tex_of_plaintyp(plain_typ)), Box::new(tex_of_iter(*iter)))
+            Doc::Sup(Box::new(tex_of_plaintyp(plain_typ)), Box::new(tex_of_iter(*iter)))
         }
     }
 }
@@ -267,7 +266,7 @@ fn tex_of_infix_typ(typ_l: &Typ, atom: &Atom, typ_r: &Typ) -> Doc {
 
     // Plain infix notation retains its complete right operand
     if !matches!(atom.node, AtomKind::ArrowSub | AtomKind::DoubleArrowSub) {
-        return doc::concat_spaced(vec![tex_l, tex_op, tex_of_typ(typ_r)]);
+        return Doc::concat_spaced(vec![tex_l, tex_op, tex_of_typ(typ_r)]);
     }
 
     // Subscripted arrows consume one type from a sequence or the whole operand
@@ -275,15 +274,15 @@ fn tex_of_infix_typ(typ_l: &Typ, atom: &Atom, typ_r: &Typ) -> Doc {
         // A sequence tail remains to the right of the arrow
         Typ::Notation(NotTyp { node: NotTypKind::Seq(typs), .. }) => {
             let Some((typ_sub, typs)) = typs.split_first() else {
-                return doc::concat_spaced(vec![tex_l, tex_op]);
+                return Doc::concat_spaced(vec![tex_l, tex_op]);
             };
             (tex_of_typ(typ_sub), tex_of_typs(typs))
         }
         // A single operand supplies only the subscript
         typ_sub => (tex_of_typ(typ_sub), Doc::Empty),
     };
-    let tex_op = Doc::Subscript(Box::new(tex_op), Box::new(tex_sub));
-    doc::concat_spaced(vec![tex_l, tex_op, tex_r])
+    let tex_op = Doc::Sub(Box::new(tex_op), Box::new(tex_sub));
+    Doc::concat_spaced(vec![tex_l, tex_op, tex_r])
 }
 
 // - Definition type
@@ -297,10 +296,10 @@ fn tex_of_deftyp(def_typ: &DefTyp) -> Doc {
                 .map(|typ_field| {
                     let tex_atom = tex_of_atom(&typ_field.atom);
                     let tex_typ = tex_of_plaintyp(&typ_field.typ);
-                    doc::concat_spaced(vec![tex_atom, tex_typ])
+                    Doc::concat_spaced(vec![tex_atom, tex_typ])
                 })
                 .collect();
-            let doc = doc::layout_group_soft_comma_separated(docs);
+            let doc = Doc::layout_group_soft_comma_separated(docs);
             Doc::Delimited(Delimiter::Brace, Box::new(doc))
         }
         DefTypKind::Variant(typ_cases) => {
@@ -308,7 +307,7 @@ fn tex_of_deftyp(def_typ: &DefTyp) -> Doc {
                 .iter()
                 .map(|typ_case| Block::Line(tex_of_typ(&typ_case.typ)))
                 .collect();
-            doc::gathered(blocks)
+            Doc::gathered(blocks)
         }
     }
 }
@@ -328,7 +327,7 @@ fn tex_of_varid(id: &Id) -> Doc {
         // A plain identifier needs no subscript
         None => Doc::Styled(Style::Mathsf, id.node.clone()),
         // The remaining underscores belong to the subscript text
-        Some((var, subscript)) => Doc::Subscript(
+        Some((var, subscript)) => Doc::Sub(
             Box::new(Doc::Styled(Style::Mathsf, var.to_owned())),
             Box::new(Doc::Styled(Style::Mathsf, subscript.to_owned())),
         ),
@@ -372,7 +371,7 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
         ExpKind::Un(op, exp) => {
             let term = render_exp(exp, anchors)?;
             let tex_exp = tex_of_nested_exp((C::Unary, Assoc::Right), Side::Right, term);
-            Ok(Term::new(doc::concat_spaced(vec![tex_of_unop(*op), tex_exp]), C::Unary))
+            Ok(Term::new(Doc::concat_spaced(vec![tex_of_unop(*op), tex_exp]), C::Unary))
         }
         ExpKind::Bin(exp_l, BinOp::Num(num::BinOp::Pow), exp_r) => {
             let term_l = render_exp(exp_l, anchors)?;
@@ -380,7 +379,7 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
             let prec = precedence::of_binop(BinOp::Num(num::BinOp::Pow));
             let tex_l = tex_of_nested_exp(prec, Side::Left, term_l);
             let tex_r = tex_of_nested_exp(prec, Side::Right, term_r);
-            Ok(Term::new(Doc::Superscript(Box::new(tex_l), Box::new(tex_r)), C::Power))
+            Ok(Term::new(Doc::Sup(Box::new(tex_l), Box::new(tex_r)), C::Power))
         }
         ExpKind::Bin(exp_l, op, exp_r) => {
             render_binary_exp(precedence::of_binop(*op), tex_of_binop(*op), exp_l, exp_r, anchors)
@@ -396,7 +395,7 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
         ExpKind::Eps => Ok(Term::new(Doc::Fixed(Symbol::Epsilon), C::Atomic)),
         ExpKind::List(exps) => {
             let docs = texs_of_exps(exps, anchors)?;
-            let doc = doc::layout_group_soft_comma_separated(docs);
+            let doc = Doc::layout_group_soft_comma_separated(docs);
             Ok(Term::new(Doc::Delimited(Delimiter::Bracket, Box::new(doc)), C::Atomic))
         }
         ExpKind::Cons(exp_l, exp_r) => {
@@ -415,7 +414,7 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
         ExpKind::Slice(exp_base, exp_idx, exp_len) => {
             let tex_idx = tex_of_exp(exp_idx, anchors)?;
             let tex_len = tex_of_exp(exp_len, anchors)?;
-            let tex_body = doc::concat_spaced(vec![tex_idx, Doc::Fixed(Symbol::Colon), tex_len]);
+            let tex_body = Doc::concat_spaced(vec![tex_idx, Doc::Fixed(Symbol::Colon), tex_len]);
             let tex_suffix = Doc::Delimited(Delimiter::Bracket, Box::new(tex_body));
             render_postfix_exp(exp_base, tex_suffix, anchors)
         }
@@ -436,26 +435,26 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
                 .map(|(atom, exp)| {
                     let tex_atom = tex_of_atom(atom);
                     let tex_exp = tex_of_exp(exp, anchors)?;
-                    Ok(doc::concat_spaced(vec![tex_atom, tex_exp]))
+                    Ok(Doc::concat_spaced(vec![tex_atom, tex_exp]))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            let doc = doc::layout_group_soft_comma_separated(docs);
+            let doc = Doc::layout_group_soft_comma_separated(docs);
             Ok(Term::new(Doc::Delimited(Delimiter::Brace, Box::new(doc)), C::Atomic))
         }
         ExpKind::Dot(exp_base, atom) => {
             let tex_field = tex_of_atom(atom);
             // An invisible field preserves the preceding path without a dot
-            if doc::is_empty(&tex_field) {
+            if tex_field.is_empty() {
                 return render_exp(exp_base, anchors);
             }
             let term_base = render_exp(exp_base, anchors)?;
             let tex_base = tex_of_nested_exp((C::Postfix, Assoc::Left), Side::Left, term_base);
-            Ok(Term::new(Doc::Subscript(Box::new(tex_base), Box::new(tex_field)), C::Postfix))
+            Ok(Term::new(Doc::Sub(Box::new(tex_base), Box::new(tex_field)), C::Postfix))
         }
         ExpKind::Upd(exp_base, path, exp_field) => {
             let tex_path = tex_of_path(path, anchors)?;
             let tex_field = tex_of_exp(exp_field, anchors)?;
-            let tex_body = doc::concat_spaced(vec![tex_path, Doc::Fixed(Symbol::Equal), tex_field]);
+            let tex_body = Doc::concat_spaced(vec![tex_path, Doc::Fixed(Symbol::Equal), tex_field]);
             let tex_suffix = Doc::Delimited(Delimiter::Bracket, Box::new(tex_body));
             render_postfix_exp(exp_base, tex_suffix, anchors)
         }
@@ -465,7 +464,7 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
         }
         ExpKind::Tuple(exps) => {
             let docs = texs_of_exps(exps, anchors)?;
-            let doc = doc::layout_group_soft_comma_separated(docs);
+            let doc = Doc::layout_group_soft_comma_separated(docs);
             Ok(Term::new(Doc::Delimited(Delimiter::Paren, Box::new(doc)), C::Atomic))
         }
         ExpKind::Call(id, targs, args) => {
@@ -473,18 +472,18 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<Term> {
             let tex_name = tex_of_link(anchor.as_deref(), tex_of_defid(id))?;
             let tex_targs = tex_of_targs(targs);
             let tex_args = tex_of_args(args, anchors)?;
-            Ok(Term::new(doc::concat(vec![tex_name, tex_targs, tex_args]), C::Atomic))
+            Ok(Term::new(Doc::concat(vec![tex_name, tex_targs, tex_args]), C::Atomic))
         }
         ExpKind::Iter(exp, iter) => {
             let term = render_exp(exp, anchors)?;
             let tex_base = tex_of_nested_exp((C::Postfix, Assoc::Left), Side::Left, term);
             let tex_iter = tex_of_iter(*iter);
-            Ok(Term::new(Doc::Superscript(Box::new(tex_base), Box::new(tex_iter)), C::Postfix))
+            Ok(Term::new(Doc::Sup(Box::new(tex_base), Box::new(tex_iter)), C::Postfix))
         }
         ExpKind::Sub(exp, plain_typ) => {
             let term = render_exp(exp, anchors)?;
             let tex_l = tex_of_nested_exp((C::Colon, Assoc::Left), Side::Left, term);
-            let tex_op = Doc::Mathrel(Box::new(doc::concat(vec![
+            let tex_op = Doc::Mathrel(Box::new(Doc::concat(vec![
                 Doc::Fixed(Symbol::Less),
                 Doc::Fixed(Symbol::Colon),
             ])));
@@ -547,7 +546,7 @@ fn render_postfix_exp(
 ) -> Result<Term> {
     let term_base = render_exp(exp_base, anchors)?;
     let tex_base = tex_of_nested_exp((Category::Postfix, Assoc::Left), Side::Left, term_base);
-    Ok(Term::new(doc::concat(vec![tex_base, tex_suffix]), Category::Postfix))
+    Ok(Term::new(Doc::concat(vec![tex_base, tex_suffix]), Category::Postfix))
 }
 
 // - Sequence expression
@@ -561,7 +560,7 @@ fn render_seq_exp(exps: &[Exp], anchors: Option<&Anchors<'_>>) -> Result<Term> {
             Ok(tex_of_nested_exp((Category::Sequence, Assoc::Left), Side::Right, term))
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(Term::new(doc::fill(0, Doc::ThinSpace, docs), Category::Sequence))
+    Ok(Term::new(Doc::fill(0, Doc::ThinSpace, docs), Category::Sequence))
 }
 
 // - Infix expression
@@ -585,7 +584,7 @@ fn render_infix_exp(
                 Some((exp_sub, exps)) => {
                     let term_r = render_seq_exp(exps, anchors)?;
                     let tex_sub = tex_of_exp(exp_sub, anchors)?;
-                    (term_r, Doc::Subscript(Box::new(tex_op), Box::new(tex_sub)))
+                    (term_r, Doc::Sub(Box::new(tex_op), Box::new(tex_sub)))
                 }
                 None => (Term::new(Doc::Empty, Category::Atomic), tex_op),
             },
@@ -594,7 +593,7 @@ fn render_infix_exp(
                 let tex_sub = tex_of_exp(exp_r, anchors)?;
                 (
                     Term::new(Doc::Empty, Category::Atomic),
-                    Doc::Subscript(Box::new(tex_op), Box::new(tex_sub)),
+                    Doc::Sub(Box::new(tex_op), Box::new(tex_sub)),
                 )
             }
         }
@@ -620,15 +619,15 @@ fn tex_of_path(path: &Path, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
             let tex_path = tex_of_path(path, anchors)?;
             let tex_idx = tex_of_exp(exp_idx, anchors)?;
             let tex_suffix = Doc::Delimited(Delimiter::Bracket, Box::new(tex_idx));
-            Ok(doc::concat(vec![tex_path, tex_suffix]))
+            Ok(Doc::concat(vec![tex_path, tex_suffix]))
         }
         PathKind::Slice(path, exp_idx, exp_len) => {
             let tex_path = tex_of_path(path, anchors)?;
             let tex_idx = tex_of_exp(exp_idx, anchors)?;
             let tex_len = tex_of_exp(exp_len, anchors)?;
-            let tex_body = doc::concat_spaced(vec![tex_idx, Doc::Fixed(Symbol::Colon), tex_len]);
+            let tex_body = Doc::concat_spaced(vec![tex_idx, Doc::Fixed(Symbol::Colon), tex_len]);
             let tex_suffix = Doc::Delimited(Delimiter::Bracket, Box::new(tex_body));
-            Ok(doc::concat(vec![tex_path, tex_suffix]))
+            Ok(Doc::concat(vec![tex_path, tex_suffix]))
         }
         PathKind::Dot(path, atom) => {
             let tex_field = tex_of_atom(atom);
@@ -638,10 +637,10 @@ fn tex_of_path(path: &Path, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
             }
             let tex_path = tex_of_path(path, anchors)?;
             // An invisible field preserves the preceding path without a dot
-            if doc::is_empty(&tex_field) {
+            if tex_field.is_empty() {
                 return Ok(tex_path);
             }
-            Ok(doc::concat(vec![tex_path, Doc::Fixed(Symbol::Dot), tex_field]))
+            Ok(Doc::concat(vec![tex_path, Doc::Fixed(Symbol::Dot), tex_field]))
         }
     }
 }
@@ -655,7 +654,7 @@ fn tex_of_tparams(tparams: &[TParam]) -> Doc {
         return Doc::Empty;
     }
     let docs = tparams.iter().map(tex_of_typid).collect();
-    let doc = doc::layout_group_soft_comma_separated(docs);
+    let doc = Doc::layout_group_soft_comma_separated(docs);
     Doc::Delimited(Delimiter::Angle, Box::new(doc))
 }
 
@@ -666,7 +665,7 @@ fn tex_of_targs(targs: &[Targ]) -> Doc {
         return Doc::Empty;
     }
     let docs = targs.iter().map(tex_of_plaintyp).collect();
-    let doc = doc::layout_group_soft_comma_separated(docs);
+    let doc = Doc::layout_group_soft_comma_separated(docs);
     Doc::Delimited(Delimiter::Angle, Box::new(doc))
 }
 
@@ -683,7 +682,7 @@ fn tex_of_param(param: &Param) -> Doc {
 
 fn tex_of_params(params: &[Param]) -> Doc {
     let docs = params.iter().map(tex_of_param).collect();
-    let doc = doc::layout_group_soft_comma_separated(docs);
+    let doc = Doc::layout_group_soft_comma_separated(docs);
     Doc::Delimited(Delimiter::Paren, Box::new(doc))
 }
 
@@ -701,7 +700,7 @@ fn tex_of_args(args: &[Arg], anchors: Option<&Anchors<'_>>) -> Result<Doc> {
         .iter()
         .map(|arg| tex_of_arg(arg, anchors))
         .collect::<Result<Vec<_>>>()?;
-    let doc = doc::layout_group_soft_comma_separated(docs);
+    let doc = Doc::layout_group_soft_comma_separated(docs);
     Ok(Doc::Delimited(Delimiter::Paren, Box::new(doc)))
 }
 
@@ -711,7 +710,7 @@ fn tex_of_args(args: &[Arg], anchors: Option<&Anchors<'_>>) -> Result<Doc> {
 
 fn tex_of_prem(prem: &Prem, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
     match &prem.node {
-        PremKind::Var(VarPrem { id, plain_typ }) => Ok(doc::concat_spaced(vec![
+        PremKind::Var(VarPrem { id, plain_typ }) => Ok(Doc::concat_spaced(vec![
             tex_of_varid(id),
             Doc::Fixed(Symbol::Colon),
             tex_of_plaintyp(plain_typ),
@@ -726,7 +725,7 @@ fn tex_of_prem(prem: &Prem, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
             let term = render_exp(exp, anchors)?;
             let tex_exp = tex_of_nested_exp((Category::Unary, Assoc::Right), Side::Right, term);
             let tex_exp = tex_of_link(anchor.as_deref(), tex_exp)?;
-            Ok(doc::concat_spaced(vec![Doc::Fixed(Symbol::Neg), tex_exp]))
+            Ok(Doc::concat_spaced(vec![Doc::Fixed(Symbol::Neg), tex_exp]))
         }
         PremKind::If(IfPrem { exp }) => tex_of_exp(exp, anchors),
         PremKind::Else => Ok(Doc::Styled(Style::Mathrm, "otherwise".to_owned())),
@@ -737,11 +736,11 @@ fn tex_of_prem(prem: &Prem, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
             } else {
                 Doc::Delimited(Delimiter::Paren, Box::new(tex_prem))
             };
-            Ok(Doc::Superscript(Box::new(tex_base), Box::new(tex_of_iter(*iter))))
+            Ok(Doc::Sup(Box::new(tex_base), Box::new(tex_of_iter(*iter))))
         }
         PremKind::Debug(DebugPrem { exp }) => {
             let tex_exp = tex_of_exp(exp, anchors)?;
-            Ok(doc::concat_spaced(vec![Doc::Styled(Style::Mathrm, "debug".to_owned()), tex_exp]))
+            Ok(Doc::concat_spaced(vec![Doc::Styled(Style::Mathrm, "debug".to_owned()), tex_exp]))
         }
     }
 }
@@ -751,24 +750,24 @@ fn texs_of_prems(prems: &[Prem], anchors: Option<&Anchors<'_>>) -> Result<Vec<Do
         .iter()
         .map(|prem| tex_of_prem(prem, anchors))
         .collect::<Result<Vec<_>>>()?;
-    Ok(docs.into_iter().filter(|doc| !doc::is_empty(doc)).collect())
+    Ok(docs.into_iter().filter(|doc| !doc.is_empty()).collect())
 }
 
 // == Type definitions
 
 /// Aligns variant alternatives beneath their production operator.
 fn tex_of_typ_def(id: &Id, tparams: &[TParam], def_typ: &DefTyp) -> Doc {
-    let tex_l = doc::concat(vec![tex_of_typid(id), tex_of_tparams(tparams)]);
+    let tex_l = Doc::concat(vec![tex_of_typid(id), tex_of_tparams(tparams)]);
     let tex_production = Doc::Mathrel(Box::new(Doc::Fixed(Symbol::Production)));
 
     // Non-variant definitions keep their body on the production line
     let DefTypKind::Variant(typ_cases) = &def_typ.node else {
-        return doc::concat_spaced(vec![tex_l, tex_production, tex_of_deftyp(def_typ)]);
+        return Doc::concat_spaced(vec![tex_l, tex_production, tex_of_deftyp(def_typ)]);
     };
 
     // An empty variant denotes the empty set
     let Some((typ_case, typ_cases)) = typ_cases.split_first() else {
-        return doc::concat_spaced(vec![tex_l, tex_production, Doc::Fixed(Symbol::EmptySet)]);
+        return Doc::concat_spaced(vec![tex_l, tex_production, Doc::Fixed(Symbol::EmptySet)]);
     };
 
     // Continue each alternative in the operator and body columns
@@ -785,7 +784,7 @@ fn tex_of_typ_def(id: &Id, tparams: &[TParam], def_typ: &DefTyp) -> Doc {
 // - Signature
 
 fn tex_of_rel_signature(id: &Id, not_typ: &NotTyp, annotation: Option<&str>) -> Doc {
-    let tex = doc::concat_spaced(vec![
+    let tex = Doc::concat_spaced(vec![
         tex_of_defid(id),
         Doc::Fixed(Symbol::Colon),
         tex_of_nottyp(not_typ),
@@ -804,7 +803,7 @@ fn tex_of_rule(rule: &Rule, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
 
     // A single premise needs no numbered gutter
     let mut docs = texs_of_prems(prems, anchors)?;
-    let tex_numerator = if docs.len() == 1 { docs.remove(0) } else { doc::numbered(docs) };
+    let tex_numerator = if docs.len() == 1 { docs.remove(0) } else { Doc::numbered(docs) };
 
     // Keep the full rule identifier in the badge above the inference rule
     let text = if id_rule.node.is_empty() {
@@ -814,10 +813,10 @@ fn tex_of_rule(rule: &Rule, anchors: Option<&Anchors<'_>>) -> Result<Doc> {
     };
     let tex_conclusion = tex_of_exp(exp, anchors)?;
     let tex_fraction = Doc::Fraction(Box::new(tex_numerator), Box::new(tex_conclusion));
-    let tex_fraction = doc::displaystyle(tex_fraction);
+    let tex_fraction = Doc::displaystyle(tex_fraction);
     let tex_fraction = layout::resolve(WIDTH_LAYOUT, &tex_fraction)?;
-    let tex_badge = doc::badge(text);
-    Ok(doc::left_stack(vec![tex_badge, tex_fraction]))
+    let tex_badge = Doc::badge(text);
+    Ok(Doc::left_stack(vec![tex_badge, tex_fraction]))
 }
 
 // - Rule group
@@ -838,7 +837,7 @@ fn tex_of_rulegroup(
                 format!("{}-{}", id_rel.node, id_group.node)
             };
             let tex_name = Doc::Styled(Style::Mathrm, text);
-            let tex = doc::concat_spaced(vec![
+            let tex = Doc::concat_spaced(vec![
                 tex_name,
                 Doc::Fixed(Symbol::Colon),
                 Doc::Fixed(Symbol::EmptySet),
@@ -856,7 +855,7 @@ fn tex_of_rulegroup(
                 }
                 blocks.push(Block::Line(tex_of_rule(rule, anchors)?));
             }
-            Ok(doc::gathered(blocks))
+            Ok(Doc::gathered(blocks))
         }
     }
 }
@@ -873,9 +872,9 @@ fn tex_of_func_signature(
     annotation: Option<&str>,
 ) -> Doc {
     let tex_head =
-        doc::concat(vec![tex_of_defid(id), tex_of_tparams(tparams), tex_of_params(params)]);
+        Doc::concat(vec![tex_of_defid(id), tex_of_tparams(tparams), tex_of_params(params)]);
     let tex =
-        doc::concat_spaced(vec![tex_head, Doc::Fixed(Symbol::Colon), tex_of_plaintyp(plain_typ)]);
+        Doc::concat_spaced(vec![tex_head, Doc::Fixed(Symbol::Colon), tex_of_plaintyp(plain_typ)]);
     match annotation {
         None => tex,
         Some(text) => annotate(tex, text),
@@ -904,9 +903,9 @@ fn tex_of_funcs(defs: &[&FuncDef], anchors: Option<&Anchors<'_>>) -> Result<Doc>
 
     // Multiple clauses use a grid; a compact single equation uses aligned
     let doc = if defs.len() > 1 {
-        doc::grid(vec![Alignment::Left, Alignment::Center, Alignment::Left], rows)?
+        Doc::grid(vec![Alignment::Left, Alignment::Center, Alignment::Left], rows)?
     } else if has_condition_below {
-        doc::grid(vec![Alignment::Right, Alignment::Center, Alignment::Left], rows)?
+        Doc::grid(vec![Alignment::Right, Alignment::Center, Alignment::Left], rows)?
     } else {
         let rows = rows
             .into_iter()
@@ -925,7 +924,7 @@ fn layout_func(def: &FuncDef, anchors: Option<&Anchors<'_>>) -> Result<(Vec<Doc>
     let tex_name = tex_of_defid(&def.id);
     let tex_tparams = tex_of_tparams(&def.tparams);
     let tex_args = tex_of_args(&def.args, anchors)?;
-    let tex_l = doc::concat(vec![tex_name, tex_tparams, tex_args]);
+    let tex_l = Doc::concat(vec![tex_name, tex_tparams, tex_args]);
     let tex_body = tex_of_exp(&def.exp, anchors)?;
     let docs_prem = texs_of_prems(&def.prems, anchors)?;
 
@@ -933,17 +932,17 @@ fn layout_func(def: &FuncDef, anchors: Option<&Anchors<'_>>) -> Result<(Vec<Doc>
     let tex_prem = match docs_prem.as_slice() {
         [] => Doc::Empty,
         [doc] => doc.clone(),
-        docs => doc::numbered(docs.to_vec()),
+        docs => Doc::numbered(docs.to_vec()),
     };
     let tex_condition = if docs_prem.is_empty() {
         Doc::Empty
     } else {
-        doc::concat_juxtaposed(vec![Doc::Styled(Style::Text, "if".to_owned()), tex_prem.clone()])
+        Doc::concat_juxtaposed(vec![Doc::Styled(Style::Text, "if".to_owned()), tex_prem.clone()])
     };
-    let tex_r = if doc::is_empty(&tex_condition) {
+    let tex_r = if tex_condition.is_empty() {
         tex_body.clone()
     } else {
-        doc::concat_spaced(vec![tex_body.clone(), Doc::Quad, tex_condition])
+        Doc::concat_spaced(vec![tex_body.clone(), Doc::Quad, tex_condition])
     };
     let docs_inline = vec![tex_l.clone(), Doc::Fixed(Symbol::Equal), tex_r];
     if width::flat(&Doc::Aligned(vec![docs_inline.clone()])) <= WIDTH_LAYOUT {
@@ -960,10 +959,10 @@ fn layout_func(def: &FuncDef, anchors: Option<&Anchors<'_>>) -> Result<(Vec<Doc>
 
     // Reserve the prefix width when breaking the premise block
     let tex_prefix =
-        doc::concat(vec![Doc::Quad, Doc::Styled(Style::Text, "if".to_owned()), Doc::ThinSpace]);
+        Doc::concat(vec![Doc::Quad, Doc::Styled(Style::Text, "if".to_owned()), Doc::ThinSpace]);
     let width_prem = WIDTH_LAYOUT - width::flat(&tex_prefix);
     let tex_prem = layout::resolve(width_prem, &tex_prem)?;
-    let tex_condition = doc::layout_group(doc::concat(vec![tex_prefix, tex_prem]));
+    let tex_condition = Doc::layout_group(Doc::concat(vec![tex_prefix, tex_prem]));
     Ok((docs, Some(tex_condition)))
 }
 
@@ -973,7 +972,7 @@ fn layout_func(def: &FuncDef, anchors: Option<&Anchors<'_>>) -> Result<(Vec<Doc>
 fn tex_of_table(id: &Id, rows: &[TableRow], anchors: Option<&Anchors<'_>>) -> Result<Doc> {
     // Empty tables retain their name and declaration category
     if rows.is_empty() {
-        let tex = doc::concat_spaced(vec![
+        let tex = Doc::concat_spaced(vec![
             tex_of_defid(id),
             Doc::Fixed(Symbol::Colon),
             Doc::Fixed(Symbol::EmptySet),
@@ -987,7 +986,7 @@ fn tex_of_table(id: &Id, rows: &[TableRow], anchors: Option<&Anchors<'_>>) -> Re
         .map(|row| {
             let tex_pattern = tex_of_exp(&row.node.exp_pattern, anchors)?;
             let tex_pattern = Doc::Delimited(Delimiter::Paren, Box::new(tex_pattern));
-            let tex_l = doc::concat(vec![tex_of_defid(id), tex_pattern]);
+            let tex_l = Doc::concat(vec![tex_of_defid(id), tex_pattern]);
             let tex_r = tex_of_exp(&row.node.exp_body, anchors)?;
             Ok(vec![tex_l, Doc::Fixed(Symbol::Mapsto), tex_r])
         })
@@ -1012,17 +1011,17 @@ pub(super) fn tex_of_def(def: &Def, anchors: Option<&Anchors<'_>>) -> Result<Doc
                 let docs = entries
                     .iter()
                     .map(|entry| {
-                        doc::concat(vec![tex_of_typid(&entry.id), tex_of_tparams(&entry.tparams)])
+                        Doc::concat(vec![tex_of_typid(&entry.id), tex_of_tparams(&entry.tparams)])
                     })
                     .collect();
-                doc::concat_comma_separated(docs)
+                Doc::concat_comma_separated(docs)
             };
             Ok(annotate(tex, "syntax"))
         }
         DefKind::Typ(TypDef { id, tparams, def_typ, .. }) => {
             Ok(tex_of_typ_def(id, tparams, def_typ))
         }
-        DefKind::Var(VarDef { id, plain_typ, .. }) => Ok(doc::concat_spaced(vec![
+        DefKind::Var(VarDef { id, plain_typ, .. }) => Ok(Doc::concat_spaced(vec![
             tex_of_varid(id),
             Doc::Fixed(Symbol::Colon),
             tex_of_plaintyp(plain_typ),
@@ -1094,6 +1093,6 @@ pub(super) fn tex_of_defs(mut defs: &[Def], anchors: Option<&Anchors<'_>>) -> Re
     if blocks.iter().all(|block| matches!(block, Block::Gap)) {
         Ok(Doc::Empty)
     } else {
-        Ok(doc::gathered(blocks))
+        Ok(Doc::gathered(blocks))
     }
 }

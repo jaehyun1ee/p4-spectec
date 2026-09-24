@@ -1,13 +1,12 @@
 //! TeX serialization through the shared printer
 //!
-//! `to_string` checks row structure through `validate` before invoking `Print`.
+//! `to_string` renders the document through `Print`.
 //! `render_doc` dispatches each variant to its document writer;
 //! shared escaping, enclosure, and array helpers preserve canonical TeX spelling.
 //! Mixed grids render visible content once;
 //! `render_grid_phantom` reserves its width with link-free invisible copies.
 
-use super::{doc::*, link, validate};
-use crate::backend::latex::error::Result;
+use super::{doc::*, link};
 use crate::lang::traits::print::{Print, Printer};
 use num_bigint::BigInt;
 use std::fmt::{self, Write};
@@ -154,15 +153,15 @@ fn render_doc(output: &mut dyn Write, doc: &Doc) -> fmt::Result {
         Doc::Mathrel(doc) => render_enclosed(output, r"\mathrel{", "}", doc),
         Doc::Displaystyle(doc) => render_enclosed(output, r"{\displaystyle ", "}", doc),
         Doc::Delimited(delimiter, doc) => render_delimited_doc(output, *delimiter, doc),
-        Doc::Subscript(doc_base, doc_sub) => render_subscript_doc(output, doc_base, doc_sub),
-        Doc::Superscript(doc_base, doc_sup) => render_superscript_doc(output, doc_base, doc_sup),
+        Doc::Sub(doc_base, doc_sub) => render_subscript_doc(output, doc_base, doc_sub),
+        Doc::Sup(doc_base, doc_sup) => render_superscript_doc(output, doc_base, doc_sup),
         Doc::Subsup(doc_base, doc_sub, doc_sup) => {
             render_subsup_doc(output, doc_base, doc_sub, doc_sup)
         }
         Doc::Fraction(doc_num, doc_den) => render_fraction_doc(output, doc_num, doc_den),
         Doc::Link(target, doc) => render_link_doc(output, target, doc),
         Doc::LayoutGroup(doc) | Doc::Nest(_, doc) => render_doc(output, doc),
-        Doc::Fill(_, separator, docs) => render_docs(output, interspersed(separator, docs)),
+        Doc::Fill(_, separator, docs) => render_docs(output, Doc::fill_line(separator, docs)),
         Doc::Aligned(rows) => render_aligned_doc(output, rows),
         Doc::Grid(alignments, rows) => render_grid_doc(output, alignments, rows),
         Doc::Stacked(docs) => render_stacked_doc(output, docs),
@@ -390,7 +389,7 @@ fn render_grid_array(
     let docs_column_head: Vec<_> = rows_cell
         .iter()
         .filter_map(|docs| docs.first())
-        .map(link::strip_links)
+        .map(|doc| link::strip_links(doc.clone()))
         .collect();
     output.write_str(r"\begin{array}{")?;
     render_alignments(output, alignments)?;
@@ -472,12 +471,13 @@ fn render_grid_phantom(
     // Remove links from the invisible copy of the ordinary rows
     let rows_cell: Vec<Vec<_>> = rows_cell
         .iter()
-        .map(|docs| docs.iter().map(link::strip_links).collect())
+        .map(|docs| docs.iter().cloned().map(link::strip_links).collect())
         .collect();
     render_array(output, alignments, rows_cell.iter().map(Vec::as_slice))?;
     // Spanning documents can be wider than the shared cell columns
     for doc in docs_spanning {
         output.write_str(" \\\\\n")?;
+        let doc = (*doc).clone();
         let doc = link::strip_links(doc);
         render_doc(output, &doc)?;
     }
@@ -577,8 +577,7 @@ impl Print for Doc {
     }
 }
 
-/// Validates a document and renders it through its context-free printer.
-pub(crate) fn to_string(doc: &Doc) -> Result<String> {
-    validate::validate(doc)?;
-    Ok(Print::to_string(doc))
+/// Renders a document through its context-free printer.
+pub(crate) fn to_string(doc: &Doc) -> String {
+    Print::to_string(doc)
 }

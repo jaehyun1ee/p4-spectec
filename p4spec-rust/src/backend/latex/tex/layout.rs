@@ -28,7 +28,7 @@ fn doc_of_indent(column_next: usize) -> Doc {
     if !column_next.is_multiple_of(2) {
         docs.push(Doc::Space);
     }
-    concat(docs)
+    Doc::concat(docs)
 }
 
 /// Exposes concrete left-stack rows while retaining other wrappers.
@@ -60,7 +60,7 @@ fn concat_lines(mut lines_l: Vec<Doc>, mut lines_r: Vec<Doc>) -> Vec<Doc> {
         return lines_r;
     };
     let line_r = lines_r.remove(0);
-    lines_l.push(concat(vec![line_l, line_r]));
+    lines_l.push(Doc::concat(vec![line_l, line_r]));
     lines_l.extend(lines_r);
     lines_l
 }
@@ -87,7 +87,9 @@ fn width_before_break(doc: &Doc) -> (usize, bool) {
         | Doc::Link(_, doc)
         | Doc::Nest(_, doc) => width_before_break(doc),
         Doc::SoftBreak(_) => (0, true),
-        Doc::Fill(_, separator, docs) => width_before_break_in_docs(interspersed(separator, docs)),
+        Doc::Fill(_, separator, docs) => {
+            width_before_break_in_docs(Doc::fill_line(separator, docs))
+        }
         _ => (measure::flat(doc), false),
     }
 }
@@ -240,7 +242,7 @@ fn resolve_doc(
             let doc = resolve_doc(width_child, column, column_next, width_suffix, doc);
             Doc::Delimited(*delimiter, Box::new(doc))
         }
-        Doc::Subscript(doc_base, doc_sub) => {
+        Doc::Sub(doc_base, doc_sub) => {
             let doc_base = resolve_doc(
                 width,
                 column,
@@ -250,9 +252,9 @@ fn resolve_doc(
             );
             let width_child = width_script_budget(width, column, width_suffix, &doc_base);
             let doc_sub = resolve_doc(width_child, 0, column_next, 0, doc_sub);
-            Doc::Subscript(Box::new(doc_base), Box::new(doc_sub))
+            Doc::Sub(Box::new(doc_base), Box::new(doc_sub))
         }
-        Doc::Superscript(doc_base, doc_sup) => {
+        Doc::Sup(doc_base, doc_sup) => {
             let doc_base = resolve_doc(
                 width,
                 column,
@@ -262,7 +264,7 @@ fn resolve_doc(
             );
             let width_child = width_script_budget(width, column, width_suffix, &doc_base);
             let doc_sup = resolve_doc(width_child, 0, column_next, 0, doc_sup);
-            Doc::Superscript(Box::new(doc_base), Box::new(doc_sup))
+            Doc::Sup(Box::new(doc_base), Box::new(doc_sup))
         }
         Doc::Subsup(doc_base, doc_sub, doc_sup) => {
             let width_script =
@@ -282,7 +284,7 @@ fn resolve_doc(
         }
         Doc::Link(target, doc) => {
             let doc = resolve_doc(width, column, column_next, width_suffix, doc);
-            link::normalize_after_layout(target, doc)
+            link::link_resolved_doc(target, doc)
         }
         Doc::SoftBreak(Soft::SoftCut) => Doc::Empty,
         Doc::SoftBreak(Soft::SoftSpace) => Doc::Space,
@@ -374,14 +376,14 @@ fn resolve_fill(
         if column_current + width_needed <= width {
             let column_doc = column_current + measure::flat(separator);
             let doc = resolve_doc(width, column_doc, column_next, width_suffix_doc, doc);
-            let doc = concat(vec![separator.clone(), doc]);
+            let doc = Doc::concat(vec![separator.clone(), doc]);
             lines = concat_lines(lines, lines_of_doc(doc));
         } else {
             let doc = resolve_doc(width, column_next, column_next, width_suffix_doc, doc);
             let mut lines_doc = lines_of_doc(doc);
             if let Some(line_head) = lines_doc.first_mut() {
                 let doc_head = std::mem::replace(line_head, Doc::Empty);
-                *line_head = concat(vec![doc_of_indent(column_next), doc_head]);
+                *line_head = Doc::concat(vec![doc_of_indent(column_next), doc_head]);
             }
             lines.extend(lines_doc);
         }
@@ -461,7 +463,7 @@ fn resolve_in_mode(
             let lines = resolve_in_mode(mode, width_child, column, column_next, width_suffix, doc);
             vec![Doc::Delimited(*delimiter, Box::new(doc_of_lines(lines)))]
         }
-        Doc::Subscript(doc_base, doc_sub) => {
+        Doc::Sub(doc_base, doc_sub) => {
             let width_script = measure::flat_script_width(doc_sub);
             let lines = resolve_in_mode(
                 mode,
@@ -475,9 +477,9 @@ fn resolve_in_mode(
             let width_child = width_script_budget(width, column, width_suffix, &doc_base);
             let lines = resolve_in_mode(mode, width_child, 0, column_next, 0, doc_sub);
             let doc_sub = doc_of_lines(lines);
-            vec![Doc::Subscript(Box::new(doc_base), Box::new(doc_sub))]
+            vec![Doc::Sub(Box::new(doc_base), Box::new(doc_sub))]
         }
-        Doc::Superscript(doc_base, doc_sup) => {
+        Doc::Sup(doc_base, doc_sup) => {
             let width_script = measure::flat_script_width(doc_sup);
             let lines = resolve_in_mode(
                 mode,
@@ -491,7 +493,7 @@ fn resolve_in_mode(
             let width_child = width_script_budget(width, column, width_suffix, &doc_base);
             let lines = resolve_in_mode(mode, width_child, 0, column_next, 0, doc_sup);
             let doc_sup = doc_of_lines(lines);
-            vec![Doc::Superscript(Box::new(doc_base), Box::new(doc_sup))]
+            vec![Doc::Sup(Box::new(doc_base), Box::new(doc_sup))]
         }
         Doc::Subsup(doc_base, doc_sub, doc_sup) => {
             let width_script =

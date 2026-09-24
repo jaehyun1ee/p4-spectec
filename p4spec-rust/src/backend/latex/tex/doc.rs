@@ -1,12 +1,23 @@
-//! Mathematical document structure and normalization
+//! Semantic TeX document model and its normalizing constructors
 //!
-//! `concat`, `grid`, and `gathered` normalize structural composition;
-//! layout and serialization interpret the retained mathematical intent.
+//! A `Doc` keeps mathematical and layout intent until layout and serialization.
+//! Constructors drop emptiness and redundant structure while building:
+//!
+//! ```text
+//! Doc::concat([a, Empty, Concat([b, c])])              -> Concat([a, b, c])
+//! Doc::link(target, Empty)                             -> Empty
+//! Doc::fill(2, separator, [x])                         -> x
+//! Doc::grid(columns, [Gap, Cells(x), Gap, Gap, Gap])   -> Grid(columns, [Cells(x)])
+//! Doc::gathered([Gap, Line(x), Gap, Gap, Line(y)])     -> Gathered([Line(x), Gap, Line(y)])
+//! ```
 
 use crate::backend::latex::error::{Error, Result};
 use num_bigint::BigInt;
 
 // == Document model
+//
+//   Delimited(Paren, Styled(Mathsf, "x"))               -> \left(\mathsf{x}\right)
+//   LayoutGroup(Concat([x, SoftBreak(SoftSpace), y]))   -> x y on one line, or x and y on two
 
 /// Selects a font and its escaping context.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -166,6 +177,7 @@ pub(crate) struct Target(pub(super) String);
 /// Retains mathematical and layout intent until interpretation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Doc {
+    // Atomic documents
     /// No content and no width.
     Empty,
     /// Text escaped in the selected font and math or text context.
@@ -184,8 +196,10 @@ pub(crate) enum Doc {
     ThinSpace,
     /// A wide math space, `\quad`, measured as two columns.
     Quad,
+    // Sequential composition
     /// Documents concatenated without implicit spacing.
     Concat(Vec<Doc>),
+    // TeX classification
     /// An explicit TeX group, `{...}`, retained even when empty.
     Group(Box<Doc>),
     /// Content classified as a binary operator, `\mathbin{...}`.
@@ -194,19 +208,22 @@ pub(crate) enum Doc {
     Mathrel(Box<Doc>),
     /// Content forced to display-style math, `{\displaystyle ...}`.
     Displaystyle(Box<Doc>),
+    // Delimiters and attachments
     /// A delimiter pair sized to its enclosed document.
     Delimited(Delimiter, Box<Doc>),
     /// A base and subscript, in that order: `{base}_{sub}`.
-    Subscript(Box<Doc>, Box<Doc>),
+    Sub(Box<Doc>, Box<Doc>),
     /// A base and superscript, in that order: `{base}^{sup}`.
-    Superscript(Box<Doc>, Box<Doc>),
+    Sup(Box<Doc>, Box<Doc>),
     /// A base, subscript, and superscript: `{base}_{sub}^{sup}`.
     #[allow(dead_code)]
     Subsup(Box<Doc>, Box<Doc>, Box<Doc>),
     /// A numerator and denominator: `\frac{num}{den}`.
     Fraction(Box<Doc>, Box<Doc>),
+    // Navigation
     /// A local anchor and its visible document: `\href{#target}{doc}`.
     Link(Target, Box<Doc>),
+    // Width-sensitive layout
     /// A break opportunity whose flat spelling is selected by `Soft`.
     SoftBreak(Soft),
     /// Content whose soft breaks are selected together by available width.
@@ -216,8 +233,9 @@ pub(crate) enum Doc {
     /// The first line keeps its current column.
     Nest(usize, Box<Doc>),
     /// Continuation indentation, separator, and greedily packed documents.
-    /// A line break replaces the separator; `fill` removes empty items.
+    /// A line break replaces the separator; `Doc::fill` keeps only nonempty items.
     Fill(usize, Box<Doc>, Vec<Doc>),
+    // Multi-row layout
     /// Equation rows in `aligned`, with shared column widths.
     Aligned(Vec<Vec<Doc>>),
     /// Explicit column alignments and cell, spanning, or gap rows.
@@ -240,7 +258,7 @@ pub(crate) enum GridRow {
     Cells(Vec<Doc>),
     /// Content spanning the grid, laid out with the full line-width budget.
     Spanning(Doc),
-    /// Extra vertical space after a content row; never first or consecutive.
+    /// Extra space after a content row; `grid` trims and coalesces gaps.
     Gap,
 }
 
@@ -249,241 +267,473 @@ pub(crate) enum GridRow {
 pub(crate) enum Block {
     /// One centered document in a gathered environment.
     Line(Doc),
-    /// Extra space between lines; `gathered` trims and coalesces gaps.
+    /// Extra space after a line; `gathered` trims and coalesces gaps.
     Gap,
 }
 
-// == Inspection and traversal
+// == Inspection
 
-// - Emptiness
+impl Doc {
+    // - Emptiness
+    //
+    //   Concat([Empty, Nest(2, Empty)]).is_empty()   -> true
+    //   Group(Empty).is_empty()                      -> false
 
-/// Tests semantic emptiness without discarding explicit TeX groups.
-pub(crate) fn is_empty(doc: &Doc) -> bool {
-    match doc {
-        Doc::Empty => true,
-        Doc::Concat(docs)
-        | Doc::Stacked(docs)
-        | Doc::LeftStack(docs)
-        | Doc::Numbered(docs)
-        | Doc::Fill(_, _, docs) => docs.iter().all(is_empty),
-        Doc::Displaystyle(doc) | Doc::LayoutGroup(doc) | Doc::Nest(_, doc) => is_empty(doc),
-        _ => false,
-    }
-}
-
-// - Nonempty sequences
-
-/// Borrows nonempty documents with a separator between adjacent documents.
-pub(super) fn interspersed<'a>(
-    separator: &'a Doc,
-    docs: &'a [Doc],
-) -> impl Iterator<Item = &'a Doc> {
-    // Filter emptiness before inserting borrowed separators
-    docs.iter()
-        .filter(|doc| !is_empty(doc))
-        .enumerate()
-        .flat_map(move |(idx, doc)| {
-            let separator = (idx != 0).then_some(separator);
-            separator.into_iter().chain(std::iter::once(doc))
-        })
-}
-
-// == Concatenation
-
-// - Flattening
-
-/// Flattens concatenation and removes empty atomic documents.
-pub(crate) fn concat(docs: Vec<Doc>) -> Doc {
-    // Expand nested sequences in their original order
-    let mut docs_flat = Vec::new();
-    let mut docs_pending = docs;
-    docs_pending.reverse();
-    while let Some(doc) = docs_pending.pop() {
-        match doc {
-            // Discard only atomic emptiness
-            Doc::Empty => {}
-            // Put nested children before the remaining siblings
-            Doc::Concat(docs) => docs_pending.extend(docs.into_iter().rev()),
-            // Preserve wrappers even when their content is empty
-            doc => docs_flat.push(doc),
+    /// Tests semantic emptiness without discarding explicit TeX groups.
+    pub(crate) fn is_empty(&self) -> bool {
+        match self {
+            Doc::Empty => true,
+            Doc::Styled(..)
+            | Doc::Badge(_)
+            | Doc::Decimal(_)
+            | Doc::Hexadecimal(_)
+            | Doc::Fixed(_)
+            | Doc::Space
+            | Doc::ThinSpace
+            | Doc::Quad
+            | Doc::Group(_)
+            | Doc::Mathbin(_)
+            | Doc::Mathrel(_)
+            | Doc::Delimited(..)
+            | Doc::Sub(..)
+            | Doc::Sup(..)
+            | Doc::Subsup(..)
+            | Doc::Fraction(..)
+            | Doc::Link(..)
+            | Doc::SoftBreak(_)
+            | Doc::Aligned(_)
+            | Doc::Grid(..)
+            | Doc::Gathered(_) => false,
+            Doc::Displaystyle(doc) | Doc::LayoutGroup(doc) | Doc::Nest(_, doc) => doc.is_empty(),
+            Doc::Concat(docs)
+            | Doc::Stacked(docs)
+            | Doc::LeftStack(docs)
+            | Doc::Numbered(docs)
+            | Doc::Fill(_, _, docs) => docs.iter().all(Doc::is_empty),
         }
     }
-    match docs_flat.len() {
-        0 => Doc::Empty,
-        1 => docs_flat.pop().unwrap(),
-        _ => Doc::Concat(docs_flat),
-    }
-}
 
-// - Separators
+    // - Children
+    //
+    //   Fill(_, s, [x, y]).children()         -> [s, x, y]
+    //   Sub(x, i).map_children(f)             -> Sub(f(x), f(i))
+    //   Fill(_, s, [x]).map_children(f)       -> Fill(_, s, [f(x)])
 
-/// Inserts separators only between semantically nonempty documents.
-pub(crate) fn concat_intersperse(separator: Doc, docs: Vec<Doc>) -> Doc {
-    let mut docs_separated = Vec::new();
-    // Skip emptiness before deciding whether a separator is needed
-    for doc in docs.into_iter().filter(|doc| !is_empty(doc)) {
-        if !docs_separated.is_empty() {
-            docs_separated.push(separator.clone());
-        }
-        docs_separated.push(doc);
-    }
-    concat(docs_separated)
-}
-
-/// Separates nonempty documents by spaces.
-pub(crate) fn concat_spaced(docs: Vec<Doc>) -> Doc {
-    concat_intersperse(Doc::Space, docs)
-}
-
-/// Separates nonempty documents by commas and spaces.
-pub(crate) fn concat_comma_separated(docs: Vec<Doc>) -> Doc {
-    let separator = concat(vec![Doc::Fixed(Symbol::Comma), Doc::Space]);
-    concat_intersperse(separator, docs)
-}
-
-/// Separates nonempty documents by thin spaces.
-pub(crate) fn concat_juxtaposed(docs: Vec<Doc>) -> Doc {
-    concat_intersperse(Doc::ThinSpace, docs)
-}
-
-// == Wrappers
-
-// - Badges
-
-/// Omits a badge whose label is empty.
-pub(crate) fn badge(text: String) -> Doc {
-    if text.is_empty() { Doc::Empty } else { Doc::Badge(text) }
-}
-
-// - Display style
-
-/// Omits display style around an empty document.
-pub(crate) fn displaystyle(doc: Doc) -> Doc {
-    if is_empty(&doc) { Doc::Empty } else { Doc::Displaystyle(Box::new(doc)) }
-}
-
-// - Links
-
-/// Omits a link around an empty document.
-pub(crate) fn link(target: Target, doc: Doc) -> Doc {
-    if is_empty(&doc) { Doc::Empty } else { Doc::Link(target, Box::new(doc)) }
-}
-
-// == Layout composition
-
-// - Groups
-
-/// Omits a layout group around an empty document.
-pub(crate) fn layout_group(doc: Doc) -> Doc {
-    if is_empty(&doc) { Doc::Empty } else { Doc::LayoutGroup(Box::new(doc)) }
-}
-
-// - Indentation
-
-/// Omits ineffective continuation indentation.
-pub(crate) fn nest(indent: usize, doc: Doc) -> Doc {
-    if indent == 0 || is_empty(&doc) { doc } else { Doc::Nest(indent, Box::new(doc)) }
-}
-
-// - Fills
-
-/// Retains a fill only when multiple nonempty documents need packing.
-pub(crate) fn fill(indent: usize, separator: Doc, docs: Vec<Doc>) -> Doc {
-    let mut docs: Vec<_> = docs.into_iter().filter(|doc| !is_empty(doc)).collect();
-    match docs.len() {
-        0 => Doc::Empty,
-        1 => docs.pop().unwrap(),
-        _ => Doc::Fill(indent, Box::new(separator), docs),
-    }
-}
-
-// - Breakable lists
-
-/// Groups a comma-separated list with breakable spaces.
-pub(crate) fn layout_group_soft_comma_separated(docs: Vec<Doc>) -> Doc {
-    let separator = concat(vec![Doc::Fixed(Symbol::Comma), Doc::SoftBreak(Soft::SoftSpace)]);
-    let doc = concat_intersperse(separator, docs);
-    layout_group(doc)
-}
-
-// == Multi-row composition
-
-// - Grids
-
-/// Validates grid arity and removes empty content rows.
-pub(crate) fn grid(alignments: Vec<Alignment>, rows: Vec<GridRow>) -> Result<Doc> {
-    // A nonempty row sequence needs a column specification
-    if alignments.is_empty() {
-        return if rows.is_empty() { Ok(Doc::Empty) } else { Err(Error::GridWithoutColumns) };
-    }
-    // Validate before filtering so malformed empty rows remain errors
-    for row in &rows {
-        if let GridRow::Cells(docs) = row
-            && docs.len() != alignments.len()
-        {
-            return Err(Error::GridCellCount { expected: alignments.len(), actual: docs.len() });
+    /// Lists direct children, with a fill separator before its items.
+    pub(crate) fn children(&self) -> Vec<&Doc> {
+        match self {
+            Doc::Empty
+            | Doc::Styled(..)
+            | Doc::Badge(_)
+            | Doc::Decimal(_)
+            | Doc::Hexadecimal(_)
+            | Doc::Fixed(_)
+            | Doc::Space
+            | Doc::ThinSpace
+            | Doc::Quad
+            | Doc::SoftBreak(_) => Vec::new(),
+            Doc::Group(doc)
+            | Doc::Mathbin(doc)
+            | Doc::Mathrel(doc)
+            | Doc::Displaystyle(doc)
+            | Doc::Delimited(_, doc)
+            | Doc::Link(_, doc)
+            | Doc::LayoutGroup(doc)
+            | Doc::Nest(_, doc) => vec![doc],
+            Doc::Sub(doc_base, doc_sub) => vec![doc_base, doc_sub],
+            Doc::Sup(doc_base, doc_sup) => vec![doc_base, doc_sup],
+            Doc::Subsup(doc_base, doc_sub, doc_sup) => vec![doc_base, doc_sub, doc_sup],
+            Doc::Fraction(doc_num, doc_den) => vec![doc_num, doc_den],
+            Doc::Fill(_, separator, docs) => std::iter::once(&**separator).chain(docs).collect(),
+            Doc::Concat(docs) | Doc::Stacked(docs) | Doc::LeftStack(docs) | Doc::Numbered(docs) => {
+                docs.iter().collect()
+            }
+            Doc::Aligned(rows) => rows.iter().flatten().collect(),
+            Doc::Grid(_, rows) => rows
+                .iter()
+                .flat_map(|row| match row {
+                    GridRow::Cells(docs) => docs.iter().collect(),
+                    GridRow::Spanning(doc) => vec![doc],
+                    GridRow::Gap => Vec::new(),
+                })
+                .collect(),
+            Doc::Gathered(blocks) => blocks
+                .iter()
+                .filter_map(|block| match block {
+                    Block::Line(doc) => Some(doc),
+                    Block::Gap => None,
+                })
+                .collect(),
         }
     }
-    let rows: Vec<_> = rows
-        .into_iter()
-        .filter(|row| match row {
-            GridRow::Cells(docs) => !docs.iter().all(is_empty),
-            GridRow::Spanning(doc) => !is_empty(doc),
-            GridRow::Gap => true,
-        })
-        .collect();
-    if rows.is_empty() { Ok(Doc::Empty) } else { Ok(Doc::Grid(alignments, rows)) }
-}
 
-// - Stacks
-
-/// Removes empty documents from a centered stack.
-#[allow(dead_code)]
-pub(crate) fn stacked(docs: Vec<Doc>) -> Doc {
-    let docs: Vec<_> = docs.into_iter().filter(|doc| !is_empty(doc)).collect();
-    if docs.is_empty() { Doc::Empty } else { Doc::Stacked(docs) }
-}
-
-/// Collapses a left stack with at most one nonempty document.
-pub(crate) fn left_stack(docs: Vec<Doc>) -> Doc {
-    let mut docs: Vec<_> = docs.into_iter().filter(|doc| !is_empty(doc)).collect();
-    match docs.len() {
-        0 => Doc::Empty,
-        1 => docs.pop().unwrap(),
-        _ => Doc::LeftStack(docs),
+    /// Maps one boxed child, reusing its allocation.
+    fn map_box(mut doc: Box<Doc>, map: &mut impl FnMut(Doc) -> Doc) -> Box<Doc> {
+        let doc_inner = std::mem::replace(&mut *doc, Doc::Empty);
+        *doc = map(doc_inner);
+        doc
     }
-}
 
-// - Numbered premises
-
-/// Numbers only nonempty premise documents.
-pub(crate) fn numbered(docs: Vec<Doc>) -> Doc {
-    let docs: Vec<_> = docs.into_iter().filter(|doc| !is_empty(doc)).collect();
-    if docs.is_empty() { Doc::Empty } else { Doc::Numbered(docs) }
-}
-
-// - Gathered blocks
-
-/// Removes outer gaps and coalesces gaps between nonempty lines.
-pub(crate) fn gathered(blocks: Vec<Block>) -> Doc {
-    let mut blocks_normalized = Vec::new();
-    let mut gap_pending = false;
-    // Defer gaps until a subsequent nonempty line uses them
-    for block in blocks {
-        match block {
-            // Leading gaps have no preceding line
-            Block::Gap => gap_pending = !blocks_normalized.is_empty(),
-            // Empty lines preserve a pending interior gap
-            Block::Line(doc) if is_empty(&doc) => {}
-            // Emit at most one gap before this line
-            Block::Line(doc) => {
-                if gap_pending {
-                    blocks_normalized.push(Block::Gap);
-                }
-                blocks_normalized.push(Block::Line(doc));
-                gap_pending = false;
+    /// Rebuilds a document with each child mapped, leaving fill separators untouched.
+    pub(crate) fn map_children(self, mut map: impl FnMut(Doc) -> Doc) -> Doc {
+        match self {
+            Doc::Empty
+            | Doc::Styled(..)
+            | Doc::Badge(_)
+            | Doc::Decimal(_)
+            | Doc::Hexadecimal(_)
+            | Doc::Fixed(_)
+            | Doc::Space
+            | Doc::ThinSpace
+            | Doc::Quad
+            | Doc::SoftBreak(_) => self,
+            Doc::Concat(docs) => {
+                let docs = docs.into_iter().map(map).collect();
+                Doc::Concat(docs)
+            }
+            Doc::Group(doc) => {
+                let doc = Doc::map_box(doc, &mut map);
+                Doc::Group(doc)
+            }
+            Doc::Mathbin(doc) => {
+                let doc = Doc::map_box(doc, &mut map);
+                Doc::Mathbin(doc)
+            }
+            Doc::Mathrel(doc) => {
+                let doc = Doc::map_box(doc, &mut map);
+                Doc::Mathrel(doc)
+            }
+            Doc::Displaystyle(doc) => {
+                let doc = Doc::map_box(doc, &mut map);
+                Doc::Displaystyle(doc)
+            }
+            Doc::Delimited(delimiter, doc) => {
+                let doc = Doc::map_box(doc, &mut map);
+                Doc::Delimited(delimiter, doc)
+            }
+            Doc::Sub(doc_base, doc_sub) => {
+                let doc_base = Doc::map_box(doc_base, &mut map);
+                let doc_sub = Doc::map_box(doc_sub, &mut map);
+                Doc::Sub(doc_base, doc_sub)
+            }
+            Doc::Sup(doc_base, doc_sup) => {
+                let doc_base = Doc::map_box(doc_base, &mut map);
+                let doc_sup = Doc::map_box(doc_sup, &mut map);
+                Doc::Sup(doc_base, doc_sup)
+            }
+            Doc::Subsup(doc_base, doc_sub, doc_sup) => {
+                let doc_base = Doc::map_box(doc_base, &mut map);
+                let doc_sub = Doc::map_box(doc_sub, &mut map);
+                let doc_sup = Doc::map_box(doc_sup, &mut map);
+                Doc::Subsup(doc_base, doc_sub, doc_sup)
+            }
+            Doc::Fraction(doc_num, doc_den) => {
+                let doc_num = Doc::map_box(doc_num, &mut map);
+                let doc_den = Doc::map_box(doc_den, &mut map);
+                Doc::Fraction(doc_num, doc_den)
+            }
+            Doc::Link(target, doc) => {
+                let doc = Doc::map_box(doc, &mut map);
+                Doc::Link(target, doc)
+            }
+            Doc::LayoutGroup(doc) => {
+                let doc = Doc::map_box(doc, &mut map);
+                Doc::LayoutGroup(doc)
+            }
+            Doc::Nest(indent, doc) => {
+                let doc = Doc::map_box(doc, &mut map);
+                Doc::Nest(indent, doc)
+            }
+            Doc::Fill(indent, separator, docs) => {
+                let docs = docs.into_iter().map(map).collect();
+                Doc::Fill(indent, separator, docs)
+            }
+            Doc::Aligned(rows) => {
+                let rows = rows
+                    .into_iter()
+                    .map(|docs| docs.into_iter().map(&mut map).collect())
+                    .collect();
+                Doc::Aligned(rows)
+            }
+            Doc::Grid(alignments, rows) => {
+                let rows = rows
+                    .into_iter()
+                    .map(|row| match row {
+                        GridRow::Cells(docs) => {
+                            let docs = docs.into_iter().map(&mut map).collect();
+                            GridRow::Cells(docs)
+                        }
+                        GridRow::Spanning(doc) => {
+                            let doc = map(doc);
+                            GridRow::Spanning(doc)
+                        }
+                        GridRow::Gap => GridRow::Gap,
+                    })
+                    .collect();
+                Doc::Grid(alignments, rows)
+            }
+            Doc::Stacked(docs) => {
+                let docs = docs.into_iter().map(map).collect();
+                Doc::Stacked(docs)
+            }
+            Doc::LeftStack(docs) => {
+                let docs = docs.into_iter().map(map).collect();
+                Doc::LeftStack(docs)
+            }
+            Doc::Numbered(docs) => {
+                let docs = docs.into_iter().map(map).collect();
+                Doc::Numbered(docs)
+            }
+            Doc::Gathered(blocks) => {
+                let blocks = blocks
+                    .into_iter()
+                    .map(|block| match block {
+                        Block::Line(doc) => {
+                            let doc = map(doc);
+                            Block::Line(doc)
+                        }
+                        Block::Gap => Block::Gap,
+                    })
+                    .collect();
+                Doc::Gathered(blocks)
             }
         }
     }
-    Doc::Gathered(blocks_normalized)
+}
+
+// == Constructors
+
+impl Doc {
+    // - Atomic documents
+    //
+    //   Doc::badge("")    -> Empty
+    //   Doc::badge("R")   -> Badge("R")
+
+    /// Omits a badge whose label is empty.
+    pub(crate) fn badge(text: String) -> Doc {
+        if text.is_empty() { Doc::Empty } else { Doc::Badge(text) }
+    }
+
+    // - Sequential composition
+    //
+    //   Doc::concat([a, Empty, Concat([b, c])])   -> Concat([a, b, c])
+    //   Doc::concat_spaced([x, Empty, y])         -> Concat([x, Space, y])
+
+    /// Flattens concatenation and removes empty atomic documents.
+    pub(crate) fn concat(docs: Vec<Doc>) -> Doc {
+        let mut docs_flat = Vec::new();
+        let mut docs_pending = docs;
+        docs_pending.reverse();
+        // Expand nested sequences in their original order
+        while let Some(doc) = docs_pending.pop() {
+            match doc {
+                // Discard only atomic emptiness
+                Doc::Empty => {}
+                // Put nested children before the remaining siblings
+                Doc::Concat(docs) => docs_pending.extend(docs.into_iter().rev()),
+                // Preserve wrappers even when their content is empty
+                doc => docs_flat.push(doc),
+            }
+        }
+        match docs_flat.len() {
+            0 => Doc::Empty,
+            1 => docs_flat.pop().unwrap(),
+            _ => Doc::Concat(docs_flat),
+        }
+    }
+
+    /// Inserts separators only between semantically nonempty documents.
+    pub(crate) fn concat_intersperse(separator: Doc, docs: Vec<Doc>) -> Doc {
+        let mut docs_separated = Vec::new();
+        // Skip emptiness before deciding whether a separator is needed
+        for doc in docs.into_iter().filter(|doc| !doc.is_empty()) {
+            if !docs_separated.is_empty() {
+                docs_separated.push(separator.clone());
+            }
+            docs_separated.push(doc);
+        }
+        Doc::concat(docs_separated)
+    }
+
+    /// Separates nonempty documents by spaces.
+    pub(crate) fn concat_spaced(docs: Vec<Doc>) -> Doc {
+        Doc::concat_intersperse(Doc::Space, docs)
+    }
+
+    /// Separates nonempty documents by commas and spaces.
+    pub(crate) fn concat_comma_separated(docs: Vec<Doc>) -> Doc {
+        let separator = Doc::concat(vec![Doc::Fixed(Symbol::Comma), Doc::Space]);
+        Doc::concat_intersperse(separator, docs)
+    }
+
+    /// Separates nonempty documents by thin spaces.
+    pub(crate) fn concat_juxtaposed(docs: Vec<Doc>) -> Doc {
+        Doc::concat_intersperse(Doc::ThinSpace, docs)
+    }
+
+    // - TeX classification
+    //
+    //   Doc::displaystyle(Empty)    -> Empty
+
+    /// Omits display style around an empty document.
+    pub(crate) fn displaystyle(doc: Doc) -> Doc {
+        if doc.is_empty() { Doc::Empty } else { Doc::Displaystyle(Box::new(doc)) }
+    }
+
+    // - Navigation
+    //
+    //   Doc::link(target, Empty)   -> Empty
+
+    /// Omits a link around an empty document.
+    pub(crate) fn link(target: Target, doc: Doc) -> Doc {
+        if doc.is_empty() { Doc::Empty } else { Doc::Link(target, Box::new(doc)) }
+    }
+
+    // - Width-sensitive layout
+    //
+    //   Doc::nest(0, x)                                -> x
+    //   Doc::fill(2, s, [x, Empty])                    -> x
+    //   Doc::fill_line(s, [x, y, z])                   -> x, s, y, s, z
+    //   Doc::layout_group_soft_comma_separated([x, y])
+    //   -> LayoutGroup(Concat([x, Fixed(Comma), SoftBreak(SoftSpace), y]))
+
+    /// Omits a layout group around an empty document.
+    pub(crate) fn layout_group(doc: Doc) -> Doc {
+        if doc.is_empty() { Doc::Empty } else { Doc::LayoutGroup(Box::new(doc)) }
+    }
+
+    /// Groups a comma-separated list with breakable spaces.
+    pub(crate) fn layout_group_soft_comma_separated(docs: Vec<Doc>) -> Doc {
+        let separator =
+            Doc::concat(vec![Doc::Fixed(Symbol::Comma), Doc::SoftBreak(Soft::SoftSpace)]);
+        let doc = Doc::concat_intersperse(separator, docs);
+        Doc::layout_group(doc)
+    }
+
+    /// Omits ineffective continuation indentation.
+    pub(crate) fn nest(indent: usize, doc: Doc) -> Doc {
+        if indent == 0 || doc.is_empty() { doc } else { Doc::Nest(indent, Box::new(doc)) }
+    }
+
+    /// Retains a fill only when multiple nonempty documents need packing.
+    pub(crate) fn fill(indent: usize, separator: Doc, docs: Vec<Doc>) -> Doc {
+        let mut docs: Vec<_> = docs.into_iter().filter(|doc| !doc.is_empty()).collect();
+        match docs.len() {
+            0 => Doc::Empty,
+            1 => docs.pop().unwrap(),
+            _ => Doc::Fill(indent, Box::new(separator), docs),
+        }
+    }
+
+    /// Lists fill items with the separator between each pair, as on one line.
+    ///
+    /// Items need no emptiness filter: `Doc::fill` already dropped empty ones.
+    pub(super) fn fill_line<'a>(
+        separator: &'a Doc,
+        docs: &'a [Doc],
+    ) -> impl Iterator<Item = &'a Doc> {
+        docs.iter().enumerate().flat_map(move |(idx, doc)| {
+            let separator = (idx != 0).then_some(separator);
+            separator.into_iter().chain(std::iter::once(doc))
+        })
+    }
+
+    // - Multi-row layout
+    //
+    //   Doc::grid(columns, [Gap, Cells(x), Gap, Gap, Gap])   -> Grid(columns, [Cells(x)])
+    //   Doc::gathered([Gap, Line(x), Gap, Gap, Line(y)])     -> Gathered([Line(x), Gap, Line(y)])
+    //   Doc::left_stack([x, Empty])                          -> x
+
+    /// Removes blank rows and outer gaps, and coalesces interior gaps.
+    ///
+    /// ```text
+    /// [Gap, x, Gap, blank, Gap, y, Gap]   -> [x, Gap, y]
+    /// ```
+    fn normalize_rows<T>(
+        rows: Vec<T>,
+        is_gap: impl Fn(&T) -> bool,
+        is_blank: impl Fn(&T) -> bool,
+    ) -> Vec<T> {
+        let mut rows_normalized = Vec::new();
+        let mut gap_pending = None;
+        // Defer each gap until a subsequent content row uses it
+        for row in rows {
+            // A leading gap has no preceding row
+            if is_gap(&row) {
+                if !rows_normalized.is_empty() {
+                    gap_pending = Some(row);
+                }
+                continue;
+            }
+            // A blank row keeps the pending gap for the next content row
+            if is_blank(&row) {
+                continue;
+            }
+            // Emit at most one gap before this row
+            if let Some(gap) = gap_pending.take() {
+                rows_normalized.push(gap);
+            }
+            rows_normalized.push(row);
+        }
+        rows_normalized
+    }
+
+    /// Validates grid arity, then removes blank rows and redundant gaps.
+    pub(crate) fn grid(alignments: Vec<Alignment>, rows: Vec<GridRow>) -> Result<Doc> {
+        // A nonempty row sequence needs a column specification
+        if alignments.is_empty() {
+            return if rows.is_empty() { Ok(Doc::Empty) } else { Err(Error::GridWithoutColumns) };
+        }
+        // Validate before normalizing so malformed blank rows remain errors
+        for row in &rows {
+            if let GridRow::Cells(docs) = row
+                && docs.len() != alignments.len()
+            {
+                let error = Error::GridCellCount { expected: alignments.len(), actual: docs.len() };
+                return Err(error);
+            }
+        }
+        let is_gap = |row: &GridRow| matches!(row, GridRow::Gap);
+        let is_blank = |row: &GridRow| match row {
+            GridRow::Cells(docs) => docs.iter().all(Doc::is_empty),
+            GridRow::Spanning(doc) => doc.is_empty(),
+            GridRow::Gap => false,
+        };
+        let rows = Doc::normalize_rows(rows, is_gap, is_blank);
+        if rows.is_empty() { Ok(Doc::Empty) } else { Ok(Doc::Grid(alignments, rows)) }
+    }
+
+    /// Removes empty documents from a centered stack.
+    #[allow(dead_code)]
+    pub(crate) fn stacked(docs: Vec<Doc>) -> Doc {
+        let docs: Vec<_> = docs.into_iter().filter(|doc| !doc.is_empty()).collect();
+        if docs.is_empty() { Doc::Empty } else { Doc::Stacked(docs) }
+    }
+
+    /// Collapses a left stack with at most one nonempty document.
+    pub(crate) fn left_stack(docs: Vec<Doc>) -> Doc {
+        let mut docs: Vec<_> = docs.into_iter().filter(|doc| !doc.is_empty()).collect();
+        match docs.len() {
+            0 => Doc::Empty,
+            1 => docs.pop().unwrap(),
+            _ => Doc::LeftStack(docs),
+        }
+    }
+
+    /// Numbers only nonempty premise documents.
+    pub(crate) fn numbered(docs: Vec<Doc>) -> Doc {
+        let docs: Vec<_> = docs.into_iter().filter(|doc| !doc.is_empty()).collect();
+        if docs.is_empty() { Doc::Empty } else { Doc::Numbered(docs) }
+    }
+
+    /// Removes empty lines and redundant gaps between gathered blocks.
+    pub(crate) fn gathered(blocks: Vec<Block>) -> Doc {
+        let is_gap = |block: &Block| matches!(block, Block::Gap);
+        let is_blank = |block: &Block| match block {
+            Block::Line(doc) => doc.is_empty(),
+            Block::Gap => false,
+        };
+        let blocks = Doc::normalize_rows(blocks, is_gap, is_blank);
+        Doc::Gathered(blocks)
+    }
 }
