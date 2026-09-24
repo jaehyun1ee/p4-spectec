@@ -94,7 +94,7 @@ const ITERATION_LOOP_VARIABLE_MISSING: &str = "algo/iteration-loop-variable-miss
 
 /// Reports an iteration with no externally bound variable to range over.
 pub(crate) fn iteration_loop_variable_missing(span: &Span, vars: &[ast::Var]) -> AlgoError {
-    let mut labels = vec![Label::primary(span, "this iteration has no range source")];
+    let mut labels = vec![Label::primary(span, "this iteration has no iteration source")];
     for var in vars {
         labels
             .push(Label::secondary(&var.id.span, format!("`{}` is newly bound here", var.id.node)));

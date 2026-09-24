@@ -5,7 +5,7 @@ error[algo/iteration-loop-variable-missing]: this iteration has no previously bo
    │       ^^^^^^^^^^^
    │       │   │
    │       │   `x` is newly bound here
-   │       this iteration has no range source
+   │       this iteration has no iteration source
    │
    = A variable bound outside the iteration must supply the values it ranges over.
 
