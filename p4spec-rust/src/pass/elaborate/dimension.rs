@@ -347,7 +347,7 @@ impl Occurrences {
 
 // - Iteration variables
 
-/// Selects the occurring variables that the iteration `iter` ranges over.
+/// Selects the occurring variables that supply values for `iter`.
 ///
 /// A variable is iterated
 /// when adding `iter` to its current dimension
@@ -638,7 +638,7 @@ fn annotate_call_exp(bounds: &VEnv, args: &mut [ast::Arg]) -> Result<Occurrences
 
 // - Iteration expressions
 
-/// Fills in the variables an iterated expression ranges over.
+/// Fills in the source variables of an iterated expression.
 fn annotate_iter_exp(
     bounds: &VEnv,
     span: &Span,
@@ -651,9 +651,9 @@ fn annotate_iter_exp(
         return Err(error::dim::iteration_annotation_invalid(span, "expression"));
     }
     let occurs = annotate_exp(bounds, exp_inner)?;
-    // Variables the iteration ranges over
+    // Variables that supply iteration values
     let vars_inner = collect_iter_vars(bounds, &occurs, iter);
-    // An iteration must range over at least one variable
+    // An iteration needs at least one source variable
     if vars_inner.is_empty() {
         return Err(error::dim::iteration_expression_empty(span));
     }
@@ -851,7 +851,7 @@ fn annotate_if_not_hold_prem(
 
 // - Iteration premises
 
-/// Fills in the variables an iterated premise ranges over.
+/// Fills in the source variables of an iterated premise.
 fn annotate_iter_prem(
     bounds: &VEnv,
     span: &Span,
@@ -863,9 +863,9 @@ fn annotate_iter_prem(
     }
     let occurs = annotate_prem(bounds, &mut iter_prem.prem)?;
     let iter = iter_prem.prem_iter.iter;
-    // Variables the iteration ranges over
+    // Variables that supply iteration values
     let vars_bound = collect_iter_vars(bounds, &occurs, iter);
-    // An iteration must range over at least one variable
+    // An iteration needs at least one source variable
     if vars_bound.is_empty() {
         return Err(error::dim::iteration_premise_empty(span));
     }

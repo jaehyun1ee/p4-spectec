@@ -532,7 +532,7 @@ impl Renamer {
 
     // - Bound variables
 
-    /// Renames the ranged-over variables of an instruction iterator.
+    /// Renames the source variables of an instruction iterator.
     pub(crate) fn rename_iterinstr_bound(
         &self,
         changed: &mut bool,

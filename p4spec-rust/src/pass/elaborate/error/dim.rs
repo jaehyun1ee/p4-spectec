@@ -98,12 +98,12 @@ fn empty_iteration(code: &str, span: &Span) -> ElabError {
     )
 }
 
-/// Reports an iterated expression with no variable to range over.
+/// Reports an iterated expression without a source variable.
 pub(in crate::pass::elaborate) fn iteration_expression_empty(span: &Span) -> ElabError {
     empty_iteration(ITERATION_EXPRESSION_EMPTY, span)
 }
 
-/// Reports an iterated premise with no variable to range over.
+/// Reports an iterated premise without a source variable.
 pub(in crate::pass::elaborate) fn iteration_premise_empty(span: &Span) -> ElabError {
     empty_iteration(ITERATION_PREMISE_EMPTY, span)
 }

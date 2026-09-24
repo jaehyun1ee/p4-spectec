@@ -2,7 +2,7 @@
 //!
 //! `ICtx` is the stack of iterations enclosing the expression under analysis,
 //! innermost first.
-//! Each `Iteration` accumulates the variables it ranges over (`vars_bound`)
+//! Each `Iteration` accumulates the variables that supply its values (`vars_bound`)
 //! and the variables it binds (`vars_bind`);
 //! `iterate_prem` finally wraps a premise in one `IterPrem` per level.
 
@@ -20,13 +20,13 @@ use crate::{
 
 use super::super::{AlgoError, error};
 
-/// One enclosing iteration with the variables it ranges over and binds.
+/// One enclosing iteration with its source variables and new bindings.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Iteration {
     pub iter: ast::Iter,
     /// Source iteration, absent for dimensions synthesized during rewriting.
     pub span_opt: Option<Span>,
-    /// Variables bound outside that this iteration ranges over.
+    /// Variables bound outside that supply this iteration's values.
     pub vars_bound: Vec<ast::Var>,
     /// Variables this iteration binds.
     pub vars_bind: Vec<ast::Var>,
@@ -111,7 +111,7 @@ impl ICtx {
             .collect()
     }
 
-    /// Registers ranged-over variables at every level, one iteration per level.
+    /// Registers source variables at every level, one iteration per level.
     pub fn add_vars_bound(&mut self, mut venv: VEnv) {
         for entry in &mut self.0 {
             entry
@@ -149,7 +149,7 @@ impl ICtx {
 
     // == Filtering
 
-    /// Keeps only the ranged-over variables that satisfy the predicate.
+    /// Keeps only source variables that satisfy the predicate.
     pub fn filter_bound(&mut self, mut predicate: impl FnMut(&ast::Var) -> bool) {
         for entry in &mut self.0 {
             entry.vars_bound.retain(&mut predicate);
@@ -158,11 +158,11 @@ impl ICtx {
 
     // == Validation
 
-    /// Rejects iterations that range over nothing.
+    /// Rejects iterations with no previously bound source variable.
     pub fn validate(&self, span: Span) -> Result<(), AlgoError> {
         for entry in &self.0 {
             if entry.vars_bound.is_empty() {
-                // Binding with nothing to range over has no determinable length
+                // Binding without an iteration source has no determinable length
                 let span_iter = entry.span_opt.as_ref().unwrap_or(&span);
                 return Err(error::binding::iteration_loop_variable_missing(
                     span_iter,

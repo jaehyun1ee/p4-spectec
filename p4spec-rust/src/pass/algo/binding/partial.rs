@@ -190,7 +190,7 @@ fn gen_prem_bound(
         node: al::ast::PremKind::If(al::ast::IfPrem { exp: exp_cond }),
         span: exp_from.span.clone(),
     };
-    // Keep only the ranged-over variables the source expression uses
+    // Keep only the iteration sources used by the source expression
     // Iterate the check under the destination's dimension
     let mut iter_ctx = iter_ctx.clone();
     let venv = dimension::infer_exp(exp_from);
@@ -226,7 +226,7 @@ fn gen_prem_bind_match(
         }),
         span: exp_from.span.clone(),
     };
-    // The guard ranges over the destination only
+    // The guard iterates over the destination only
     let mut iter_ctx_match = ICtx::from_iterations(
         iter_ctx
             .as_slice()
@@ -303,7 +303,7 @@ fn gen_prem_bind_sub(
         node: al::ast::PremKind::If(al::ast::IfPrem { exp: exp_guard_sub }),
         span: exp_from.span.clone(),
     };
-    // The guard ranges over the destination only
+    // The guard iterates over the destination only
     let mut iter_ctx_sub = ICtx::from_iterations(
         iter_ctx
             .as_slice()

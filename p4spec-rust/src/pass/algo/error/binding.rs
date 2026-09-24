@@ -107,7 +107,7 @@ pub(crate) fn equality_binding_invalid(span: &Span, benv_l: &BEnv, benv_r: &BEnv
 
 const ITERATION_LOOP_VARIABLE_MISSING: &str = "algo/iteration-loop-variable-missing";
 
-/// Reports an iteration with no externally bound variable to range over.
+/// Reports an iteration whose length has no previously bound source variable.
 pub(crate) fn iteration_loop_variable_missing(span: &Span, vars: &[ast::Var]) -> AlgoError {
     let mut labels = vec![Label::primary(span, "this iteration has no iteration source")];
     for var in vars {
@@ -116,10 +116,11 @@ pub(crate) fn iteration_loop_variable_missing(span: &Span, vars: &[ast::Var]) ->
     }
     cause(
         ITERATION_LOOP_VARIABLE_MISSING,
-        "this iteration has no previously bound variable to determine its range",
+        "this iteration has no previously bound variable to determine its length",
         labels,
         vec![
-            "A variable bound outside the iteration must supply the values it ranges over.".into(),
+            "Bind a variable before this iteration so its values determine the iteration length."
+                .into(),
         ],
     )
 }

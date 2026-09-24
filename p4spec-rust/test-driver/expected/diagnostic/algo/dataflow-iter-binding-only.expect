@@ -1,4 +1,4 @@
-error[algo/iteration-loop-variable-missing]: this iteration has no previously bound variable to determine its range
+error[algo/iteration-loop-variable-missing]: this iteration has no previously bound variable to determine its length
    ┌─ algo/dataflow-iter-binding-only.watsup:13:6
    │
 13 │   -- (if x = 0)*
@@ -7,5 +7,5 @@ error[algo/iteration-loop-variable-missing]: this iteration has no previously bo
    │      │   `x` is newly bound here
    │      this iteration has no iteration source
    │
-   = A variable bound outside the iteration must supply the values it ranges over.
+   = Bind a variable before this iteration so its values determine the iteration length.
 

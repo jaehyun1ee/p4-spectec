@@ -423,7 +423,7 @@ fn lower_rule_prem(
         }),
         span: span.clone(),
     };
-    // Iterations range over input variables and bind output variables
+    // Iterations use input variables as sources and bind output variables
     let venv_bound = dimension::infer_exps(&exps_input_il);
     let mut iter_ctx = iter_ctx;
     iter_ctx.filter_bound(|var| {
@@ -575,7 +575,7 @@ fn lower_let_prem(
         }),
         span: span.clone(),
     };
-    // Iterations range over the right side's variables and bind the left side's
+    // Iterations use the right side's variables as sources and bind the left side's
     let venv_l = dimension::infer_exp(&exp_l_al);
     let venv_r = dimension::infer_exp(exp_r_il);
     let mut iter_ctx = iter_ctx;

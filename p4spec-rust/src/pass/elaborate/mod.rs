@@ -4,7 +4,7 @@
 //!
 //! Definitions are checked in source order,
 //! rule groups and clauses are attached to their relation or function,
-//! and iterations are annotated with the variables they range over.
+//! and iterations are annotated with their source variables.
 //!
 //! For example, `-- if (n_x = n_y)*` becomes `-- if (n_x = n_y)*{n_x <- n_x*}`
 //! once the dimensions of `n_x` and `n_y` are known.

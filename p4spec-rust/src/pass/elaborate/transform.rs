@@ -3533,7 +3533,7 @@ pub(super) fn elab_spec(
     let mut defs_il = populate_defs(&mut ctx, defs_il);
     // Retain missing-body warnings even if dimension analysis fails
     warn_undef_defs(&ctx, &defs_il, warnings);
-    // Annotate iterations with the variables they range over
+    // Annotate iterations with their source variables
     dimension::analyze_spec(&mut defs_il)?;
     Ok(defs_il)
 }
