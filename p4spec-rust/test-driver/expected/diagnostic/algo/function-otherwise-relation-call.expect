@@ -3,6 +3,6 @@ error[algo/otherwise-relation-call-invalid]: an `otherwise` body cannot call a r
    │
 12 │   -- otherwise
    │      --------- `otherwise` body starts here
-13 │   -- R: 0 |- 0
-   │      ^^^^^^^^^
+13 │   -- R: 0 |- value
+   │      ^^^^^^^^^^^^^
 

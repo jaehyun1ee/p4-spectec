@@ -10,7 +10,7 @@ use crate::{
         il::ast::Otherwise,
         traits::at::At,
     },
-    pass::algo::binding::partial::PartialbindConditionOrigin,
+    pass::algo::binding::partial::Origin,
 };
 
 const OTHERWISE_CONDITION_INVALID: &str = "algo/otherwise-condition-invalid";
@@ -52,23 +52,16 @@ pub(crate) fn otherwise_multibind_invalid(
 }
 
 /// Explains a condition introduced by partialbind in an otherwise pattern.
-pub(crate) fn otherwise_partialbind_invalid(
-    origin: &PartialbindConditionOrigin,
-    otherwise: &Otherwise,
-) -> AlgoError {
+pub(crate) fn otherwise_partialbind_invalid(origin: &Origin, otherwise: &Otherwise) -> AlgoError {
     let (span, message) = match origin {
         // Compare a bound sub-pattern with its source value
-        PartialbindConditionOrigin::Equality(span) => {
-            (span, "this pattern requires an equality check".to_owned())
-        }
+        Origin::Equality(span) => (span, "this pattern requires an equality check".to_owned()),
         // Match an injected or non-singleton shape
-        PartialbindConditionOrigin::Match(span, construct) => {
+        Origin::Match(span, construct) => {
             (span, format!("matching this {construct} requires a check"))
         }
         // Check that the source belongs to the subtype
-        PartialbindConditionOrigin::Subtype(span) => {
-            (span, "this pattern requires a subtype check".to_owned())
-        }
+        Origin::Subtype(span) => (span, "this pattern requires a subtype check".to_owned()),
     };
     cause(
         OTHERWISE_PARTIALBIND_INVALID,

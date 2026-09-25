@@ -267,19 +267,20 @@ fn generate_side_condition(
     Some(iter_ctx_side.iterate_prem(prem))
 }
 
-/// Builds one side condition per repeated identifier.
-pub fn generate_side_conditions(iter_ctx: &ICtx, renv: &RenameEnv) -> Vec<al::ast::Prem> {
-    generate_multibind_side_conditions_with_origins(iter_ctx, renv)
-        .into_iter()
-        .map(|(prem_al, _, _)| prem_al)
-        .collect()
+/// Source identifiers involved in a repeated binding.
+pub struct Origin {
+    pub id_bound: Id,
+    pub id_repeated: Id,
 }
 
-/// Builds multibind checks with their first and repeated source ids.
-pub fn generate_multibind_side_conditions_with_origins(
-    iter_ctx: &ICtx,
-    renv: &RenameEnv,
-) -> Vec<(al::ast::Prem, Id, Id)> {
+/// A multibind check and the identifiers that caused it.
+pub struct AnalyzedPrem {
+    pub prem_al: al::ast::Prem,
+    pub origin: Origin,
+}
+
+/// Builds one check per repeated identifier with its source identifiers.
+pub fn generate_side_conditions(iter_ctx: &ICtx, renv: &RenameEnv) -> Vec<AnalyzedPrem> {
     renv.iter()
         .filter_map(|(id, ids_rename)| {
             let dim = renv.dimension(id)?;
@@ -287,7 +288,7 @@ pub fn generate_multibind_side_conditions_with_origins(
             let id_bound = ids_rename.first()?.clone();
             let mut id_repeated = id.clone();
             id_repeated.span = ids_rename.last()?.span.clone();
-            Some((prem_al, id_bound, id_repeated))
+            Some(AnalyzedPrem { prem_al, origin: Origin { id_bound, id_repeated } })
         })
         .collect()
 }
