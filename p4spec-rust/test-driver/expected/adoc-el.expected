@@ -72,8 +72,8 @@ def $replace_text(t, t_old, t_new) = $replace_text'(0, |t|, t, t_old, t_new)
 def $replace_text'(n_len, n_len, t, t_old, t_new) = t
 
 def $replace_text'(n, n_len, t, t_old, t_new)
-  = $replace_text'(n + 1, n_len, t_replaced, t_old, t_new)
-  -- if n < n_len
+  = $replace_text'($(n + 1), n_len, t_replaced, t_old, t_new)
+  -- if $(n < n_len)
   -- if t_replaced = $ite<text>(t[n] = t_old, t[[n] = t_new], t)
 
 dec $replace_text_except(text, text, text) : text
@@ -86,8 +86,8 @@ def $replace_text_except(t, t_old, t_new)
 def $replace_text_except'(n_len, n_len, t, t_old, t_new) = t
 
 def $replace_text_except'(n, n_len, t, t_old, t_new)
-  = $replace_text_except'(n + 1, n_len, t_replaced, t_old, t_new)
-  -- if n < n_len
+  = $replace_text_except'($(n + 1), n_len, t_replaced, t_old, t_new)
+  -- if $(n < n_len)
   -- if t_replaced = $ite<text>(t[n] = t_old, t, t[[n] = t_new])
 
 builtin dec $strip_prefix(text, text) : text
@@ -99,7 +99,7 @@ builtin dec $strip_all_whitespace(text) : text
 dec $starts_with(text, text) : bool
 
 def $starts_with(t, t_prefix) = true
-  -- if |t_prefix| <= |t|
+  -- if $(|t_prefix| <= |t|)
   -- if t[0 : |t_prefix|] = t_prefix
 
 def $starts_with(t, t_prefix) = false
@@ -108,8 +108,8 @@ def $starts_with(t, t_prefix) = false
 dec $ends_with(text, text) : bool
 
 def $ends_with(t, t_suffix) = true
-  -- if |t_suffix| <= |t|
-  -- if n_start = |t| - |t_suffix|
+  -- if $(|t_suffix| <= |t|)
+  -- if n_start = $(|t| - |t_suffix|)
   -- if t[n_start : |t_suffix|] = t_suffix
 
 def $ends_with(t, t_suffix) = false
@@ -142,11 +142,11 @@ def $contains(t, t_c) = $contains'(0, |t|, t, t_c)
 def $contains'(n_len, n_len, t, t_c) = false
 
 def $contains'(n, n_len, t, t_c) = true
-  -- if n < n_len
+  -- if $(n < n_len)
   -- if t[n] = t_c
 
-def $contains'(n, n_len, t, t_c) = $contains'(n + 1, n_len, t, t_c)
-  -- if n < n_len
+def $contains'(n, n_len, t, t_c) = $contains'($(n + 1), n_len, t, t_c)
+  -- if $(n < n_len)
   -- if t[n] =/= t_c
 
 
@@ -187,7 +187,7 @@ def $init_(0) = eps
 
 def $init_(n) = n' :: $init_(n')
   -- if n =/= 0
-  -- if n' = n - 1
+  -- if n' = $(n - 1)
 
 dec $repeat_<X>(X, nat) : X*
 
@@ -195,7 +195,7 @@ def $repeat_<X>(X, 0) = eps
 
 def $repeat_<X>(X, n) = X ++ $repeat_<X>(X, n')
   -- if n =/= 0
-  -- if n' = n - 1
+  -- if n' = $(n - 1)
 
 builtin dec $rev_<X>(X*) : X*
 
@@ -289,7 +289,7 @@ builtin dec $print_<X>(X) : text
 
 dec $modulo(nat, nat) : nat?
 
-def $modulo(n_a, n_b) = n_a \ n_b
+def $modulo(n_a, n_b) = $(n_a \ n_b)
   -- if n_b =/= 0
 
 def $modulo(n_a, n_b) = eps
@@ -1919,7 +1919,7 @@ def $fresh_typeIds(0) = eps
 
 def $fresh_typeIds(n) = $fresh_typeId() :: $fresh_typeIds(n')
   -- if n =/= 0
-  -- if n' = n - 1
+  -- if n' = $(n - 1)
 
 
 
@@ -2245,16 +2245,16 @@ def $write_value_from_bits(value, n_var, b*) = value_updated
 def $write_value_from_bits'(_B _, n_var, b_h :: b_t*) = (_B b_h, b_t*)
 
 def $write_value_from_bits'(w W _, n_var, b*) = (w W i, b_t*)
-  -- if |b*| >= w
+  -- if $(|b*| >= w)
   -- if b_h* = b*[0 : w]
-  -- if n_t = |b*| - w
+  -- if n_t = $(|b*| - w)
   -- if b_t* = b*[w : n_t]
   -- if i = $int_to_bitstr(w, $bits_to_int_unsigned(b_h*))
 
 def $write_value_from_bits'(w S _, n_var, b*) = (w S i, b_t*)
-  -- if |b*| >= w
+  -- if $(|b*| >= w)
   -- if b_h* = b*[0 : w]
-  -- if n_t = |b*| - w
+  -- if n_t = $(|b*| - w)
   -- if b_t* = b*[w : n_t]
   -- if i = $int_to_bitstr(w, $bits_to_int_signed(b_h*))
 
@@ -2263,9 +2263,9 @@ def $write_value_from_bits'(n_max '.' _ V i, 0, b*) = (n_max '.' 0 V i, b*)
 def $write_value_from_bits'(n_max '.' _ V _, n_var, b*)
   = (n_max '.' n_var V i, b_t*)
   -- if n_var =/= 0
-  -- if |b*| >= n_var
+  -- if $(|b*| >= n_var)
   -- if b_h* = b*[0 : n_var]
-  -- if n_t = |b*| - n_var
+  -- if n_t = $(|b*| - n_var)
   -- if b_t* = b*[n_var : n_t]
   -- if i = $int_to_bitstr(n_var, $bits_to_int_signed(b_h*))
 
@@ -4055,7 +4055,7 @@ def $specialize_callableTypeDefIR(callableTypeDefIR_base, typeArgumentIR*)
   -- if (typeParameterIR_expl*, typeParameterIR_impl*)
       = $typeParameterListIR_of_callableTypeDefIR(callableTypeDefIR_base)
   -- if typeParameterIR* = typeParameterIR_expl* ++ typeParameterIR_impl*
-  -- if |typeParameterIR_expl*| = |typeArgumentIR*|
+  -- if $(|typeParameterIR_expl*| = |typeArgumentIR*|)
   -- if typeId_fresh* = $fresh_typeIds(|typeParameterIR_impl*|)
   -- (if (typeArgumentIR_impl = _NAME typeId_fresh))*
   -- if theta
@@ -4072,7 +4072,7 @@ def $specialize_callableTypeDefIR(callableTypeDefIR_base, typeArgumentIR*)
   -- if (typeParameterIR_expl*, typeParameterIR_impl*)
       = $typeParameterListIR_of_callableTypeDefIR(callableTypeDefIR_base)
   -- if typeParameterIR* = typeParameterIR_expl* ++ typeParameterIR_impl*
-  -- if |typeParameterIR_expl*| > 0 /\ |typeArgumentIR*| = 0
+  -- if $(|typeParameterIR_expl*| > 0) /\ $(|typeArgumentIR*| = 0)
   -- if typeId_fresh* = $fresh_typeIds(|typeParameterIR*|)
   -- (if (typeArgumentIR_fresh = _NAME typeId_fresh))*
   -- if theta = `{ (typeParameterIR ':' typeArgumentIR_fresh)* `}
@@ -4093,7 +4093,7 @@ def $specialize_constructorTypeDefIR(
     typeArgumentIR*)
   = (constructorTypeIR_spec, typeId_fresh*)
   -- if typeParameterIR* = typeParameterIR_expl* ++ typeParameterIR_impl*
-  -- if |typeParameterIR_expl*| = |typeArgumentIR*|
+  -- if $(|typeParameterIR_expl*| = |typeArgumentIR*|)
   -- if typeId_fresh* = $fresh_typeIds(|typeParameterIR_impl*|)
   -- (if (typeArgumentIR_impl = _NAME typeId_fresh))*
   -- if theta
@@ -4112,7 +4112,7 @@ def $specialize_constructorTypeDefIR(
     typeArgumentIR*)
   = (constructorTypeIR_spec, typeId_fresh*)
   -- if typeParameterIR* = typeParameterIR_expl* ++ typeParameterIR_impl*
-  -- if |typeParameterIR_expl*| > 0 /\ |typeArgumentIR*| = 0
+  -- if $(|typeParameterIR_expl*| > 0) /\ $(|typeArgumentIR*| = 0)
   -- if typeId_fresh* = $fresh_typeIds(|typeParameterIR*|)
   -- (if (typeArgumentIR_fresh = _NAME typeId_fresh))*
   -- if theta = `{ (typeParameterIR ':' typeArgumentIR_fresh)* `}
@@ -4407,11 +4407,11 @@ dec $un_bnot(value) : value
 
 def $un_bnot(w W i) = w W i''
   -- if i' = $bneg(i)
-  -- if i'' = $ite<int>(i' >= 0, i', $pow2(w) + i')
+  -- if i'' = $ite<int>($(i' >= 0), i', $($pow2(w) + i'))
 
 def $un_bnot(w S i) = w S i''
   -- if i' = $bneg(i)
-  -- if i'' = $ite<int>(i' >= 0, i', $pow2(w) + i')
+  -- if i'' = $ite<int>($(i' >= 0), i', $($pow2(w) + i'))
 
 def $un_op('~', value) = $un_bnot(value)
 
@@ -4445,13 +4445,13 @@ def $un_op('+', value) = $un_plus(value)
 
 dec $un_minus(value) : value
 
-def $un_minus(D i) = D -i
+def $un_minus(D i) = D $(-i)
 
 def $un_minus(w W i) = w W i'
-  -- if i' = $int_to_bitstr(w, $pow2(w) - i)
+  -- if i' = $int_to_bitstr(w, $($pow2(w) - i))
 
 def $un_minus(w S i) = w S i'
-  -- if i' = $int_to_bitstr(w, $bitstr_to_int(w, -i))
+  -- if i' = $int_to_bitstr(w, $bitstr_to_int(w, $(-i)))
 
 def $un_op('-', value) = $un_minus(value)
 
@@ -4467,17 +4467,17 @@ dec $bin_op(binop, value, value) : value
 
 dec $bin_plus(value, value) : value
 
-def $bin_plus(D i_l, D i_r) = D i_l + i_r
+def $bin_plus(D i_l, D i_r) = D $(i_l + i_r)
 
 def $bin_plus(w W i_l, w W i_r) = w W i'
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = $int_to_bitstr(w, i_l' + i_r')
+  -- if i' = $int_to_bitstr(w, $(i_l' + i_r'))
 
 def $bin_plus(w S i_l, w S i_r) = w S i'
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = $int_to_bitstr(w, i_l' + i_r')
+  -- if i' = $int_to_bitstr(w, $(i_l' + i_r'))
 
 def $bin_op('+', value_l, value_r) = $bin_plus(value_l, value_r)
 
@@ -4488,28 +4488,28 @@ def $bin_op('+', value_l, value_r) = $bin_plus(value_l, value_r)
 dec $bin_satplus(value, value) : value
 
 def $bin_satplus(w W i_l, w W i_r) = w W i'
-  -- if i = i_l + i_r
+  -- if i = $(i_l + i_r)
   -- if i_max = $pow2(w)
-  -- if i' = $ite<int>(i < i_max, i, i_max - 1)
+  -- if i' = $ite<int>($(i < i_max), i, $(i_max - 1))
 
 def $bin_satplus(w S i_l, w S i_r) = w S i'''
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = i_l' + i_r'
-  -- if i' > 0
-  -- if w' = w - 1
+  -- if i' = $(i_l' + i_r')
+  -- if $(i' > 0)
+  -- if w' = $(w - 1)
   -- if i_max = $pow2(w')
-  -- if i'' = $ite<int>(i' < i_max, i', i_max - 1)
+  -- if i'' = $ite<int>($(i' < i_max), i', $(i_max - 1))
   -- if i''' = $int_to_bitstr(w, i'')
 
 def $bin_satplus(w S i_l, w S i_r) = w S i'''
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = i_l' + i_r'
-  -- if i' <= 0
-  -- if w' = w - 1
+  -- if i' = $(i_l' + i_r')
+  -- if $(i' <= 0)
+  -- if w' = $(w - 1)
   -- if i_min = -$pow2(w')
-  -- if i'' = $ite<int>(i' >= i_min, i', i_min)
+  -- if i'' = $ite<int>($(i' >= i_min), i', i_min)
   -- if i''' = $int_to_bitstr(w, i'')
 
 def $bin_op('|+|', value_l, value_r) = $bin_satplus(value_l, value_r)
@@ -4520,17 +4520,17 @@ def $bin_op('|+|', value_l, value_r) = $bin_satplus(value_l, value_r)
 
 dec $bin_minus(value, value) : value
 
-def $bin_minus(D i_l, D i_r) = D i_l - i_r
+def $bin_minus(D i_l, D i_r) = D $(i_l - i_r)
 
 def $bin_minus(w W i_l, w W i_r) = w W i'
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = $int_to_bitstr(w, i_l' - i_r')
+  -- if i' = $int_to_bitstr(w, $(i_l' - i_r'))
 
 def $bin_minus(w S i_l, w S i_r) = w S i'
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = $int_to_bitstr(w, i_l' - i_r')
+  -- if i' = $int_to_bitstr(w, $(i_l' - i_r'))
 
 def $bin_op('-', value_l, value_r) = $bin_minus(value_l, value_r)
 
@@ -4541,27 +4541,27 @@ def $bin_op('-', value_l, value_r) = $bin_minus(value_l, value_r)
 dec $bin_satminus(value, value) : value
 
 def $bin_satminus(w W i_l, w W i_r) = w W i'
-  -- if i = i_l - i_r
-  -- if i' = $ite<int>(i >= 0, i, 0)
+  -- if i = $(i_l - i_r)
+  -- if i' = $ite<int>($(i >= 0), i, 0)
 
 def $bin_satminus(w S i_l, w S i_r) = w S i'''
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = i_l' - i_r'
-  -- if i' > 0
-  -- if w' = w - 1
+  -- if i' = $(i_l' - i_r')
+  -- if $(i' > 0)
+  -- if w' = $(w - 1)
   -- if i_max = $pow2(w')
-  -- if i'' = $ite<int>(i' < i_max, i', i_max - 1)
+  -- if i'' = $ite<int>($(i' < i_max), i', $(i_max - 1))
   -- if i''' = $int_to_bitstr(w, i'')
 
 def $bin_satminus(w S i_l, w S i_r) = w S i'''
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = i_l' - i_r'
-  -- if i' <= 0
-  -- if w' = w - 1
+  -- if i' = $(i_l' - i_r')
+  -- if $(i' <= 0)
+  -- if w' = $(w - 1)
   -- if i_min = -$pow2(w')
-  -- if i'' = $ite<int>(i' >= i_min, i', i_min)
+  -- if i'' = $ite<int>($(i' >= i_min), i', i_min)
   -- if i''' = $int_to_bitstr(w, i'')
 
 def $bin_op('|-|', value_l, value_r) = $bin_satminus(value_l, value_r)
@@ -4572,17 +4572,17 @@ def $bin_op('|-|', value_l, value_r) = $bin_satminus(value_l, value_r)
 
 dec $bin_mul(value, value) : value
 
-def $bin_mul(D i_l, D i_r) = D i_l * i_r
+def $bin_mul(D i_l, D i_r) = D $(i_l * i_r)
 
 def $bin_mul(w W i_l, w W i_r) = w W i'
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = $int_to_bitstr(w, i_l' * i_r')
+  -- if i' = $int_to_bitstr(w, $(i_l' * i_r'))
 
 def $bin_mul(w S i_l, w S i_r) = w S i'
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = $int_to_bitstr(w, i_l' * i_r')
+  -- if i' = $int_to_bitstr(w, $(i_l' * i_r'))
 
 def $bin_op('*', value_l, value_r) = $bin_mul(value_l, value_r)
 
@@ -4592,12 +4592,12 @@ def $bin_op('*', value_l, value_r) = $bin_mul(value_l, value_r)
 
 dec $bin_div(value, value) : value
 
-def $bin_div(D i_l, D i_r) = D i_l / i_r
+def $bin_div(D i_l, D i_r) = D $(i_l / i_r)
 
 def $bin_div(w W i_l, w W i_r) = w W i'
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = $int_to_bitstr(w, i_l' / i_r')
+  -- if i' = $int_to_bitstr(w, $(i_l' / i_r'))
 
 def $bin_op('/', value_l, value_r) = $bin_div(value_l, value_r)
 
@@ -4607,12 +4607,12 @@ def $bin_op('/', value_l, value_r) = $bin_div(value_l, value_r)
 
 dec $bin_mod(value, value) : value
 
-def $bin_mod(D i_l, D i_r) = D i_l \ i_r
+def $bin_mod(D i_l, D i_r) = D $(i_l \ i_r)
 
 def $bin_mod(w W i_l, w W i_r) = w W i'
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
-  -- if i' = $int_to_bitstr(w, i_l' \ i_r')
+  -- if i' = $int_to_bitstr(w, $(i_l' \ i_r'))
 
 def $bin_op('%', value_l, value_r) = $bin_mod(value_l, value_r)
 
@@ -4678,42 +4678,42 @@ def $bin_shr(w_l W i_l, w_r S i_r) = w_l W i'
 
 def $bin_shr(w_l S i_l, D i_r) = w_l S i''
   -- if i_l' = $bitstr_to_int(w_l, i_l)
-  -- if i_l' < 0
-  -- if w_l' = w_l - 1
+  -- if $(i_l' < 0)
+  -- if w_l' = $(w_l - 1)
   -- if i' = $shr_arith(i_l, i_r, $pow2(w_l'))
   -- if i'' = $int_to_bitstr(w_l, i')
 
 def $bin_shr(w_l S i_l, D i_r) = w_l S i''
   -- if i_l' = $bitstr_to_int(w_l, i_l)
-  -- if i_l' >= 0
+  -- if $(i_l' >= 0)
   -- if i' = $shr(i_l, i_r)
   -- if i'' = $int_to_bitstr(w_l, i')
 
 def $bin_shr(w_l S i_l, w_r W i_r) = w_l S i''
   -- if i_l' = $bitstr_to_int(w_l, i_l)
-  -- if i_l' < 0
-  -- if w_l' = w_l - 1
+  -- if $(i_l' < 0)
+  -- if w_l' = $(w_l - 1)
   -- if i' = $shr_arith(i_l, i_r, $pow2(w_l'))
   -- if i'' = $int_to_bitstr(w_l, i')
 
 def $bin_shr(w_l S i_l, w_r W i_r) = w_l S i''
   -- if i_l' = $bitstr_to_int(w_l, i_l)
-  -- if i_l' >= 0
+  -- if $(i_l' >= 0)
   -- if i' = $shr(i_l, i_r)
   -- if i'' = $int_to_bitstr(w_l, i')
 
 def $bin_shr(w_l S i_l, w_r S i_r) = w_l S i''
   -- if i_l' = $bitstr_to_int(w_l, i_l)
   -- if i_r' = $bitstr_to_int(w_r, i_r)
-  -- if i_l' < 0
-  -- if w_l' = w_l - 1
+  -- if $(i_l' < 0)
+  -- if w_l' = $(w_l - 1)
   -- if i' = $shr_arith(i_l, i_r, $pow2(w_l'))
   -- if i'' = $int_to_bitstr(w_l, i')
 
 def $bin_shr(w_l S i_l, w_r S i_r) = w_l S i''
   -- if i_l' = $bitstr_to_int(w_l, i_l)
   -- if i_r' = $bitstr_to_int(w_r, i_r)
-  -- if i_l' >= 0
+  -- if $(i_l' >= 0)
   -- if i' = $shr(i_l, i_r)
   -- if i'' = $int_to_bitstr(w_l, i')
 
@@ -4725,11 +4725,11 @@ def $bin_op('>>', value_l, value_r) = $bin_shr(value_l, value_r)
 
 dec $bin_le(value, value) : bool
 
-def $bin_le(D i_l, D i_r) = i_l <= i_r
+def $bin_le(D i_l, D i_r) = $(i_l <= i_r)
 
-def $bin_le(w W i_l, w W i_r) = i_l <= i_r
+def $bin_le(w W i_l, w W i_r) = $(i_l <= i_r)
 
-def $bin_le(w S i_l, w S i_r) = i_l' <= i_r'
+def $bin_le(w S i_l, w S i_r) = $(i_l' <= i_r')
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
 
@@ -4741,11 +4741,11 @@ def $bin_op('<=', value_l, value_r) = _B $bin_le(value_l, value_r)
 
 dec $bin_ge(value, value) : bool
 
-def $bin_ge(D i_l, D i_r) = i_l >= i_r
+def $bin_ge(D i_l, D i_r) = $(i_l >= i_r)
 
-def $bin_ge(w W i_l, w W i_r) = i_l >= i_r
+def $bin_ge(w W i_l, w W i_r) = $(i_l >= i_r)
 
-def $bin_ge(w S i_l, w S i_r) = i_l' >= i_r'
+def $bin_ge(w S i_l, w S i_r) = $(i_l' >= i_r')
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
 
@@ -4757,11 +4757,11 @@ def $bin_op('>=', value_l, value_r) = _B $bin_ge(value_l, value_r)
 
 dec $bin_lt(value, value) : bool
 
-def $bin_lt(D i_l, D i_r) = i_l < i_r
+def $bin_lt(D i_l, D i_r) = $(i_l < i_r)
 
-def $bin_lt(w W i_l, w W i_r) = i_l < i_r
+def $bin_lt(w W i_l, w W i_r) = $(i_l < i_r)
 
-def $bin_lt(w S i_l, w S i_r) = i_l' < i_r'
+def $bin_lt(w S i_l, w S i_r) = $(i_l' < i_r')
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
 
@@ -4773,11 +4773,11 @@ def $bin_op('<', value_l, value_r) = _B $bin_lt(value_l, value_r)
 
 dec $bin_gt(value, value) : bool
 
-def $bin_gt(D i_l, D i_r) = i_l > i_r
+def $bin_gt(D i_l, D i_r) = $(i_l > i_r)
 
-def $bin_gt(w W i_l, w W i_r) = i_l > i_r
+def $bin_gt(w W i_l, w W i_r) = $(i_l > i_r)
 
-def $bin_gt(w S i_l, w S i_r) = i_l' > i_r'
+def $bin_gt(w S i_l, w S i_r) = $(i_l' > i_r')
   -- if i_l' = $bitstr_to_int(w, i_l)
   -- if i_r' = $bitstr_to_int(w, i_r)
 
@@ -4925,28 +4925,28 @@ def $bin_concat('"' t_l '"', '"' t_r '"') = '"' (t_l ++ t_r) '"'
 
 def $bin_concat(w_l W i_l, w_r W i_r) = w W i''
   -- if i_l' = $shl(i_l, w_r)
-  -- if i_l'' = i_l' + i_r
-  -- if w = w_l + w_r
+  -- if i_l'' = $(i_l' + i_r)
+  -- if w = $(w_l + w_r)
   -- if i'' = $int_to_bitstr(w, i_l'')
 
 def $bin_concat(w_l W i_l, w_r S i_r) = w W i''
   -- if i_l' = $shl(i_l, w_r)
-  -- if i_l'' = i_l' + i_r
-  -- if w = w_l + w_r
+  -- if i_l'' = $(i_l' + i_r)
+  -- if w = $(w_l + w_r)
   -- if i'' = $int_to_bitstr(w, i_l'')
 
 def $bin_concat(w_l S i_l, w_r W i_r) = w S i'''
   -- if i_l' = $bitstr_to_int(w_l, i_l)
   -- if i_l'' = $shl(i_l', w_r)
-  -- if i_l''' = i_l'' + i_r
-  -- if w = w_l + w_r
+  -- if i_l''' = $(i_l'' + i_r)
+  -- if w = $(w_l + w_r)
   -- if i''' = $int_to_bitstr(w, i_l''')
 
 def $bin_concat(w_l S i_l, w_r S i_r) = w S i'''
   -- if i_l' = $bitstr_to_int(w_l, i_l)
   -- if i_l'' = $shl(i_l', w_r)
-  -- if i_l''' = i_l'' + i_r
-  -- if w = w_l + w_r
+  -- if i_l''' = $(i_l'' + i_r)
+  -- if w = $(w_l + w_r)
   -- if i''' = $int_to_bitstr(w, i_l''')
 
 def $bin_op('++', value_l, value_r) = $bin_concat(value_l, value_r)
@@ -5248,14 +5248,14 @@ def $cast_sequence(TUPLE `< typeIR* `>, SEQ `( value* ',' '...' `))
 def $cast_sequence(ARRAY typeIR `[ n_size `], SEQ `( value* ',' '...' `))
   = ARRAY `[ value_cast* `]
   -- (if (value_given = $cast_op(typeIR, value)))*
-  -- if n_rest = n_size - |value*|
+  -- if n_rest = $(n_size - |value*|)
   -- if value_rest* = $repeat_<value>($default(typeIR), n_rest)
   -- if value_cast* = value_given* ++ value_rest*
 
 def $cast_sequence(HEADER_STACK typeIR `[ n_size `], SEQ `( value* ',' '...' `))
   = HEADER_STACK `[ value_cast* `( n_idx `) `]
   -- (if (value_given = $cast_op(typeIR, value)))*
-  -- if n_rest = n_size - |value*|
+  -- if n_rest = $(n_size - |value*|)
   -- if value_rest* = $repeat_<value>($default(typeIR), n_rest)
   -- if value_cast* = value_given* ++ value_rest*
   -- if n_idx = |value*|
@@ -5483,7 +5483,7 @@ def $bitacc_range_op(integerValue_b, integerValue_h, integerValue_l) = w W i
   -- if i_b = $int_of_integerValue(integerValue_b)
   -- if i_h = $int_of_integerValue(integerValue_h)
   -- if i_l = $int_of_integerValue(integerValue_l)
-  -- if w = i_h + 1 - i_l
+  -- if w = $(i_h + 1 - i_l)
   -- if i = $bitacc(i_b, i_h, i_l)
 
 
@@ -5496,7 +5496,7 @@ def $bitacc_offset_op(integerValue_b, integerValue_l, integerValue_w) = w W i
   -- if i_b = $int_of_integerValue(integerValue_b)
   -- if i_l = $int_of_integerValue(integerValue_l)
   -- if w = $nat_of_integerValue(integerValue_w)
-  -- if i_h = i_l + w - 1
+  -- if i_h = $(i_l + w - 1)
   -- if i = $bitacc(i_b, i_h, i_l)
 
 
@@ -5544,7 +5544,7 @@ def $bitacc_offset_replace_op(
   -- if w W i_b = integerValue_b
   -- if i_l = $int_of_integerValue(integerValue_l)
   -- if n_w = $nat_of_integerValue(integerValue_w)
-  -- if i_h = i_l + n_w - 1
+  -- if i_h = $(i_l + n_w - 1)
   -- if _ W i_r = integerValue_r
   -- if i = $bitacc_replace(i_b, i_h, i_l, i_r)
 
@@ -5557,7 +5557,7 @@ def $bitacc_offset_replace_op(
   -- if w S i_b = integerValue_b
   -- if i_l = $int_of_integerValue(integerValue_l)
   -- if n_w = $nat_of_integerValue(integerValue_w)
-  -- if i_h = i_l + n_w - 1
+  -- if i_h = $(i_l + n_w - 1)
   -- if _ W i_r = integerValue_r
   -- if i = $bitacc_replace(i_b, i_h, i_l, i_r)
 
@@ -5604,10 +5604,10 @@ def $sizeof_minSizeInBits'(TUPLE `< typeIR* `>)
   = $sum_nat($sizeof_minSizeInBits'(typeIR)*)
 
 def $sizeof_minSizeInBits'(ARRAY typeIR `[ n_size `])
-  = $sizeof_minSizeInBits'(typeIR) * n_size
+  = $($sizeof_minSizeInBits'(typeIR) * n_size)
 
 def $sizeof_minSizeInBits'(HEADER_STACK typeIR `[ n_size `])
-  = $sizeof_minSizeInBits'(typeIR) * n_size
+  = $($sizeof_minSizeInBits'(typeIR) * n_size)
 
 def $sizeof_minSizeInBits'(STRUCT _ `< _ `> `{ (_ typeIR _ ';')* `})
   = $sum_nat($sizeof_minSizeInBits'(typeIR)*)
@@ -5624,7 +5624,7 @@ def $sizeof(typeIR, "minSizeInBits") = $sizeof_minSizeInBits(typeIR)
 
 
 
-def $sizeof_minSizeInBytes(typeIR) = D n_size / 8
+def $sizeof_minSizeInBytes(typeIR) = D $(n_size / 8)
   -- if n_size = $sizeof_minSizeInBits'(typeIR)
 
 def $sizeof(typeIR, "minSizeInBytes") = $sizeof_minSizeInBytes(typeIR)
@@ -5654,10 +5654,10 @@ def $sizeof_maxSizeInBits'(TUPLE `< typeIR* `>)
   = $sum_nat($sizeof_maxSizeInBits'(typeIR)*)
 
 def $sizeof_maxSizeInBits'(ARRAY typeIR `[ n_size `])
-  = $sizeof_maxSizeInBits'(typeIR) * n_size
+  = $($sizeof_maxSizeInBits'(typeIR) * n_size)
 
 def $sizeof_maxSizeInBits'(HEADER_STACK typeIR `[ n_size `])
-  = $sizeof_maxSizeInBits'(typeIR) * n_size
+  = $($sizeof_maxSizeInBits'(typeIR) * n_size)
 
 def $sizeof_maxSizeInBits'(STRUCT _ `< _ `> `{ (_ typeIR _ ';')* `})
   = $sum_nat($sizeof_maxSizeInBits'(typeIR)*)
@@ -5674,7 +5674,7 @@ def $sizeof(typeIR, "maxSizeInBits") = $sizeof_maxSizeInBits(typeIR)
 
 
 
-def $sizeof_maxSizeInBytes(typeIR) = D n_size / 8
+def $sizeof_maxSizeInBytes(typeIR) = D $(n_size / 8)
   -- if n_size = $sizeof_maxSizeInBits'(typeIR)
 
 def $sizeof(typeIR, "maxSizeInBytes") = $sizeof_maxSizeInBytes(typeIR)
@@ -6834,7 +6834,7 @@ def $match_overloaded_named<V>(
   -- (if (id_param = $id_of_parameterIR(parameterIR)))*
   -- (if (b_default = $is_default_parameterIR(parameterIR)))*
   -- (if (b_optional = $is_optional_parameterIR(parameterIR)))*
-  -- if |id_param*| > |id_arg*|
+  -- if $(|id_param*| > |id_arg*|)
   -- if `{ id_param_omitted* `} = $diff_set<id>(`{ id_param* `}, `{ id_arg* `})
   -- if id_default_param*
       = $filter_<id>(id_param*, $is_default_parameterIR(parameterIR)*)
@@ -6901,7 +6901,7 @@ def $match_overloaded_unnamed<V>(
   -- (if (b_default = $is_default_parameterIR(parameterIR)))*
   -- (if (b_optional = $is_optional_parameterIR(parameterIR)))*
   -- if ~($exists_(b_default*) /\ $exists_(b_optional*))
-  -- if |id_param*| > n_arg
+  -- if $(|id_param*| > n_arg)
   -- if (parameterIR_given*, parameterIR_omitted*)
       = $partition_<parameterIR>(parameterIR*, n_arg)
   -- (if (~$is_optional_parameterIR(parameterIR_omitted)))*
@@ -6922,7 +6922,7 @@ def $match_overloaded_unnamed<V>(
   -- (if (b_default = $is_default_parameterIR(parameterIR)))*
   -- (if (b_optional = $is_optional_parameterIR(parameterIR)))*
   -- if ~($exists_(b_default*) /\ $exists_(b_optional*))
-  -- if |id_param*| > n_arg
+  -- if $(|id_param*| > n_arg)
   -- if (parameterIR_given*, parameterIR_omitted*)
       = $partition_<parameterIR>(parameterIR*, n_arg)
   -- (if (~$is_default_parameterIR(parameterIR_given)))*
@@ -7049,7 +7049,7 @@ def $find_overloaded<V>(
     nameIR_f `( id_arg?* `),
     def $get_parameterListIR)
   = eps
-  -- if |(id_arg?)*| > 0
+  -- if $(|(id_arg?)*| > 0)
   -- (if (id_arg_inner = id_arg?))*
   -- if eps
       = $find_overloadeds_named<V>(
@@ -7062,7 +7062,7 @@ def $find_overloaded<V>(
     nameIR_f `( id_arg?* `),
     def $get_parameterListIR)
   = callableId_found ':' V_found '#' id_default* '#' id_optional*
-  -- if |(id_arg?)*| > 0
+  -- if $(|(id_arg?)*| > 0)
   -- (if (id_arg_inner = id_arg?))*
   -- if callableId_found ':' V_found '#' id_default* '#' id_optional*
       = $find_overloadeds_named<V>(
@@ -8272,7 +8272,7 @@ def $lift_tupleKeysetExpressionIR(`( '_' `)) = `( '_' `)
 
 def $lift_tupleKeysetExpressionIR(`( simpleKeysetExpressionIR* `))
   = `( simpleKeysetExpression_h ',' simpleKeysetExpressionList_t `)
-  -- if |simpleKeysetExpressionIR*| > 1
+  -- if $(|simpleKeysetExpressionIR*| > 1)
   -- if simpleKeysetExpressionIR_h :: simpleKeysetExpressionIR_t*
       = simpleKeysetExpressionIR*
   -- if simpleKeysetExpression_h
@@ -8477,7 +8477,7 @@ def $lift_directApplicationStatementIR(
     constructorTargetIR '.' APPLY `( argumentIR* `) ';')
   = namedType '.' APPLY `( argumentList `) ';'
   -- if prefixedNameIR `< typeArgumentIR* `> = constructorTargetIR
-  -- if |typeArgumentIR*| > 0
+  -- if $(|typeArgumentIR*| > 0)
   -- if prefixedTypeName
       = $lift_prefixedNameIR_as_prefixedTypeName(prefixedNameIR)
   -- if typeArgumentList = $lift_typeArgumentListIR(typeArgumentIR*)
@@ -8939,7 +8939,7 @@ def $lift_instantiationIR(
     annotationList typeIR constructorTargetIR `( argumentIR* `) nameIR eps ';')
   = annotationList type `( argumentList `) name ';'
   -- if prefixedNameIR `< typeArgumentIR* `> = constructorTargetIR
-  -- if |typeArgumentIR*| > 0
+  -- if $(|typeArgumentIR*| > 0)
   -- if prefixedTypeName
       = $lift_prefixedNameIR_as_prefixedTypeName(prefixedNameIR)
   -- if typeArgumentList = $lift_typeArgumentListIR(typeArgumentIR*)
@@ -8967,7 +8967,7 @@ def $lift_instantiationIR(
   = annotationList type `( argumentList `) name
   ('=' `{ objectDeclarationList `}) ';'
   -- if prefixedNameIR `< typeArgumentIR* `> = constructorTargetIR
-  -- if |typeArgumentIR*| > 0
+  -- if $(|typeArgumentIR*| > 0)
   -- if prefixedTypeName
       = $lift_prefixedNameIR_as_prefixedTypeName(prefixedNameIR)
   -- if typeArgumentIR* =/= eps
@@ -10956,7 +10956,7 @@ def $set_priorities_of_tableEntryListIR(
   -- if b_lw = TBLC.PRIORITIES.LARGEST_WINS
   -- if n_size = TBLC.ENTRIES.SIZE
   -- if n_delta = TBLC.PRIORITIES.DELTA
-  -- if n = $ite<int>(b_lw, (n_size - 1) * n_delta + 1, 1)
+  -- if n = $ite<int>(b_lw, $((n_size - 1) * n_delta + 1), 1)
   -- if tableEntryIR_h_updated
       = $set_priority_of_tableEntryIR(tableEntryIR_h, n)
   -- if tableEntryIR_t_updated*
@@ -10987,7 +10987,7 @@ def $set_priorities_of_tableEntryListIR'(
   -- if eps = $tableEntryPriorityOptIR_of_tableEntryIR(tableEntryIR_h)
   -- if b_lw = TBLC.PRIORITIES.LARGEST_WINS
   -- if n_delta = TBLC.PRIORITIES.DELTA
-  -- if n = $ite<int>(b_lw, n_last - n_delta, n_last + n_delta)
+  -- if n = $ite<int>(b_lw, $(n_last - n_delta), $(n_last + n_delta))
   -- if tableEntryIR_h_updated
       = $set_priority_of_tableEntryIR(tableEntryIR_h, n)
   -- if tableEntryIR_t_updated*
@@ -11036,18 +11036,18 @@ def $tableEntry_lpm_prefix(value) = $tableEntry_lpm_prefix'(value, 0)
 def $tableEntry_lpm_prefix'(0 W _, n_prefix) = n_prefix
 
 def $tableEntry_lpm_prefix'(w W n, n_prefix)
-  = $tableEntry_lpm_prefix'(value', n_prefix + 1)
-  -- if w > 0
-  -- if w' = w - 1
-  -- if n \ 2 =/= 0
-  -- if n' = (n - 1) / 2
+  = $tableEntry_lpm_prefix'(value', $(n_prefix + 1))
+  -- if $(w > 0)
+  -- if w' = $(w - 1)
+  -- if $(n \ 2 =/= 0)
+  -- if n' = $((n - 1) / 2)
   -- if value' = w' W n'
 
 def $tableEntry_lpm_prefix'(w W n, 0) = $tableEntry_lpm_prefix'(value', 0)
-  -- if w > 0
-  -- if w' = w - 1
-  -- if n \ 2 = 0
-  -- if value' = w' W n / 2
+  -- if $(w > 0)
+  -- if w' = $(w - 1)
+  -- if $(n \ 2 = 0)
+  -- if value' = w' W $(n / 2)
 
 relation Type_wf:
   bound |- typeIR
@@ -12231,7 +12231,7 @@ rulegroup Type_ok/fixedInt {
 
   rule Type_ok/integer:
     p TC |- INT `< n `> : (INT `< n `>) '#' eps
-    -- if n > 0
+    -- if $(n > 0)
 
   rule Type_ok/expression:
     p TC |- INT `< `( expression `) `> : (INT `< n `>) '#' eps
@@ -12239,7 +12239,7 @@ rulegroup Type_ok/fixedInt {
     -- if LCTK = $ctk_of_typedExpressionIR(typedExpressionIR)
     -- Expr_eval_lctk: p TC |- typedExpressionIR ~> integerValue
     -- if n = $nat_of_integerValue(integerValue)
-    -- if n > 0
+    -- if $(n > 0)
 
 }
 
@@ -12336,7 +12336,7 @@ rule Type_ok/headerStackType:
   -- if LCTK = $ctk_of_typedExpressionIR(typedExpressionIR_size)
   -- Expr_eval_lctk: p TC |- typedExpressionIR_size ~> integerValue_size
   -- if n_size = $nat_of_integerValue(integerValue_size)
-  -- if n_size > 0
+  -- if $(n_size > 0)
 
 rule Type_ok/arrayType:
   p TC
@@ -12349,7 +12349,7 @@ rule Type_ok/arrayType:
   -- if LCTK = $ctk_of_typedExpressionIR(typedExpressionIR_size)
   -- Expr_eval_lctk: p TC |- typedExpressionIR_size ~> integerValue_size
   -- if n_size = $nat_of_integerValue(integerValue_size)
-  -- if n_size > 0
+  -- if $(n_size > 0)
 
 
 
@@ -12557,7 +12557,7 @@ rulegroup Cast_expl_neq/sequenceTypeIR-non-default {
   rule Cast_expl_neq/arrayTypeIR:
     SEQ `< typeIR_a* `> -> arrayTypeIR : OK typeIR_cast_agg*
     -- if ARRAY typeIR_b `[ n_size `] = arrayTypeIR
-    -- if |typeIR_a*| = n_size
+    -- if $(|typeIR_a*| = n_size)
     -- (Cast_expl: typeIR_a -> typeIR_b : OK typeIR_cast*)*
     -- if typeIR_cast_agg*
         = $chain_casts_sequenceTypeIR(typeIR_a*, typeIR_cast**, arrayTypeIR)
@@ -12565,7 +12565,7 @@ rulegroup Cast_expl_neq/sequenceTypeIR-non-default {
   rule Cast_expl_neq/headerStackTypeIR:
     SEQ `< typeIR_a* `> -> headerStackTypeIR : OK typeIR_cast_agg*
     -- if HEADER_STACK typeIR_b `[ n_size `] = headerStackTypeIR
-    -- if |typeIR_a*| = n_size
+    -- if $(|typeIR_a*| = n_size)
     -- (Cast_expl: typeIR_a -> typeIR_b : OK typeIR_cast*)*
     -- if typeIR_cast_agg*
         = $chain_casts_sequenceTypeIR(
@@ -12594,7 +12594,7 @@ rulegroup Cast_expl_neq/sequenceTypeIR-default {
   rule Cast_expl_neq/tupleTypeIR:
     SEQ `< typeIR_a* ',' '...' `> -> tupleTypeIR : OK typeIR_cast_agg*
     -- if TUPLE `< typeIR_b* `> = tupleTypeIR
-    -- if |typeIR_a*| < |typeIR_b*|
+    -- if $(|typeIR_a*| < |typeIR_b*|)
     -- if (typeIR_b_non_default*, typeIR_b_default*)
         = $partition_<typeIR>(typeIR_b*, |typeIR_a*|)
     -- (Cast_expl: typeIR_a -> typeIR_b_non_default : OK typeIR_cast*)*
@@ -12608,7 +12608,7 @@ rulegroup Cast_expl_neq/sequenceTypeIR-default {
   rule Cast_expl_neq/arrayTypeIR:
     SEQ `< typeIR_a* ',' '...' `> -> arrayTypeIR : OK typeIR_cast_agg*
     -- if ARRAY typeIR_b `[ n_size `] = arrayTypeIR
-    -- if |typeIR_a*| < n_size
+    -- if $(|typeIR_a*| < n_size)
     -- (Cast_expl: typeIR_a -> typeIR_b : OK typeIR_cast*)*
     -- if $is_defaultable_typeIR(typeIR_b)
     -- if typeIR_cast_agg*
@@ -12620,7 +12620,7 @@ rulegroup Cast_expl_neq/sequenceTypeIR-default {
   rule Cast_expl_neq/headerStackTypeIR:
     SEQ `< typeIR_a* ',' '...' `> -> headerStackTypeIR : OK typeIR_cast_agg*
     -- if HEADER_STACK typeIR_b `[ n_size `] = headerStackTypeIR
-    -- if |typeIR_a*| < n_size
+    -- if $(|typeIR_a*| < n_size)
     -- (Cast_expl: typeIR_a -> typeIR_b : OK typeIR_cast*)*
     -- if $is_defaultable_typeIR(typeIR_b)
     -- if typeIR_cast_agg*
@@ -12632,7 +12632,7 @@ rulegroup Cast_expl_neq/sequenceTypeIR-default {
   rule Cast_expl_neq/structTypeIR:
     SEQ `< typeIR_a* ',' '...' `> -> structTypeIR : OK typeIR_cast_agg*
     -- if STRUCT _ `< _ `> `{ (_ typeIR_field_b _ ';')* `} = structTypeIR
-    -- if |typeIR_a*| < |typeIR_field_b*|
+    -- if $(|typeIR_a*| < |typeIR_field_b*|)
     -- if (typeIR_field_b_non_default*, typeIR_field_b_default*)
         = $partition_<typeIR>(typeIR_field_b*, |typeIR_a*|)
     -- (Cast_expl: typeIR_a -> typeIR_field_b_non_default : OK typeIR_cast*)*
@@ -12646,7 +12646,7 @@ rulegroup Cast_expl_neq/sequenceTypeIR-default {
   rule Cast_expl_neq/headerTypeIR:
     SEQ `< typeIR_a* ',' '...' `> -> headerTypeIR : OK typeIR_cast_agg*
     -- if HEADER _ `< _ `> `{ (_ typeIR_field_b _ ';')* `} = headerTypeIR
-    -- if |typeIR_a*| < |typeIR_field_b*|
+    -- if $(|typeIR_a*| < |typeIR_field_b*|)
     -- if (typeIR_field_b_non_default*, typeIR_field_b_default*)
         = $partition_<typeIR>(typeIR_field_b*, |typeIR_a*|)
     -- (Cast_expl: typeIR_a -> typeIR_field_b_non_default : OK typeIR_cast*)*
@@ -12851,7 +12851,7 @@ rulegroup Cast_impl_neq/sequenceTypeIR-non-default {
   rule Cast_impl_neq/arrayTypeIR:
     SEQ `< typeIR_a* `> -> arrayTypeIR : OK typeIR_cast_agg*
     -- if ARRAY typeIR_b `[ n_size `] = arrayTypeIR
-    -- if |typeIR_a*| = n_size
+    -- if $(|typeIR_a*| = n_size)
     -- (Cast_impl: typeIR_a -> typeIR_b : OK typeIR_cast*)*
     -- if typeIR_cast_agg*
         = $chain_casts_sequenceTypeIR(typeIR_a*, typeIR_cast**, arrayTypeIR)
@@ -12859,7 +12859,7 @@ rulegroup Cast_impl_neq/sequenceTypeIR-non-default {
   rule Cast_impl_neq/headerStackTypeIR:
     SEQ `< typeIR_a* `> -> headerStackTypeIR : OK typeIR_cast_agg*
     -- if HEADER_STACK typeIR_b `[ n_size `] = headerStackTypeIR
-    -- if |typeIR_a*| = n_size
+    -- if $(|typeIR_a*| = n_size)
     -- (Cast_impl: typeIR_a -> typeIR_b : OK typeIR_cast*)*
     -- if typeIR_cast_agg*
         = $chain_casts_sequenceTypeIR(
@@ -12899,7 +12899,7 @@ rulegroup Cast_impl_neq/sequenceTypeIR-default {
   rule Cast_impl_neq/tupleTypeIR:
     SEQ `< typeIR_a* ',' '...' `> -> tupleTypeIR : OK typeIR_cast_agg*
     -- if TUPLE `< typeIR_b* `> = tupleTypeIR
-    -- if |typeIR_a*| < |typeIR_b*|
+    -- if $(|typeIR_a*| < |typeIR_b*|)
     -- if (typeIR_b_non_default*, typeIR_b_default*)
         = $partition_<typeIR>(typeIR_b*, |typeIR_a*|)
     -- (Cast_impl: typeIR_a -> typeIR_b_non_default : OK typeIR_cast*)*
@@ -12913,7 +12913,7 @@ rulegroup Cast_impl_neq/sequenceTypeIR-default {
   rule Cast_impl_neq/arrayTypeIR:
     SEQ `< typeIR_a* ',' '...' `> -> arrayTypeIR : OK typeIR_cast_agg*
     -- if ARRAY typeIR_b `[ n_size `] = arrayTypeIR
-    -- if |typeIR_a*| < n_size
+    -- if $(|typeIR_a*| < n_size)
     -- (Cast_impl: typeIR_a -> typeIR_b : OK typeIR_cast*)*
     -- if $is_defaultable_typeIR(typeIR_b)
     -- if typeIR_cast_agg*
@@ -12925,7 +12925,7 @@ rulegroup Cast_impl_neq/sequenceTypeIR-default {
   rule Cast_impl_neq/headerStackTypeIR:
     SEQ `< typeIR_a* ',' '...' `> -> headerStackTypeIR : OK typeIR_cast_agg*
     -- if HEADER_STACK typeIR_b `[ n_size `] = headerStackTypeIR
-    -- if |typeIR_a*| < n_size
+    -- if $(|typeIR_a*| < n_size)
     -- (Cast_impl: typeIR_a -> typeIR_b : OK typeIR_cast*)*
     -- if $is_defaultable_typeIR(typeIR_b)
     -- if typeIR_cast_agg*
@@ -12937,7 +12937,7 @@ rulegroup Cast_impl_neq/sequenceTypeIR-default {
   rule Cast_impl_neq/structTypeIR:
     SEQ `< typeIR_a* ',' '...' `> -> structTypeIR : OK typeIR_cast_agg*
     -- if STRUCT _ `< _ `> `{ (_ typeIR_field_b _ ';')* `} = structTypeIR
-    -- if |typeIR_a*| < |typeIR_field_b*|
+    -- if $(|typeIR_a*| < |typeIR_field_b*|)
     -- if (typeIR_field_b_non_default*, typeIR_field_b_default*)
         = $partition_<typeIR>(typeIR_field_b*, |typeIR_a*|)
     -- (Cast_impl: typeIR_a -> typeIR_field_b_non_default : OK typeIR_cast*)*
@@ -12951,7 +12951,7 @@ rulegroup Cast_impl_neq/sequenceTypeIR-default {
   rule Cast_impl_neq/headerTypeIR:
     SEQ `< typeIR_a* ',' '...' `> -> headerTypeIR : OK typeIR_cast_agg*
     -- if HEADER _ `< _ `> `{ (_ typeIR_field_b _ ';')* `} = headerTypeIR
-    -- if |typeIR_a*| < |typeIR_field_b*|
+    -- if $(|typeIR_a*| < |typeIR_field_b*|)
     -- if (typeIR_field_b_non_default*, typeIR_field_b_default*)
         = $partition_<typeIR>(typeIR_field_b*, |typeIR_a*|)
     -- (Cast_impl: typeIR_a -> typeIR_field_b_non_default : OK typeIR_cast*)*
@@ -13433,9 +13433,9 @@ dec $compat_plusminusmult(typeIR, typeIR) : bool
 
 def $compat_plusminusmult(INT, INT) = true
 
-def $compat_plusminusmult(INT `< w_l `>, INT `< w_r `>) = w_l = w_r
+def $compat_plusminusmult(INT `< w_l `>, INT `< w_r `>) = $(w_l = w_r)
 
-def $compat_plusminusmult(BIT `< w_l `>, BIT `< w_r `>) = w_l = w_r
+def $compat_plusminusmult(BIT `< w_l `>, BIT `< w_r `>) = $(w_l = w_r)
 
 def $compat_plusminusmult(TYPEDEF _ typeIR_l, typeIR_r)
   = $compat_plusminusmult(typeIR_l, typeIR_r)
@@ -13474,9 +13474,9 @@ rule Expr_ok/binaryExpression-plusminusmult:
 
 dec $compat_satplusminus(typeIR, typeIR) : bool
 
-def $compat_satplusminus(INT `< w_l `>, INT `< w_r `>) = w_l = w_r
+def $compat_satplusminus(INT `< w_l `>, INT `< w_r `>) = $(w_l = w_r)
 
-def $compat_satplusminus(BIT `< w_l `>, BIT `< w_r `>) = w_l = w_r
+def $compat_satplusminus(BIT `< w_l `>, BIT `< w_r `>) = $(w_l = w_r)
 
 def $compat_satplusminus(TYPEDEF _ typeIR_l, typeIR_r)
   = $compat_satplusminus(typeIR_l, typeIR_r)
@@ -13517,7 +13517,7 @@ dec $compat_divmod(typeIR, typeIR) : bool
 
 def $compat_divmod(INT, INT) = true
 
-def $compat_divmod(BIT `< w_l `>, BIT `< w_r `>) = w_l = w_r
+def $compat_divmod(BIT `< w_l `>, BIT `< w_r `>) = $(w_l = w_r)
 
 def $compat_divmod(TYPEDEF _ typeIR_l, typeIR_r)
   = $compat_divmod(typeIR_l, typeIR_r)
@@ -13553,7 +13553,7 @@ rulegroup Expr_ok/binaryExpression-divmod {
     -- if ctk_r_reduced = LCTK
     -- Expr_eval_lctk: p TC |- typedExpressionIR_r_reduced ~> integerValue_r
     -- if n_r = $nat_of_integerValue(integerValue_r)
-    -- if n_r > 0
+    -- if $(n_r > 0)
     -- if ctk_reduced = $join_ctk(ctk_l_reduced, ctk_r_reduced)
     -- if expressionNoteIR = `( typeIR_reduced ctk_reduced `)
 
@@ -13665,7 +13665,7 @@ rulegroup Expr_ok/binaryExpression-shift {
     -- if ctk_r_reduced = LCTK
     -- Expr_eval_lctk: p TC |- typedExpressionIR_r_reduced ~> integerValue_r
     -- if i_r = $int_of_integerValue(integerValue_r)
-    -- if i_r >= 0
+    -- if $(i_r >= 0)
     -- if ctk_reduced = $join_ctk(ctk_l_reduced, ctk_r_reduced)
     -- if expressionNoteIR = `( typeIR_l_reduced ctk_reduced `)
 
@@ -13700,9 +13700,9 @@ dec $compat_compare(typeIR, typeIR) : bool
 
 def $compat_compare(INT, INT) = true
 
-def $compat_compare(INT `< w_l `>, INT `< w_r `>) = w_l = w_r
+def $compat_compare(INT `< w_l `>, INT `< w_r `>) = $(w_l = w_r)
 
-def $compat_compare(BIT `< w_l `>, BIT `< w_r `>) = w_l = w_r
+def $compat_compare(BIT `< w_l `>, BIT `< w_r `>) = $(w_l = w_r)
 
 def $compat_compare(TYPEDEF _ typeIR_l, typeIR_r)
   = $compat_compare(typeIR_l, typeIR_r)
@@ -13741,9 +13741,9 @@ rule Expr_ok/binaryExpression-comparison:
 
 dec $compat_bitwise(typeIR, typeIR) : bool
 
-def $compat_bitwise(INT `< w_l `>, INT `< w_r `>) = w_l = w_r
+def $compat_bitwise(INT `< w_l `>, INT `< w_r `>) = $(w_l = w_r)
 
-def $compat_bitwise(BIT `< w_l `>, BIT `< w_r `>) = w_l = w_r
+def $compat_bitwise(BIT `< w_l `>, BIT `< w_r `>) = $(w_l = w_r)
 
 def $compat_bitwise(TYPEDEF _ typeIR_l, typeIR_r)
   = $compat_bitwise(typeIR_l, typeIR_r)
@@ -13806,13 +13806,13 @@ dec $result_concat(typeIR, typeIR) : typeIR
 
 def $result_concat(STRING, STRING) = STRING
 
-def $result_concat(INT `< w_a `>, INT `< w_b `>) = INT `< w_a + w_b `>
+def $result_concat(INT `< w_a `>, INT `< w_b `>) = INT `< $(w_a + w_b) `>
 
-def $result_concat(INT `< w_a `>, BIT `< w_b `>) = INT `< w_a + w_b `>
+def $result_concat(INT `< w_a `>, BIT `< w_b `>) = INT `< $(w_a + w_b) `>
 
-def $result_concat(BIT `< w_a `>, INT `< w_b `>) = BIT `< w_a + w_b `>
+def $result_concat(BIT `< w_a `>, INT `< w_b `>) = BIT `< $(w_a + w_b) `>
 
-def $result_concat(BIT `< w_a `>, BIT `< w_b `>) = BIT `< w_a + w_b `>
+def $result_concat(BIT `< w_a `>, BIT `< w_b `>) = BIT `< $(w_a + w_b) `>
 
 def $result_concat(TYPEDEF _ typeIR_l, typeIR_r)
   = $result_concat(typeIR_l, typeIR_r)
@@ -14250,7 +14250,7 @@ rulegroup Expr_ok/indexAccessExpression {
     -- Expr_eval_lctk:
         p TC |- typedExpressionIR_index_reduced ~> integerValue_index
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < |typeIR_e*|
+    -- if $(n_index < |typeIR_e*|)
     -- if expressionNoteIR = `( typeIR_e*[n_index] ctk_base `)
 
   rule Expr_ok/array-lctk:
@@ -14273,7 +14273,7 @@ rulegroup Expr_ok/indexAccessExpression {
     -- Expr_eval_lctk:
         p TC |- typedExpressionIR_index_reduced ~> integerValue_index
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < n_size
+    -- if $(n_index < n_size)
     -- if expressionNoteIR = `( typeIR ctk_base `)
 
   rule Expr_ok/array-non-lctk:
@@ -14316,7 +14316,7 @@ rulegroup Expr_ok/indexAccessExpression {
     -- Expr_eval_lctk:
         p TC |- typedExpressionIR_index_reduced ~> integerValue_index
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < n_size
+    -- if $(n_index < n_size)
     -- if expressionNoteIR = `( typeIR ctk_base `)
 
   rule Expr_ok/headerStack-non-lctk:
@@ -14349,7 +14349,7 @@ tbl dec $compat_bitslice_base(typeIR) : bool
 
 tbl def $compat_bitslice_base =
   | INT => true
-  | INT `< w `> => w > 0
+  | INT `< w `> => $(w > 0)
   | BIT `< _ `> => true
   | TYPEDEF _ typeIR => $compat_bitslice_base(typeIR)
   | _ => false
@@ -14383,15 +14383,15 @@ tbl def $compat_bitslice_offset_width =
 
 dec $is_valid_bitslice(typeIR, nat, nat) : bool
 
-def $is_valid_bitslice(INT, n_lo, n_hi) = n_lo <= n_hi
+def $is_valid_bitslice(INT, n_lo, n_hi) = $(n_lo <= n_hi)
 
 def $is_valid_bitslice(INT `< w `>, n_lo, n_hi)
-  = n_lo <= n_hi /\ n_hi <= w /\ w_slice <= w
-  -- if w_slice = n_hi - n_lo + 1
+  = $(n_lo <= n_hi) /\ $(n_hi <= w) /\ $(w_slice <= w)
+  -- if w_slice = $(n_hi - n_lo + 1)
 
 def $is_valid_bitslice(BIT `< w `>, n_lo, n_hi)
-  = n_lo <= n_hi /\ n_hi <= w /\ w_slice <= w
-  -- if w_slice = n_hi - n_lo + 1
+  = $(n_lo <= n_hi) /\ $(n_hi <= w) /\ $(w_slice <= w)
+  -- if w_slice = $(n_hi - n_lo + 1)
 
 def $is_valid_bitslice(TYPEDEF _ typeIR, n_lo, n_hi)
   = $is_valid_bitslice(typeIR, n_lo, n_hi)
@@ -14443,7 +14443,7 @@ rulegroup Expr_ok/sliceAccessExpression {
     -- Expr_eval_lctk: p TC |- typedExpressionIR_lo_reduced ~> integerValue_lo
     -- if n_lo = $nat_of_integerValue(integerValue_lo)
     -- if $is_valid_bitslice(typeIR_base_reduced, n_lo, n_hi)
-    -- if n_slice = n_hi - n_lo + 1
+    -- if n_slice = $(n_hi - n_lo + 1)
     -- if typeIR = BIT `< n_slice `>
     -- if expressionNoteIR = `( typeIR ctk_base_reduced `)
 
@@ -14486,7 +14486,7 @@ rulegroup Expr_ok/sliceAccessExpression {
     -- if ctk_w_reduced = LCTK
     -- Expr_eval_lctk: p TC |- typedExpressionIR_w_reduced ~> integerValue_w
     -- if n_w = $nat_of_integerValue(integerValue_w)
-    -- if n_h = n_w + n_l - 1
+    -- if n_h = $(n_w + n_l - 1)
     -- if $is_valid_bitslice(typeIR_base_reduced, n_l, n_h)
     -- if typeIR = BIT `< n_w `>
     -- if expressionNoteIR = `( typeIR ctk_base_reduced `)
@@ -14962,7 +14962,7 @@ rulegroup Expr_eval_lctk/indexAccessExpressionIR {
     -- Expr_eval_lctk: p TC |- typedExpressionIR_index ~> integerValue_index
     -- if TUPLE `( value_e* `) = value_base
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < |value_e*|
+    -- if $(n_index < |value_e*|)
     -- if value = value_e*[n_index]
 
   rule Expr_eval_lctk/array:
@@ -14972,7 +14972,7 @@ rulegroup Expr_eval_lctk/indexAccessExpressionIR {
     -- Expr_eval_lctk: p TC |- typedExpressionIR_index ~> integerValue_index
     -- if ARRAY `[ value_e* `] = value_base
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < |value_e*|
+    -- if $(n_index < |value_e*|)
     -- if value = value_e*[n_index]
 
   rule Expr_eval_lctk/stack:
@@ -14982,7 +14982,7 @@ rulegroup Expr_eval_lctk/indexAccessExpressionIR {
     -- Expr_eval_lctk: p TC |- typedExpressionIR_index ~> integerValue_index
     -- if HEADER_STACK `[ value_e* `( _ `) `] = value_base
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < |value_e*|
+    -- if $(n_index < |value_e*|)
     -- if value = value_e*[n_index]
 
 }
@@ -15250,7 +15250,7 @@ rulegroup Lvalue_ok/indexAccess {
     -- Expr_eval_lctk:
         p TC |- typedExpressionIR_index_reduced ~> integerValue_index
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < n_size
+    -- if $(n_index < n_size)
     -- if typedLvalueIR
         = (typedLvalueIR_base `[ typedExpressionIR_index_reduced `]) '#'
         `( typeIR `)
@@ -15286,7 +15286,7 @@ rulegroup Lvalue_ok/indexAccess {
     -- Expr_eval_lctk:
         p TC |- typedExpressionIR_index_reduced ~> integerValue_index
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < n_size
+    -- if $(n_index < n_size)
     -- if typedLvalueIR
         = (typedLvalueIR_base `[ typedExpressionIR_index_reduced `]) '#'
         `( typeIR `)
@@ -15341,7 +15341,7 @@ rulegroup Lvalue_ok/sliceAccess {
     -- Expr_eval_lctk: p TC |- typedExpressionIR_lo_reduced ~> integerValue_lo
     -- if n_lo = $nat_of_integerValue(integerValue_lo)
     -- if $is_valid_bitslice(typeIR_base, n_lo, n_hi)
-    -- if n_slice = n_hi - n_lo + 1
+    -- if n_slice = $(n_hi - n_lo + 1)
     -- if typeIR = BIT `< n_slice `>
     -- if typedLvalueIR
         = (
@@ -15865,9 +15865,9 @@ dec $compat_range(typeIR, typeIR) : bool
 
 def $compat_range(INT, INT) = true
 
-def $compat_range(INT `< w_l `>, INT `< w_r `>) = w_l = w_r
+def $compat_range(INT `< w_l `>, INT `< w_r `>) = $(w_l = w_r)
 
-def $compat_range(BIT `< w_l `>, BIT `< w_r `>) = w_l = w_r
+def $compat_range(BIT `< w_l `>, BIT `< w_r `>) = $(w_l = w_r)
 
 def $compat_range(TYPEDEF _ typeIR_l, typeIR_r)
   = $compat_range(typeIR_l, typeIR_r)
@@ -17403,9 +17403,9 @@ dec $compat_mask(typeIR, typeIR) : bool
 
 def $compat_mask(INT, INT) = true
 
-def $compat_mask(INT `< w_l `>, INT `< w_r `>) = w_l = w_r
+def $compat_mask(INT `< w_l `>, INT `< w_r `>) = $(w_l = w_r)
 
-def $compat_mask(BIT `< w_l `>, BIT `< w_r `>) = w_l = w_r
+def $compat_mask(BIT `< w_l `>, BIT `< w_r `>) = $(w_l = w_r)
 
 def $compat_mask(TYPEDEF _ typeIR_l, typeIR_r)
   = $compat_mask(typeIR_l, typeIR_r)
@@ -17494,7 +17494,7 @@ rulegroup SelectCase_keyset_ok/simpleKeysetExpression {
 
   rule SelectCase_keyset_ok/expression-list:
     TC typeIR_key* |- expression : simpleKeysetExpressionIR
-    -- if |typeIR_key*| > 1
+    -- if $(|typeIR_key*| > 1)
     -- if typeIR_key_tuple = TUPLE `< typeIR_key* `>
     -- SelectCase_keyset_simple_ok:
         TC typeIR_key_tuple |- expression : simpleKeysetExpressionIR
@@ -17521,7 +17521,7 @@ rulegroup SelectCase_keyset_ok/simpleKeysetExpression {
 
   rule SelectCase_keyset_ok/default-many-to-one:
     TC typeIR_key* |- DEFAULT : simpleKeysetExpressionIR
-    -- if |typeIR_key*| > 1
+    -- if $(|typeIR_key*| > 1)
     -- SelectCase_keyset_simple_ok:
         TC (SEQ `< typeIR_key* `>) |- DEFAULT : simpleKeysetExpressionIR
 
@@ -17532,7 +17532,7 @@ rulegroup SelectCase_keyset_ok/simpleKeysetExpression {
 
   rule SelectCase_keyset_ok/dontcare-many-to-one:
     TC typeIR_key* |- '_' : simpleKeysetExpressionIR
-    -- if |typeIR_key*| > 1
+    -- if $(|typeIR_key*| > 1)
     -- SelectCase_keyset_simple_ok:
         TC (SEQ `< typeIR_key* `>) |- '_' : simpleKeysetExpressionIR
 
@@ -17566,7 +17566,7 @@ rulegroup SelectCase_keyset_ok/tupleKeysetExpression {
 
   rule SelectCase_keyset_ok/default-many-to-one:
     TC typeIR_key* |- `( DEFAULT `) : `( simpleKeysetExpressionIR `)
-    -- if |typeIR_key*| > 1
+    -- if $(|typeIR_key*| > 1)
     -- SelectCase_keyset_simple_ok:
         TC (SEQ `< typeIR_key* `>) |- DEFAULT : simpleKeysetExpressionIR
 
@@ -17577,7 +17577,7 @@ rulegroup SelectCase_keyset_ok/tupleKeysetExpression {
 
   rule SelectCase_keyset_ok/dontcare-many-to-one:
     TC typeIR_key* |- `( '_' `) : `( simpleKeysetExpressionIR `)
-    -- if |typeIR_key*| > 1
+    -- if $(|typeIR_key*| > 1)
     -- SelectCase_keyset_simple_ok:
         TC (SEQ `< typeIR_key* `>) |- '_' : simpleKeysetExpressionIR
 
@@ -18029,7 +18029,7 @@ rule Call_action_partial_ok:
           : parameterIR_data* ',' parameterIR_control* '@' argumentIR_cast*
   -- if (parameterIR_data*, parameterIR_control*)
       = $split_dataplane_parameters(parameterIR*)
-  -- if |parameterIR_data*| = |argumentIR*|
+  -- if $(|parameterIR_data*| = |argumentIR*|)
   -- if typedExpressionIR_sub* = $subexpressions_of_argumentListIR(argumentIR*)
   -- if $forall_((~$is_table_application(typedExpressionIR_sub))*)
   -- Call_convention_ok:
@@ -18355,7 +18355,7 @@ rulegroup TableEntry_keysets_simple_ok {
 
 rule TableEntry_keyset_ok/expression:
   TC TBLC |- expression : TBLS simpleKeysetExpressionIR
-  -- if |TBLC.KEYS| = 1
+  -- if $(|TBLC.KEYS| = 1)
   -- TableEntry_keysets_simple_ok:
       TC TBLC NON_LPM
           |- TBLC.KEYS '@' expression : TBLS simpleKeysetExpressionIR
@@ -18368,7 +18368,7 @@ rulegroup TableEntry_keyset_ok/mask {
 
   rule TableEntry_keyset_ok/simple:
     TC TBLC |- expression_l '&&&' expression_r : TBLS simpleKeysetExpressionIR
-    -- if |TBLC.KEYS| = 1
+    -- if $(|TBLC.KEYS| = 1)
     -- TableEntry_keysets_simple_ok:
         TC TBLC NON_LPM
             |- TBLC.KEYS '@' (expression_l '&&&' expression_r)
@@ -18378,7 +18378,7 @@ rulegroup TableEntry_keyset_ok/mask {
     TC TBLC
         |- `( expression_l '&&&' expression_r `)
             : TBLS (`( simpleKeysetExpressionIR `))
-    -- if |TBLC.KEYS| = 1
+    -- if $(|TBLC.KEYS| = 1)
     -- TableEntry_keysets_simple_ok:
         TC TBLC NON_LPM
             |- TBLC.KEYS '@' (expression_l '&&&' expression_r)
@@ -18394,7 +18394,7 @@ rulegroup TableEntry_keyset_ok/range {
 
   rule TableEntry_keyset_ok/simple:
     TC TBLC |- expression_l '..' expression_r : TBLS simpleKeysetExpressionIR
-    -- if |TBLC.KEYS| = 1
+    -- if $(|TBLC.KEYS| = 1)
     -- TableEntry_keysets_simple_ok:
         TC TBLC NON_LPM
             |- TBLC.KEYS '@' (expression_l '..' expression_r)
@@ -18404,7 +18404,7 @@ rulegroup TableEntry_keyset_ok/range {
     TC TBLC
         |- `( expression_l '..' expression_r `)
             : TBLS (`( simpleKeysetExpressionIR `))
-    -- if |TBLC.KEYS| = 1
+    -- if $(|TBLC.KEYS| = 1)
     -- TableEntry_keysets_simple_ok:
         TC TBLC NON_LPM
             |- TBLC.KEYS '@' (expression_l '..' expression_r)
@@ -18604,7 +18604,7 @@ rule TableProperty_ok/entries:
           : TBLC_2
           (annotationList constOptIR ENTRIES '=' `{ tableEntryIR_pri* `})
   -- if tableEntry* = $flatten_tableEntryList(tableEntryList)
-  -- if |TBLC_0.KEYS| = 0 => |tableEntry*| = 0
+  -- if $(|TBLC_0.KEYS| = 0) => $(|tableEntry*| = 0)
   -- if TBLC_1 = TBLC_0[ENTRIES.SIZE = |tableEntry*|]
   -- if constOptIR = $flatten_constOpt(constOpt)
   -- if TBLC_2 = TBLC_1[ENTRIES.CONST = (constOptIR = CONST)]
@@ -18656,7 +18656,7 @@ rulegroup TableProperty_ok/priority {
     -- if (typeIR_unroll <: integerTypeIR) /\ ~(typeIR_unroll <: varBitTypeIR)
     -- Expr_eval_lctk: LOCAL TC |- typedExpressionIR ~> integerValue
     -- if n_delta = $nat_of_integerValue(integerValue)
-    -- if n_delta > 0
+    -- if $(n_delta > 0)
     -- if TBLC_1 = TBLC_0[PRIORITIES.DELTA = n_delta]
     -- if constOptIR = $flatten_constOpt(constOpt)
     -- if tablePropertyIR
@@ -18792,10 +18792,11 @@ rulegroup Table_ok {
         |- tableProperty*
             : TBLC_2
             (tablePropertyIR_updated* ++ [tablePropertyIR_default_action])
-    -- if |$filter_<tableProperty>(
-        tableProperty*,
-        $is_tableKeysProperty(tableProperty)*)|
-        <= 1
+    -- if $(
+      |$filter_<tableProperty>(
+          tableProperty*,
+          $is_tableKeysProperty(tableProperty)*)|
+          <= 1)
     -- if |$filter_<tableProperty>(
         tableProperty*,
         $is_tableActionsProperty(tableProperty)*)|
@@ -18804,10 +18805,11 @@ rulegroup Table_ok {
         tableProperty*,
         $is_tableDefaultActionProperty(tableProperty)*)|
         = 0
-    -- if |$filter_<tableProperty>(
-        tableProperty*,
-        $is_tableLargestPriorityWinsProperty(tableProperty)*)|
-        <= 1
+    -- if $(
+      |$filter_<tableProperty>(
+          tableProperty*,
+          $is_tableLargestPriorityWinsProperty(tableProperty)*)|
+          <= 1)
     -- if TBLC_0 = $empty_tableContext()
     -- TableProperties_ok: TC TBLC_0 |- tableProperty* : TBLC_1 tablePropertyIR*
     -- if tablePropertyIR_default_action
@@ -18817,10 +18819,11 @@ rulegroup Table_ok {
 
   rule Table_ok/one-default-action:
     TC |- tableProperty* : TBLC_1 tablePropertyIR*
-    -- if |$filter_<tableProperty>(
-        tableProperty*,
-        $is_tableKeysProperty(tableProperty)*)|
-        <= 1
+    -- if $(
+      |$filter_<tableProperty>(
+          tableProperty*,
+          $is_tableKeysProperty(tableProperty)*)|
+          <= 1)
     -- if |$filter_<tableProperty>(
         tableProperty*,
         $is_tableActionsProperty(tableProperty)*)|
@@ -18829,10 +18832,11 @@ rulegroup Table_ok {
         tableProperty*,
         $is_tableDefaultActionProperty(tableProperty)*)|
         = 1
-    -- if |$filter_<tableProperty>(
-        tableProperty*,
-        $is_tableLargestPriorityWinsProperty(tableProperty)*)|
-        <= 1
+    -- if $(
+      |$filter_<tableProperty>(
+          tableProperty*,
+          $is_tableLargestPriorityWinsProperty(tableProperty)*)|
+          <= 1)
     -- if TBLC_0 = $empty_tableContext()
     -- TableProperties_ok: TC TBLC_0 |- tableProperty* : TBLC_1 tablePropertyIR*
 
@@ -21350,7 +21354,7 @@ rulegroup Expr_inst/indexAccessExpressionIR {
         p IC STO_1 |- typedExpressionIR_index : STO_2 integerValue_index
     -- if TUPLE `( value_e* `) = value_base
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < |value_e*|
+    -- if $(n_index < |value_e*|)
     -- if value = value_e*[n_index]
 
   rule Expr_inst/array:
@@ -21362,7 +21366,7 @@ rulegroup Expr_inst/indexAccessExpressionIR {
         p IC STO_1 |- typedExpressionIR_index : STO_2 integerValue_index
     -- if ARRAY `[ value_e* `] = value_base
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < |value_e*|
+    -- if $(n_index < |value_e*|)
     -- if value = value_e*[n_index]
 
   rule Expr_inst/stack:
@@ -21374,7 +21378,7 @@ rulegroup Expr_inst/indexAccessExpressionIR {
         p IC STO_1 |- typedExpressionIR_index : STO_2 integerValue_index
     -- if HEADER_STACK `[ value_e* `( _ `) `] = value_base
     -- if n_index = $nat_of_integerValue(integerValue_index)
-    -- if n_index < |value_e*|
+    -- if $(n_index < |value_e*|)
     -- if value = value_e*[n_index]
 
 }
@@ -24373,7 +24377,7 @@ rulegroup Expr_eval/memberAccessExpressionIR-typedExpressionIR {
     -- if HEADER_STACK `[ value_elem* `( n_idx `) `] = headerStackValue_base
     -- if nameIR = "last"
     -- if n_size = |value_elem*|
-    -- if b_out_of_bounds = (n_idx < 1 \/ n_idx > n_size)
+    -- if b_out_of_bounds = ($(n_idx < 1) \/ $(n_idx > n_size))
     -- if b_out_of_bounds
     -- if rejectTransitionResult = REJECT (ERROR '.' "StackOutOfBounds")
 
@@ -24388,9 +24392,9 @@ rulegroup Expr_eval/memberAccessExpressionIR-typedExpressionIR {
     -- if HEADER_STACK `[ value_elem* `( n_idx `) `] = headerStackValue_base
     -- if nameIR = "last"
     -- if n_size = |value_elem*|
-    -- if b_out_of_bounds = (n_idx < 1 \/ n_idx > n_size)
+    -- if b_out_of_bounds = ($(n_idx < 1) \/ $(n_idx > n_size))
     -- if ~b_out_of_bounds
-    -- if n_idx_last = n_idx - 1
+    -- if n_idx_last = $(n_idx - 1)
     -- if value_last = value_elem*[n_idx_last]
     -- if expressionResult = _CONT value_last
 
@@ -24404,7 +24408,7 @@ rulegroup Expr_eval/memberAccessExpressionIR-typedExpressionIR {
                 : EC_1 ARCH_1 (_CONT headerStackValue_base)
     -- if HEADER_STACK `[ value_elem* `( n_idx `) `] = headerStackValue_base
     -- if nameIR = "lastIndex"
-    -- if n_idx_last = $max_nat([n_idx, 1]) - 1
+    -- if n_idx_last = $($max_nat([n_idx, 1]) - 1)
     -- if value_idx_last = 32 W n_idx_last
     -- if expressionResult = _CONT value_idx_last
 
@@ -24527,8 +24531,8 @@ rulegroup Expr_eval/indexAccessExpressionIR {
     -- if ARRAY `[ value_elem* `] = arrayValue_base
     -- if n_size = |value_elem*|
     -- if i_index = $int_of_integerValue(integerValue_index)
-    -- if b_in_bounds = (i_index < n_size /\ i_index >= 0)
-    -- if n_idx = $ite<int>(b_in_bounds, i_index, n_size - 1)
+    -- if b_in_bounds = ($(i_index < n_size) /\ $(i_index >= 0))
+    -- if n_idx = $ite<int>(b_in_bounds, i_index, $(n_size - 1))
     -- if expressionResult = _CONT value_elem*[n_idx]
 
   rule Expr_eval/headerStack:
@@ -24543,8 +24547,8 @@ rulegroup Expr_eval/indexAccessExpressionIR {
     -- if HEADER_STACK `[ value_elem* `( _ `) `] = headerStackValue_base
     -- if n_size = |value_elem*|
     -- if i_index = $int_of_integerValue(integerValue_index)
-    -- if b_in_bounds = (i_index < n_size /\ i_index >= 0)
-    -- if n_idx = $ite<int>(b_in_bounds, i_index, n_size - 1)
+    -- if b_in_bounds = ($(i_index < n_size) /\ $(i_index >= 0))
+    -- if n_idx = $ite<int>(b_in_bounds, i_index, $(n_size - 1))
     -- if expressionResult = _CONT value_elem*[n_idx]
 
 }
@@ -24969,7 +24973,7 @@ rulegroup Lvalue_eval/memberAccess {
     -- if HEADER_STACK `[ value_element* `( n_idx `) `] = headerStackValue
     -- if nameIR = "next"
     -- if n_size = |value_element*|
-    -- if n_idx >= n_size
+    -- if $(n_idx >= n_size)
     -- if rejectTransitionResult = REJECT (ERROR '.' "StackOutOfBounds")
 
   rule Lvalue_eval/stack-next-in-bounds:
@@ -24981,7 +24985,7 @@ rulegroup Lvalue_eval/memberAccess {
     -- if HEADER_STACK `[ value_element* `( n_idx `) `] = headerStackValue
     -- if n_size = |value_element*|
     -- if nameIR = "next"
-    -- if n_idx < n_size
+    -- if $(n_idx < n_size)
     -- if storageReferenceResult = _CONT (storageReference '.' nameIR)
 
   rule Lvalue_eval/stack-last-out-of-bounds:
@@ -24993,7 +24997,7 @@ rulegroup Lvalue_eval/memberAccess {
     -- if HEADER_STACK `[ value_element* `( n_idx `) `] = headerStackValue
     -- if nameIR = "last"
     -- if n_size = |value_element*|
-    -- if (n_idx < 1 \/ n_idx > n_size)
+    -- if ($(n_idx < 1) \/ $(n_idx > n_size))
     -- if rejectTransitionResult = REJECT (ERROR '.' "StackOutOfBounds")
 
   rule Lvalue_eval/stack-last-in-bounds:
@@ -25005,7 +25009,7 @@ rulegroup Lvalue_eval/memberAccess {
     -- if HEADER_STACK `[ value_element* `( n_idx `) `] = headerStackValue
     -- if n_size = |value_element*|
     -- if nameIR = "last"
-    -- if ~(n_idx < 1 \/ n_idx > n_size)
+    -- if ~($(n_idx < 1) \/ $(n_idx > n_size))
     -- if storageReferenceResult = _CONT (storageReference '.' nameIR)
 
   rule Lvalue_eval/cont:
@@ -25131,7 +25135,7 @@ rulegroup Lvalue_read/memberAccess {
     -- if HEADER_STACK `[ value_element* `( n_idx `) `] = headerStackValue_base
     -- if nameIR = "next"
     -- if n_size = |value_element*|
-    -- if n_idx < n_size
+    -- if $(n_idx < n_size)
     -- if value = value_element*[n_idx]
 
   rule Lvalue_read/stack-last:
@@ -25140,8 +25144,8 @@ rulegroup Lvalue_read/memberAccess {
     -- if HEADER_STACK `[ value_element* `( n_idx `) `] = headerStackValue_base
     -- if nameIR = "last"
     -- if n_size = |value_element*|
-    -- if ~(n_idx < 1 \/ n_idx > n_size)
-    -- if n_idx_last = n_idx - 1
+    -- if ~($(n_idx < 1) \/ $(n_idx > n_size))
+    -- if n_idx_last = $(n_idx - 1)
     -- if value = value_element*[n_idx_last]
 
   rule Lvalue_read/struct:
@@ -25178,7 +25182,7 @@ rulegroup Lvalue_read/indexAccess {
     -- if ARRAY `[ value_element* `] = arrayValue_base
     -- if n_size = |value_element*|
     -- if i_idx = $int_of_integerValue(integerValue_index)
-    -- if b_in_bounds = (i_idx < n_size /\ i_idx >= 0)
+    -- if b_in_bounds = ($(i_idx < n_size) /\ $(i_idx >= 0))
     -- if b_in_bounds
     -- if n_idx = i_idx
     -- if value = value_element*[n_idx]
@@ -25189,7 +25193,7 @@ rulegroup Lvalue_read/indexAccess {
     -- if ARRAY `[ value_element* `] = arrayValue_base
     -- if n_size = |value_element*|
     -- if i_idx = $int_of_integerValue(integerValue_index)
-    -- if b_in_bounds = (i_idx < n_size /\ i_idx >= 0)
+    -- if b_in_bounds = ($(i_idx < n_size) /\ $(i_idx >= 0))
     -- if ~b_in_bounds
     -- if HEADER typeId `{ b_valid ';' fieldValue* `} = value_element*[0]
     -- if value = HEADER typeId `{ false ';' fieldValue* `}
@@ -25200,7 +25204,7 @@ rulegroup Lvalue_read/indexAccess {
     -- if HEADER_STACK `[ value_element* `( _ `) `] = headerStackValue_base
     -- if n_size = |value_element*|
     -- if i_idx = $int_of_integerValue(integerValue_index)
-    -- if b_in_bounds = (i_idx < n_size /\ i_idx >= 0)
+    -- if b_in_bounds = ($(i_idx < n_size) /\ $(i_idx >= 0))
     -- if b_in_bounds
     -- if n_idx = i_idx
     -- if value = value_element*[n_idx]
@@ -25211,7 +25215,7 @@ rulegroup Lvalue_read/indexAccess {
     -- if HEADER_STACK `[ value_element* `( _ `) `] = headerStackValue_base
     -- if n_size = |value_element*|
     -- if i_idx = $int_of_integerValue(integerValue_index)
-    -- if b_in_bounds = (i_idx < n_size /\ i_idx >= 0)
+    -- if b_in_bounds = ($(i_idx < n_size) /\ $(i_idx >= 0))
     -- if ~b_in_bounds
     -- if HEADER typeId `{ b_valid ';' fieldValue* `} = value_element*[0]
     -- if value = HEADER typeId `{ false ';' fieldValue* `}
@@ -25257,7 +25261,7 @@ rulegroup Lvalue_write/memberAccess {
     -- if nameIR = "next"
     -- if value_element_update* = value_element*[[n_idx] = value]
     -- if headerStackValue_base_update
-        = HEADER_STACK `[ value_element_update* `( n_idx + 1 `) `]
+        = HEADER_STACK `[ value_element_update* `( $(n_idx + 1) `) `]
     -- Lvalue_write:
         p EC_0 ARCH |- storageReference := headerStackValue_base_update : EC_1
 
@@ -25266,7 +25270,7 @@ rulegroup Lvalue_write/memberAccess {
     -- Lvalue_read: p EC_0 ARCH |- storageReference : headerStackValue_base
     -- if HEADER_STACK `[ value_element* `( n_idx `) `] = headerStackValue_base
     -- if nameIR = "last"
-    -- if n_idx_last = n_idx - 1
+    -- if n_idx_last = $(n_idx - 1)
     -- if value_element_update* = value_element*[[n_idx_last] = value]
     -- if headerStackValue_base_update
         = HEADER_STACK `[ value_element_update* `( n_idx `) `]
@@ -25339,7 +25343,7 @@ rulegroup Lvalue_write/indexAccess {
     -- if ARRAY `[ value_element* `] = arrayValue_base
     -- if n_size = |value_element*|
     -- if i_idx = $int_of_integerValue(integerValue_index)
-    -- if b_in_bounds = (i_idx < n_size /\ i_idx >= 0)
+    -- if b_in_bounds = ($(i_idx < n_size) /\ $(i_idx >= 0))
     -- if b_in_bounds
     -- if n_idx = i_idx
     -- if value_element_update* = value_element*[[n_idx] = value]
@@ -25353,7 +25357,7 @@ rulegroup Lvalue_write/indexAccess {
     -- if ARRAY `[ value_element* `] = arrayValue_base
     -- if n_size = |value_element*|
     -- if i_idx = $int_of_integerValue(integerValue_index)
-    -- if b_in_bounds = (i_idx < n_size /\ i_idx >= 0)
+    -- if b_in_bounds = ($(i_idx < n_size) /\ $(i_idx >= 0))
     -- if ~b_in_bounds
 
   rule Lvalue_write/stack-in-bounds:
@@ -25363,7 +25367,7 @@ rulegroup Lvalue_write/indexAccess {
         = headerStackValue_base
     -- if n_size = |value_element*|
     -- if i_idx = $int_of_integerValue(integerValue_index)
-    -- if b_in_bounds = (i_idx < n_size /\ i_idx >= 0)
+    -- if b_in_bounds = ($(i_idx < n_size) /\ $(i_idx >= 0))
     -- if b_in_bounds
     -- if n_idx = i_idx
     -- if value_element_update* = value_element*[[n_idx] = value]
@@ -25378,7 +25382,7 @@ rulegroup Lvalue_write/indexAccess {
     -- if HEADER_STACK `[ value_element* `( _ `) `] = headerStackValue_base
     -- if n_size = |value_element*|
     -- if i_idx = $int_of_integerValue(integerValue_index)
-    -- if b_in_bounds = (i_idx < n_size /\ i_idx >= 0)
+    -- if b_in_bounds = ($(i_idx < n_size) /\ $(i_idx >= 0))
     -- if ~b_in_bounds
 
 }
@@ -27063,7 +27067,7 @@ def $select_action(TBL, tableMatch) = tableActionReferenceIR
   -- if _ ':' tableActionReferenceIR = tableMatch
 
 def $select_action(TBL, tableMatch*) = tableActionReferenceIR_h
-  -- if |tableMatch*| > 1
+  -- if $(|tableMatch*| > 1)
   -- (if (n_priority ':' tableActionReferenceIR = tableMatch))*
   -- if (n_priority_sorted, tableActionReferenceIR_sorted)*
       = $sort_<tableActionReferenceIR>((n_priority, tableActionReferenceIR)*)
@@ -27072,7 +27076,7 @@ def $select_action(TBL, tableMatch*) = tableActionReferenceIR_h
       = $rev_<tableActionReferenceIR>(tableActionReferenceIR_sorted*)
 
 def $select_action(TBL, tableMatch*) = tableActionReferenceIR_h
-  -- if |tableMatch*| > 1
+  -- if $(|tableMatch*| > 1)
   -- (if (n_priority ':' tableActionReferenceIR = tableMatch))*
   -- if (n_priority_sorted, tableActionReferenceIR_sorted)*
       = $sort_<tableActionReferenceIR>((n_priority, tableActionReferenceIR)*)
@@ -28082,13 +28086,13 @@ rulegroup Call_eval/builtinPushFrontMethodCallee {
     -- Argument_eval:
         p EC_0 ARCH_0 |- argumentIR : EC_1 ARCH_1 (_CONT integerValue_count)
     -- if n_count = $nat_of_integerValue(integerValue_count)
-    -- if n_count < n_size
+    -- if $(n_count < n_size)
     -- if value_front* = value_element*[0 : n_count]
     -- (if (value_front_invalidated = $invalidate_value(value_front)))*
-    -- if n_back = $max_int([0, n_size - n_count])
+    -- if n_back = $max_int([0, $(n_size - n_count)])
     -- if value_back* = value_element*[0 : n_back]
     -- if value_element_updated* = value_front_invalidated* ++ value_back*
-    -- if n_idx_updated = $min_nat([n_size, n_idx + n_count])
+    -- if n_idx_updated = $min_nat([n_size, $(n_idx + n_count)])
     -- if headerStackValue_updated
         = HEADER_STACK `[ value_element_updated* `( n_idx_updated `) `]
     -- Lvalue_write:
@@ -28105,9 +28109,9 @@ rulegroup Call_eval/builtinPushFrontMethodCallee {
     -- Argument_eval:
         p EC_0 ARCH_0 |- argumentIR : EC_1 ARCH_1 (_CONT integerValue_count)
     -- if n_count = $nat_of_integerValue(integerValue_count)
-    -- if n_count >= n_size
+    -- if $(n_count >= n_size)
     -- (if (value_element_updated = $invalidate_value(value_element)))*
-    -- if n_idx_updated = $min_nat([n_size, n_idx + n_count])
+    -- if n_idx_updated = $min_nat([n_size, $(n_idx + n_count)])
     -- if headerStackValue_updated
         = HEADER_STACK `[ value_element_updated* `( n_idx_updated `) `]
     -- Lvalue_write:
@@ -28141,8 +28145,8 @@ rulegroup Call_eval/builtinPopFrontMethodCallee {
     -- Argument_eval:
         p EC_0 ARCH_0 |- argumentIR : EC_1 ARCH_1 (_CONT integerValue_count)
     -- if n_count = $nat_of_integerValue(integerValue_count)
-    -- if n_count < n_size
-    -- if n_front = $max_int([0, n_size - n_count])
+    -- if $(n_count < n_size)
+    -- if n_front = $max_int([0, $(n_size - n_count)])
     -- if value_front* = value_element*[n_count : n_front]
     -- if value_back* = value_element*[0 : n_count]
     -- (if (value_back_invalidated = $invalidate_value(value_back)))*
@@ -28164,9 +28168,9 @@ rulegroup Call_eval/builtinPopFrontMethodCallee {
     -- Argument_eval:
         p EC_0 ARCH_0 |- argumentIR : EC_1 ARCH_1 (_CONT integerValue_count)
     -- if n_count = $nat_of_integerValue(integerValue_count)
-    -- if n_count >= n_size
+    -- if $(n_count >= n_size)
     -- (if (value_element_updated = $invalidate_value(value_element)))*
-    -- if n_idx_updated = $max_int([0, n_size - n_count])
+    -- if n_idx_updated = $max_int([0, $(n_size - n_count)])
     -- if headerStackValue_updated
         = HEADER_STACK `[ value_element_updated* `( n_idx_updated `) `]
     -- Lvalue_write:
@@ -28861,16 +28865,16 @@ def $reverse_bytes_of_hex(t)
   = "0x" ++ $reverse_bytes_of_hex'(t[2 : n_len_bytes])
   -- if t[0 : 2] = "0x"
   -- if n_len = |t|
-  -- if n_len_bytes = n_len - 2
+  -- if n_len_bytes = $(n_len - 2)
 
 def $reverse_bytes_of_hex'(t) = t
-  -- if |t| <= 2
+  -- if $(|t| <= 2)
 
 def $reverse_bytes_of_hex'(t) = t_bytes_rev ++ t_byte
   -- if n_len = |t|
-  -- if n_len > 2
+  -- if $(n_len > 2)
   -- if t_byte = t[0 : 2]
-  -- if n_len_bytes = n_len - 2
+  -- if n_len_bytes = $(n_len - 2)
   -- if t_bytes = t[2 : n_len_bytes]
   -- if t_bytes_rev = $reverse_bytes_of_hex'(t_bytes)
 
@@ -29049,14 +29053,14 @@ def $tableObject_create_entry_key(
   -- if text_key_prefix_value_rev = $reverse_bytes_of_hex(text_key_prefix_value)
   -- if i_key_prefix_value = $text_to_int(text_key_prefix_value_rev)
   -- if n_key_type_width = $sizeof_maxSizeInBits'(typeIR)
-  -- if n_key_prefix_width <= n_key_type_width
-  -- if n_key_remaining_width = n_key_type_width - n_key_prefix_width
+  -- if $(n_key_prefix_width <= n_key_type_width)
+  -- if n_key_remaining_width = $(n_key_type_width - n_key_prefix_width)
   -- if i_key_base_value = $shl(i_key_prefix_value, n_key_remaining_width)
   -- if typedExpressionIR_base = (D i_key_base_value) '#' `( INT DYN `)
   -- if typedExpressionIR_base_cast
       = $cast_control_plane(EC, typedExpressionIR_base, typeIR)
   -- if i_key_mask_value
-      = $pow2(n_key_type_width) - $pow2(n_key_remaining_width)
+      = $($pow2(n_key_type_width) - $pow2(n_key_remaining_width))
   -- if typedExpressionIR_mask = (D i_key_mask_value) '#' `( INT DYN `)
   -- if typedExpressionIR_mask_cast
       = $cast_control_plane(EC, typedExpressionIR_base, typeIR)
@@ -29182,7 +29186,7 @@ def $alias_to_original_lookup_map(parameterIR*)
   -- if (nameIR_original, nameIR_aliases*)*
       = $filter_<(nameIR, nameIR*)>(
           (id, nameIR_names*)*,
-          (|nameIR_names*| > 0)*)
+          ($(|nameIR_names*| > 0))*)
   -- if nameIR_alias* = (nameIR_aliases*[0])*
 
 

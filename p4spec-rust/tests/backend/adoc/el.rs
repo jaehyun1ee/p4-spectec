@@ -60,6 +60,15 @@ fn test_definitions_render_their_adoc_forms() {
 }
 
 #[test]
+fn test_arithmetic_escapes_keep_their_delimiters() {
+    assert_eq!(render("def $succ(n) = $(n + 1)"), "def $succ(n) = $(n + 1)");
+    assert_eq!(
+        render("def $f(n) = n\n  -- if $(n < 1) /\\ $(n > 0)"),
+        "def $f(n) = n\n  -- if $(n < 1) /\\ $(n > 0)",
+    );
+}
+
+#[test]
 fn test_text_literals_use_ocaml_compatible_escaping() {
     let def = p4spec_rust::phrase! {
         node: DefKind::FuncDef(ast::FuncDef {
