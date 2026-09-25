@@ -614,7 +614,7 @@ fn render_exp(exp: &Exp, anchors: Option<&Anchors<'_>>) -> Result<ExpTerm> {
         ExpKind::Infix(exp_l, atom, exp_r) => render_infix_exp(exp_l, atom, exp_r, anchors),
         ExpKind::Brack(atom_l, exp, atom_r) => render_brack_exp(atom_l, exp, atom_r, anchors),
         ExpKind::Hole(_) => Err(Error::Hole(exp.span.clone())),
-        ExpKind::Fuse(_, _) => Err(Error::Fuse(exp.span.clone())),
+        ExpKind::Fuse(..) => Err(Error::Fuse(exp.span.clone())),
         ExpKind::Unparen(_) => Err(Error::Unparen(exp.span.clone())),
         ExpKind::Latex(_) => Err(Error::RawLatex(exp.span.clone())),
     }
