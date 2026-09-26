@@ -249,7 +249,7 @@ fn filter_prems_insert(
 
 /// Wraps a premise under an iteration over the variables it uses, if any.
 fn iterate_prem(iter: ast::Iter, vars: &[ast::Var], prem_al: ast::Prem) -> Option<ast::Prem> {
-    // Only variables the premise uses are ranged over
+    // Only variables used by the premise supply iteration values
     let frees = prem_al.free_ids();
     let vars_bound = vars
         .iter()
@@ -598,7 +598,7 @@ fn collect_iter_prem(iter_prem: &ast::IterPrem) -> Collected {
     let mut vars_must = prem_iter.vars_bound.clone();
     vars_must.extend(prem_iter.vars_bind.clone());
 
-    // Musts iterate over all variables, inserts over ranged-over ones only
+    // Musts iterate over all variables, inserts use source variables only
     let collected = collect_prem(&iter_prem.prem);
     let collected = iterate_collected(prem_iter.iter, &vars_must, &prem_iter.vars_bound, collected);
     // The iteration itself requires its variables to agree in length

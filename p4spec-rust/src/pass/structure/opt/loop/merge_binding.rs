@@ -111,7 +111,7 @@ impl<'a> Bind<'a> {
                 (exp_iter_bound, exp_iter_bind)
             })
             .unzip();
-        // Inputs use the ranged-over iterators, outputs the binding ones
+        // Inputs use the source iterators, outputs the binding ones
         let expunits_input = exps_input
             .into_iter()
             .map(|exp| ExpUnit::new(exp, &iter_exps_bound))

@@ -1,8 +1,8 @@
-error[algo/expression-variable-unbound]: expression uses unbound variable `u`
+error[algo/expression-variable-unbound]: `u` is not bound when this expression is evaluated
    ┌─ algo/dataflow-free-variable-in-output.watsup:14:8
    │
 14 │   v |- u
-   │        ^
+   │        ^ `u` is read here
    │
-   = Every variable here must already be bound by an earlier part of the rule, such as the relation's input or a preceding premise.
+   = Bind the variable in an earlier input pattern or premise before reading it here.
 

@@ -53,9 +53,9 @@ fn test_otherwise_diagnostics_relate_the_marker_in_functions_and_relations() {
     for (source, line_else, line_condition) in [
         ("dec $f : nat\ndef $f = 0\n  -- otherwise\n  -- if true\n", 3, 4),
         (
-            "relation R: nat |- nat\n  hint(input %0)\nrule R/else: 0 |- 0\n  -- otherwise\n  -- if true\n",
-            4,
+            "var x : nat\nrelation R: nat |- nat\n  hint(input %0)\nrule R/else: x |- 0\n  -- otherwise\n  -- if true\n",
             5,
+            6,
         ),
     ] {
         let spec_el = crate::spec_fixture::parse(source).unwrap();
@@ -94,6 +94,36 @@ fn test_synthesized_otherwise_clause_retains_its_enclosing_location() {
     assert_eq!(diagnostic.code.as_deref(), Some("algo/otherwise-condition-invalid"));
     assert_eq!(diagnostic.labels[1].style, LabelStyle::Secondary);
     assert_eq!(diagnostic.labels[1].span, span_clause);
+}
+
+#[test]
+fn test_otherwise_relation_input_reports_repeated_binder() {
+    let source = "var x : nat\nrelation R: (nat, nat) |- nat\n  hint(input %0)\nrule R/base: (0, 0) |- 0\nrule R/else: (x, x) |- 0\n  -- otherwise\n";
+    let spec_el = crate::spec_fixture::parse(source).unwrap();
+    let spec_il = elaborate::convert(spec_el).unwrap();
+    let report = algo::convert(spec_il).unwrap_err();
+
+    assert_eq!(cause(&report).code.as_deref(), Some("algo/otherwise-multibind-invalid"));
+}
+
+#[test]
+fn test_otherwise_let_reports_repeated_binder() {
+    let source = "var x : nat\ndec $f : nat\ndef $f = x\n  -- otherwise\n  -- if (x, x) = (0, 0)\n";
+    let spec_el = crate::spec_fixture::parse(source).unwrap();
+    let spec_il = elaborate::convert(spec_el).unwrap();
+    let report = algo::convert(spec_il).unwrap_err();
+
+    assert_eq!(cause(&report).code.as_deref(), Some("algo/otherwise-multibind-invalid"));
+}
+
+#[test]
+fn test_otherwise_relation_output_reports_repeated_binder() {
+    let source = "var x : nat\nvar value : nat\nrelation R: nat |- (nat, nat)\n  hint(input %0)\nrule R/base: 0 |- (0, 0)\nrelation S: nat |- nat\n  hint(input %0)\nrule S/base: 0 |- 0\nrule S/else: value |- x\n  -- otherwise\n  -- R: value |- (x, x)\n";
+    let spec_el = crate::spec_fixture::parse(source).unwrap();
+    let spec_il = elaborate::convert(spec_el).unwrap();
+    let report = algo::convert(spec_il).unwrap_err();
+
+    assert_eq!(cause(&report).code.as_deref(), Some("algo/otherwise-multibind-invalid"));
 }
 
 fn span(line: usize) -> Span {
