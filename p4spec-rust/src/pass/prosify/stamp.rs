@@ -26,7 +26,7 @@ fn can_fail_instr(instr: &pl::Instr<pl::GroupInstr>) -> bool {
         // Holds and checked lets always may fail
         pl::InstrKind::Hold(..) => true,
         pl::InstrKind::Case(pl::CaseInstr { exp, cases, .. }) => {
-            exp.has_call() || cases.iter().any(can_fail_case)
+            exp.has_call() || cases.iter().any(|case| case.guard.has_call())
         }
         pl::InstrKind::Let(pl::LetInstr { exp_r, .. }) => exp_r.has_call(),
         pl::InstrKind::Debug(pl::DebugInstr { exp })
@@ -49,22 +49,6 @@ fn can_fail_group_instr(instr: &pl::GroupInstr) -> bool {
         }
         pl::GroupInstr::Return(pl::ReturnInstr { exp }) => exp.has_call(),
         pl::GroupInstr::Backtrack(_) => false,
-    }
-}
-
-/// Whether an arm's guard can fail.
-fn can_fail_case(case: &pl::Case<pl::GroupInstr>) -> bool {
-    can_fail_guard(&case.guard)
-}
-
-/// Whether a guard can fail: only when it evaluates an expression with a call.
-fn can_fail_guard(guard: &pl::Guard) -> bool {
-    match guard {
-        pl::Guard::Bool(_) | pl::Guard::Sub(..) | pl::Guard::Match(_) => false,
-        pl::Guard::Cmp(_, _, exp)
-        | pl::Guard::Mem(exp)
-        | pl::Guard::CheckLetSub(_, _, exp)
-        | pl::Guard::CheckLetMatch(_, exp) => exp.has_call(),
     }
 }
 

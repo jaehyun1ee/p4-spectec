@@ -27,10 +27,9 @@ use crate::lang::{
     pl::{
         annot::Hints,
         ast::{self as pl, ExpKind},
-        partial::{is_partial_exp, is_partial_guard},
     },
     sl,
-    traits::print::Print,
+    traits::{has_call::HasCall, print::Print},
 };
 
 use super::{
@@ -1829,9 +1828,8 @@ fn render_case_instr<Tier>(
         }
 
         // Attach fallthrough only where evaluating the condition can fail
-        let is_partial =
-            is_partial_guard(&case.guard) || (idx == 0 && is_partial_exp(&case_instr.exp));
-        let prose_label = if is_partial { prose_fallthrough.clone() } else { Prose::Empty };
+        let can_fail = case.guard.has_call() || (idx == 0 && case_instr.exp.has_call());
+        let prose_label = if can_fail { prose_fallthrough.clone() } else { Prose::Empty };
         let keyword = if idx == 0 { "If " } else { "Else if " };
         // Nest the selected case body below its condition
         let prose_guard = prose_of_guard(&case_instr.exp, &case.guard);
