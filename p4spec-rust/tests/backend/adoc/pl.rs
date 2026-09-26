@@ -479,3 +479,40 @@ fn test_rulegroup_fragments_keep_distinct_arm_anchors() {
     );
     assert_eq!(text_a, text_fresh);
 }
+
+#[test]
+fn test_membership_guard_with_call_carries_the_fallthrough_label() {
+    let exp_set = p4spec_rust::annotated_note_phrase! {
+        node: pl::ExpKind::Call(id("g"), vec![], vec![]),
+        note: pl::TypKind::Bool,
+        span: Span::default(),
+    };
+    let case_instr = p4spec_rust::annotated_note_phrase! {
+        node: pl::InstrKind::Case(pl::CaseInstr {
+            exp: exp_id("x"),
+            cases: vec![
+                pl::Case {
+                    guard: pl::Guard::Mem(exp_set),
+                    block: vec![return_exp_instr(exp_bool(true), None)],
+                },
+                pl::Case {
+                    guard: pl::Guard::Bool(true),
+                    block: vec![return_exp_instr(exp_bool(false), None)],
+                },
+            ],
+            dangle: true,
+        }),
+        note: Some(pl::Fallthrough::Fail),
+        span: Span::default(),
+    };
+    let def = defined_func("f", vec![case_instr]);
+    let text = render_def(&def, &subject_name).unwrap();
+    assert_eq!(
+        text,
+        concat!(
+            "xref:f[$f]\n\n",
+            ". If ``x`` is in xref:g[``$g``]:+++<sub class=\"bk-mark\">[FAIL]</sub>+++ return ``true``.\n",
+            ". Else if ``x``: return ``false``.",
+        ),
+    );
+}

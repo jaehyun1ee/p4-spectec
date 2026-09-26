@@ -60,8 +60,9 @@ fn can_fail_case(case: &pl::Case<pl::GroupInstr>) -> bool {
 /// Whether a guard can fail: only when it evaluates an expression with a call.
 fn can_fail_guard(guard: &pl::Guard) -> bool {
     match guard {
-        pl::Guard::Bool(_) | pl::Guard::Sub(..) | pl::Guard::Match(_) | pl::Guard::Mem(_) => false,
+        pl::Guard::Bool(_) | pl::Guard::Sub(..) | pl::Guard::Match(_) => false,
         pl::Guard::Cmp(_, _, exp)
+        | pl::Guard::Mem(exp)
         | pl::Guard::CheckLetSub(_, _, exp)
         | pl::Guard::CheckLetMatch(_, exp) => exp.has_call(),
     }

@@ -54,8 +54,9 @@ pub fn is_partial_exp(exp: &pl::Exp) -> bool {
 
 pub fn is_partial_guard(guard: &pl::Guard) -> bool {
     match guard {
-        pl::Guard::Bool(_) | pl::Guard::Sub(..) | pl::Guard::Match(_) | pl::Guard::Mem(_) => false,
+        pl::Guard::Bool(_) | pl::Guard::Sub(..) | pl::Guard::Match(_) => false,
         pl::Guard::Cmp(_, _, exp)
+        | pl::Guard::Mem(exp)
         | pl::Guard::CheckLetSub(_, _, exp)
         | pl::Guard::CheckLetMatch(_, exp) => is_partial_exp(exp),
     }
