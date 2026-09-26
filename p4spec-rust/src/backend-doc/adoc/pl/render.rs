@@ -1349,1535 +1349,6 @@ fn prose_of_check_let_guard(exp_scrut: &pl::Exp, exp_target: &pl::Exp) -> Prose 
     Prose::seq([Prose::text("let "), Prose::code(code_target), Prose::text(" be "), prose_scrut])
 }
 
-// == Instructions
-
-// - Tier results
-//
-//   Inline under ". If ``b`` is equal to ``true``:"
-//   -> . If ``b`` is equal to ``true``: return ``X~t~``.
-//
-//   InlineGoto under ". If ``nat'^{asterisk}^`` matches pattern ``[]``:"
-//   -> ... matches pattern ``[]``: goto xref:Even-nil[nil]
-//
-//   Nested under ". Else:"
-//   -> . Else:
-//       .. Let ``t~h~`` ``{two-colons}`` ``t~t~^{asterisk}^`` be ``t^{asterisk}^``.
-
-/// A tier instruction ready to fold inline or nest below its enclosing head.
-enum Rendered {
-    /// Appends prose directly to the optional enclosing heading.
-    Inline(Prose),
-    /// Appends a dispatch target and capitalizes the composed heading.
-    InlineGoto(Prose),
-    /// Keeps a block below the heading instead of folding it into prose.
-    Nested(Block),
-}
-
-/// Renders one tier payload while preserving the shared renderer state.
-type RenderTier<Tier> =
-    fn(&mut Renderer<'_>, usize, &Context, bool, &pl::Instr<Tier>, &Tier) -> Rendered;
-
-/// Composes a tier result with the enclosing instruction head.
-fn compose(block_head: Option<Block>, singleton: bool, rendered: Rendered) -> Block {
-    match rendered {
-        Rendered::Inline(prose_tail) => {
-            let block_tail = Block::inline(prose_tail);
-            match block_head {
-                Some(block_head) => Block::concat([block_head, block_tail]),
-                None => block_tail,
-            }
-        }
-        Rendered::InlineGoto(prose_tail) => {
-            let block_tail = Block::inline(prose_tail);
-            let block = match block_head {
-                Some(block_head) => Block::concat([block_head, block_tail]),
-                None => block_tail,
-            };
-            block.capitalize_first()
-        }
-        Rendered::Nested(block) if !singleton => block,
-        Rendered::Nested(block) => match block_head {
-            Some(block_head) => Block::seq([block_head, block]),
-            None => Block::concat([Block::raw("\n"), Block::seq([block])]),
-        },
-    }
-}
-
-// - Instruction
-//
-//   -- if $(n < m)   -> . Check that ``n`` is less than ``m``.
-//   -- debug n       -> . (debug: ``n``)
-
-/// Renders one shared or tier-specific instruction.
-fn render_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-) -> Block {
-    match &instr.node.node {
-        pl::InstrKind::If(if_instr) => {
-            render_if_instr(renderer, level, ctx, render_tier, instr, if_instr)
-        }
-        pl::InstrKind::Hold(hold_instr) => {
-            render_hold_instr(renderer, level, ctx, render_tier, instr, hold_instr)
-        }
-        pl::InstrKind::Case(case_instr) => {
-            render_case_instr(renderer, level, ctx, render_tier, instr, case_instr)
-        }
-        pl::InstrKind::Let(let_instr) => render_let_instr(level, ctx, instr, let_instr),
-        pl::InstrKind::Debug(debug_instr) => render_debug_instr(level, ctx, instr, debug_instr),
-        pl::InstrKind::Destruct(destruct_instr) => {
-            render_destruct_instr(level, ctx, instr, destruct_instr)
-        }
-        pl::InstrKind::CheckLetSub(check_instr) => {
-            render_check_let_sub_instr(renderer, level, ctx, render_tier, instr, check_instr)
-        }
-        pl::InstrKind::CheckLetMatch(check_instr) => {
-            render_check_let_match_instr(renderer, level, ctx, render_tier, instr, check_instr)
-        }
-        pl::InstrKind::OptionGet(option_instr) => {
-            render_option_get_instr(renderer, level, ctx, render_tier, instr, option_instr)
-        }
-        pl::InstrKind::Tier(tier_instr) => {
-            render_tier_instr(renderer, level, ctx, render_tier, instr, tier_instr)
-        }
-    }
-}
-
-// - Instruction sequences
-//
-//   $ite<X>(true, X_t, X_f) = X_t   -> . If ``b`` is equal to ``true``: return ``X~t~``.
-
-/// Renders instructions under an optional heading.
-fn render_instrs<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    block_head: Option<Block>,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instrs: &[pl::Instr<Tier>],
-) -> Block {
-    // Fold a lone tier instruction into the enclosing heading
-    if let [instr] = instrs
-        && let pl::InstrKind::Tier(tier_instr) = &instr.node.node
-    {
-        let rendered = render_tier(renderer, level, ctx, true, instr, &tier_instr.tier);
-        return compose(block_head, true, rendered);
-    }
-
-    // Render general blocks as a sequence below the optional heading
-    let blocks_rendered: Vec<Block> = instrs
-        .iter()
-        .map(|instr| render_instr(renderer, level, ctx, render_tier, instr))
-        .collect();
-    match block_head {
-        Some(block_head) => Block::seq(std::iter::once(block_head).chain(blocks_rendered)),
-        None => Block::concat([Block::raw("\n"), Block::seq(blocks_rendered)]),
-    }
-}
-
-/// Appends continuation instructions below a check heading at the same level.
-fn render_continuation<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    block_head: Block,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instrs: &[pl::Instr<Tier>],
-) -> Block {
-    // Empty continuations leave the heading alone
-    if instrs.is_empty() {
-        return block_head;
-    }
-
-    let blocks_rendered = instrs
-        .iter()
-        .map(|instr| render_instr(renderer, level, ctx, render_tier, instr));
-    Block::seq(std::iter::once(block_head).chain(blocks_rendered))
-}
-
-// - Otherwise blocks
-//
-//   def $starts_with(t, t_prefix) = false
-//     -- otherwise
-//   -> . +++<span id="starts_with-else"></span>+++Otherwise: return ``false``.
-
-/// Serializes an otherwise block with its optional anchor.
-fn render_elseblock<Tier>(
-    renderer: &mut Renderer<'_>,
-    anchor_else: Option<&str>,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    block_opt: Option<&[pl::Instr<Tier>]>,
-) -> String {
-    // Omit absent and empty otherwise blocks
-    let Some(block) = block_opt.filter(|block| !block.is_empty()) else {
-        return String::new();
-    };
-    // Prefix the visible heading with its optional destination anchor
-    let text_anchor = anchor_else
-        .map(|anchor| format!("+++<span id=\"{anchor}\"></span>+++"))
-        .unwrap_or_default();
-    let block_body = render_instrs(renderer, 1, None, ctx, render_tier, block);
-    let text_body = serialize::ser_block(renderer.anchor, &block_body);
-    format!("\n\n. {text_anchor}Otherwise:{text_body}")
-}
-
-// - Iteration suffixes
-//
-//   -- if typeIR? matches (_), iterated over typeIR?*
-//   -> Check that ``typeIR^?^`` is defined, for all ``typeIR^?^`` in ``typeIR^?^^{asterisk}^``.
-
-fn prose_of_iterexp_suffix(iter_exps: &[pl::ExpIter]) -> Prose {
-    // Collect every expression iterator binding in source order
-    let proses: Vec<Prose> = iter_exps
-        .iter()
-        .flat_map(|iter_exp| {
-            let iter = iter_exp.iter;
-            iter_exp
-                .vars
-                .iter()
-                .map(move |var| prose_of_in_itervar(iter, var))
-        })
-        .collect();
-    // Omit the quantifier when no variables are bound
-    if proses.is_empty() {
-        return Prose::Empty;
-    }
-
-    let prose_vars = prose_of_list(proses);
-    Prose::seq([Prose::text(", for all "), prose_vars])
-}
-
-fn prose_of_iterinstr_suffix(iter_instrs: &[pl::InstrIter]) -> Prose {
-    // Collect every instruction iterator binding in source order
-    let proses: Vec<Prose> = iter_instrs
-        .iter()
-        .flat_map(|iter_instr| {
-            let iter = iter_instr.iter;
-            iter_instr
-                .vars_bound
-                .iter()
-                .map(move |var| prose_of_in_itervar(iter, var))
-        })
-        .collect();
-    // Omit the quantifier when no variables are bound
-    if proses.is_empty() {
-        return Prose::Empty;
-    }
-
-    let prose_vars = prose_of_list(proses);
-    Prose::seq([Prose::text(", for each "), prose_vars])
-}
-
-// - Iteration blocks
-//
-//   -- (if m = $(n + 1))*   -> . For each ``n`` in ``n^{asterisk}^``:
-//                              +
-//                              --
-//                               ** Let ``m`` be ``n`` ``{plus}`` ``1``.
-//                              --
-//                              +
-//                              Let ``m^{asterisk}^`` be the resulting list.
-
-/// Wraps a body in nested iteration blocks and binds visible outputs.
-fn render_iterinstrs(
-    level: usize,
-    prose_fallthrough: Prose,
-    iter_instrs: &[pl::InstrIter],
-    render_body: &dyn Fn(usize) -> Block,
-) -> Block {
-    render_iterinstr_levels(level, true, &prose_fallthrough, iter_instrs, render_body)
-}
-
-/// Opens one iteration block per level, attaching the fallthrough to the outermost one.
-fn render_iterinstr_levels(
-    level: usize,
-    outermost: bool,
-    prose_fallthrough: &Prose,
-    iter_instrs: &[pl::InstrIter],
-    render_body: &dyn Fn(usize) -> Block,
-) -> Block {
-    // Finish recursion at the caller-supplied body
-    let Some((iter_instr, iter_instrs_tail)) = iter_instrs.split_last() else {
-        return render_body(level);
-    };
-    // Keep only outputs that appear in the rendered binding
-    let vars_output: Vec<&pl::Var> = iter_instr
-        .vars_bind
-        .iter()
-        .filter(|var| !var.id.node.starts_with('_'))
-        .collect();
-    // Render inner iteration levels before their enclosing open block
-    let block_inner =
-        render_iterinstr_levels(level + 1, false, prose_fallthrough, iter_instrs_tail, render_body);
-    let prose_vars_bound = prose_of_in_itervars(iter_instr.iter, &iter_instr.vars_bound);
-    let prose_head = Prose::seq([Prose::text("For each "), prose_vars_bound, Prose::text(":")]);
-    // Bind visible outputs after closing the iteration body
-    let block_body = if vars_output.is_empty() {
-        Block::concat([Block::raw("+\n--\n"), block_inner, Block::raw("\n--\n")])
-    } else {
-        let prose_vars_output = prose_of_out_itervars(iter_instr.iter, &vars_output);
-        let text_noun = string_of_iter(iter_instr.iter);
-        let text_suffix = if vars_output.len() > 1 { "s" } else { "" };
-        let prose_label = if outermost { prose_fallthrough.clone() } else { Prose::Empty };
-        let prose_binding = Prose::seq([
-            Prose::text("Let "),
-            prose_vars_output,
-            Prose::text(format!(" be the resulting {text_noun}{text_suffix}.")),
-            prose_label,
-        ]);
-        Block::concat([
-            Block::raw("+\n--\n"),
-            block_inner,
-            Block::raw("\n--\n+\n"),
-            Block::inline(prose_binding),
-        ])
-    };
-    Block::item(level, ItemKind::Ordered(None), prose_head, block_body)
-}
-
-// - If instructions
-//
-//   -- if $(n < m)   -> . Check that ``n`` is less than ``m``.
-
-/// Renders a conditional check and its continuation.
-fn render_if_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-    if_instr: &pl::IfInstr<Tier>,
-) -> Block {
-    // Build the check heading with its failure continuation
-    let prose_cond = prose_of_exp(&if_instr.exp);
-    let prose_suffix = prose_of_iterexp_suffix(&if_instr.iter_exps);
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    let prose_head = Prose::seq([
-        Prose::text("Check that "),
-        prose_cond,
-        prose_suffix,
-        Prose::text("."),
-        prose_fallthrough,
-    ]);
-    let block_head = Block::item_ordered(level, prose_head);
-    render_continuation(renderer, level, block_head, ctx, render_tier, &if_instr.block)
-}
-
-// - Hold instructions
-//
-//   rule Even/cons: |- n_a :: n_b :: n*
-//     -- Even: |- n*
-//   -> . If xref:Even[``n^{asterisk}^`` has even length]:+++<sub class="bk-mark">[FAIL]</sub>+++ then, the relation holds.
-
-/// Builds the heading of a positive or negative relation holding branch.
-fn render_hold_head<Tier>(
-    level: usize,
-    ctx: &Context,
-    instr: &pl::Instr<Tier>,
-    hold_instr: &pl::HoldInstr<Tier>,
-    hold: bool,
-) -> Block {
-    let hint_opt = if hold { &instr.hints.prose_true } else { &instr.hints.prose_false };
-    let link = Link::Subject(Subject::Relation(hold_instr.id.node.clone()));
-    let prose_cond = match hint_opt {
-        // Hinted relations describe the branch condition in prose
-        Some(hint) => {
-            let exps = hold_instr.not_exp.args();
-            let prose_hint = alternate(
-                hint,
-                &|text_body| reindent_lines(0, text_body),
-                &|&exp| prose_of_exp(exp),
-                &exps,
-                false,
-            );
-            Prose::link(link, prose_hint)
-        }
-        // Unhinted relations show their notation followed by the verdict
-        None => {
-            let code_not = code_of_mixfix(&hold_instr.not_exp, &code_of_exp);
-            let prose_rel = Prose::link(link, Prose::code(code_not));
-            let text_verdict = if hold { " holds" } else { " does not hold" };
-            Prose::seq([prose_rel, Prose::text(text_verdict)])
-        }
-    };
-    let prose_suffix = prose_of_iterexp_suffix(&hold_instr.iter_exps);
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    let prose_head = Prose::seq([
-        Prose::text("If "),
-        prose_cond,
-        prose_suffix,
-        Prose::text(":"),
-        prose_fallthrough,
-    ]);
-    Block::item_ordered(level, prose_head)
-}
-
-/// Renders positive, negative, or two-sided relation holding branches.
-fn render_hold_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-    hold_instr: &pl::HoldInstr<Tier>,
-) -> Block {
-    // Render the selected one-sided or two-sided branch structure
-    match &hold_instr.hold_case {
-        pl::HoldCase::Hold(block, _) => {
-            let block_head = render_hold_head(level, ctx, instr, hold_instr, true);
-            render_instrs(renderer, level + 1, Some(block_head), ctx, render_tier, block)
-        }
-        pl::HoldCase::NotHold(block, _) => {
-            let block_head = render_hold_head(level, ctx, instr, hold_instr, false);
-            render_instrs(renderer, level + 1, Some(block_head), ctx, render_tier, block)
-        }
-        pl::HoldCase::Both(block_hold, block_not_hold) => {
-            let block_head_hold = render_hold_head(level, ctx, instr, hold_instr, true);
-            let block_branch_hold = render_instrs(
-                renderer,
-                level + 1,
-                Some(block_head_hold),
-                ctx,
-                render_tier,
-                block_hold,
-            );
-            let block_head_else = Block::item_ordered(level, Prose::text("Else:"));
-            let block_branch_else = render_instrs(
-                renderer,
-                level + 1,
-                Some(block_head_else),
-                ctx,
-                render_tier,
-                block_not_hold,
-            );
-            Block::seq([block_branch_hold, block_branch_else])
-        }
-    }
-}
-
-// - Case instructions
-//
-//   def $join_text(eps, t_sep) = ""
-//   def $join_text([ t_h ], t_sep) = t_h
-//   -> . If ``t'^{asterisk}^`` matches pattern ``[]``: return ``""``.
-//      . Else if let ``t~h~`` be ``t'^{asterisk}^``: return ``t~h~``.
-
-/// Renders a check or an if/else-if/else case ladder.
-fn render_case_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-    case_instr: &pl::CaseInstr<Tier>,
-) -> Block {
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    // Render a single arm as a check without an if ladder
-    if let [case] = case_instr.cases.as_slice() {
-        let prose_guard = prose_of_guard(&case_instr.exp, &case.guard);
-        let prose_head = Prose::seq([
-            Prose::text("Check that "),
-            prose_guard,
-            Prose::text("."),
-            prose_fallthrough,
-        ]);
-        let block_head = Block::item_ordered(level, prose_head);
-        return render_continuation(renderer, level, block_head, ctx, render_tier, &case.block);
-    }
-
-    let num_cases = case_instr.cases.len();
-    let mut blocks_case = Vec::with_capacity(num_cases);
-    for (idx, case) in case_instr.cases.iter().enumerate() {
-        // Turn the final total arm into an otherwise branch
-        if idx + 1 == num_cases && !case_instr.dangle {
-            let block_else = Block::item_ordered(level, Prose::text("Else:"));
-            let is_binding =
-                matches!(case.guard, pl::Guard::CheckLetSub(..) | pl::Guard::CheckLetMatch(..));
-            let block_case = if is_binding {
-                // A binding guard becomes the first step of the otherwise branch
-                let prose_guard = prose_of_guard(&case_instr.exp, &case.guard).capitalize_first();
-                let prose_bind = Prose::seq([prose_guard, Prose::text(".")]);
-                let block_bind = Block::item_ordered(level + 1, prose_bind);
-                let blocks_rendered = case
-                    .block
-                    .iter()
-                    .map(|instr| render_instr(renderer, level + 1, ctx, render_tier, instr));
-                Block::seq([block_else, block_bind].into_iter().chain(blocks_rendered))
-            } else {
-                render_instrs(renderer, level + 1, Some(block_else), ctx, render_tier, &case.block)
-            };
-            blocks_case.push(block_case);
-            continue;
-        }
-
-        // Attach fallthrough only where evaluating the condition can fail
-        let can_fail = case.guard.has_call() || (idx == 0 && case_instr.exp.has_call());
-        let prose_label = if can_fail { prose_fallthrough.clone() } else { Prose::Empty };
-        let keyword = if idx == 0 { "If " } else { "Else if " };
-        // Nest the selected case body below its condition
-        let prose_guard = prose_of_guard(&case_instr.exp, &case.guard);
-        let prose_head =
-            Prose::seq([Prose::text(keyword), prose_guard, Prose::text(":"), prose_label]);
-        let block_head = Block::item_ordered(level, prose_head);
-        let block_case =
-            render_instrs(renderer, level + 1, Some(block_head), ctx, render_tier, &case.block);
-        blocks_case.push(block_case);
-    }
-    Block::seq(blocks_case)
-}
-
-// - Group dispatch links
-//
-//   Even/nil   -> goto xref:Even-nil[nil]
-
-fn prose_of_group_dispatch(id_rel: &pl::Id, id_group: &pl::Id) -> Prose {
-    let anchor_group = fallthrough::anchor_of_group(&id_rel.node, &id_group.node);
-    let prose_group = Prose::link(Link::Direct(anchor_group), Prose::text(id_group.node.clone()));
-    Prose::seq([Prose::text("goto "), prose_group])
-}
-
-// - Let instructions
-//
-//   -- if m = $(n + 1)            -> . Let ``m`` be ``n`` ``{plus}`` ``1``.
-//   -- if {LEFT n, RIGHT m} = p   -> . Let ``+{++LEFT+`` ``n,`` ``+RIGHT+`` ``m+}+`` be ``p``.
-
-/// Renders a binding and any instruction iterations around it.
-fn render_let_instr<Tier>(
-    level: usize,
-    ctx: &Context,
-    instr: &pl::Instr<Tier>,
-    let_instr: &pl::LetInstr,
-) -> Block {
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    // Detect outputs that require explicit iteration blocks
-    let has_output = let_instr
-        .iter_instrs
-        .iter()
-        .flat_map(|iter_instr| &iter_instr.vars_bind)
-        .any(|var| !var.id.node.starts_with('_'));
-    // Keep output-free bindings inline with their iterator suffix
-    if !has_output {
-        let code_l = code_of_exp(&let_instr.exp_l);
-        let prose_r = prose_of_exp(&let_instr.exp_r);
-        let prose_suffix = prose_of_iterinstr_suffix(&let_instr.iter_instrs);
-        let prose_head = Prose::seq([
-            Prose::text("Let "),
-            Prose::code(code_l),
-            Prose::text(" be "),
-            prose_r,
-            prose_suffix,
-            Prose::text("."),
-            prose_fallthrough,
-        ]);
-        return Block::item_ordered(level, prose_head);
-    }
-
-    // Nest output-producing bindings under their iteration scopes
-    render_iterinstrs(level, prose_fallthrough, &let_instr.iter_instrs, &|level| {
-        let code_l = code_of_exp(&let_instr.exp_l);
-        let prose_r = prose_of_exp(&let_instr.exp_r);
-        let prose_head = Prose::seq([
-            Prose::text("Let "),
-            Prose::code(code_l),
-            Prose::text(" be "),
-            prose_r,
-            Prose::text("."),
-        ]);
-        Block::item_unordered(level, prose_head)
-    })
-}
-
-// - Rule instructions
-//
-//   -- Double: n_t* ~> m*   -> . Let xref:Double[``n~t~^{asterisk}^`` ``+~>+`` ``m^{asterisk}^``].
-
-/// Renders a relation application and its bound outputs.
-fn render_rule_instr(
-    level: usize,
-    ctx: &Context,
-    instr: &pl::Instr<pl::GroupInstr>,
-    rule_instr: &pl::RuleInstr,
-) -> Block {
-    // Split the notation into input and output expressions
-    let exps = rule_instr.not_exp.args();
-    let (exps_input, exps_output) =
-        input::split(&rule_instr.input_hint, exps).expect("validated rule input hint");
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    // Detect outputs collected by an enclosing iteration
-    let has_output = rule_instr
-        .iter_instrs
-        .iter()
-        .flat_map(|iter_instr| &iter_instr.vars_bind)
-        .any(|var| !var.id.node.starts_with('_'));
-    // Apply paired relation hints when both sides are available
-    let link = Link::Subject(Subject::Relation(rule_instr.id.node.clone()));
-    let prose_rule = if let (Some(hint_input), Some(hint_output)) =
-        (&instr.hints.prose_in, &instr.hints.prose_out)
-    {
-        let prose_output =
-            alternate(hint_output, &unindent_lines, &|&exp| prose_of_exp(exp), &exps_output, false);
-        let text_output = serialize::ser_prose_in_link(&prose_output);
-        let prose_input =
-            alternate(hint_input, &unindent_lines, &|&exp| prose_of_exp(exp), &exps_input, false);
-        Prose::seq([
-            Prose::text("Let "),
-            Prose::text(text_output),
-            Prose::text(" be the result of "),
-            Prose::link(link, prose_input),
-        ])
-    } else {
-        let code_not = code_of_mixfix(&rule_instr.not_exp, &code_of_exp);
-        Prose::seq([Prose::text("Let "), Prose::link(link, Prose::code(code_not))])
-    };
-    // Wrap bindings that produce iterated outputs in open blocks
-    if !has_output {
-        let prose_suffix = prose_of_iterinstr_suffix(&rule_instr.iter_instrs);
-        let prose_head =
-            Prose::seq([prose_rule, prose_suffix, Prose::text("."), prose_fallthrough]);
-        return Block::item_ordered(level, prose_head);
-    }
-
-    render_iterinstrs(level, prose_fallthrough, &rule_instr.iter_instrs, &|level| {
-        let prose_head = Prose::seq([prose_rule.clone(), Prose::text(".")]);
-        Block::item_unordered(level, prose_head)
-    })
-}
-
-// - Results
-//
-//   n* ~> true   -> the result is ``true``.
-//   |- eps       -> then, the relation holds.
-
-/// Describes a relation result according to its output shape and hints.
-fn prose_of_result(hints: &Hints, signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
-    let typs = signature.not_typ.node.args();
-    let is_conditional =
-        input::is_conditional(&signature.input_hint, &typs).expect("validated relation input hint");
-    if is_conditional {
-        Prose::text("then, the relation holds.")
-    } else if let Some(hint) = &hints.prose_out {
-        let prose_output =
-            alternate(hint, &|text_body| reindent_lines(0, text_body), &prose_of_exp, exps, false);
-        Prose::seq([Prose::text("the result is "), prose_output, Prose::text(".")])
-    } else if exps.is_empty() {
-        Prose::text("the relation holds.")
-    } else {
-        let prose_exps = prose_of_exps(exps);
-        Prose::seq([Prose::text("the result is "), prose_exps, Prose::text(".")])
-    }
-}
-
-// - Debug instructions
-//
-//   -- debug n   -> . (debug: ``n``)
-
-fn render_debug_instr<Tier>(
-    level: usize,
-    ctx: &Context,
-    instr: &pl::Instr<Tier>,
-    debug_instr: &pl::DebugInstr,
-) -> Block {
-    let prose_exp = prose_of_exp(&debug_instr.exp);
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    let prose_head =
-        Prose::seq([Prose::text("(debug: "), prose_exp, Prose::text(")"), prose_fallthrough]);
-    Block::item_ordered(level, prose_head)
-}
-
-// - Destruct instructions
-//
-//   one named projection   -> . Let ``expressionIR`` be the expression of ``typedExpressionIR``.
-
-/// Renders named destructuring projections.
-fn render_destruct_instr<Tier>(
-    level: usize,
-    ctx: &Context,
-    instr: &pl::Instr<Tier>,
-    destruct_instr: &pl::DestructInstr,
-) -> Block {
-    // Discard unnamed projections from the prose binding
-    let projections: Vec<(&String, &pl::Exp)> = destruct_instr
-        .bindings
-        .iter()
-        .filter_map(|(name, exp)| name.as_ref().map(|name| (name, exp)))
-        .collect();
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    // Use dedicated singular prose for one named projection
-    if let [(name, exp_target)] = projections.as_slice() {
-        let prose_target = prose_of_exp(exp_target);
-        let prose_source = prose_of_exp(&destruct_instr.exp);
-        let prose_head = Prose::seq([
-            Prose::text("Let "),
-            prose_target,
-            Prose::text(format!(" be the {name} of ")),
-            prose_source,
-            Prose::text("."),
-            prose_fallthrough,
-        ]);
-        return Block::item_ordered(level, prose_head);
-    }
-
-    // Pair multiple targets with their projection names
-    let proses_target = projections
-        .iter()
-        .map(|(_, exp)| prose_of_exp(exp))
-        .collect();
-    let prose_targets = prose_of_list(proses_target);
-    let proses_name = projections
-        .iter()
-        .map(|(name, _)| Prose::text(format!("the {name}")))
-        .collect();
-    let prose_names = prose_of_list(proses_name);
-    let prose_source = prose_of_exp(&destruct_instr.exp);
-    let prose_head = Prose::seq([
-        Prose::text("Let "),
-        prose_targets,
-        Prose::text(" be "),
-        prose_names,
-        Prose::text(" of "),
-        prose_source,
-        Prose::text("."),
-        prose_fallthrough,
-    ]);
-    Block::item_ordered(level, prose_head)
-}
-
-// - Check-let instructions
-//
-//   def $join_text(t_h1 :: t_h2 :: t_t*, t_sep) = ...
-//   -> .. Let!~type~ ``t~h2~`` ``{two-colons}`` ``t~t~^{asterisk}^`` be ``t^{asterisk}^``.+++<sub class="bk-mark">[FAIL]</sub>+++
-
-/// A partial binding and the instructions that continue after it succeeds.
-struct CheckLetBinding<'a, Tier> {
-    exp_l: &'a pl::Exp,
-    exp_r: &'a pl::Exp,
-    block: &'a [pl::Instr<Tier>],
-}
-
-/// Renders a partial subtype or pattern binding.
-fn render_check_let_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-    binding: CheckLetBinding<'_, Tier>,
-) -> Block {
-    let CheckLetBinding { exp_l, exp_r, block } = binding;
-    // Build the partial binding heading with its failure continuation
-    let code_l = code_of_exp(exp_l);
-    let prose_r = prose_of_exp(exp_r);
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    let prose_head = Prose::seq([
-        Prose::text("Let!~type~ "),
-        Prose::code(code_l),
-        Prose::text(" be "),
-        prose_r,
-        Prose::text("."),
-        prose_fallthrough,
-    ]);
-    let block_head = Block::item_ordered(level, prose_head);
-    render_continuation(renderer, level, block_head, ctx, render_tier, block)
-}
-
-fn render_check_let_sub_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-    check_instr: &pl::CheckLetSubInstr<Tier>,
-) -> Block {
-    let pl::CheckLetSubInstr { exp_l, exp_r, block, .. } = check_instr;
-    let binding = CheckLetBinding { exp_l, exp_r, block };
-    render_check_let_instr(renderer, level, ctx, render_tier, instr, binding)
-}
-
-fn render_check_let_match_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-    check_instr: &pl::CheckLetMatchInstr<Tier>,
-) -> Block {
-    let pl::CheckLetMatchInstr { exp_l, exp_r, block, .. } = check_instr;
-    let binding = CheckLetBinding { exp_l, exp_r, block };
-    render_check_let_instr(renderer, level, ctx, render_tier, instr, binding)
-}
-
-// - Option-get instructions
-//
-//   -- if n_result = $modulo(n, 42)
-//   -> . Let ``n~result~`` be xref:option_get[*!*] xref:modulo[``n`` mod ``42``].+++<sub class="bk-mark">[FAIL]</sub>+++
-
-/// Renders a forced option binding.
-fn render_option_get_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-    option_instr: &pl::OptionGetInstr<Tier>,
-) -> Block {
-    // Build the forced binding heading with its failure continuation
-    let code_l = code_of_exp(&option_instr.exp_l);
-    let text_get = adoc_link("option_get", "*!*");
-    let prose_r = prose_of_exp(&option_instr.exp_r);
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    let prose_head = Prose::seq([
-        Prose::text("Let "),
-        Prose::code(code_l),
-        Prose::text(" be "),
-        Prose::text(text_get),
-        Prose::text(" "),
-        prose_r,
-        Prose::text("."),
-        prose_fallthrough,
-    ]);
-    let block_head = Block::item_ordered(level, prose_head);
-    render_continuation(renderer, level, block_head, ctx, render_tier, &option_instr.block)
-}
-
-// - Tier instructions
-//
-//   return n   -> . Return ``n``.
-
-fn render_tier_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-    tier_instr: &pl::TierInstr<Tier>,
-) -> Block {
-    let rendered = render_tier(renderer, level, ctx, false, instr, &tier_instr.tier);
-    compose(None, false, rendered)
-}
-
-// == Relations
-
-// - Synthesized outputs
-//
-//   SL Iter(Id(m), *)   -> PL Iter(Id(m), *) with the same note and span
-
-/// Lifts a synthesized SL output expression into an unhinted PL expression.
-fn lift_synthesized_exp(exp_sl: &sl::ast::Exp) -> pl::Exp {
-    let exp_kind = match &exp_sl.node {
-        sl::ast::ExpKind::Id(id) => ExpKind::Id(id.clone()),
-        sl::ast::ExpKind::Iter(exp_inner_sl, iter_exp) => {
-            let exp_inner = lift_synthesized_exp(exp_inner_sl);
-            ExpKind::Iter(Box::new(exp_inner), iter_exp.clone())
-        }
-        _ => panic!("relation title outputs are synthesized variables"),
-    };
-    crate::annotated_note_phrase! {
-        node: exp_kind,
-        note: exp_sl.note.as_ref().clone(),
-        span: exp_sl.span.clone(),
-    }
-}
-
-// - Relation notation titles
-//
-//   Double: nat* ~> nat*, input %0   -> ``nat^{asterisk}^`` ``+~>+`` ``%``
-
-/// Fills relation inputs and leaves output positions as percent holes.
-fn prose_of_rel_title_math(signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
-    let mixop = signature.not_typ.node.to_mixop();
-    let num_outputs = mixop.arity() - exps.len();
-    let codes_input: Vec<Code> = exps.iter().map(code_of_exp).collect();
-    let codes_output: Vec<Code> = (0..num_outputs).map(|_| Code::token("%")).collect();
-    let codes_args = input::combine(&signature.input_hint, codes_input, codes_output)
-        .expect("validated relation input hint");
-    let not_exp = pl::Mixop::fill(&mixop, codes_args).expect("relation title fills its notation");
-    let code_not = code_of_mixfix(&not_exp, &Clone::clone);
-    Prose::code(code_not)
-}
-
-// - Relation titles
-//
-//   relation Even: |- nat*, hinted prose_true
-//   -> xref:Even[Even]:
-//
-//      * ``nat'^{asterisk}^`` has even length
-//
-//   relation Double: nat* ~> nat*, unhinted
-//   -> xref:Double[Double: ``nat^{asterisk}^`` ``+~>+`` ``%``]
-
-/// Builds a relation title from input, output, truth, or notation prose.
-fn render_rel_title_block(
-    hints: &Hints,
-    id_rel: &pl::Id,
-    signature: &pl::RelSignature,
-    exps: &[pl::Exp],
-) -> Block {
-    // Prefer synthesized inputs when prosification changed title bindings
-    let exps_synthesized = hints
-        .prose_input_exps
-        .as_ref()
-        .map(|exps| exps.iter().map(lift_synthesized_exp).collect::<Vec<_>>());
-    let exps_input = exps_synthesized.as_deref().unwrap_or(exps);
-    // Build the shared linked heading before selecting the title form
-    let link = Link::Subject(Subject::Relation(id_rel.node.clone()));
-    let prose_name = Prose::link(link.clone(), Prose::text(id_rel.node.clone()));
-    let prose_header = Prose::seq([prose_name, Prose::text(":")]);
-    let block_header = Block::concat([Block::inline(prose_header), Block::raw("\n\n")]);
-    // Select paired, input-only, truth, or notation prose
-    match (&hints.prose_in, &hints.prose_out, &hints.prose_output_exps, &hints.prose_true) {
-        // Reject incomplete paired output hints
-        (Some(_), Some(_), None, _) => panic!("prose_out title requires synthesized outputs"),
-        (Some(hint_input), Some(hint_output), Some(exps_output_sl), _) => {
-            // Render paired input and synthesized output prose
-            let exps_output: Vec<pl::Exp> =
-                exps_output_sl.iter().map(lift_synthesized_exp).collect();
-            let prose_input = alternate(
-                hint_input,
-                &|text_body| reindent_lines(1, text_body),
-                &prose_of_exp,
-                exps_input,
-                true,
-            );
-            let prose_output = alternate(
-                hint_output,
-                &|text_body| reindent_lines(1, text_body),
-                &prose_of_exp,
-                &exps_output,
-                false,
-            );
-            let prose_result = Prose::seq([Prose::text("The result is "), prose_output]);
-            Block::concat([
-                block_header,
-                Block::item_unordered(0, prose_input),
-                Block::raw(":\n"),
-                Block::item_unordered(0, prose_result),
-                Block::raw("."),
-            ])
-        }
-        // Render input prose without a synthesized result
-        (Some(hint_input), _, _, _) => {
-            let prose_input = alternate(
-                hint_input,
-                &|text_body| reindent_lines(1, text_body),
-                &prose_of_exp,
-                exps_input,
-                true,
-            );
-            Block::concat([block_header, Block::item_unordered(0, prose_input), Block::raw(".")])
-        }
-        // Render a direct truth description
-        (_, _, _, Some(hint_true)) => {
-            let prose_true = alternate(
-                hint_true,
-                &|text_body| reindent_lines(0, text_body),
-                &prose_of_exp,
-                exps,
-                true,
-            );
-            Block::concat([block_header, Block::item_unordered(0, prose_true)])
-        }
-        // Fall back to the filled relation notation
-        _ => {
-            let prose_math = prose_of_rel_title_math(signature, exps);
-            let prose_title = Prose::seq([Prose::text(format!("{}: ", id_rel.node)), prose_math]);
-            Block::inline(Prose::link(link, prose_title))
-        }
-    }
-}
-
-// == Tier renderers
-
-// - Backtracking arms
-//
-//   def $modulo(n_a, n_b) = $(n_a \ n_b)
-//     -- if n_b =/= 0
-//   def $modulo(n_a, n_b) = eps
-//     -- if n_b = 0
-//   -> . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-1"></span>+++Try:
-//       .. Check that ``n~b~`` is not equal to ``0``.
-//       .. Return ``n~a~`` ``\`` ``n~b~``.
-//      . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-2"></span>+++Then, try:
-//       .. Check that ``n~b~`` is equal to ``0``.
-//       .. Return ``·``.
-
-/// Renders backtracking arms with derived next-arm targets.
-fn render_block_arms<Arm>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    arms: &[Arm],
-    render_arm: &dyn Fn(&mut Renderer<'_>, &Context, &Arm) -> Block,
-) -> Block {
-    // Allocate one shared namespace for every arm target
-    let anchor_block = renderer.anchors.fresh_block(&ctx.namespace);
-    let num_arms = arms.len();
-    let mut blocks_arm = Vec::with_capacity(num_arms);
-    for (idx, arm) in arms.iter().enumerate() {
-        // Point each arm at its successor or the enclosing destination
-        let anchor_next_opt = if idx + 1 < num_arms {
-            Some(fallthrough::anchor_of_arm(&anchor_block, idx + 1))
-        } else {
-            ctx.next.clone()
-        };
-        let ctx_arm = Context { namespace: ctx.namespace.clone(), next: anchor_next_opt };
-        // Anchor the arm before rendering its body with the derived context
-        let anchor_arm = fallthrough::anchor_of_arm(&anchor_block, idx);
-        let text_head = if idx == 0 { "Try:" } else { "Then, try:" };
-        let block_body = render_arm(renderer, &ctx_arm, arm);
-        let block_arm = Block::item(
-            level,
-            ItemKind::Ordered(Some(anchor_arm)),
-            Prose::text(text_head),
-            block_body,
-        );
-        blocks_arm.push(block_arm);
-    }
-    Block::seq(blocks_arm)
-}
-
-// - Group-body tier
-//
-//   return n           -> . Return ``n``.
-//   then n* ~> false   -> the result is ``false``.
-
-/// Renders a group-tier instruction.
-fn render_instr_group(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    singleton: bool,
-    instr: &pl::Instr<pl::GroupInstr>,
-    tier: &pl::GroupInstr,
-) -> Rendered {
-    match tier {
-        pl::GroupInstr::Return(return_instr) => {
-            render_return_instr(level, ctx, singleton, instr, return_instr)
-        }
-        pl::GroupInstr::Result(result_instr) => {
-            render_result_instr(level, ctx, singleton, instr, result_instr)
-        }
-        pl::GroupInstr::Rule(rule_instr) => {
-            Rendered::Nested(render_rule_instr(level, ctx, instr, rule_instr))
-        }
-        pl::GroupInstr::Backtrack(backtrack_instr) => {
-            render_backtrack_instr(renderer, level, ctx, backtrack_instr)
-        }
-    }
-}
-
-// - Return instructions
-//
-//   def $e_bool(n) = true                 -> xref:e_bool[$e_bool(n)]
-//
-//                                             return ``true``.
-//   def $i_if(n, m) = n  -- if $(n < m)   -> . Return ``n``.
-
-fn render_return_instr(
-    level: usize,
-    ctx: &Context,
-    singleton: bool,
-    instr: &pl::Instr<pl::GroupInstr>,
-    return_instr: &pl::ReturnInstr,
-) -> Rendered {
-    let prose_exp = prose_of_exp(&return_instr.exp);
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    // A short lone return folds onto its heading
-    if singleton && prose_exp.width() <= ADOC_WIDTH_SHORT {
-        let prose_tail =
-            Prose::seq([Prose::text(" return "), prose_exp, Prose::text("."), prose_fallthrough]);
-        return Rendered::Inline(prose_tail);
-    }
-
-    let prose_head =
-        Prose::seq([Prose::text("Return "), prose_exp, Prose::text("."), prose_fallthrough]);
-    Rendered::Nested(Block::item_ordered(level, prose_head))
-}
-
-// - Result instructions
-//
-//   rule Even/nil: |- eps
-//   -> xref:Even[``·`` has even length]:
-//       then, the relation holds.
-//
-//   rule Double/cons: n_h :: n_t* ~> n_h :: n_h :: m*
-//   -> . The result is ``n~h~`` ``{two-colons}`` ``n~h~`` ``{two-colons}`` ``m^{asterisk}^``.
-
-fn render_result_instr(
-    level: usize,
-    ctx: &Context,
-    singleton: bool,
-    instr: &pl::Instr<pl::GroupInstr>,
-    result_instr: &pl::ResultInstr,
-) -> Rendered {
-    let prose_result =
-        prose_of_result(&instr.hints, &result_instr.rel_signature, &result_instr.exps_output);
-    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
-    // A short lone result folds onto its heading
-    if singleton && prose_result.width() <= ADOC_WIDTH_SHORT {
-        let prose_tail = Prose::seq([Prose::text(" "), prose_result, prose_fallthrough]);
-        return Rendered::Inline(prose_tail);
-    }
-
-    let prose_head = Prose::seq([prose_result.capitalize_first(), prose_fallthrough]);
-    Rendered::Nested(Block::item_ordered(level, prose_head))
-}
-
-// - Backtrack instructions
-//
-//   two $modulo clauses
-//   -> . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-1"></span>+++Try:
-//       .. ...
-//      . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-2"></span>+++Then, try:
-//       .. ...
-
-fn render_backtrack_instr(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    backtrack_instr: &pl::BacktrackInstr,
-) -> Rendered {
-    let level_body = level + 1;
-    let block_arms = render_block_arms(
-        renderer,
-        level,
-        ctx,
-        &backtrack_instr.blocks,
-        &|renderer, ctx_arm, arm| {
-            let blocks_rendered = arm.iter().map(|instr| {
-                render_instr(renderer, level_body, ctx_arm, render_instr_group, instr)
-            });
-            Block::seq(blocks_rendered)
-        },
-    );
-    Rendered::Nested(block_arms)
-}
-
-// - Dispatch tier
-//
-//   Even dispatch, first group
-//   -> . If ``nat'^{asterisk}^`` matches pattern ``[]``: goto xref:Even-nil[nil]
-//
-//   Sign dispatch, last group
-//   -> . Goto xref:Sign-zero[zero]
-
-/// Renders a dispatch-tier instruction.
-fn render_instr_dispatch(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    singleton: bool,
-    _instr: &pl::Instr<pl::DispatchInstr>,
-    tier: &pl::DispatchInstr,
-) -> Rendered {
-    match tier {
-        pl::DispatchInstr::Group(group_instr) => {
-            render_group_instr_dispatch(level, singleton, group_instr)
-        }
-        pl::DispatchInstr::Route(route_instr) => {
-            render_route_instr(renderer, level, ctx, route_instr)
-        }
-    }
-}
-
-// - Group dispatch instructions
-//
-//   lone Even/nil under a check   -> ... goto xref:Even-nil[nil]
-//   nested Sign/zero              -> . Goto xref:Sign-zero[zero]
-
-fn render_group_instr_dispatch(
-    level: usize,
-    singleton: bool,
-    group_instr: &pl::RuleGroupInstr,
-) -> Rendered {
-    let prose_dispatch = prose_of_group_dispatch(&group_instr.id_rel, &group_instr.id_group);
-    // A lone dispatch folds onto its heading
-    if singleton {
-        return Rendered::InlineGoto(Prose::seq([Prose::text(" "), prose_dispatch]));
-    }
-
-    Rendered::Nested(Block::item_ordered(level, prose_dispatch.capitalize_first()))
-}
-
-// - Route instructions
-//
-//   Parity/even and Parity/odd
-//   -> . +++<span class="bk-arm-anchor" id="bk-Parity-1-arm-1"></span>+++Try:
-//       .. Goto xref:Parity-even[even]
-//      . +++<span class="bk-arm-anchor" id="bk-Parity-1-arm-2"></span>+++Then, try:
-//       .. Goto xref:Parity-odd[odd]
-
-fn render_route_instr(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    route_instr: &pl::RouteInstr,
-) -> Rendered {
-    let level_body = level + 1;
-    let block_arms =
-        render_block_arms(renderer, level, ctx, &route_instr.blocks, &|renderer, ctx_arm, arm| {
-            let blocks_rendered = arm.iter().map(|instr| {
-                render_instr(renderer, level_body, ctx_arm, render_instr_dispatch, instr)
-            });
-            Block::seq(blocks_rendered)
-        });
-    Rendered::Nested(block_arms)
-}
-
-// - Inline dispatch tier
-//
-//   rule Sign/other: i ~> "nonzero"  -- otherwise
-//   -> .. xref:Sign[``i`` ``+~>+`` ``%``]: the result is ``"nonzero"``.
-
-/// Renders an otherwise dispatch group with its body inline.
-fn render_dispatch_inline(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    singleton: bool,
-    instr: &pl::Instr<pl::DispatchInstr>,
-    tier: &pl::DispatchInstr,
-) -> Rendered {
-    match tier {
-        pl::DispatchInstr::Group(group_instr) => {
-            render_group_instr_inline(renderer, level, ctx, instr, group_instr)
-        }
-        pl::DispatchInstr::Route(_) => {
-            render_instr_dispatch(renderer, level, ctx, singleton, instr, tier)
-        }
-    }
-}
-
-// - Inline group instructions
-//
-//   rule Sign/other: i ~> "nonzero"  -- otherwise
-//   -> .. xref:Sign[``i`` ``+~>+`` ``%``]: the result is ``"nonzero"``.
-
-fn render_group_instr_inline(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    instr: &pl::Instr<pl::DispatchInstr>,
-    group_instr: &pl::RuleGroupInstr,
-) -> Rendered {
-    // Select hinted prose or filled relation notation for the title
-    let hint_opt = instr
-        .hints
-        .prose_in
-        .as_ref()
-        .or(instr.hints.prose_true.as_ref());
-    let prose_body = match hint_opt {
-        Some(hint) => alternate(
-            hint,
-            &|text_body| reindent_lines(0, text_body),
-            &prose_of_exp,
-            &group_instr.exps_input,
-            true,
-        ),
-        None => prose_of_rel_title_math(&group_instr.rel_signature, &group_instr.exps_input),
-    };
-    let link = Link::Subject(Subject::Relation(group_instr.id_rel.node.clone()));
-    let prose_title = Prose::link(link, prose_body);
-    // Render the group body below its linked title
-    let block_head = Block::item_ordered(level, Prose::seq([prose_title, Prose::text(":")]));
-    let block_group = render_instrs(
-        renderer,
-        level + 1,
-        Some(block_head),
-        ctx,
-        render_instr_group,
-        &group_instr.block,
-    );
-    Rendered::Nested(block_group)
-}
-
-// == Relation definitions
-
-// - Rule groups
-//
-//   Even dispatch tree   -> [Even/nil, Even/cons], in document order
-
-/// A rule group instruction together with the hints of its dispatch step.
-struct GroupRef<'a> {
-    hints: &'a Hints,
-    group: &'a pl::RuleGroupInstr,
-}
-
-/// Collects rule groups from a dispatch tree in document order.
-fn collect_groups<'a>(block: &'a pl::DispatchBlock, groups: &mut Vec<GroupRef<'a>>) {
-    for instr in block {
-        match &instr.node.node {
-            pl::InstrKind::If(if_instr) => collect_groups(&if_instr.block, groups),
-            pl::InstrKind::Hold(hold_instr) => match &hold_instr.hold_case {
-                pl::HoldCase::Both(block_l, block_r) => {
-                    collect_groups(block_l, groups);
-                    collect_groups(block_r, groups);
-                }
-                pl::HoldCase::Hold(block, _) | pl::HoldCase::NotHold(block, _) => {
-                    collect_groups(block, groups);
-                }
-            },
-            pl::InstrKind::Case(case_instr) => {
-                for case in &case_instr.cases {
-                    collect_groups(&case.block, groups);
-                }
-            }
-            pl::InstrKind::CheckLetSub(check_instr) => collect_groups(&check_instr.block, groups),
-            pl::InstrKind::CheckLetMatch(check_instr) => collect_groups(&check_instr.block, groups),
-            pl::InstrKind::OptionGet(option_instr) => collect_groups(&option_instr.block, groups),
-            pl::InstrKind::Tier(tier_instr) => match &tier_instr.tier {
-                pl::DispatchInstr::Route(route_instr) => {
-                    for arm in &route_instr.blocks {
-                        collect_groups(arm, groups);
-                    }
-                }
-                pl::DispatchInstr::Group(group) => {
-                    groups.push(GroupRef { hints: &instr.hints, group });
-                }
-            },
-            pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_) => {}
-        }
-    }
-}
-
-// - External relation definition
-//
-//   extern relation Oracle: nat ~> nat   -> xref:Oracle[Oracle: ``nat`` ``+~>+`` ``%``]
-
-fn render_extern_rel_def(hints: &Hints, rel: &pl::ExternRel) -> Block {
-    render_rel_title_block(hints, &rel.id, &rel.rel_signature, &rel.exps_input)
-}
-
-// - Defined relation definition
-//
-//   relation Sign: int ~> text
-//   rule Sign/zero: 0 ~> "zero"
-//   rule Sign/other: i ~> "nonzero"
-//     -- otherwise
-//   -> xref:Sign[Sign: ``i`` ``+~>+`` ``%``]
-//
-//      xref:Sign[``0`` ``+~>+`` ``%``]:
-//       the result is ``"zero"``.
-//
-//      . +++<span id="Sign-else"></span>+++Otherwise:
-//       .. xref:Sign[``i`` ``+~>+`` ``%``]: the result is ``"nonzero"``.
-//
-//      Sign dispatch:
-//
-//      . Check that ``i`` is equal to ``0``.
-//      . Goto xref:Sign-zero[zero]
-
-/// Builds a complete relation block with source-compatible counter order.
-fn render_defined_rel_def(
-    renderer: &mut Renderer<'_>,
-    hints: &Hints,
-    rel: &pl::DefinedRel,
-) -> Block {
-    // Reserve an otherwise anchor only for a visible block
-    let has_else = rel
-        .block_else_opt
-        .as_ref()
-        .is_some_and(|block| !block.is_empty());
-    let anchor_else = has_else.then(|| fallthrough::anchor_of_else(&rel.id.node));
-    // Allocate counter-bearing fragments in OCaml right-to-left evaluation order
-    let text_dispatch = renderer.render_defined_rel_def_dispatch(rel);
-    let ctx = Context::new(&rel.id.node);
-    let text_else = render_elseblock(
-        renderer,
-        anchor_else.as_deref(),
-        &ctx,
-        render_dispatch_inline,
-        rel.block_else_opt.as_deref(),
-    );
-    // Extract each rule group from the dispatch tree in document order
-    let mut groups = Vec::new();
-    collect_groups(&rel.block, &mut groups);
-    let mut texts_group = Vec::with_capacity(groups.len());
-    for group_ref in groups {
-        let GroupRef { hints: hints_group, group } = group_ref;
-        let text_group = renderer.render_rulegroup(
-            hints_group,
-            &group.id_rel,
-            &group.rel_signature,
-            &group.exps_input,
-            &group.block,
-        );
-        texts_group.push(text_group);
-    }
-    let text_groups = texts_group.join("\n\n");
-    // Assemble fragments in their displayed order
-    let block_title = render_rel_title_block(hints, &rel.id, &rel.rel_signature, &rel.exps_input);
-    Block::concat([
-        block_title,
-        Block::raw("\n\n"),
-        Block::raw(text_groups),
-        Block::raw(text_else),
-        Block::raw(format!("\n\n{text_dispatch}")),
-    ])
-}
-
-// == Function definitions
-
-// - Function headers
-//
-//   dec $modulo(nat, nat) : nat?, hinted %0 "mod" %1   -> xref:modulo[``n~a~`` mod ``n~b~``]
-//   dec $i_if(nat, nat) : nat, unhinted                -> xref:i_if[$i_if(n, m)]
-
-/// Builds the linked inline header used before a body or table.
-fn render_func_header_block(
-    hints: &Hints,
-    id_func: &pl::Id,
-    tparams: &[pl::TParam],
-    params: &[pl::Param],
-) -> Block {
-    let hint_opt = hints.prose_in.as_ref().or(hints.prose_true.as_ref());
-    // Keep nested links visible to the final serializer
-    let prose_body = match hint_opt {
-        Some(hint) => alternate(
-            hint,
-            &|text_body| reindent_lines(0, text_body),
-            &prose_of_param,
-            params,
-            true,
-        ),
-        // Preserve plain signature text without pre-serializing its code
-        None => {
-            let text_id = string_of_defid(id_func);
-            let text_tparams = if tparams.is_empty() {
-                String::new()
-            } else {
-                let texts_tparam: Vec<String> = tparams.iter().map(Print::to_string).collect();
-                let text_tparams = texts_tparam.join(", ");
-                format!("<{text_tparams}>")
-            };
-            let code_params = code_of_params(params);
-            let code_signature =
-                Code::seq([Code::token(text_id), Code::token(text_tparams), code_params]);
-            Prose::PlainCode(code_signature)
-        }
-    };
-    let link = Link::Subject(Subject::Function(id_func.node.clone()));
-    Block::inline(Prose::link(link, prose_body))
-}
-
-// - External function definition
-//
-//   extern $check(x), hinted "checking" %0   -> xref:check[Checking value ``x``]
-
-fn render_extern_func_def(hints: &Hints, func: &pl::ExternFunc) -> Block {
-    render_func_header_block(hints, &func.id, &func.tparams, &func.params)
-}
-
-// - Builtin function definition
-//
-//   builtin dec $sum_nat(nat*) : nat   -> xref:sum_nat[Sum``+`(+`` ``nat^{asterisk}^`` ``+`)+``]
-
-fn render_builtin_func_def(hints: &Hints, func: &pl::BuiltinFunc) -> Block {
-    render_func_header_block(hints, &func.id, &func.tparams, &func.params)
-}
-
-// - Table function definition
-//
-//   tbl def $is_defaultable_typeIR =
-//     | BOOL => true
-//     | ERROR => true
-//   -> xref:is_defaultable_typeIR[``typeIR''`` can be default-initialized]:
-//      [cols="2", options="header"]
-//      |===
-//      | (``typeIR''``) | Result
-//
-//      | +BOOL+ | true
-//      | +ERROR+ | true
-//      ...
-
-/// Builds a table function with argument and result columns.
-fn render_table_func_def(hints: &Hints, func: &pl::TableFunc) -> Block {
-    // Retain code links until the enclosing document resolves its anchors
-    let rows_table = func
-        .rows
-        .iter()
-        .map(|row| vec![code_of_exps(&row.exps_input, ", "), code_of_exp(&row.exp)])
-        .collect();
-    // Assemble the linked header and table with one result column
-    let block_header = render_func_header_block(hints, &func.id, &[], &func.params);
-    let prose_params = prose_of_params(&func.params);
-    let block_table =
-        Block::Table(Table { header: vec![prose_params, Prose::text("Result")], rows: rows_table });
-    Block::concat([block_header, Block::raw(":\n"), block_table])
-}
-
-// - Defined function definition
-//
-//   def $c_sign(0) = "zero"
-//   def $c_sign(i) = "pos"
-//     -- if $(i > 0)
-//   def $c_sign(i) = "neg"
-//     -- otherwise
-//   -> xref:c_sign[$c_sign(i)]
-//
-//      . +++<span class="bk-arm-anchor" id="bk-c_sign-1-arm-1"></span>+++Try:
-//       .. Check that ``i`` is equal to ``0``.
-//       .. Return ``"zero"``.
-//      . +++<span class="bk-arm-anchor" id="bk-c_sign-1-arm-2"></span>+++Then, try:
-//       .. Check that ``i`` is greater than ``0``.
-//       .. Return ``"pos"``.
-//
-//      . +++<span id="c_sign-else"></span>+++Otherwise: return ``"neg"``.
-
-/// Builds a function body and its optional otherwise clause.
-fn render_defined_func_def(
-    renderer: &mut Renderer<'_>,
-    hints: &Hints,
-    func: &pl::DefinedFunc,
-) -> Block {
-    // Reserve an otherwise anchor only for a visible block
-    let has_else = func
-        .block_else_opt
-        .as_ref()
-        .is_some_and(|block| !block.is_empty());
-    let ctx = Context::new(&func.id.node);
-    // Choose the compact boolean or general body form
-    let block_body;
-    let anchor_else;
-    match func.block.as_slice() {
-        [instr]
-            if let pl::InstrKind::Tier(tier_instr) = &instr.node.node
-                && let pl::GroupInstr::Return(return_instr) = &tier_instr.tier
-                && matches!(return_instr.exp.node.node, ExpKind::Bool(_)) =>
-        {
-            // Render a lone boolean return as inline prose
-            let code_exp = code_of_exp(&return_instr.exp);
-            let prose_tail =
-                Prose::seq([Prose::text(" return "), Prose::code(code_exp), Prose::text(".")]);
-            block_body = Block::inline(prose_tail);
-            anchor_else = None;
-        }
-        _ => {
-            // Render the general instruction sequence with an optional target
-            let blocks_rendered: Vec<Block> = func
-                .block
-                .iter()
-                .map(|instr| render_instr(renderer, 0, &ctx, render_instr_group, instr))
-                .collect();
-            block_body = Block::seq(blocks_rendered);
-            anchor_else = has_else.then(|| fallthrough::anchor_of_else(&func.id.node));
-        }
-    }
-    // Append the otherwise clause after the selected body form
-    let block_header = render_func_header_block(hints, &func.id, &func.tparams, &func.params);
-    let text_else = render_elseblock(
-        renderer,
-        anchor_else.as_deref(),
-        &ctx,
-        render_instr_group,
-        func.block_else_opt.as_deref(),
-    );
-    Block::concat([block_header, Block::raw("\n\n"), block_body, Block::raw(text_else)])
-}
-
 // == Rendering context
 //
 //   two render_rulegroup calls on one Renderer   -> arm anchors bk-Rel-1-arm-1, then bk-Rel-2-arm-1
@@ -2892,10 +1363,1352 @@ pub struct Renderer<'a> {
     anchor: &'a dyn Fn(&Subject) -> Option<String>,
 }
 
+/// A tier instruction ready to fold inline or nest below its enclosing head.
+enum Rendered {
+    /// Appends prose directly to the optional enclosing heading.
+    Inline(Prose),
+    /// Appends a dispatch target and capitalizes the composed heading.
+    InlineGoto(Prose),
+    /// Keeps a block below the heading instead of folding it into prose.
+    Nested(Block),
+}
+
+/// Renders one tier payload while preserving the shared renderer state.
+type RenderTier<'a, Tier> =
+    fn(&mut Renderer<'a>, usize, &Context, bool, &pl::Instr<Tier>, &Tier) -> Rendered;
+
+/// A rule group instruction together with the hints of its dispatch step.
+struct GroupRef<'a> {
+    hints: &'a Hints,
+    group: &'a pl::RuleGroupInstr,
+}
+
 impl<'a> Renderer<'a> {
     /// Starts a document with fresh arm counters and a subject resolver.
     pub fn new(anchor: &'a dyn Fn(&Subject) -> Option<String>) -> Self {
         Self { anchors: Anchors::default(), anchor }
+    }
+
+    // == Instructions
+
+    // - Tier results
+    //
+    //   Inline under ". If ``b`` is equal to ``true``:"
+    //   -> . If ``b`` is equal to ``true``: return ``X~t~``.
+    //
+    //   InlineGoto under ". If ``nat'^{asterisk}^`` matches pattern ``[]``:"
+    //   -> ... matches pattern ``[]``: goto xref:Even-nil[nil]
+    //
+    //   Nested under ". Else:"
+    //   -> . Else:
+    //       .. Let ``t~h~`` ``{two-colons}`` ``t~t~^{asterisk}^`` be ``t^{asterisk}^``.
+
+    /// Composes a tier result with the enclosing instruction head.
+    fn compose(block_head: Option<Block>, singleton: bool, rendered: Rendered) -> Block {
+        match rendered {
+            Rendered::Inline(prose_tail) => {
+                let block_tail = Block::inline(prose_tail);
+                match block_head {
+                    Some(block_head) => Block::concat([block_head, block_tail]),
+                    None => block_tail,
+                }
+            }
+            Rendered::InlineGoto(prose_tail) => {
+                let block_tail = Block::inline(prose_tail);
+                let block = match block_head {
+                    Some(block_head) => Block::concat([block_head, block_tail]),
+                    None => block_tail,
+                };
+                block.capitalize_first()
+            }
+            Rendered::Nested(block) if !singleton => block,
+            Rendered::Nested(block) => match block_head {
+                Some(block_head) => Block::seq([block_head, block]),
+                None => Block::concat([Block::raw("\n"), Block::seq([block])]),
+            },
+        }
+    }
+
+    // - Instruction
+    //
+    //   -- if $(n < m)   -> . Check that ``n`` is less than ``m``.
+    //   -- debug n       -> . (debug: ``n``)
+
+    /// Renders one shared or tier-specific instruction.
+    fn render_instr<Tier>(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        instr: &pl::Instr<Tier>,
+    ) -> Block {
+        match &instr.node.node {
+            pl::InstrKind::If(if_instr) => {
+                self.render_if_instr(level, ctx, render_tier, instr, if_instr)
+            }
+            pl::InstrKind::Hold(hold_instr) => {
+                self.render_hold_instr(level, ctx, render_tier, instr, hold_instr)
+            }
+            pl::InstrKind::Case(case_instr) => {
+                self.render_case_instr(level, ctx, render_tier, instr, case_instr)
+            }
+            pl::InstrKind::Let(let_instr) => Self::render_let_instr(level, ctx, instr, let_instr),
+            pl::InstrKind::Debug(debug_instr) => {
+                Self::render_debug_instr(level, ctx, instr, debug_instr)
+            }
+            pl::InstrKind::Destruct(destruct_instr) => {
+                Self::render_destruct_instr(level, ctx, instr, destruct_instr)
+            }
+            pl::InstrKind::CheckLetSub(check_instr) => {
+                self.render_check_let_sub_instr(level, ctx, render_tier, instr, check_instr)
+            }
+            pl::InstrKind::CheckLetMatch(check_instr) => {
+                self.render_check_let_match_instr(level, ctx, render_tier, instr, check_instr)
+            }
+            pl::InstrKind::OptionGet(option_instr) => {
+                self.render_option_get_instr(level, ctx, render_tier, instr, option_instr)
+            }
+            pl::InstrKind::Tier(tier_instr) => {
+                self.render_tier_instr(level, ctx, render_tier, instr, tier_instr)
+            }
+        }
+    }
+
+    // - Instruction sequences
+    //
+    //   $ite<X>(true, X_t, X_f) = X_t   -> . If ``b`` is equal to ``true``: return ``X~t~``.
+
+    /// Renders instructions under an optional heading.
+    fn render_instrs<Tier>(
+        &mut self,
+        level: usize,
+        block_head: Option<Block>,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        instrs: &[pl::Instr<Tier>],
+    ) -> Block {
+        // Fold a lone tier instruction into the enclosing heading
+        if let [instr] = instrs
+            && let pl::InstrKind::Tier(tier_instr) = &instr.node.node
+        {
+            let rendered = render_tier(self, level, ctx, true, instr, &tier_instr.tier);
+            return Self::compose(block_head, true, rendered);
+        }
+
+        // Render general blocks as a sequence below the optional heading
+        let blocks_rendered: Vec<Block> = instrs
+            .iter()
+            .map(|instr| self.render_instr(level, ctx, render_tier, instr))
+            .collect();
+        match block_head {
+            Some(block_head) => Block::seq(std::iter::once(block_head).chain(blocks_rendered)),
+            None => Block::concat([Block::raw("\n"), Block::seq(blocks_rendered)]),
+        }
+    }
+
+    /// Appends continuation instructions below a check heading at the same level.
+    fn render_continuation<Tier>(
+        &mut self,
+        level: usize,
+        block_head: Block,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        instrs: &[pl::Instr<Tier>],
+    ) -> Block {
+        // Empty continuations leave the heading alone
+        if instrs.is_empty() {
+            return block_head;
+        }
+
+        let blocks_rendered = instrs
+            .iter()
+            .map(|instr| self.render_instr(level, ctx, render_tier, instr));
+        Block::seq(std::iter::once(block_head).chain(blocks_rendered))
+    }
+
+    // - Otherwise blocks
+    //
+    //   def $starts_with(t, t_prefix) = false
+    //     -- otherwise
+    //   -> . +++<span id="starts_with-else"></span>+++Otherwise: return ``false``.
+
+    /// Serializes an otherwise block with its optional anchor.
+    fn render_elseblock<Tier>(
+        &mut self,
+        anchor_else: Option<&str>,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        block_opt: Option<&[pl::Instr<Tier>]>,
+    ) -> String {
+        // Omit absent and empty otherwise blocks
+        let Some(block) = block_opt.filter(|block| !block.is_empty()) else {
+            return String::new();
+        };
+        // Prefix the visible heading with its optional destination anchor
+        let text_anchor = anchor_else
+            .map(|anchor| format!("+++<span id=\"{anchor}\"></span>+++"))
+            .unwrap_or_default();
+        let block_body = self.render_instrs(1, None, ctx, render_tier, block);
+        let text_body = serialize::ser_block(self.anchor, &block_body);
+        format!("\n\n. {text_anchor}Otherwise:{text_body}")
+    }
+
+    // - Iteration suffixes
+    //
+    //   -- if typeIR? matches (_), iterated over typeIR?*
+    //   -> Check that ``typeIR^?^`` is defined, for all ``typeIR^?^`` in ``typeIR^?^^{asterisk}^``.
+
+    fn prose_of_iterexp_suffix(iter_exps: &[pl::ExpIter]) -> Prose {
+        // Collect every expression iterator binding in source order
+        let proses: Vec<Prose> = iter_exps
+            .iter()
+            .flat_map(|iter_exp| {
+                let iter = iter_exp.iter;
+                iter_exp
+                    .vars
+                    .iter()
+                    .map(move |var| prose_of_in_itervar(iter, var))
+            })
+            .collect();
+        // Omit the quantifier when no variables are bound
+        if proses.is_empty() {
+            return Prose::Empty;
+        }
+
+        let prose_vars = prose_of_list(proses);
+        Prose::seq([Prose::text(", for all "), prose_vars])
+    }
+
+    fn prose_of_iterinstr_suffix(iter_instrs: &[pl::InstrIter]) -> Prose {
+        // Collect every instruction iterator binding in source order
+        let proses: Vec<Prose> = iter_instrs
+            .iter()
+            .flat_map(|iter_instr| {
+                let iter = iter_instr.iter;
+                iter_instr
+                    .vars_bound
+                    .iter()
+                    .map(move |var| prose_of_in_itervar(iter, var))
+            })
+            .collect();
+        // Omit the quantifier when no variables are bound
+        if proses.is_empty() {
+            return Prose::Empty;
+        }
+
+        let prose_vars = prose_of_list(proses);
+        Prose::seq([Prose::text(", for each "), prose_vars])
+    }
+
+    // - Iteration blocks
+    //
+    //   -- (if m = $(n + 1))*   -> . For each ``n`` in ``n^{asterisk}^``:
+    //                              +
+    //                              --
+    //                               ** Let ``m`` be ``n`` ``{plus}`` ``1``.
+    //                              --
+    //                              +
+    //                              Let ``m^{asterisk}^`` be the resulting list.
+
+    /// Wraps a body in nested iteration blocks and binds visible outputs.
+    fn render_iterinstrs(
+        level: usize,
+        prose_fallthrough: Prose,
+        iter_instrs: &[pl::InstrIter],
+        render_body: &dyn Fn(usize) -> Block,
+    ) -> Block {
+        Self::render_iterinstr_levels(level, true, &prose_fallthrough, iter_instrs, render_body)
+    }
+
+    /// Opens one iteration block per level, attaching the fallthrough to the outermost one.
+    fn render_iterinstr_levels(
+        level: usize,
+        outermost: bool,
+        prose_fallthrough: &Prose,
+        iter_instrs: &[pl::InstrIter],
+        render_body: &dyn Fn(usize) -> Block,
+    ) -> Block {
+        // Finish recursion at the caller-supplied body
+        let Some((iter_instr, iter_instrs_tail)) = iter_instrs.split_last() else {
+            return render_body(level);
+        };
+        // Keep only outputs that appear in the rendered binding
+        let vars_output: Vec<&pl::Var> = iter_instr
+            .vars_bind
+            .iter()
+            .filter(|var| !var.id.node.starts_with('_'))
+            .collect();
+        // Render inner iteration levels before their enclosing open block
+        let block_inner = Self::render_iterinstr_levels(
+            level + 1,
+            false,
+            prose_fallthrough,
+            iter_instrs_tail,
+            render_body,
+        );
+        let prose_vars_bound = prose_of_in_itervars(iter_instr.iter, &iter_instr.vars_bound);
+        let prose_head = Prose::seq([Prose::text("For each "), prose_vars_bound, Prose::text(":")]);
+        // Bind visible outputs after closing the iteration body
+        let block_body = if vars_output.is_empty() {
+            Block::concat([Block::raw("+\n--\n"), block_inner, Block::raw("\n--\n")])
+        } else {
+            let prose_vars_output = prose_of_out_itervars(iter_instr.iter, &vars_output);
+            let text_noun = string_of_iter(iter_instr.iter);
+            let text_suffix = if vars_output.len() > 1 { "s" } else { "" };
+            let prose_label = if outermost { prose_fallthrough.clone() } else { Prose::Empty };
+            let prose_binding = Prose::seq([
+                Prose::text("Let "),
+                prose_vars_output,
+                Prose::text(format!(" be the resulting {text_noun}{text_suffix}.")),
+                prose_label,
+            ]);
+            Block::concat([
+                Block::raw("+\n--\n"),
+                block_inner,
+                Block::raw("\n--\n+\n"),
+                Block::inline(prose_binding),
+            ])
+        };
+        Block::item(level, ItemKind::Ordered(None), prose_head, block_body)
+    }
+
+    // - If instructions
+    //
+    //   -- if $(n < m)   -> . Check that ``n`` is less than ``m``.
+
+    /// Renders a conditional check and its continuation.
+    fn render_if_instr<Tier>(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        instr: &pl::Instr<Tier>,
+        if_instr: &pl::IfInstr<Tier>,
+    ) -> Block {
+        // Build the check heading with its failure continuation
+        let prose_cond = prose_of_exp(&if_instr.exp);
+        let prose_suffix = Self::prose_of_iterexp_suffix(&if_instr.iter_exps);
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_head = Prose::seq([
+            Prose::text("Check that "),
+            prose_cond,
+            prose_suffix,
+            Prose::text("."),
+            prose_fallthrough,
+        ]);
+        let block_head = Block::item_ordered(level, prose_head);
+        self.render_continuation(level, block_head, ctx, render_tier, &if_instr.block)
+    }
+
+    // - Hold instructions
+    //
+    //   rule Even/cons: |- n_a :: n_b :: n*
+    //     -- Even: |- n*
+    //   -> . If xref:Even[``n^{asterisk}^`` has even length]:+++<sub class="bk-mark">[FAIL]</sub>+++ then, the relation holds.
+
+    /// Builds the heading of a positive or negative relation holding branch.
+    fn render_hold_head<Tier>(
+        level: usize,
+        ctx: &Context,
+        instr: &pl::Instr<Tier>,
+        hold_instr: &pl::HoldInstr<Tier>,
+        hold: bool,
+    ) -> Block {
+        let hint_opt = if hold { &instr.hints.prose_true } else { &instr.hints.prose_false };
+        let link = Link::Subject(Subject::Relation(hold_instr.id.node.clone()));
+        let prose_cond = match hint_opt {
+            // Hinted relations describe the branch condition in prose
+            Some(hint) => {
+                let exps = hold_instr.not_exp.args();
+                let prose_hint = alternate(
+                    hint,
+                    &|text_body| reindent_lines(0, text_body),
+                    &|&exp| prose_of_exp(exp),
+                    &exps,
+                    false,
+                );
+                Prose::link(link, prose_hint)
+            }
+            // Unhinted relations show their notation followed by the verdict
+            None => {
+                let code_not = code_of_mixfix(&hold_instr.not_exp, &code_of_exp);
+                let prose_rel = Prose::link(link, Prose::code(code_not));
+                let text_verdict = if hold { " holds" } else { " does not hold" };
+                Prose::seq([prose_rel, Prose::text(text_verdict)])
+            }
+        };
+        let prose_suffix = Self::prose_of_iterexp_suffix(&hold_instr.iter_exps);
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_head = Prose::seq([
+            Prose::text("If "),
+            prose_cond,
+            prose_suffix,
+            Prose::text(":"),
+            prose_fallthrough,
+        ]);
+        Block::item_ordered(level, prose_head)
+    }
+
+    /// Renders positive, negative, or two-sided relation holding branches.
+    fn render_hold_instr<Tier>(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        instr: &pl::Instr<Tier>,
+        hold_instr: &pl::HoldInstr<Tier>,
+    ) -> Block {
+        // Render the selected one-sided or two-sided branch structure
+        match &hold_instr.hold_case {
+            pl::HoldCase::Hold(block, _) => {
+                let block_head = Self::render_hold_head(level, ctx, instr, hold_instr, true);
+                self.render_instrs(level + 1, Some(block_head), ctx, render_tier, block)
+            }
+            pl::HoldCase::NotHold(block, _) => {
+                let block_head = Self::render_hold_head(level, ctx, instr, hold_instr, false);
+                self.render_instrs(level + 1, Some(block_head), ctx, render_tier, block)
+            }
+            pl::HoldCase::Both(block_hold, block_not_hold) => {
+                let block_head_hold = Self::render_hold_head(level, ctx, instr, hold_instr, true);
+                let block_branch_hold = self.render_instrs(
+                    level + 1,
+                    Some(block_head_hold),
+                    ctx,
+                    render_tier,
+                    block_hold,
+                );
+                let block_head_else = Block::item_ordered(level, Prose::text("Else:"));
+                let block_branch_else = self.render_instrs(
+                    level + 1,
+                    Some(block_head_else),
+                    ctx,
+                    render_tier,
+                    block_not_hold,
+                );
+                Block::seq([block_branch_hold, block_branch_else])
+            }
+        }
+    }
+
+    // - Case instructions
+    //
+    //   def $join_text(eps, t_sep) = ""
+    //   def $join_text([ t_h ], t_sep) = t_h
+    //   -> . If ``t'^{asterisk}^`` matches pattern ``[]``: return ``""``.
+    //      . Else if let ``t~h~`` be ``t'^{asterisk}^``: return ``t~h~``.
+
+    /// Renders a check or an if/else-if/else case ladder.
+    fn render_case_instr<Tier>(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        instr: &pl::Instr<Tier>,
+        case_instr: &pl::CaseInstr<Tier>,
+    ) -> Block {
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        // Render a single arm as a check without an if ladder
+        if let [case] = case_instr.cases.as_slice() {
+            let prose_guard = prose_of_guard(&case_instr.exp, &case.guard);
+            let prose_head = Prose::seq([
+                Prose::text("Check that "),
+                prose_guard,
+                Prose::text("."),
+                prose_fallthrough,
+            ]);
+            let block_head = Block::item_ordered(level, prose_head);
+            return self.render_continuation(level, block_head, ctx, render_tier, &case.block);
+        }
+
+        let num_cases = case_instr.cases.len();
+        let mut blocks_case = Vec::with_capacity(num_cases);
+        for (idx, case) in case_instr.cases.iter().enumerate() {
+            // Turn the final total arm into an otherwise branch
+            if idx + 1 == num_cases && !case_instr.dangle {
+                let block_else = Block::item_ordered(level, Prose::text("Else:"));
+                let is_binding =
+                    matches!(case.guard, pl::Guard::CheckLetSub(..) | pl::Guard::CheckLetMatch(..));
+                let block_case = if is_binding {
+                    // A binding guard becomes the first step of the otherwise branch
+                    let prose_guard =
+                        prose_of_guard(&case_instr.exp, &case.guard).capitalize_first();
+                    let prose_bind = Prose::seq([prose_guard, Prose::text(".")]);
+                    let block_bind = Block::item_ordered(level + 1, prose_bind);
+                    let blocks_rendered = case
+                        .block
+                        .iter()
+                        .map(|instr| self.render_instr(level + 1, ctx, render_tier, instr));
+                    Block::seq([block_else, block_bind].into_iter().chain(blocks_rendered))
+                } else {
+                    self.render_instrs(level + 1, Some(block_else), ctx, render_tier, &case.block)
+                };
+                blocks_case.push(block_case);
+                continue;
+            }
+
+            // Attach fallthrough only where evaluating the condition can fail
+            let can_fail = case.guard.has_call() || (idx == 0 && case_instr.exp.has_call());
+            let prose_label = if can_fail { prose_fallthrough.clone() } else { Prose::Empty };
+            let keyword = if idx == 0 { "If " } else { "Else if " };
+            // Nest the selected case body below its condition
+            let prose_guard = prose_of_guard(&case_instr.exp, &case.guard);
+            let prose_head =
+                Prose::seq([Prose::text(keyword), prose_guard, Prose::text(":"), prose_label]);
+            let block_head = Block::item_ordered(level, prose_head);
+            let block_case =
+                self.render_instrs(level + 1, Some(block_head), ctx, render_tier, &case.block);
+            blocks_case.push(block_case);
+        }
+        Block::seq(blocks_case)
+    }
+
+    // - Group dispatch links
+    //
+    //   Even/nil   -> goto xref:Even-nil[nil]
+
+    fn prose_of_group_dispatch(id_rel: &pl::Id, id_group: &pl::Id) -> Prose {
+        let anchor_group = fallthrough::anchor_of_group(&id_rel.node, &id_group.node);
+        let prose_group =
+            Prose::link(Link::Direct(anchor_group), Prose::text(id_group.node.clone()));
+        Prose::seq([Prose::text("goto "), prose_group])
+    }
+
+    // - Group dispatch instructions
+    //
+    //   lone Even/nil under a check   -> ... goto xref:Even-nil[nil]
+    //   nested Sign/zero              -> . Goto xref:Sign-zero[zero]
+
+    fn render_group_instr_dispatch(
+        level: usize,
+        singleton: bool,
+        group_instr: &pl::RuleGroupInstr,
+    ) -> Rendered {
+        let prose_dispatch =
+            Self::prose_of_group_dispatch(&group_instr.id_rel, &group_instr.id_group);
+        // A lone dispatch folds onto its heading
+        if singleton {
+            return Rendered::InlineGoto(Prose::seq([Prose::text(" "), prose_dispatch]));
+        }
+
+        Rendered::Nested(Block::item_ordered(level, prose_dispatch.capitalize_first()))
+    }
+
+    // - Let instructions
+    //
+    //   -- if m = $(n + 1)            -> . Let ``m`` be ``n`` ``{plus}`` ``1``.
+    //   -- if {LEFT n, RIGHT m} = p   -> . Let ``+{++LEFT+`` ``n,`` ``+RIGHT+`` ``m+}+`` be ``p``.
+
+    /// Renders a binding and any instruction iterations around it.
+    fn render_let_instr<Tier>(
+        level: usize,
+        ctx: &Context,
+        instr: &pl::Instr<Tier>,
+        let_instr: &pl::LetInstr,
+    ) -> Block {
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        // Detect outputs that require explicit iteration blocks
+        let has_output = let_instr
+            .iter_instrs
+            .iter()
+            .flat_map(|iter_instr| &iter_instr.vars_bind)
+            .any(|var| !var.id.node.starts_with('_'));
+        // Keep output-free bindings inline with their iterator suffix
+        if !has_output {
+            let code_l = code_of_exp(&let_instr.exp_l);
+            let prose_r = prose_of_exp(&let_instr.exp_r);
+            let prose_suffix = Self::prose_of_iterinstr_suffix(&let_instr.iter_instrs);
+            let prose_head = Prose::seq([
+                Prose::text("Let "),
+                Prose::code(code_l),
+                Prose::text(" be "),
+                prose_r,
+                prose_suffix,
+                Prose::text("."),
+                prose_fallthrough,
+            ]);
+            return Block::item_ordered(level, prose_head);
+        }
+
+        // Nest output-producing bindings under their iteration scopes
+        Self::render_iterinstrs(level, prose_fallthrough, &let_instr.iter_instrs, &|level| {
+            let code_l = code_of_exp(&let_instr.exp_l);
+            let prose_r = prose_of_exp(&let_instr.exp_r);
+            let prose_head = Prose::seq([
+                Prose::text("Let "),
+                Prose::code(code_l),
+                Prose::text(" be "),
+                prose_r,
+                Prose::text("."),
+            ]);
+            Block::item_unordered(level, prose_head)
+        })
+    }
+
+    // - Rule instructions
+    //
+    //   -- Double: n_t* ~> m*   -> . Let xref:Double[``n~t~^{asterisk}^`` ``+~>+`` ``m^{asterisk}^``].
+
+    /// Renders a relation application and its bound outputs.
+    fn render_rule_instr(
+        level: usize,
+        ctx: &Context,
+        instr: &pl::Instr<pl::GroupInstr>,
+        rule_instr: &pl::RuleInstr,
+    ) -> Block {
+        // Split the notation into input and output expressions
+        let exps = rule_instr.not_exp.args();
+        let (exps_input, exps_output) =
+            input::split(&rule_instr.input_hint, exps).expect("validated rule input hint");
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        // Detect outputs collected by an enclosing iteration
+        let has_output = rule_instr
+            .iter_instrs
+            .iter()
+            .flat_map(|iter_instr| &iter_instr.vars_bind)
+            .any(|var| !var.id.node.starts_with('_'));
+        // Apply paired relation hints when both sides are available
+        let link = Link::Subject(Subject::Relation(rule_instr.id.node.clone()));
+        let prose_rule = if let (Some(hint_input), Some(hint_output)) =
+            (&instr.hints.prose_in, &instr.hints.prose_out)
+        {
+            let prose_output = alternate(
+                hint_output,
+                &unindent_lines,
+                &|&exp| prose_of_exp(exp),
+                &exps_output,
+                false,
+            );
+            let text_output = serialize::ser_prose_in_link(&prose_output);
+            let prose_input = alternate(
+                hint_input,
+                &unindent_lines,
+                &|&exp| prose_of_exp(exp),
+                &exps_input,
+                false,
+            );
+            Prose::seq([
+                Prose::text("Let "),
+                Prose::text(text_output),
+                Prose::text(" be the result of "),
+                Prose::link(link, prose_input),
+            ])
+        } else {
+            let code_not = code_of_mixfix(&rule_instr.not_exp, &code_of_exp);
+            Prose::seq([Prose::text("Let "), Prose::link(link, Prose::code(code_not))])
+        };
+        // Wrap bindings that produce iterated outputs in open blocks
+        if !has_output {
+            let prose_suffix = Self::prose_of_iterinstr_suffix(&rule_instr.iter_instrs);
+            let prose_head =
+                Prose::seq([prose_rule, prose_suffix, Prose::text("."), prose_fallthrough]);
+            return Block::item_ordered(level, prose_head);
+        }
+
+        Self::render_iterinstrs(level, prose_fallthrough, &rule_instr.iter_instrs, &|level| {
+            let prose_head = Prose::seq([prose_rule.clone(), Prose::text(".")]);
+            Block::item_unordered(level, prose_head)
+        })
+    }
+
+    // - Results
+    //
+    //   n* ~> true   -> the result is ``true``.
+    //   |- eps       -> then, the relation holds.
+
+    /// Describes a relation result according to its output shape and hints.
+    fn prose_of_result(hints: &Hints, signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
+        let typs = signature.not_typ.node.args();
+        let is_conditional = input::is_conditional(&signature.input_hint, &typs)
+            .expect("validated relation input hint");
+        if is_conditional {
+            Prose::text("then, the relation holds.")
+        } else if let Some(hint) = &hints.prose_out {
+            let prose_output = alternate(
+                hint,
+                &|text_body| reindent_lines(0, text_body),
+                &prose_of_exp,
+                exps,
+                false,
+            );
+            Prose::seq([Prose::text("the result is "), prose_output, Prose::text(".")])
+        } else if exps.is_empty() {
+            Prose::text("the relation holds.")
+        } else {
+            let prose_exps = prose_of_exps(exps);
+            Prose::seq([Prose::text("the result is "), prose_exps, Prose::text(".")])
+        }
+    }
+
+    // - Result instructions
+    //
+    //   rule Even/nil: |- eps
+    //   -> xref:Even[``·`` has even length]:
+    //       then, the relation holds.
+    //
+    //   rule Double/cons: n_h :: n_t* ~> n_h :: n_h :: m*
+    //   -> . The result is ``n~h~`` ``{two-colons}`` ``n~h~`` ``{two-colons}`` ``m^{asterisk}^``.
+
+    fn render_result_instr(
+        level: usize,
+        ctx: &Context,
+        singleton: bool,
+        instr: &pl::Instr<pl::GroupInstr>,
+        result_instr: &pl::ResultInstr,
+    ) -> Rendered {
+        let prose_result = Self::prose_of_result(
+            &instr.hints,
+            &result_instr.rel_signature,
+            &result_instr.exps_output,
+        );
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        // A short lone result folds onto its heading
+        if singleton && prose_result.width() <= ADOC_WIDTH_SHORT {
+            let prose_tail = Prose::seq([Prose::text(" "), prose_result, prose_fallthrough]);
+            return Rendered::Inline(prose_tail);
+        }
+
+        let prose_head = Prose::seq([prose_result.capitalize_first(), prose_fallthrough]);
+        Rendered::Nested(Block::item_ordered(level, prose_head))
+    }
+
+    // - Return instructions
+    //
+    //   def $e_bool(n) = true                 -> xref:e_bool[$e_bool(n)]
+    //
+    //                                             return ``true``.
+    //   def $i_if(n, m) = n  -- if $(n < m)   -> . Return ``n``.
+
+    fn render_return_instr(
+        level: usize,
+        ctx: &Context,
+        singleton: bool,
+        instr: &pl::Instr<pl::GroupInstr>,
+        return_instr: &pl::ReturnInstr,
+    ) -> Rendered {
+        let prose_exp = prose_of_exp(&return_instr.exp);
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        // A short lone return folds onto its heading
+        if singleton && prose_exp.width() <= ADOC_WIDTH_SHORT {
+            let prose_tail = Prose::seq([
+                Prose::text(" return "),
+                prose_exp,
+                Prose::text("."),
+                prose_fallthrough,
+            ]);
+            return Rendered::Inline(prose_tail);
+        }
+
+        let prose_head =
+            Prose::seq([Prose::text("Return "), prose_exp, Prose::text("."), prose_fallthrough]);
+        Rendered::Nested(Block::item_ordered(level, prose_head))
+    }
+
+    // - Debug instructions
+    //
+    //   -- debug n   -> . (debug: ``n``)
+
+    fn render_debug_instr<Tier>(
+        level: usize,
+        ctx: &Context,
+        instr: &pl::Instr<Tier>,
+        debug_instr: &pl::DebugInstr,
+    ) -> Block {
+        let prose_exp = prose_of_exp(&debug_instr.exp);
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_head =
+            Prose::seq([Prose::text("(debug: "), prose_exp, Prose::text(")"), prose_fallthrough]);
+        Block::item_ordered(level, prose_head)
+    }
+
+    // - Destruct instructions
+    //
+    //   one named projection   -> . Let ``expressionIR`` be the expression of ``typedExpressionIR``.
+
+    /// Renders named destructuring projections.
+    fn render_destruct_instr<Tier>(
+        level: usize,
+        ctx: &Context,
+        instr: &pl::Instr<Tier>,
+        destruct_instr: &pl::DestructInstr,
+    ) -> Block {
+        // Discard unnamed projections from the prose binding
+        let projections: Vec<(&String, &pl::Exp)> = destruct_instr
+            .bindings
+            .iter()
+            .filter_map(|(name, exp)| name.as_ref().map(|name| (name, exp)))
+            .collect();
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        // Use dedicated singular prose for one named projection
+        if let [(name, exp_target)] = projections.as_slice() {
+            let prose_target = prose_of_exp(exp_target);
+            let prose_source = prose_of_exp(&destruct_instr.exp);
+            let prose_head = Prose::seq([
+                Prose::text("Let "),
+                prose_target,
+                Prose::text(format!(" be the {name} of ")),
+                prose_source,
+                Prose::text("."),
+                prose_fallthrough,
+            ]);
+            return Block::item_ordered(level, prose_head);
+        }
+
+        // Pair multiple targets with their projection names
+        let proses_target = projections
+            .iter()
+            .map(|(_, exp)| prose_of_exp(exp))
+            .collect();
+        let prose_targets = prose_of_list(proses_target);
+        let proses_name = projections
+            .iter()
+            .map(|(name, _)| Prose::text(format!("the {name}")))
+            .collect();
+        let prose_names = prose_of_list(proses_name);
+        let prose_source = prose_of_exp(&destruct_instr.exp);
+        let prose_head = Prose::seq([
+            Prose::text("Let "),
+            prose_targets,
+            Prose::text(" be "),
+            prose_names,
+            Prose::text(" of "),
+            prose_source,
+            Prose::text("."),
+            prose_fallthrough,
+        ]);
+        Block::item_ordered(level, prose_head)
+    }
+
+    // - Check-let instructions
+    //
+    //   def $join_text(t_h1 :: t_h2 :: t_t*, t_sep) = ...
+    //   -> .. Let!~type~ ``t~h2~`` ``{two-colons}`` ``t~t~^{asterisk}^`` be ``t^{asterisk}^``.+++<sub class="bk-mark">[FAIL]</sub>+++
+
+    /// Renders a partial subtype binding.
+    fn render_check_let_sub_instr<Tier>(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        instr: &pl::Instr<Tier>,
+        check_instr: &pl::CheckLetSubInstr<Tier>,
+    ) -> Block {
+        let pl::CheckLetSubInstr { exp_l, exp_r, block, .. } = check_instr;
+        // Build the partial binding heading with its failure continuation
+        let code_l = code_of_exp(exp_l);
+        let prose_r = prose_of_exp(exp_r);
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_head = Prose::seq([
+            Prose::text("Let!~type~ "),
+            Prose::code(code_l),
+            Prose::text(" be "),
+            prose_r,
+            Prose::text("."),
+            prose_fallthrough,
+        ]);
+        let block_head = Block::item_ordered(level, prose_head);
+        self.render_continuation(level, block_head, ctx, render_tier, block)
+    }
+
+    /// Renders a partial pattern binding.
+    fn render_check_let_match_instr<Tier>(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        instr: &pl::Instr<Tier>,
+        check_instr: &pl::CheckLetMatchInstr<Tier>,
+    ) -> Block {
+        let pl::CheckLetMatchInstr { exp_l, exp_r, block, .. } = check_instr;
+        // Build the partial binding heading with its failure continuation
+        let code_l = code_of_exp(exp_l);
+        let prose_r = prose_of_exp(exp_r);
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_head = Prose::seq([
+            Prose::text("Let!~type~ "),
+            Prose::code(code_l),
+            Prose::text(" be "),
+            prose_r,
+            Prose::text("."),
+            prose_fallthrough,
+        ]);
+        let block_head = Block::item_ordered(level, prose_head);
+        self.render_continuation(level, block_head, ctx, render_tier, block)
+    }
+
+    // - Option-get instructions
+    //
+    //   -- if n_result = $modulo(n, 42)
+    //   -> . Let ``n~result~`` be xref:option_get[*!*] xref:modulo[``n`` mod ``42``].+++<sub class="bk-mark">[FAIL]</sub>+++
+
+    /// Renders a forced option binding.
+    fn render_option_get_instr<Tier>(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        instr: &pl::Instr<Tier>,
+        option_instr: &pl::OptionGetInstr<Tier>,
+    ) -> Block {
+        // Build the forced binding heading with its failure continuation
+        let code_l = code_of_exp(&option_instr.exp_l);
+        let text_get = adoc_link("option_get", "*!*");
+        let prose_r = prose_of_exp(&option_instr.exp_r);
+        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_head = Prose::seq([
+            Prose::text("Let "),
+            Prose::code(code_l),
+            Prose::text(" be "),
+            Prose::text(text_get),
+            Prose::text(" "),
+            prose_r,
+            Prose::text("."),
+            prose_fallthrough,
+        ]);
+        let block_head = Block::item_ordered(level, prose_head);
+        self.render_continuation(level, block_head, ctx, render_tier, &option_instr.block)
+    }
+
+    // - Tier instructions
+    //
+    //   return n   -> . Return ``n``.
+
+    fn render_tier_instr<Tier>(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        render_tier: RenderTier<'a, Tier>,
+        instr: &pl::Instr<Tier>,
+        tier_instr: &pl::TierInstr<Tier>,
+    ) -> Block {
+        let rendered = render_tier(self, level, ctx, false, instr, &tier_instr.tier);
+        Self::compose(None, false, rendered)
+    }
+
+    // == Relations
+
+    // - Synthesized outputs
+    //
+    //   SL Iter(Id(m), *)   -> PL Iter(Id(m), *) with the same note and span
+
+    /// Lifts a synthesized SL output expression into an unhinted PL expression.
+    fn lift_synthesized_exp(exp_sl: &sl::ast::Exp) -> pl::Exp {
+        let exp_kind = match &exp_sl.node {
+            sl::ast::ExpKind::Id(id) => ExpKind::Id(id.clone()),
+            sl::ast::ExpKind::Iter(exp_inner_sl, iter_exp) => {
+                let exp_inner = Self::lift_synthesized_exp(exp_inner_sl);
+                ExpKind::Iter(Box::new(exp_inner), iter_exp.clone())
+            }
+            _ => panic!("relation title outputs are synthesized variables"),
+        };
+        crate::annotated_note_phrase! {
+            node: exp_kind,
+            note: exp_sl.note.as_ref().clone(),
+            span: exp_sl.span.clone(),
+        }
+    }
+
+    // - Relation notation titles
+    //
+    //   Double: nat* ~> nat*, input %0   -> ``nat^{asterisk}^`` ``+~>+`` ``%``
+
+    /// Fills relation inputs and leaves output positions as percent holes.
+    fn prose_of_rel_title_math(signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
+        let mixop = signature.not_typ.node.to_mixop();
+        let num_outputs = mixop.arity() - exps.len();
+        let codes_input: Vec<Code> = exps.iter().map(code_of_exp).collect();
+        let codes_output: Vec<Code> = (0..num_outputs).map(|_| Code::token("%")).collect();
+        let codes_args = input::combine(&signature.input_hint, codes_input, codes_output)
+            .expect("validated relation input hint");
+        let not_exp =
+            pl::Mixop::fill(&mixop, codes_args).expect("relation title fills its notation");
+        let code_not = code_of_mixfix(&not_exp, &Clone::clone);
+        Prose::code(code_not)
+    }
+
+    // - Relation titles
+    //
+    //   relation Even: |- nat*, hinted prose_true
+    //   -> xref:Even[Even]:
+    //
+    //      * ``nat'^{asterisk}^`` has even length
+    //
+    //   relation Double: nat* ~> nat*, unhinted
+    //   -> xref:Double[Double: ``nat^{asterisk}^`` ``+~>+`` ``%``]
+
+    /// Builds a relation title from input, output, truth, or notation prose.
+    fn render_rel_title_block(
+        hints: &Hints,
+        id_rel: &pl::Id,
+        signature: &pl::RelSignature,
+        exps: &[pl::Exp],
+    ) -> Block {
+        // Prefer synthesized inputs when prosification changed title bindings
+        let exps_synthesized = hints.prose_input_exps.as_ref().map(|exps| {
+            exps.iter()
+                .map(Self::lift_synthesized_exp)
+                .collect::<Vec<_>>()
+        });
+        let exps_input = exps_synthesized.as_deref().unwrap_or(exps);
+        // Build the shared linked heading before selecting the title form
+        let link = Link::Subject(Subject::Relation(id_rel.node.clone()));
+        let prose_name = Prose::link(link.clone(), Prose::text(id_rel.node.clone()));
+        let prose_header = Prose::seq([prose_name, Prose::text(":")]);
+        let block_header = Block::concat([Block::inline(prose_header), Block::raw("\n\n")]);
+        // Select paired, input-only, truth, or notation prose
+        match (&hints.prose_in, &hints.prose_out, &hints.prose_output_exps, &hints.prose_true) {
+            // Reject incomplete paired output hints
+            (Some(_), Some(_), None, _) => panic!("prose_out title requires synthesized outputs"),
+            (Some(hint_input), Some(hint_output), Some(exps_output_sl), _) => {
+                // Render paired input and synthesized output prose
+                let exps_output: Vec<pl::Exp> = exps_output_sl
+                    .iter()
+                    .map(Self::lift_synthesized_exp)
+                    .collect();
+                let prose_input = alternate(
+                    hint_input,
+                    &|text_body| reindent_lines(1, text_body),
+                    &prose_of_exp,
+                    exps_input,
+                    true,
+                );
+                let prose_output = alternate(
+                    hint_output,
+                    &|text_body| reindent_lines(1, text_body),
+                    &prose_of_exp,
+                    &exps_output,
+                    false,
+                );
+                let prose_result = Prose::seq([Prose::text("The result is "), prose_output]);
+                Block::concat([
+                    block_header,
+                    Block::item_unordered(0, prose_input),
+                    Block::raw(":\n"),
+                    Block::item_unordered(0, prose_result),
+                    Block::raw("."),
+                ])
+            }
+            // Render input prose without a synthesized result
+            (Some(hint_input), _, _, _) => {
+                let prose_input = alternate(
+                    hint_input,
+                    &|text_body| reindent_lines(1, text_body),
+                    &prose_of_exp,
+                    exps_input,
+                    true,
+                );
+                Block::concat([
+                    block_header,
+                    Block::item_unordered(0, prose_input),
+                    Block::raw("."),
+                ])
+            }
+            // Render a direct truth description
+            (_, _, _, Some(hint_true)) => {
+                let prose_true = alternate(
+                    hint_true,
+                    &|text_body| reindent_lines(0, text_body),
+                    &prose_of_exp,
+                    exps,
+                    true,
+                );
+                Block::concat([block_header, Block::item_unordered(0, prose_true)])
+            }
+            // Fall back to the filled relation notation
+            _ => {
+                let prose_math = Self::prose_of_rel_title_math(signature, exps);
+                let prose_title =
+                    Prose::seq([Prose::text(format!("{}: ", id_rel.node)), prose_math]);
+                Block::inline(Prose::link(link, prose_title))
+            }
+        }
+    }
+
+    // == External relations
+
+    // - External relation definition
+    //
+    //   extern relation Oracle: nat ~> nat   -> xref:Oracle[Oracle: ``nat`` ``+~>+`` ``%``]
+
+    fn render_extern_rel_def(hints: &Hints, rel: &pl::ExternRel) -> Block {
+        Self::render_rel_title_block(hints, &rel.id, &rel.rel_signature, &rel.exps_input)
+    }
+
+    // == Tier renderers
+
+    // - Backtracking arms
+    //
+    //   def $modulo(n_a, n_b) = $(n_a \ n_b)
+    //     -- if n_b =/= 0
+    //   def $modulo(n_a, n_b) = eps
+    //     -- if n_b = 0
+    //   -> . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-1"></span>+++Try:
+    //       .. Check that ``n~b~`` is not equal to ``0``.
+    //       .. Return ``n~a~`` ``\`` ``n~b~``.
+    //      . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-2"></span>+++Then, try:
+    //       .. Check that ``n~b~`` is equal to ``0``.
+    //       .. Return ``·``.
+
+    /// Renders backtracking arms with derived next-arm targets.
+    fn render_block_arms<Arm>(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        arms: &[Arm],
+        render_arm: &dyn Fn(&mut Renderer<'a>, &Context, &Arm) -> Block,
+    ) -> Block {
+        // Allocate one shared namespace for every arm target
+        let anchor_block = self.anchors.fresh_block(&ctx.namespace);
+        let num_arms = arms.len();
+        let mut blocks_arm = Vec::with_capacity(num_arms);
+        for (idx, arm) in arms.iter().enumerate() {
+            // Point each arm at its successor or the enclosing destination
+            let anchor_next_opt = if idx + 1 < num_arms {
+                Some(fallthrough::anchor_of_arm(&anchor_block, idx + 1))
+            } else {
+                ctx.next.clone()
+            };
+            let ctx_arm = Context { namespace: ctx.namespace.clone(), next: anchor_next_opt };
+            // Anchor the arm before rendering its body with the derived context
+            let anchor_arm = fallthrough::anchor_of_arm(&anchor_block, idx);
+            let text_head = if idx == 0 { "Try:" } else { "Then, try:" };
+            let block_body = render_arm(self, &ctx_arm, arm);
+            let block_arm = Block::item(
+                level,
+                ItemKind::Ordered(Some(anchor_arm)),
+                Prose::text(text_head),
+                block_body,
+            );
+            blocks_arm.push(block_arm);
+        }
+        Block::seq(blocks_arm)
+    }
+
+    // - Group-body tier
+    //
+    //   return n           -> . Return ``n``.
+    //   then n* ~> false   -> the result is ``false``.
+
+    /// Renders a group-tier instruction.
+    fn render_instr_group(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        singleton: bool,
+        instr: &pl::Instr<pl::GroupInstr>,
+        tier: &pl::GroupInstr,
+    ) -> Rendered {
+        match tier {
+            pl::GroupInstr::Return(return_instr) => {
+                Self::render_return_instr(level, ctx, singleton, instr, return_instr)
+            }
+            pl::GroupInstr::Result(result_instr) => {
+                Self::render_result_instr(level, ctx, singleton, instr, result_instr)
+            }
+            pl::GroupInstr::Rule(rule_instr) => {
+                Rendered::Nested(Self::render_rule_instr(level, ctx, instr, rule_instr))
+            }
+            pl::GroupInstr::Backtrack(backtrack_instr) => {
+                self.render_backtrack_instr(level, ctx, backtrack_instr)
+            }
+        }
+    }
+
+    // - Backtrack instructions
+    //
+    //   two $modulo clauses
+    //   -> . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-1"></span>+++Try:
+    //       .. ...
+    //      . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-2"></span>+++Then, try:
+    //       .. ...
+
+    fn render_backtrack_instr(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        backtrack_instr: &pl::BacktrackInstr,
+    ) -> Rendered {
+        let level_body = level + 1;
+        let block_arms = self.render_block_arms(
+            level,
+            ctx,
+            &backtrack_instr.blocks,
+            &|renderer, ctx_arm, arm| {
+                let blocks_rendered = arm.iter().map(|instr| {
+                    renderer.render_instr(level_body, ctx_arm, Self::render_instr_group, instr)
+                });
+                Block::seq(blocks_rendered)
+            },
+        );
+        Rendered::Nested(block_arms)
+    }
+
+    // - Dispatch tier
+    //
+    //   Even dispatch, first group
+    //   -> . If ``nat'^{asterisk}^`` matches pattern ``[]``: goto xref:Even-nil[nil]
+    //
+    //   Sign dispatch, last group
+    //   -> . Goto xref:Sign-zero[zero]
+
+    /// Renders a dispatch-tier instruction.
+    fn render_instr_dispatch(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        singleton: bool,
+        _instr: &pl::Instr<pl::DispatchInstr>,
+        tier: &pl::DispatchInstr,
+    ) -> Rendered {
+        match tier {
+            pl::DispatchInstr::Group(group_instr) => {
+                Self::render_group_instr_dispatch(level, singleton, group_instr)
+            }
+            pl::DispatchInstr::Route(route_instr) => {
+                self.render_route_instr(level, ctx, route_instr)
+            }
+        }
+    }
+
+    // - Route instructions
+    //
+    //   Parity/even and Parity/odd
+    //   -> . +++<span class="bk-arm-anchor" id="bk-Parity-1-arm-1"></span>+++Try:
+    //       .. Goto xref:Parity-even[even]
+    //      . +++<span class="bk-arm-anchor" id="bk-Parity-1-arm-2"></span>+++Then, try:
+    //       .. Goto xref:Parity-odd[odd]
+
+    fn render_route_instr(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        route_instr: &pl::RouteInstr,
+    ) -> Rendered {
+        let level_body = level + 1;
+        let block_arms =
+            self.render_block_arms(level, ctx, &route_instr.blocks, &|renderer, ctx_arm, arm| {
+                let blocks_rendered = arm.iter().map(|instr| {
+                    renderer.render_instr(level_body, ctx_arm, Self::render_instr_dispatch, instr)
+                });
+                Block::seq(blocks_rendered)
+            });
+        Rendered::Nested(block_arms)
+    }
+
+    // - Inline dispatch tier
+    //
+    //   rule Sign/other: i ~> "nonzero"  -- otherwise
+    //   -> .. xref:Sign[``i`` ``+~>+`` ``%``]: the result is ``"nonzero"``.
+
+    /// Renders an otherwise dispatch group with its body inline.
+    fn render_instr_dispatch_inline(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        singleton: bool,
+        instr: &pl::Instr<pl::DispatchInstr>,
+        tier: &pl::DispatchInstr,
+    ) -> Rendered {
+        match tier {
+            pl::DispatchInstr::Group(group_instr) => {
+                self.render_group_instr_inline(level, ctx, instr, group_instr)
+            }
+            pl::DispatchInstr::Route(_) => {
+                self.render_instr_dispatch(level, ctx, singleton, instr, tier)
+            }
+        }
+    }
+
+    // - Inline group instructions
+    //
+    //   rule Sign/other: i ~> "nonzero"  -- otherwise
+    //   -> .. xref:Sign[``i`` ``+~>+`` ``%``]: the result is ``"nonzero"``.
+
+    fn render_group_instr_inline(
+        &mut self,
+        level: usize,
+        ctx: &Context,
+        instr: &pl::Instr<pl::DispatchInstr>,
+        group_instr: &pl::RuleGroupInstr,
+    ) -> Rendered {
+        // Select hinted prose or filled relation notation for the title
+        let hint_opt = instr
+            .hints
+            .prose_in
+            .as_ref()
+            .or(instr.hints.prose_true.as_ref());
+        let prose_body = match hint_opt {
+            Some(hint) => alternate(
+                hint,
+                &|text_body| reindent_lines(0, text_body),
+                &prose_of_exp,
+                &group_instr.exps_input,
+                true,
+            ),
+            None => {
+                Self::prose_of_rel_title_math(&group_instr.rel_signature, &group_instr.exps_input)
+            }
+        };
+        let link = Link::Subject(Subject::Relation(group_instr.id_rel.node.clone()));
+        let prose_title = Prose::link(link, prose_body);
+        // Render the group body below its linked title
+        let block_head = Block::item_ordered(level, Prose::seq([prose_title, Prose::text(":")]));
+        let block_group = self.render_instrs(
+            level + 1,
+            Some(block_head),
+            ctx,
+            Self::render_instr_group,
+            &group_instr.block,
+        );
+        Rendered::Nested(block_group)
+    }
+
+    // == Defined relations
+
+    // - Rule groups
+    //
+    //   Even dispatch tree   -> [Even/nil, Even/cons], in document order
+
+    /// Collects rule groups from a dispatch tree in document order.
+    fn collect_groups<'b>(block: &'b pl::DispatchBlock, groups: &mut Vec<GroupRef<'b>>) {
+        for instr in block {
+            match &instr.node.node {
+                pl::InstrKind::If(if_instr) => Self::collect_groups(&if_instr.block, groups),
+                pl::InstrKind::Hold(hold_instr) => match &hold_instr.hold_case {
+                    pl::HoldCase::Both(block_l, block_r) => {
+                        Self::collect_groups(block_l, groups);
+                        Self::collect_groups(block_r, groups);
+                    }
+                    pl::HoldCase::Hold(block, _) | pl::HoldCase::NotHold(block, _) => {
+                        Self::collect_groups(block, groups);
+                    }
+                },
+                pl::InstrKind::Case(case_instr) => {
+                    for case in &case_instr.cases {
+                        Self::collect_groups(&case.block, groups);
+                    }
+                }
+                pl::InstrKind::CheckLetSub(check_instr) => {
+                    Self::collect_groups(&check_instr.block, groups)
+                }
+                pl::InstrKind::CheckLetMatch(check_instr) => {
+                    Self::collect_groups(&check_instr.block, groups)
+                }
+                pl::InstrKind::OptionGet(option_instr) => {
+                    Self::collect_groups(&option_instr.block, groups)
+                }
+                pl::InstrKind::Tier(tier_instr) => match &tier_instr.tier {
+                    pl::DispatchInstr::Route(route_instr) => {
+                        for arm in &route_instr.blocks {
+                            Self::collect_groups(arm, groups);
+                        }
+                    }
+                    pl::DispatchInstr::Group(group) => {
+                        groups.push(GroupRef { hints: &instr.hints, group });
+                    }
+                },
+                pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_) => {}
+            }
+        }
     }
 
     // - Rule group fragments
@@ -2922,32 +2735,17 @@ impl<'a> Renderer<'a> {
                 exps,
                 true,
             ),
-            None => prose_of_rel_title_math(signature, exps),
+            None => Self::prose_of_rel_title_math(signature, exps),
         };
         let link = Link::Subject(Subject::Relation(id_rel.node.clone()));
         let prose_title = Prose::link(link, prose_body);
         // Render the body with counters shared by the enclosing document
         let ctx = Context::new(&id_rel.node);
-        let block_body = render_instrs(self, 0, None, &ctx, render_instr_group, block);
+        let block_body = self.render_instrs(0, None, &ctx, Self::render_instr_group, block);
         // Serialize the linked title and body as one fragment
         let text_title = serialize::ser_prose(self.anchor, &prose_title);
         let text_body = serialize::ser_block(self.anchor, &block_body);
         format!("{text_title}:\n{text_body}")
-    }
-
-    // - Dispatch fragments
-    //
-    //   relation Sign   -> Sign dispatch:
-    //
-    //                      . Check that ``i`` is equal to ``0``.
-    //                      . Goto xref:Sign-zero[zero]
-
-    /// Renders relation dispatch with counters shared by other fragments.
-    pub fn render_defined_rel_def_dispatch(&mut self, rel: &pl::DefinedRel) -> String {
-        let ctx = Context::new(&rel.id.node);
-        let block_dispatch = render_instrs(self, 0, None, &ctx, render_instr_dispatch, &rel.block);
-        let text_dispatch = serialize::ser_block(self.anchor, &block_dispatch);
-        format!("{} dispatch:\n{text_dispatch}", rel.id.node)
     }
 
     // - Otherwise fragments
@@ -2960,12 +2758,255 @@ impl<'a> Renderer<'a> {
     pub fn render_rulegroup_else(&mut self, id_rel: &pl::Id, block: &pl::DispatchBlock) -> String {
         let ctx = Context::new(&id_rel.node);
         let anchor_else = fallthrough::anchor_of_else(&id_rel.node);
-        let text_else =
-            render_elseblock(self, Some(&anchor_else), &ctx, render_dispatch_inline, Some(block));
+        let text_else = self.render_elseblock(
+            Some(&anchor_else),
+            &ctx,
+            Self::render_instr_dispatch_inline,
+            Some(block),
+        );
         text_else.trim().to_owned()
     }
 
-    // - Definitions
+    // - Dispatch fragments
+    //
+    //   relation Sign   -> Sign dispatch:
+    //
+    //                      . Check that ``i`` is equal to ``0``.
+    //                      . Goto xref:Sign-zero[zero]
+
+    /// Renders relation dispatch with counters shared by other fragments.
+    pub fn render_defined_rel_def_dispatch(&mut self, rel: &pl::DefinedRel) -> String {
+        let ctx = Context::new(&rel.id.node);
+        let block_dispatch =
+            self.render_instrs(0, None, &ctx, Self::render_instr_dispatch, &rel.block);
+        let text_dispatch = serialize::ser_block(self.anchor, &block_dispatch);
+        format!("{} dispatch:\n{text_dispatch}", rel.id.node)
+    }
+
+    // - Defined relation definition
+    //
+    //   relation Sign: int ~> text
+    //   rule Sign/zero: 0 ~> "zero"
+    //   rule Sign/other: i ~> "nonzero"
+    //     -- otherwise
+    //   -> xref:Sign[Sign: ``i`` ``+~>+`` ``%``]
+    //
+    //      xref:Sign[``0`` ``+~>+`` ``%``]:
+    //       the result is ``"zero"``.
+    //
+    //      . +++<span id="Sign-else"></span>+++Otherwise:
+    //       .. xref:Sign[``i`` ``+~>+`` ``%``]: the result is ``"nonzero"``.
+    //
+    //      Sign dispatch:
+    //
+    //      . Check that ``i`` is equal to ``0``.
+    //      . Goto xref:Sign-zero[zero]
+
+    /// Builds a complete relation block with source-compatible counter order.
+    fn render_defined_rel_def(&mut self, hints: &Hints, rel: &pl::DefinedRel) -> Block {
+        // Reserve an otherwise anchor only for a visible block
+        let has_else = rel
+            .block_else_opt
+            .as_ref()
+            .is_some_and(|block| !block.is_empty());
+        let anchor_else = has_else.then(|| fallthrough::anchor_of_else(&rel.id.node));
+        // Allocate counter-bearing fragments in OCaml right-to-left evaluation order
+        let text_dispatch = self.render_defined_rel_def_dispatch(rel);
+        let ctx = Context::new(&rel.id.node);
+        let text_else = self.render_elseblock(
+            anchor_else.as_deref(),
+            &ctx,
+            Self::render_instr_dispatch_inline,
+            rel.block_else_opt.as_deref(),
+        );
+        // Extract each rule group from the dispatch tree in document order
+        let mut groups = Vec::new();
+        Self::collect_groups(&rel.block, &mut groups);
+        let mut texts_group = Vec::with_capacity(groups.len());
+        for group_ref in groups {
+            let GroupRef { hints: hints_group, group } = group_ref;
+            let text_group = self.render_rulegroup(
+                hints_group,
+                &group.id_rel,
+                &group.rel_signature,
+                &group.exps_input,
+                &group.block,
+            );
+            texts_group.push(text_group);
+        }
+        let text_groups = texts_group.join("\n\n");
+        // Assemble fragments in their displayed order
+        let block_title =
+            Self::render_rel_title_block(hints, &rel.id, &rel.rel_signature, &rel.exps_input);
+        Block::concat([
+            block_title,
+            Block::raw("\n\n"),
+            Block::raw(text_groups),
+            Block::raw(text_else),
+            Block::raw(format!("\n\n{text_dispatch}")),
+        ])
+    }
+
+    // == Function definitions
+
+    // - Function headers
+    //
+    //   dec $modulo(nat, nat) : nat?, hinted %0 "mod" %1   -> xref:modulo[``n~a~`` mod ``n~b~``]
+    //   dec $i_if(nat, nat) : nat, unhinted                -> xref:i_if[$i_if(n, m)]
+
+    /// Builds the linked inline header used before a body or table.
+    fn render_func_header_block(
+        hints: &Hints,
+        id_func: &pl::Id,
+        tparams: &[pl::TParam],
+        params: &[pl::Param],
+    ) -> Block {
+        let hint_opt = hints.prose_in.as_ref().or(hints.prose_true.as_ref());
+        // Keep nested links visible to the final serializer
+        let prose_body = match hint_opt {
+            Some(hint) => alternate(
+                hint,
+                &|text_body| reindent_lines(0, text_body),
+                &prose_of_param,
+                params,
+                true,
+            ),
+            // Preserve plain signature text without pre-serializing its code
+            None => {
+                let text_id = string_of_defid(id_func);
+                let text_tparams = if tparams.is_empty() {
+                    String::new()
+                } else {
+                    let texts_tparam: Vec<String> = tparams.iter().map(Print::to_string).collect();
+                    let text_tparams = texts_tparam.join(", ");
+                    format!("<{text_tparams}>")
+                };
+                let code_params = code_of_params(params);
+                let code_signature =
+                    Code::seq([Code::token(text_id), Code::token(text_tparams), code_params]);
+                Prose::PlainCode(code_signature)
+            }
+        };
+        let link = Link::Subject(Subject::Function(id_func.node.clone()));
+        Block::inline(Prose::link(link, prose_body))
+    }
+
+    // - External function definition
+    //
+    //   extern $check(x), hinted "checking" %0   -> xref:check[Checking value ``x``]
+
+    fn render_extern_func_def(hints: &Hints, func: &pl::ExternFunc) -> Block {
+        Self::render_func_header_block(hints, &func.id, &func.tparams, &func.params)
+    }
+
+    // - Builtin function definition
+    //
+    //   builtin dec $sum_nat(nat*) : nat   -> xref:sum_nat[Sum``+`(+`` ``nat^{asterisk}^`` ``+`)+``]
+
+    fn render_builtin_func_def(hints: &Hints, func: &pl::BuiltinFunc) -> Block {
+        Self::render_func_header_block(hints, &func.id, &func.tparams, &func.params)
+    }
+
+    // - Table function definition
+    //
+    //   tbl def $is_defaultable_typeIR =
+    //     | BOOL => true
+    //     | ERROR => true
+    //   -> xref:is_defaultable_typeIR[``typeIR''`` can be default-initialized]:
+    //      [cols="2", options="header"]
+    //      |===
+    //      | (``typeIR''``) | Result
+    //
+    //      | +BOOL+ | true
+    //      | +ERROR+ | true
+    //      ...
+
+    /// Builds a table function with argument and result columns.
+    fn render_table_func_def(hints: &Hints, func: &pl::TableFunc) -> Block {
+        // Retain code links until the enclosing document resolves its anchors
+        let rows_table = func
+            .rows
+            .iter()
+            .map(|row| vec![code_of_exps(&row.exps_input, ", "), code_of_exp(&row.exp)])
+            .collect();
+        // Assemble the linked header and table with one result column
+        let block_header = Self::render_func_header_block(hints, &func.id, &[], &func.params);
+        let prose_params = prose_of_params(&func.params);
+        let block_table = Block::Table(Table {
+            header: vec![prose_params, Prose::text("Result")],
+            rows: rows_table,
+        });
+        Block::concat([block_header, Block::raw(":\n"), block_table])
+    }
+
+    // - Defined function definition
+    //
+    //   def $c_sign(0) = "zero"
+    //   def $c_sign(i) = "pos"
+    //     -- if $(i > 0)
+    //   def $c_sign(i) = "neg"
+    //     -- otherwise
+    //   -> xref:c_sign[$c_sign(i)]
+    //
+    //      . +++<span class="bk-arm-anchor" id="bk-c_sign-1-arm-1"></span>+++Try:
+    //       .. Check that ``i`` is equal to ``0``.
+    //       .. Return ``"zero"``.
+    //      . +++<span class="bk-arm-anchor" id="bk-c_sign-1-arm-2"></span>+++Then, try:
+    //       .. Check that ``i`` is greater than ``0``.
+    //       .. Return ``"pos"``.
+    //
+    //      . +++<span id="c_sign-else"></span>+++Otherwise: return ``"neg"``.
+
+    /// Builds a function body and its optional otherwise clause.
+    fn render_defined_func_def(&mut self, hints: &Hints, func: &pl::DefinedFunc) -> Block {
+        // Reserve an otherwise anchor only for a visible block
+        let has_else = func
+            .block_else_opt
+            .as_ref()
+            .is_some_and(|block| !block.is_empty());
+        let ctx = Context::new(&func.id.node);
+        // Choose the compact boolean or general body form
+        let block_body;
+        let anchor_else;
+        match func.block.as_slice() {
+            [instr]
+                if let pl::InstrKind::Tier(tier_instr) = &instr.node.node
+                    && let pl::GroupInstr::Return(return_instr) = &tier_instr.tier
+                    && matches!(return_instr.exp.node.node, ExpKind::Bool(_)) =>
+            {
+                // Render a lone boolean return as inline prose
+                let code_exp = code_of_exp(&return_instr.exp);
+                let prose_tail =
+                    Prose::seq([Prose::text(" return "), Prose::code(code_exp), Prose::text(".")]);
+                block_body = Block::inline(prose_tail);
+                anchor_else = None;
+            }
+            _ => {
+                // Render the general instruction sequence with an optional target
+                let blocks_rendered: Vec<Block> = func
+                    .block
+                    .iter()
+                    .map(|instr| self.render_instr(0, &ctx, Self::render_instr_group, instr))
+                    .collect();
+                block_body = Block::seq(blocks_rendered);
+                anchor_else = has_else.then(|| fallthrough::anchor_of_else(&func.id.node));
+            }
+        }
+        // Append the otherwise clause after the selected body form
+        let block_header =
+            Self::render_func_header_block(hints, &func.id, &func.tparams, &func.params);
+        let text_else = self.render_elseblock(
+            anchor_else.as_deref(),
+            &ctx,
+            Self::render_instr_group,
+            func.block_else_opt.as_deref(),
+        );
+        Block::concat([block_header, Block::raw("\n\n"), block_body, Block::raw(text_else)])
+    }
+
+    // == Definitions
+
+    // - Definition
     //
     //   syntax rec = {LEFT nat, RIGHT nat}   -> None
     //   extern relation Oracle: nat ~> nat   -> Some("xref:Oracle[Oracle: ``nat`` ``+~>+`` ``%``]")
@@ -2974,21 +3015,23 @@ impl<'a> Renderer<'a> {
     pub fn render_def(&mut self, def: &pl::Def) -> Option<String> {
         let block = match &def.node.node {
             pl::DefKind::Typ(_) | pl::DefKind::Var(_) => return None,
-            pl::DefKind::Rel(pl::RelDef::Extern(rel)) => render_extern_rel_def(&def.hints, rel),
+            pl::DefKind::Rel(pl::RelDef::Extern(rel)) => {
+                Self::render_extern_rel_def(&def.hints, rel)
+            }
             pl::DefKind::Rel(pl::RelDef::Defined(rel)) => {
-                render_defined_rel_def(self, &def.hints, rel)
+                self.render_defined_rel_def(&def.hints, rel)
             }
             pl::DefKind::MetaFunc(pl::MetaFuncDef::Extern(func)) => {
-                render_extern_func_def(&def.hints, func)
+                Self::render_extern_func_def(&def.hints, func)
             }
             pl::DefKind::MetaFunc(pl::MetaFuncDef::Builtin(func)) => {
-                render_builtin_func_def(&def.hints, func)
+                Self::render_builtin_func_def(&def.hints, func)
             }
             pl::DefKind::MetaFunc(pl::MetaFuncDef::Table(func)) => {
-                render_table_func_def(&def.hints, func)
+                Self::render_table_func_def(&def.hints, func)
             }
             pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(func)) => {
-                render_defined_func_def(self, &def.hints, func)
+                self.render_defined_func_def(&def.hints, func)
             }
         };
         Some(serialize::ser_block(self.anchor, &block))
@@ -3006,7 +3049,7 @@ impl<'a> Renderer<'a> {
 //   render_spec([Oracle, Sign])   -> the two definitions joined by a blank line
 
 /// Renders one definition, omitting type and variable declarations.
-pub fn render_def(def: &pl::Def, anchor: &dyn Fn(&Subject) -> Option<String>) -> Option<String> {
+pub fn render_def(anchor: &dyn Fn(&Subject) -> Option<String>, def: &pl::Def) -> Option<String> {
     Renderer::new(anchor).render_def(def)
 }
 

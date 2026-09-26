@@ -114,7 +114,7 @@ fn test_defined_function_renders_prose_body() {
     let def = defined_func("enabled", vec![return_instr(true)]);
 
     assert_eq!(
-        render_def(&def, &subject_name),
+        render_def(&subject_name, &def),
         Some("xref:enabled[$enabled]\n\n return ``true``.".to_owned()),
     );
 }
@@ -151,7 +151,7 @@ fn test_function_hints_substitute_parameters_and_negative_calls() {
     def.hints.prose_in = Some(prose_hint("checking whether", 0, ""));
 
     assert_eq!(
-        render_def(&def, &subject_name).unwrap(),
+        render_def(&subject_name, &def).unwrap(),
         concat!(
             "xref:check[Checking whether ``flag``]",
             "\n\n",
@@ -188,7 +188,7 @@ fn test_relation_math_title_preserves_input_and_output_positions() {
     };
 
     assert_eq!(
-        render_def(&def, &subject_name).unwrap(),
+        render_def(&subject_name, &def).unwrap(),
         "xref:Check[Check: ``input`` ``+:+`` ``%``]"
     );
 }
@@ -209,7 +209,7 @@ fn test_destruct_field_names_render_in_source_order() {
     };
     let def = defined_func("fields", vec![destruct, return_instr(true)]);
 
-    assert!(render_def(&def, &subject_name).unwrap().contains(
+    assert!(render_def(&subject_name, &def).unwrap().contains(
         ". Let ``k`` and ``v`` be the key and the value of ``entry``.+++<sub class=\"bk-mark\">[FAIL]</sub>+++"
     ));
 }
@@ -225,7 +225,7 @@ fn test_nested_backtracking_uses_local_arm_labels_and_fresh_block_counters() {
         vec![return_instr(true)],
     ]);
     let def = defined_func("choice", vec![outer]);
-    let rendered = render_def(&def, &subject_name).unwrap();
+    let rendered = render_def(&subject_name, &def).unwrap();
 
     assert!(rendered.contains("id=\"bk-choice-1-arm-1\""));
     assert!(rendered.contains("id=\"bk-choice-2-arm-1\""));
@@ -242,7 +242,7 @@ fn test_custom_function_anchor_is_used_by_fragment_api() {
     };
 
     assert!(
-        render_def(&def, &anchor)
+        render_def(&anchor, &def)
             .unwrap()
             .starts_with("xref:function-enabled[$enabled]")
     );
@@ -278,7 +278,7 @@ fn test_numeric_addition_uses_the_adoc_plus_attribute() {
     let def = defined_func("add", vec![return_exp_instr(exp_add, None)]);
 
     assert!(
-        render_def(&def, &subject_name)
+        render_def(&subject_name, &def)
             .unwrap()
             .contains("``1`` ``{plus}`` ``2``")
     );
@@ -293,7 +293,7 @@ fn test_otherwise_anchor_follows_the_ordered_list_marker_space() {
     func.block_else_opt = Some(vec![return_instr(false)]);
 
     assert!(
-        render_def(&def, &subject_name)
+        render_def(&subject_name, &def)
             .unwrap()
             .contains("\n\n. +++<span id=\"fallback-else\"></span>+++Otherwise:")
     );
@@ -344,7 +344,7 @@ fn test_relation_dispatch_allocates_block_anchor_before_group_bodies() {
         },
         hints: Hints::default(),
     };
-    let rendered = render_def(&def, &subject_name).unwrap();
+    let rendered = render_def(&subject_name, &def).unwrap();
 
     assert!(rendered.contains("id=\"bk-Rel-2-arm-1\""), "{rendered}");
     assert!(rendered.contains("id=\"bk-Rel-1-arm-1\""), "{rendered}");
@@ -384,7 +384,7 @@ fn meta_func_def(hints: Hints, func: pl::MetaFuncDef) -> pl::Def {
 #[test]
 fn test_table_argument_tuple_always_occupies_one_column() {
     let def = meta_func_def(Hints::default(), pl::MetaFuncDef::Table(table_func()));
-    let text = render_def(&def, &subject_name).unwrap();
+    let text = render_def(&subject_name, &def).unwrap();
     assert_eq!(
         text,
         concat!(
@@ -408,9 +408,9 @@ fn test_table_cells_use_the_enclosing_anchor_resolver() {
         Subject::Function(id) | Subject::Relation(id) => Some(format!("custom-{id}")),
     };
     let def = meta_func_def(Hints::default(), pl::MetaFuncDef::Table(func));
-    let text = render_def(&def, &anchor).unwrap();
+    let text = render_def(&anchor, &def).unwrap();
     assert!(text.contains("| false, true | xref:custom-inner[$inner]"), "{text}");
-    let text = render_def(&def, &|_| None).unwrap();
+    let text = render_def(&|_| None, &def).unwrap();
     assert!(text.contains("| false, true | $inner"), "{text}");
     assert!(!text.contains("xref:"), "{text}");
 }
@@ -435,7 +435,7 @@ fn test_function_header_suppresses_nested_pattern_links() {
         typ: typ::make::bool(),
     };
     let def = meta_func_def(hints, pl::MetaFuncDef::Extern(func));
-    let text = render_def(&def, &subject_name).unwrap();
+    let text = render_def(&subject_name, &def).unwrap();
     assert_eq!(text, "xref:check[Checking value ``x``]");
 }
 
@@ -506,7 +506,7 @@ fn test_membership_guard_with_call_carries_the_fallthrough_label() {
         span: Span::default(),
     };
     let def = defined_func("f", vec![case_instr]);
-    let text = render_def(&def, &subject_name).unwrap();
+    let text = render_def(&subject_name, &def).unwrap();
     assert_eq!(
         text,
         concat!(
