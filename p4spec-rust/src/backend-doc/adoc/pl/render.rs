@@ -12,24 +12,27 @@
 //! -> xref:Oracle[Oracle: ``nat`` ``+~>+`` ``%``]
 //! ```
 
-use crate::lang::{
-    common::{
-        Iter,
-        notation::{atom::Atom, mixfix::Mixfix},
-        prim::{
-            bool::{BinOp as BoolBinOp, CmpOp as BoolCmpOp, UnOp as BoolUnOp},
-            num::CmpOp as NumCmpOp,
+use crate::{
+    lang::{
+        common::{
+            Iter,
+            notation::{atom::Atom, mixfix::Mixfix},
+            prim::{
+                bool::{BinOp as BoolBinOp, CmpOp as BoolCmpOp, UnOp as BoolUnOp},
+                num::CmpOp as NumCmpOp,
+            },
         },
+        el,
+        hints::{alter, input},
+        il::ast::{ListPattern, OptPattern, Pattern},
+        pl::{
+            annot::Hints,
+            ast::{self as pl, ExpKind},
+        },
+        sl,
+        traits::{has_call::HasCall, print::Print},
     },
-    el,
-    hints::{alter, input},
-    il::ast::{ListPattern, OptPattern, Pattern},
-    pl::{
-        annot::Hints,
-        ast::{self as pl, ExpKind},
-    },
-    sl,
-    traits::{has_call::HasCall, print::Print},
+    util::text::escape_text,
 };
 
 use super::{
@@ -158,27 +161,6 @@ fn code_of_mixfix<T>(mixfix: &Mixfix<T>, render_arg: &dyn Fn(&T) -> Code) -> Cod
             Code::join(" ", codes)
         }
     }
-}
-
-// == Texts
-//
-//   a"b<newline>café   -> a\"b\ncaf\195\169
-
-/// Escapes a text literal with the language printer's byte rules.
-fn escape_text(text_value: &str) -> String {
-    text_value
-        .bytes()
-        .map(|byte| match byte {
-            b'"' => "\\\"".to_owned(),
-            b'\\' => "\\\\".to_owned(),
-            8 => "\\b".to_owned(),
-            9 => "\\t".to_owned(),
-            10 => "\\n".to_owned(),
-            13 => "\\r".to_owned(),
-            32..=126 => char::from(byte).to_string(),
-            _ => format!("\\{byte:03}"),
-        })
-        .collect()
 }
 
 // == Identifiers

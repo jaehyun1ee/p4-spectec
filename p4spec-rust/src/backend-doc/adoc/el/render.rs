@@ -9,10 +9,13 @@
 //!                                          ;
 //! ```
 
-use crate::lang::{
-    common::{Iter, notation::atom::Atom as AtomKind, prim::num},
-    el::ast::*,
-    traits::print::Print,
+use crate::{
+    lang::{
+        common::{Iter, notation::atom::Atom as AtomKind, prim::num},
+        el::ast::*,
+        traits::print::Print,
+    },
+    util::text::escape_text,
 };
 
 use super::doc::Doc;
@@ -477,28 +480,6 @@ fn doc_of_variant_typ(atom_mode: AtomMode, typ_cases: &[TypCase]) -> Doc {
     Doc::nest(4, Doc::concat(docs))
 }
 
-// == Text escaping
-//
-//   a"b           -> a\"b
-//   a<newline>b   -> a\nb
-//   é             -> \195\169
-
-fn escaped(text_value: &str) -> String {
-    text_value
-        .bytes()
-        .map(|byte| match byte {
-            b'"' => "\\\"".to_owned(),
-            b'\\' => "\\\\".to_owned(),
-            8 => "\\b".to_owned(),
-            9 => "\\t".to_owned(),
-            10 => "\\n".to_owned(),
-            13 => "\\r".to_owned(),
-            32..=126 => char::from(byte).to_string(),
-            _ => format!("\\{byte:03}"),
-        })
-        .collect()
-}
-
 // == Expressions
 
 // - Expression
@@ -579,7 +560,7 @@ fn doc_of_num_exp(op: NumOp, num: &Num) -> Doc {
 //   "a\nb"   -> "a\nb"
 
 fn doc_of_text_exp(text_value: &str) -> Doc {
-    let text_escaped = escaped(text_value);
+    let text_escaped = escape_text(text_value);
     Doc::text(format!("\"{text_escaped}\""))
 }
 
@@ -893,7 +874,7 @@ fn doc_of_unparen_exp(atom_mode: AtomMode, exp_inner: &Exp) -> Doc {
 //   Latex("a\nb")   -> latex("a\nb")
 
 fn doc_of_latex_exp(text_value: &str) -> Doc {
-    let text_escaped = escaped(text_value);
+    let text_escaped = escape_text(text_value);
     Doc::text(format!("latex(\"{text_escaped}\")"))
 }
 
