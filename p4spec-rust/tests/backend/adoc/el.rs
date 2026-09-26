@@ -92,3 +92,38 @@ fn test_text_literals_use_ocaml_compatible_escaping() {
         "def $literal() = \"quote \\\" slash \\\\ tab \\t newline \\n snowman \\226\\152\\131\"",
     );
 }
+
+#[test]
+fn test_wide_list_renders_and_drops_on_a_small_stack() {
+    std::thread::Builder::new()
+        .stack_size(2 * 1024 * 1024)
+        .spawn(|| {
+            let exp = p4spec_rust::phrase! {
+                node: ExpKind::List((0..10_000).map(|_| p4spec_rust::phrase! {
+                    node: ExpKind::Bool(true),
+                    span: Span::default(),
+                }).collect()),
+                span: Span::default(),
+            };
+            let def = p4spec_rust::phrase! {
+                node: DefKind::FuncDef(ast::FuncDef {
+                    id: p4spec_rust::phrase! {
+                        node: "wide".to_owned(),
+                        span: Span::default(),
+                    },
+                    tparams: vec![],
+                    args: vec![],
+                    exp,
+                    prems: vec![],
+                }),
+                span: Span::default(),
+            };
+            let text = render_def(&def);
+            assert!(text.starts_with("def $wide()"));
+            assert_eq!(text.matches("true").count(), 10_000);
+            assert!(text.ends_with(']'));
+        })
+        .unwrap()
+        .join()
+        .unwrap();
+}

@@ -11,7 +11,7 @@ fn code_links_merge_adjacent_tokens_and_drop_nested_targets() {
             Code::Link(Link::Direct("inner".into()), Box::new(Code::Token("b".into()))),
         ])),
     );
-    assert_eq!(doc::ser_prose(&Prose::Code(code)), "xref:outer[``a`` ``b``]");
+    assert_eq!(doc::ser_prose(&Prose::Code(code), &doc::subject_name), "xref:outer[``a`` ``b``]");
 }
 
 #[test]
@@ -20,7 +20,7 @@ fn unresolved_subject_keeps_body_without_cross_reference() {
         Link::Subject(Subject::Function("f".into())),
         Box::new(Prose::Text("call".into())),
     );
-    assert_eq!(doc::ser_prose_with_anchor(&prose, &|_| None), "call");
+    assert_eq!(doc::ser_prose(&prose, &|_| None), "call");
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn fallthrough_labels_follow_nested_ordered_list_markers() {
             },
         ])),
     }]);
-    let text = doc::ser_block(&block);
+    let text = doc::ser_block(&block, &doc::subject_name);
     assert!(text.contains("[<a href=\"#two\">→ b</a>]"), "{text}");
     assert!(
         text.contains(" .. +++<span class=\"bk-arm-anchor\" id=\"two\"></span>+++Done"),
@@ -55,18 +55,18 @@ fn fallthrough_labels_follow_nested_ordered_list_markers() {
 #[test]
 fn capitalization_stops_at_code_and_reaches_text_after_empty_nodes() {
     let prose = Prose::Seq(vec![Prose::Empty, Prose::Text("hello".into())]);
-    assert_eq!(doc::ser_prose(&doc::capitalize_first_prose(prose)), "Hello");
+    assert_eq!(doc::ser_prose(&prose.capitalize_first(), &doc::subject_name), "Hello");
     let prose =
         Prose::Seq(vec![Prose::Code(Code::Token("x".into())), Prose::Text(" stays".into())]);
-    assert_eq!(doc::ser_prose(&doc::capitalize_first_prose(prose)), "``x`` stays");
+    assert_eq!(doc::ser_prose(&prose.capitalize_first(), &doc::subject_name), "``x`` stays");
 }
 
 #[test]
 fn link_delimiters_and_quoted_code_preserve_literal_content() {
     let prose = Prose::Link(Link::Direct("target".into()), Box::new(Prose::Text("a[b]".into())));
-    assert_eq!(doc::ser_prose(&prose), "<<target,a[b]>>");
+    assert_eq!(doc::ser_prose(&prose, &doc::subject_name), "<<target,a[b]>>");
     let prose = Prose::Code(Code::Token("\"a\" \"b\"".into()));
-    assert_eq!(doc::ser_prose(&prose), "``{quot}a{quot}`` ``{quot}b{quot}``");
+    assert_eq!(doc::ser_prose(&prose, &doc::subject_name), "``{quot}a{quot}`` ``{quot}b{quot}``");
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn table_serialization_keeps_header_and_cell_boundaries() {
         rows: vec![vec![Code::Token("a".into()), Code::Token("b".into())]],
     };
     assert_eq!(
-        doc::ser_block(&block),
+        doc::ser_block(&block, &doc::subject_name),
         "[cols=\"2\", options=\"header\"]\n|===\n| Input | Output \n\n| a | b\n\n|==="
     );
 }

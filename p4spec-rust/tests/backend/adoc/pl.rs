@@ -1,6 +1,8 @@
 use p4spec_rust::{
     backend::adoc::pl::{
-        self as adoc, doc::Subject, render_def, render_def_with_anchor, render_spec,
+        self as adoc,
+        doc::{Subject, subject_name},
+        render_def, render_spec,
     },
     lang::{
         common::{
@@ -111,7 +113,10 @@ fn backtrack_instr(blocks: Vec<pl::GroupBlock>) -> pl::Instr<pl::GroupInstr> {
 fn test_defined_function_renders_prose_body() {
     let def = defined_func("enabled", vec![return_instr(true)]);
 
-    assert_eq!(render_def(&def), Some("xref:enabled[$enabled]\n\n return ``true``.".to_owned()),);
+    assert_eq!(
+        render_def(&def, &subject_name),
+        Some("xref:enabled[$enabled]\n\n return ``true``.".to_owned()),
+    );
 }
 
 #[test]
@@ -146,7 +151,7 @@ fn test_function_hints_substitute_parameters_and_negative_calls() {
     def.hints.prose_in = Some(prose_hint("checking whether", 0, ""));
 
     assert_eq!(
-        render_def(&def).unwrap(),
+        render_def(&def, &subject_name).unwrap(),
         concat!(
             "xref:check[Checking whether ``flag``]",
             "\n\n",
@@ -182,7 +187,10 @@ fn test_relation_math_title_preserves_input_and_output_positions() {
         hints: Hints::default(),
     };
 
-    assert_eq!(render_def(&def).unwrap(), "xref:Check[Check: ``input`` ``+:+`` ``%``]");
+    assert_eq!(
+        render_def(&def, &subject_name).unwrap(),
+        "xref:Check[Check: ``input`` ``+:+`` ``%``]"
+    );
 }
 
 #[test]
@@ -201,7 +209,7 @@ fn test_destruct_field_names_render_in_source_order() {
     };
     let def = defined_func("fields", vec![destruct, return_instr(true)]);
 
-    assert!(render_def(&def).unwrap().contains(
+    assert!(render_def(&def, &subject_name).unwrap().contains(
         ". Let ``k`` and ``v`` be the key and the value of ``entry``.+++<sub class=\"bk-mark\">[FAIL]</sub>+++"
     ));
 }
@@ -217,7 +225,7 @@ fn test_nested_backtracking_uses_local_arm_labels_and_fresh_block_counters() {
         vec![return_instr(true)],
     ]);
     let def = defined_func("choice", vec![outer]);
-    let rendered = render_def(&def).unwrap();
+    let rendered = render_def(&def, &subject_name).unwrap();
 
     assert!(rendered.contains("id=\"bk-choice-1-arm-1\""));
     assert!(rendered.contains("id=\"bk-choice-2-arm-1\""));
@@ -234,7 +242,7 @@ fn test_custom_function_anchor_is_used_by_fragment_api() {
     };
 
     assert!(
-        render_def_with_anchor(&def, &anchor)
+        render_def(&def, &anchor)
             .unwrap()
             .starts_with("xref:function-enabled[$enabled]")
     );
@@ -269,7 +277,11 @@ fn test_numeric_addition_uses_the_adoc_plus_attribute() {
     };
     let def = defined_func("add", vec![return_exp_instr(exp_add, None)]);
 
-    assert!(render_def(&def).unwrap().contains("``1`` ``{plus}`` ``2``"));
+    assert!(
+        render_def(&def, &subject_name)
+            .unwrap()
+            .contains("``1`` ``{plus}`` ``2``")
+    );
 }
 
 #[test]
@@ -281,7 +293,7 @@ fn test_otherwise_anchor_follows_the_ordered_list_marker_space() {
     func.block_else_opt = Some(vec![return_instr(false)]);
 
     assert!(
-        render_def(&def)
+        render_def(&def, &subject_name)
             .unwrap()
             .contains("\n\n. +++<span id=\"fallback-else\"></span>+++Otherwise:")
     );
@@ -332,7 +344,7 @@ fn test_relation_dispatch_allocates_block_anchor_before_group_bodies() {
         },
         hints: Hints::default(),
     };
-    let rendered = render_def(&def).unwrap();
+    let rendered = render_def(&def, &subject_name).unwrap();
 
     assert!(rendered.contains("id=\"bk-Rel-2-arm-1\""), "{rendered}");
     assert!(rendered.contains("id=\"bk-Rel-1-arm-1\""), "{rendered}");
@@ -359,10 +371,20 @@ fn table_func() -> pl::TableFunc {
     }
 }
 
+fn meta_func_def(hints: Hints, func: pl::MetaFuncDef) -> pl::Def {
+    p4spec_rust::annotated! {
+        node: p4spec_rust::phrase! {
+            node: pl::DefKind::MetaFunc(func),
+            span: Span::default(),
+        },
+        hints: hints,
+    }
+}
+
 #[test]
 fn test_table_argument_tuple_always_occupies_one_column() {
-    let func = table_func();
-    let text = adoc::render_table_func_def(&Hints::default(), &func);
+    let def = meta_func_def(Hints::default(), pl::MetaFuncDef::Table(table_func()));
+    let text = render_def(&def, &subject_name).unwrap();
     assert_eq!(
         text,
         concat!(
@@ -385,9 +407,10 @@ fn test_table_cells_use_the_enclosing_anchor_resolver() {
     let anchor = |subject: &Subject| match subject {
         Subject::Function(id) | Subject::Relation(id) => Some(format!("custom-{id}")),
     };
-    let text = adoc::render_table_func_def_with_anchor(&Hints::default(), &func, &anchor);
+    let def = meta_func_def(Hints::default(), pl::MetaFuncDef::Table(func));
+    let text = render_def(&def, &anchor).unwrap();
     assert!(text.contains("| false, true | xref:custom-inner[$inner]"), "{text}");
-    let text = adoc::render_table_func_def_with_anchor(&Hints::default(), &func, &|_| None);
+    let text = render_def(&def, &|_| None).unwrap();
     assert!(text.contains("| false, true | $inner"), "{text}");
     assert!(!text.contains("xref:"), "{text}");
 }
@@ -405,7 +428,14 @@ fn test_function_header_suppresses_nested_pattern_links() {
         span: Span::default(),
     };
     let hints = Hints { prose_in: Some(prose_hint("checking", 0, "")), ..Hints::default() };
-    let text = adoc::render_func_header(&hints, &id("check"), &[], &[param]);
+    let func = pl::ExternFunc {
+        id: id("check"),
+        tparams: vec![],
+        params: vec![param],
+        typ: typ::make::bool(),
+    };
+    let def = meta_func_def(hints, pl::MetaFuncDef::Extern(func));
+    let text = render_def(&def, &subject_name).unwrap();
     assert_eq!(text, "xref:check[Checking value ``x``]");
 }
 
@@ -422,7 +452,7 @@ fn test_rulegroup_fragments_keep_distinct_arm_anchors() {
         vec![return_exp_instr(exp_bool(false), Some(pl::Fallthrough::Next))],
         vec![return_instr(true)],
     ])];
-    let mut renderer = adoc::Renderer::new(&adoc::doc::subject_name);
+    let mut renderer = adoc::Renderer::new(&subject_name);
     let text_a = renderer.render_rulegroup(
         &Hints::default(),
         &id("Rel"),
@@ -440,7 +470,7 @@ fn test_rulegroup_fragments_keep_distinct_arm_anchors() {
     assert!(text_a.contains("id=\"bk-Rel-1-arm-1\""), "{text_a}");
     assert!(text_b.contains("id=\"bk-Rel-2-arm-1\""), "{text_b}");
     assert!(text_b.contains("href=\"#bk-Rel-2-arm-2\">→ 2</a>"), "{text_b}");
-    let text_fresh = adoc::Renderer::new(&adoc::doc::subject_name).render_rulegroup(
+    let text_fresh = adoc::Renderer::new(&subject_name).render_rulegroup(
         &Hints::default(),
         &id("Rel"),
         &signature,

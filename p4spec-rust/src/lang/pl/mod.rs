@@ -12,4 +12,5 @@ pub mod ast;
 pub mod eq;
 pub mod free;
 pub mod has_call;
+pub mod partial;
 pub mod print;

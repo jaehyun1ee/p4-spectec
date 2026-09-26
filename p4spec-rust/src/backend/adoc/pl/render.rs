@@ -1,137 +1,73 @@
 //! AsciiDoc rendering for prose-language definitions
 //!
-//! Expressions have code and readable-prose views. Instruction rendering
-//! threads fallthrough targets through nested blocks, while one renderer owns
-//! all backtracking counters for a complete document. Definition and fragment
-//! entry points serialize the resulting document model with caller anchors.
+//! ```text
+//! def $i_if(n, m) = n
+//!   -- if $(n < m)
+//! -> xref:i_if[$i_if(n, m)]
+//!
+//!    . Check that ``n`` is less than ``m``.
+//!    . Return ``n``.
+//!
+//! extern relation Oracle: nat ~> nat
+//! -> xref:Oracle[Oracle: ``nat`` ``+~>+`` ``%``]
+//! ```
 
 use crate::lang::{
-    common::{Iter, notation::mixfix::Mixfix},
+    common::{
+        Iter,
+        notation::{atom::Atom, mixfix::Mixfix},
+        prim::{
+            bool::{BinOp as BoolBinOp, CmpOp as BoolCmpOp, UnOp as BoolUnOp},
+            num::CmpOp as NumCmpOp,
+        },
+    },
+    el,
     hints::{alter, input},
-    pl::{annot::Hints, ast as pl},
+    il::ast::{ListPattern, OptPattern, Pattern},
+    pl::{
+        annot::Hints,
+        ast::{self as pl, ExpKind},
+        partial::{is_partial_exp, is_partial_guard},
+    },
     sl,
     traits::print::Print,
 };
 
 use super::{
-    doc::{self, Block, Code, ItemKind, Link, Prose, Subject},
+    doc::{self, Block, Code, Link, Prose, Subject},
     fallthrough::{self, Anchors, Context},
-    utils::{ADOC_WIDTH_SHORT, adoc_subscript, adoc_superscript, reindent_lines, unindent_lines},
+    utils::{
+        ADOC_WIDTH_SHORT, adoc_link, adoc_subscript, adoc_superscript, reindent_lines,
+        unindent_lines,
+    },
 };
 
-// == Documents
-
-fn text(text_body: impl Into<String>) -> Prose {
-    Prose::Text(text_body.into())
-}
-
-fn token(text_body: impl Into<String>) -> Code {
-    Code::Token(text_body.into())
-}
-
-fn prose(proses: impl IntoIterator<Item = Prose>) -> Prose {
-    Prose::Seq(proses.into_iter().collect())
-}
-
-fn code(codes: impl IntoIterator<Item = Code>) -> Code {
-    Code::Seq(codes.into_iter().collect())
-}
-
-fn code_prose(code_body: Code) -> Prose {
-    Prose::Code(code_body)
-}
-
-fn inline(prose_body: Prose) -> Block {
-    Block::Inline(prose_body)
-}
-
-fn raw(text_body: impl Into<String>) -> Block {
-    Block::Raw(text_body.into())
-}
-
-fn concat(blocks_body: impl IntoIterator<Item = Block>) -> Block {
-    Block::Concat(blocks_body.into_iter().collect())
-}
-
-fn seq(blocks_body: impl IntoIterator<Item = Block>) -> Block {
-    Block::Seq(blocks_body.into_iter().collect())
-}
-
-fn ordered(level: usize, prose_head: Prose) -> Block {
-    ordered_body(level, None, prose_head, Block::Empty)
-}
-
-fn ordered_body(
-    level: usize,
-    anchor: Option<String>,
-    prose_head: Prose,
-    block_body: Block,
-) -> Block {
-    Block::Item {
-        level,
-        kind: ItemKind::Ordered(anchor),
-        prose_head,
-        block_body: Box::new(block_body),
-    }
-}
-
-fn unordered(level: usize, prose_head: Prose) -> Block {
-    Block::Item { level, kind: ItemKind::Unordered, prose_head, block_body: Box::new(Block::Empty) }
-}
-
-fn subject_link(subject: Subject, prose_body: Prose) -> Prose {
-    Prose::Link(Link::Subject(subject), Box::new(prose_body))
-}
-
-fn direct_link(target: impl Into<String>, prose_body: Prose) -> Prose {
-    Prose::Link(Link::Direct(target.into()), Box::new(prose_body))
-}
-
-fn subject_code(subject: Subject, code_body: Code) -> Code {
-    Code::Link(Link::Subject(subject), Box::new(code_body))
-}
-
-/// Interleaves items with separators selected by the following item's index.
-fn join_items<Item>(
-    items: impl IntoIterator<Item = Item>,
-    mut separator: impl FnMut(usize) -> Item,
-) -> Vec<Item> {
-    let mut items_joined = Vec::new();
-    // Move each item into one buffer without allocating intermediate lists
-    for (idx, item) in items.into_iter().enumerate() {
-        // A separator belongs only between two items
-        if idx > 0 {
-            items_joined.push(separator(idx));
-        }
-        items_joined.push(item);
-    }
-    items_joined
-}
-
-fn join_code(separator: &str, codes: impl IntoIterator<Item = Code>) -> Code {
-    code(join_items(codes, |_| token(separator)))
-}
-
-fn join_prose(separator: &str, proses: impl IntoIterator<Item = Prose>) -> Prose {
-    prose(join_items(proses, |_| text(separator)))
-}
+// == Render utils
+//
+//   [x]         -> ``x``
+//   [x, y]      -> ``x`` and ``y``
+//   [x, y, z]   -> ``x``, ``y``, and ``z``
 
 /// Joins owned prose with an Oxford comma without cloning its trees.
 fn prose_of_list(proses: Vec<Prose>) -> Prose {
     let num_proses = proses.len();
     // The final separator depends on whether the list has two or more items
-    prose(join_items(proses, |idx| {
-        text(if num_proses == 2 {
+    let proses_joined = doc::join_items(proses, |idx| {
+        let separator = if num_proses == 2 {
             " and "
         } else if idx + 1 == num_proses {
             ", and "
         } else {
             ", "
-        })
-    }))
+        };
+        Prose::text(separator)
+    });
+    Prose::seq(proses_joined)
 }
 
-// == Alteration hints
+// == Alternation
+//
+//   hint(prose_in %0 "mod" %1) on $modulo(n_a, n_b)   -> ``n~a~`` mod ``n~b~``
 
 struct AlterRenderer<'a, Item> {
     base_text: &'a dyn Fn(&str) -> String,
@@ -146,23 +82,24 @@ impl<Item> alter::Renderer<Item> for AlterRenderer<'_, Item> {
     }
 
     fn text(&self, text_hint: &str) -> Option<Self::Output> {
-        (!text_hint.is_empty()).then(|| text((self.base_text)(text_hint)))
+        (!text_hint.is_empty()).then(|| Prose::text((self.base_text)(text_hint)))
     }
 
     fn atom(&self, atom: &pl::Atom) -> Self::Output {
-        code_prose(token(string_of_atom(atom)))
+        let text_atom = string_of_atom(atom);
+        Prose::code(Code::token(text_atom))
     }
 
     fn join(&self, proses: Vec<Self::Output>) -> Self::Output {
-        join_prose(" ", proses)
+        Prose::join(" ", proses)
     }
 
     fn fuse(&self, output_l: Self::Output, output_r: Self::Output) -> Self::Output {
-        prose([output_l, output_r])
+        Prose::seq([output_l, output_r])
     }
 
-    fn other(&self, exp: &crate::lang::el::ast::Exp) -> Self::Output {
-        text(Print::to_string(exp))
+    fn other(&self, exp: &el::ast::Exp) -> Self::Output {
+        Prose::text(Print::to_string(exp))
     }
 
     fn item(&self, item: &Item) -> Self::Output {
@@ -178,76 +115,55 @@ fn alternate<Item>(
     items: &[Item],
     caps: bool,
 ) -> Prose {
-    let prose_alternated = alter::alternate(hint, items, &AlterRenderer { base_text, render_item })
-        .expect("prosify validates alteration hints");
-    if caps { doc::capitalize_first_prose(prose_alternated) } else { prose_alternated }
+    let renderer_alter = AlterRenderer { base_text, render_item };
+    let prose_alternated =
+        alter::alternate(hint, items, &renderer_alter).expect("prosify validates alteration hints");
+    if caps { prose_alternated.capitalize_first() } else { prose_alternated }
 }
 
-// == Atoms and identifiers
+// == Mixfix
+//
+//   INT n     -> ``+INT+`` ``n``
+//   n* ~> %   -> ``n^{asterisk}^`` ``+~>+`` ``%``
 
-/// Escapes an atom for an AsciiDoc code span.
-fn string_of_atom(atom: &pl::Atom) -> String {
-    use crate::lang::common::notation::atom::Atom;
-
-    match &atom.node {
-        Atom::Tag(id) => format!("{{nbsp}}{}", adoc_subscript(id)),
-        atom_kind => {
-            let text_atom = Print::to_string(atom_kind);
-            if text_atom.contains('+') {
-                text_atom.replace('+', "{plus}").replace('\'', "{apos}")
-            } else {
-                format!("+{text_atom}+")
-            }
+/// Renders a mixfix tree with caller-rendered arguments.
+fn code_of_mixfix<T>(mixfix: &Mixfix<T>, render_arg: &dyn Fn(&T) -> Code) -> Code {
+    match mixfix {
+        Mixfix::Arg(arg) => render_arg(arg),
+        Mixfix::Atom(atom) => {
+            let text_atom = string_of_atom(atom);
+            Code::token(text_atom)
+        }
+        Mixfix::Brack(atom_l, mixfix_inner, atom_r) => {
+            let text_l = string_of_atom(atom_l);
+            let code_inner = code_of_mixfix(mixfix_inner, render_arg);
+            let text_r = string_of_atom(atom_r);
+            Code::seq([
+                Code::token(text_l),
+                Code::token(" "),
+                code_inner,
+                Code::token(" "),
+                Code::token(text_r),
+            ])
+        }
+        Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
+            let code_l = code_of_mixfix(mixfix_l, render_arg);
+            let text_atom = string_of_atom(atom);
+            let code_r = code_of_mixfix(mixfix_r, render_arg);
+            Code::seq([code_l, Code::token(" "), Code::token(text_atom), Code::token(" "), code_r])
+        }
+        Mixfix::Seq(mixfixes) => {
+            let codes = mixfixes
+                .iter()
+                .map(|mixfix| code_of_mixfix(mixfix, render_arg));
+            Code::join(" ", codes)
         }
     }
 }
 
-/// Renders an identifier with its suffix as a subscript.
-fn code_of_id(id: &pl::Id) -> Code {
-    // Preserve the anonymous identifier literally
-    if id.node.starts_with('_') {
-        token("++_++")
-    } else {
-        // Render the base before any underscore suffix
-        let mut parts = id.node.split('_');
-        let base = parts.next().unwrap_or_default();
-        let subscript = parts.collect::<Vec<_>>().join("_");
-        token(if subscript.is_empty() {
-            base.to_owned()
-        } else {
-            format!("{base}{}", adoc_subscript(&subscript))
-        })
-    }
-}
-
-fn code_of_var(var: &pl::Var) -> Code {
-    code(
-        std::iter::once(code_of_id(&var.id))
-            .chain(var.iters.iter().map(|iter| token(code_of_iter(*iter)))),
-    )
-}
-
-fn code_of_iter(iter: Iter) -> String {
-    adoc_superscript(match iter {
-        Iter::List => "{asterisk}",
-        Iter::Opt => "?",
-    })
-}
-
-fn string_of_iter(iter: Iter) -> &'static str {
-    match iter {
-        Iter::List => "list",
-        Iter::Opt => "option",
-    }
-}
-
-fn code_of_typ(typ: &pl::Typ) -> Code {
-    token(Print::to_string(typ))
-}
-
-fn string_of_defid(id: &pl::Id) -> String {
-    format!("${}", id.node)
-}
+// == Texts
+//
+//   a"b<newline>café   -> a\"b\ncaf\195\169
 
 /// Escapes a text literal with the language printer's byte rules.
 fn escape_text(text_value: &str) -> String {
@@ -266,616 +182,1200 @@ fn escape_text(text_value: &str) -> String {
         .collect()
 }
 
+// == Identifiers
+//
+//   n       -> ``n``
+//   n_max   -> ``n~max~``
+//   _       -> ``++_++``
+//   $f      -> $f
+
+fn string_of_defid(id: &pl::Id) -> String {
+    format!("${}", id.node)
+}
+
+/// Renders an identifier with its suffix as a subscript.
+fn code_of_id(id: &pl::Id) -> Code {
+    // Preserve the anonymous identifier literally
+    if id.node.starts_with('_') {
+        return Code::token("++_++");
+    }
+
+    // Render the base before any underscore suffix
+    let mut parts = id.node.split('_');
+    let base = parts.next().unwrap_or_default();
+    let subscript = parts.collect::<Vec<_>>().join("_");
+    if subscript.is_empty() {
+        Code::token(base)
+    } else {
+        let text_subscript = adoc_subscript(&subscript);
+        Code::token(format!("{base}{text_subscript}"))
+    }
+}
+
+// == Atoms
+//
+//   LEFT     -> +LEFT+
+//   _EMPTY   -> {nbsp}~EMPTY~
+//   '++'     -> {apos}{plus}{plus}{apos}
+//   ->       -> +->+
+
+/// Escapes an atom for an AsciiDoc code span.
+fn string_of_atom(atom: &pl::Atom) -> String {
+    match &atom.node {
+        Atom::Tag(id) => {
+            let text_subscript = adoc_subscript(id);
+            format!("{{nbsp}}{text_subscript}")
+        }
+        atom_kind => {
+            let text_atom = Print::to_string(atom_kind);
+            if text_atom.contains('+') {
+                text_atom.replace('+', "{plus}").replace('\'', "{apos}")
+            } else {
+                format!("+{text_atom}+")
+            }
+        }
+    }
+}
+
+// == Iterators
+//
+//   *   -> ^{asterisk}^, list
+//   ?   -> ^?^, option
+
+fn code_of_iter(iter: Iter) -> String {
+    let text_iter = match iter {
+        Iter::List => "{asterisk}",
+        Iter::Opt => "?",
+    };
+    adoc_superscript(text_iter)
+}
+
+fn string_of_iter(iter: Iter) -> &'static str {
+    match iter {
+        Iter::List => "list",
+        Iter::Opt => "option",
+    }
+}
+
+// == Variables
+//
+//   n*        -> ``n^{asterisk}^``
+//   n in n*   -> ``n`` in ``n^{asterisk}^``
+
+fn code_of_var(var: &pl::Var) -> Code {
+    let code_id = code_of_id(&var.id);
+    let codes_iter = var
+        .iters
+        .iter()
+        .map(|iter| Code::token(code_of_iter(*iter)));
+    Code::seq(std::iter::once(code_id).chain(codes_iter))
+}
+
+fn prose_of_in_itervar(iter: Iter, var: &pl::Var) -> Prose {
+    let code_var = code_of_var(var);
+    let code_iterated = Code::seq([code_of_var(var), Code::token(code_of_iter(iter))]);
+    Prose::seq([Prose::code(code_var), Prose::text(" in "), Prose::code(code_iterated)])
+}
+
+fn prose_of_in_itervars(iter: Iter, vars: &[pl::Var]) -> Prose {
+    let proses = vars
+        .iter()
+        .map(|var| prose_of_in_itervar(iter, var))
+        .collect();
+    prose_of_list(proses)
+}
+
+fn prose_of_out_itervars(iter: Iter, vars: &[&pl::Var]) -> Prose {
+    let proses = vars
+        .iter()
+        .filter(|var| !var.id.node.starts_with('_'))
+        .map(|var| {
+            let code_iterated = Code::seq([code_of_var(var), Code::token(code_of_iter(iter))]);
+            Prose::code(code_iterated)
+        })
+        .collect();
+    prose_of_list(proses)
+}
+
+// == Types
+//
+//   datum   -> ``datum``
+
+fn code_of_typ(typ: &pl::Typ) -> Code {
+    Code::token(Print::to_string(typ))
+}
+
 // == Operators
+//
+//   /\   -> and
+//   =>   -> implies
+//   <    -> is less than
+//   =    -> is equal to
 
 fn string_of_binop(op: pl::BinOp) -> String {
-    use crate::lang::common::prim::bool::BinOp;
     match op {
-        pl::BinOp::Bool(BinOp::And) => "and".to_owned(),
-        pl::BinOp::Bool(BinOp::Or) => "or".to_owned(),
-        pl::BinOp::Bool(BinOp::Impl) => "implies".to_owned(),
-        pl::BinOp::Bool(BinOp::Equiv) => "is equivalent to".to_owned(),
+        pl::BinOp::Bool(BoolBinOp::And) => "and".to_owned(),
+        pl::BinOp::Bool(BoolBinOp::Or) => "or".to_owned(),
+        pl::BinOp::Bool(BoolBinOp::Impl) => "implies".to_owned(),
+        pl::BinOp::Bool(BoolBinOp::Equiv) => "is equivalent to".to_owned(),
         _ => Print::to_string(&op),
     }
 }
 
 fn string_of_cmpop(op: pl::CmpOp) -> &'static str {
-    use crate::lang::common::prim::{bool::CmpOp as BoolCmp, num::CmpOp as NumCmp};
     match op {
-        pl::CmpOp::Bool(BoolCmp::Eq) => "is equal to",
-        pl::CmpOp::Bool(BoolCmp::Ne) => "is not equal to",
-        pl::CmpOp::Num(NumCmp::Lt) => "is less than",
-        pl::CmpOp::Num(NumCmp::Gt) => "is greater than",
-        pl::CmpOp::Num(NumCmp::Le) => "is less than or equal to",
-        pl::CmpOp::Num(NumCmp::Ge) => "is greater than or equal to",
+        pl::CmpOp::Bool(BoolCmpOp::Eq) => "is equal to",
+        pl::CmpOp::Bool(BoolCmpOp::Ne) => "is not equal to",
+        pl::CmpOp::Num(NumCmpOp::Lt) => "is less than",
+        pl::CmpOp::Num(NumCmpOp::Gt) => "is greater than",
+        pl::CmpOp::Num(NumCmpOp::Le) => "is less than or equal to",
+        pl::CmpOp::Num(NumCmpOp::Ge) => "is greater than or equal to",
     }
 }
 
 // == Expressions as code
 
-/// Renders a mixfix tree with caller-rendered arguments.
-fn code_of_mixfix<T>(mixfix: &Mixfix<T>, render_arg: &dyn Fn(&T) -> Code) -> Code {
-    match mixfix {
-        Mixfix::Arg(arg) => render_arg(arg),
-        Mixfix::Atom(atom) => token(string_of_atom(atom)),
-        Mixfix::Brack(atom_l, inner, atom_r) => code([
-            token(string_of_atom(atom_l)),
-            token(" "),
-            code_of_mixfix(inner, render_arg),
-            token(" "),
-            token(string_of_atom(atom_r)),
-        ]),
-        Mixfix::Infix(mixfix_l, atom, mixfix_r) => code([
-            code_of_mixfix(mixfix_l, render_arg),
-            token(" "),
-            token(string_of_atom(atom)),
-            token(" "),
-            code_of_mixfix(mixfix_r, render_arg),
-        ]),
-        Mixfix::Seq(mixfixes) => join_code(
-            " ",
-            mixfixes
-                .iter()
-                .map(|mixfix| code_of_mixfix(mixfix, render_arg)),
-        ),
+// - Expression
+//
+//   $e_num(n)   -> xref:e_num[``$e_num(n)``]
+//   n*[m]       -> ``n^{asterisk}^[m]``
+
+/// Renders an expression in compact code form.
+fn code_of_exp(exp: &pl::Exp) -> Code {
+    match &exp.node.node {
+        ExpKind::Bool(value) => code_of_bool_exp(*value),
+        ExpKind::Num(num) => code_of_num_exp(num),
+        ExpKind::Text(text_value) => code_of_text_exp(text_value),
+        ExpKind::Id(id) => code_of_var_exp(id),
+        ExpKind::Un(op, _, exp_inner) => code_of_un_exp(op, exp_inner),
+        ExpKind::Bin(op, _, exp_l, exp_r) => code_of_bin_exp(op, exp_l, exp_r),
+        ExpKind::Cmp(op, _, exp_l, exp_r) => code_of_cmp_exp(op, exp_l, exp_r),
+        ExpKind::UpCast(_, exp_inner) => code_of_upcast_exp(exp_inner),
+        ExpKind::DownCast(_, exp_inner) => code_of_downcast_exp(exp_inner),
+        ExpKind::Sub(exp_inner, typ, _) => code_of_sub_exp(exp_inner, typ),
+        ExpKind::Match(exp_inner, pattern) => code_of_match_exp(exp_inner, pattern),
+        ExpKind::Tuple(exps) => code_of_tuple_exp(exps),
+        ExpKind::Case(not_exp) => code_of_case_exp(not_exp),
+        ExpKind::Str(fields) => code_of_str_exp(fields),
+        ExpKind::Opt(exp_opt) => code_of_opt_exp(exp_opt.as_deref()),
+        ExpKind::List(exps) => code_of_list_exp(exps),
+        ExpKind::Cons(exp_head, exp_tail) => code_of_cons_exp(exp_head, exp_tail),
+        ExpKind::Cat(exp_l, exp_r) => code_of_cat_exp(exp_l, exp_r),
+        ExpKind::Mem(exp_elem, exp_set) => code_of_mem_exp(exp_elem, exp_set),
+        ExpKind::Len(exp_inner) => code_of_len_exp(exp_inner),
+        ExpKind::Dot(exp_base, atom) => code_of_dot_exp(exp_base, atom),
+        ExpKind::Idx(exp_base, exp_idx) => code_of_idx_exp(exp_base, exp_idx),
+        ExpKind::Slice(exp_base, exp_idx, exp_len) => code_of_slice_exp(exp_base, exp_idx, exp_len),
+        ExpKind::Upd(exp_base, path, exp_field) => code_of_upd_exp(exp_base, path, exp_field),
+        ExpKind::Call(id, targs, args) => code_of_call_exp(id, targs, args),
+        ExpKind::Iter(exp_inner, iter_exp) => code_of_iter_exp(exp_inner, iter_exp),
     }
 }
 
 fn code_of_exps(exps: &[pl::Exp], separator: &str) -> Code {
-    join_code(separator, exps.iter().map(code_of_exp))
+    Code::join(separator, exps.iter().map(code_of_exp))
 }
+
+// - Boolean expressions
+//
+//   true   -> ``true``
+
+fn code_of_bool_exp(value: bool) -> Code {
+    Code::token(value.to_string())
+}
+
+// - Numeric expressions
+//
+//   42   -> ``42``
+
+fn code_of_num_exp(num: &pl::Num) -> Code {
+    Code::token(Print::to_string(num))
+}
+
+// - Text expressions
+//
+//   "a\nb"   -> ``"a\nb"``
+
+fn code_of_text_exp(text_value: &str) -> Code {
+    let text_escaped = escape_text(text_value);
+    Code::token(format!("\"{text_escaped}\""))
+}
+
+// - Variable expressions
+//
+//   n_max   -> ``n~max~``
+
+fn code_of_var_exp(id: &pl::Id) -> Code {
+    code_of_id(id)
+}
+
+// - Unary expressions
+//
+//   ~b   -> ``~b``
+
+fn code_of_un_exp(op: &pl::UnOp, exp_inner: &pl::Exp) -> Code {
+    let code_inner = code_of_exp(exp_inner);
+    Code::seq([Code::token(Print::to_string(op)), code_inner])
+}
+
+// - Binary expressions
+//
+//   b /\ c     -> ``b`` ``/\`` ``c``
+//   $(n + m)   -> ``n`` ``{plus}`` ``m``
+
+fn code_of_bin_exp(op: &pl::BinOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Code {
+    let code_l = code_of_exp(exp_l);
+    let text_op = Print::to_string(op).replace('+', "{plus}");
+    let code_r = code_of_exp(exp_r);
+    Code::seq([code_l, Code::token(format!(" {text_op} ")), code_r])
+}
+
+// - Comparison expressions
+//
+//   $(n < m)   -> ``n`` ``<`` ``m``
+
+fn code_of_cmp_exp(op: &pl::CmpOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Code {
+    let code_l = code_of_exp(exp_l);
+    let text_op = Print::to_string(op);
+    let code_r = code_of_exp(exp_r);
+    Code::seq([code_l, Code::token(format!(" {text_op} ")), code_r])
+}
+
+// - Upcast expressions
+//
+//   UpCast(int, n)   -> ``n``
+
+fn code_of_upcast_exp(exp_inner: &pl::Exp) -> Code {
+    code_of_exp(exp_inner)
+}
+
+// - Downcast expressions
+//
+//   DownCast(nat, i)   -> ``i``
+
+fn code_of_downcast_exp(exp_inner: &pl::Exp) -> Code {
+    code_of_exp(exp_inner)
+}
+
+// - Subtype checks
+//
+//   v <: datum   -> ``v`` ``has`` ``type`` ``datum``
+
+fn code_of_sub_exp(exp_inner: &pl::Exp, typ: &pl::Typ) -> Code {
+    let code_inner = code_of_exp(exp_inner);
+    let code_typ = code_of_typ(typ);
+    Code::seq([code_inner, Code::token(" has type "), code_typ])
+}
+
+// - Pattern checks
+//
+//   Match(b*, [])      -> ``b^{asterisk}^`` ``is`` ``an`` ``empty`` ``list``
+//   Match(k, _EMPTY)   -> ``k`` ``is`` ``{nbsp}~EMPTY~``
+
+fn code_of_match_exp(exp: &pl::Exp, pattern: &pl::Pattern) -> Code {
+    let code_scrut = code_of_exp(exp);
+    match pattern {
+        Pattern::Case(mixop) if mixop.arity() == 0 => {
+            let code_pattern = code_of_pattern(pattern);
+            Code::seq([code_scrut, Code::token(" is "), code_pattern])
+        }
+        Pattern::List(ListPattern::Nil) => {
+            Code::seq([code_scrut, Code::token(" is an empty list")])
+        }
+        Pattern::List(ListPattern::Cons) => {
+            Code::seq([code_scrut, Code::token(" is a non-empty list")])
+        }
+        Pattern::List(ListPattern::Fixed(num_elems)) => {
+            Code::seq([code_scrut, Code::token(format!(" is a list of length {num_elems}"))])
+        }
+        Pattern::Opt(OptPattern::None) => Code::seq([code_scrut, Code::token(" is none")]),
+        Pattern::Opt(OptPattern::Some) => Code::seq([code_scrut, Code::token(" is defined")]),
+        Pattern::Case(_) => {
+            let code_pattern = code_of_pattern(pattern);
+            Code::seq([code_scrut, Code::token(" matches pattern "), code_pattern])
+        }
+    }
+}
+
+// - Tuple expressions
+//
+//   (n, m)   -> ``(`` ``n,`` ``m`` ``)``
+
+fn code_of_tuple_exp(exps: &[pl::Exp]) -> Code {
+    let code_exps = code_of_exps(exps, ", ");
+    Code::seq([Code::token("( "), code_exps, Code::token(" )")])
+}
+
+// - Case expressions
+//
+//   INT n   -> ``+INT+`` ``n``
+
+fn code_of_case_exp(not_exp: &pl::NotExp) -> Code {
+    code_of_mixfix(not_exp, &code_of_exp)
+}
+
+// - Struct expressions
+//
+//   {LEFT n, RIGHT m}   -> ``+{++LEFT+`` ``n,`` ``+RIGHT+`` ``m+}+``
+
+fn code_of_str_exp(fields: &[(pl::Atom, pl::Exp)]) -> Code {
+    let codes_field = fields.iter().map(|(atom, exp_field)| {
+        let text_atom = string_of_atom(atom);
+        let code_field = code_of_exp(exp_field);
+        Code::seq([Code::token(text_atom), Code::token(" "), code_field])
+    });
+    let code_fields = Code::join(", ", codes_field);
+    Code::seq([Code::token("+{+"), code_fields, Code::token("+}+")])
+}
+
+// - Option expressions
+//
+//   eps   -> ``·``
+//   n     -> ``n``
+
+fn code_of_opt_exp(exp_opt: Option<&pl::Exp>) -> Code {
+    match exp_opt {
+        None => Code::token("·"),
+        Some(exp_inner) => code_of_exp(exp_inner),
+    }
+}
+
+// - List expressions
+//
+//   []       -> ``·``
+//   [n]      -> ``n``
+//   [n, m]   -> ``+[+`` ``n,`` ``m`` ``+]+``
+
+fn code_of_list_exp(exps: &[pl::Exp]) -> Code {
+    match exps {
+        [] => Code::token("·"),
+        [exp] => code_of_exp(exp),
+        _ => {
+            let code_exps = code_of_exps(exps, ", ");
+            Code::seq([Code::token("+[+ "), code_exps, Code::token(" +]+")])
+        }
+    }
+}
+
+// - Cons expressions
+//
+//   n :: n'*   -> ``n`` ``{two-colons}`` ``n'^{asterisk}^``
+
+fn code_of_cons_exp(exp_head: &pl::Exp, exp_tail: &pl::Exp) -> Code {
+    let code_head = code_of_exp(exp_head);
+    let code_tail = code_of_exp(exp_tail);
+    Code::seq([code_head, Code::token(" {two-colons} "), code_tail])
+}
+
+// - Concatenation expressions
+//
+//   n* ++ m*   -> ``n^{asterisk}^`` ``{pp}`` ``m^{asterisk}^``
+
+fn code_of_cat_exp(exp_l: &pl::Exp, exp_r: &pl::Exp) -> Code {
+    let code_l = code_of_exp(exp_l);
+    let code_r = code_of_exp(exp_r);
+    Code::seq([code_l, Code::token(" {pp} "), code_r])
+}
+
+// - Membership expressions
+//
+//   n <- m*   -> ``n`` ``is`` ``in`` ``m^{asterisk}^``
+
+fn code_of_mem_exp(exp_elem: &pl::Exp, exp_set: &pl::Exp) -> Code {
+    let code_elem = code_of_exp(exp_elem);
+    let code_set = code_of_exp(exp_set);
+    Code::seq([code_elem, Code::token(" is in "), code_set])
+}
+
+// - Length expressions
+//
+//   |n*|   -> ``the`` ``length`` ``of`` ``n^{asterisk}^``
+
+fn code_of_len_exp(exp_inner: &pl::Exp) -> Code {
+    let code_inner = code_of_exp(exp_inner);
+    Code::seq([Code::token("the length of "), code_inner])
+}
+
+// - Field-access expressions
+//
+//   p.LEFT   -> ``p.+LEFT+``
+
+fn code_of_dot_exp(exp_base: &pl::Exp, atom: &pl::Atom) -> Code {
+    let code_base = code_of_exp(exp_base);
+    let text_atom = string_of_atom(atom);
+    Code::seq([code_base, Code::token("."), Code::token(text_atom)])
+}
+
+// - Index expressions
+//
+//   n*[m]   -> ``n^{asterisk}^[m]``
+
+fn code_of_idx_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp) -> Code {
+    let code_base = code_of_exp(exp_base);
+    let code_idx = code_of_exp(exp_idx);
+    Code::seq([code_base, Code::token("["), code_idx, Code::token("]")])
+}
+
+// - Slice expressions
+//
+//   n*[m : n']   -> ``n^{asterisk}^[m`` ``:`` ``n']``
+
+fn code_of_slice_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp, exp_len: &pl::Exp) -> Code {
+    let code_base = code_of_exp(exp_base);
+    let code_idx = code_of_exp(exp_idx);
+    let code_len = code_of_exp(exp_len);
+    Code::seq([
+        code_base,
+        Code::token("["),
+        code_idx,
+        Code::token(" : "),
+        code_len,
+        Code::token("]"),
+    ])
+}
+
+// - Update expressions
+//
+//   p[.LEFT = n]   -> ``p[+LEFT+`` ``=`` ``n]``
+
+fn code_of_upd_exp(exp_base: &pl::Exp, path: &pl::Path, exp_field: &pl::Exp) -> Code {
+    let code_base = code_of_exp(exp_base);
+    let code_path = code_of_path(path);
+    let code_field = code_of_exp(exp_field);
+    Code::seq([
+        code_base,
+        Code::token("["),
+        code_path,
+        Code::token(" = "),
+        code_field,
+        Code::token("]"),
+    ])
+}
+
+// - Function calls
+//
+//   $e_num(n)   -> xref:e_num[``$e_num(n)``]
+
+fn code_of_call_exp(id: &pl::Id, targs: &[pl::Targ], args: &[pl::Arg]) -> Code {
+    let text_id = string_of_defid(id);
+    let text_targs = string_of_targs(targs);
+    let code_args = code_of_args(args);
+    let code_call = Code::seq([Code::token(text_id), Code::token(text_targs), code_args]);
+    let link = Link::Subject(Subject::Function(id.node.clone()));
+    Code::link(link, code_call)
+}
+
+// - Iterated expressions
+//
+//   $e_num(n)*   -> xref:e_num[``$e_num(n)``]``^{asterisk}^``
+
+fn code_of_iter_exp(exp_inner: &pl::Exp, iter_exp: &pl::ExpIter) -> Code {
+    // Iterations without variables render as their body
+    if iter_exp.vars.is_empty() {
+        return code_of_exp(exp_inner);
+    }
+
+    let code_inner = code_of_exp(exp_inner);
+    let text_iter = code_of_iter(iter_exp.iter);
+    // Parenthesize compound bodies whose code contains spaces
+    let needs_parens = !matches!(exp_inner.node.node, ExpKind::Id(_) | ExpKind::Tuple(_))
+        && doc::ser_code(&code_inner, &doc::subject_name).contains(' ');
+    if needs_parens {
+        Code::seq([Code::token("( "), code_inner, Code::token(" )"), Code::token(text_iter)])
+    } else {
+        Code::seq([code_inner, Code::token(text_iter)])
+    }
+}
+
+// == Expressions as prose
+
+// - Expression
+//
+//   b /\ c   -> ``b`` and ``c``
+//   n = m    -> ``n`` is equal to ``m``
+
+/// Renders an expression in readable prose form.
+fn prose_of_exp(exp: &pl::Exp) -> Prose {
+    match &exp.node.node {
+        ExpKind::Bool(value) => prose_of_bool_exp(*value),
+        ExpKind::Num(num) => prose_of_num_exp(num),
+        ExpKind::Text(text_value) => prose_of_text_exp(text_value),
+        ExpKind::Id(id) => prose_of_var_exp(id),
+        ExpKind::Un(op, _, exp_inner) => prose_of_un_exp(op, exp_inner),
+        ExpKind::Bin(op, _, exp_l, exp_r) => prose_of_bin_exp(op, exp_l, exp_r),
+        ExpKind::Cmp(op, _, exp_l, exp_r) => prose_of_cmp_exp(op, exp_l, exp_r),
+        ExpKind::UpCast(_, exp_inner) => prose_of_upcast_exp(exp_inner),
+        ExpKind::DownCast(_, exp_inner) => prose_of_downcast_exp(exp_inner),
+        ExpKind::Sub(exp_inner, typ, _) => prose_of_sub_exp(exp_inner, typ),
+        ExpKind::Match(exp_inner, pattern) => prose_of_match_exp(exp_inner, pattern),
+        ExpKind::Tuple(exps) => prose_of_tuple_exp(exps),
+        ExpKind::Case(not_exp) => prose_of_case_exp(exp, not_exp),
+        ExpKind::Str(fields) => prose_of_str_exp(fields),
+        ExpKind::Opt(exp_opt) => prose_of_opt_exp(exp_opt.as_deref()),
+        ExpKind::List(exps) => prose_of_list_exp(exps),
+        ExpKind::Cons(exp_head, exp_tail) => prose_of_cons_exp(exp_head, exp_tail),
+        ExpKind::Cat(exp_l, exp_r) => prose_of_cat_exp(exp_l, exp_r),
+        ExpKind::Mem(exp_elem, exp_set) => prose_of_mem_exp(exp_elem, exp_set),
+        ExpKind::Len(exp_inner) => prose_of_len_exp(exp_inner),
+        ExpKind::Dot(exp_base, atom) => prose_of_dot_exp(exp_base, atom),
+        ExpKind::Idx(exp_base, exp_idx) => prose_of_idx_exp(exp_base, exp_idx),
+        ExpKind::Slice(exp_base, exp_idx, exp_len) => {
+            prose_of_slice_exp(exp_base, exp_idx, exp_len)
+        }
+        ExpKind::Upd(exp_base, path, exp_field) => prose_of_upd_exp(exp_base, path, exp_field),
+        ExpKind::Call(id, targs, args) => prose_of_call_exp(exp, id, targs, args),
+        ExpKind::Iter(exp_inner, iter_exp) => prose_of_iter_exp(exp_inner, iter_exp),
+    }
+}
+
+fn prose_of_exps(exps: &[pl::Exp]) -> Prose {
+    let proses = exps.iter().map(prose_of_exp).collect();
+    prose_of_list(proses)
+}
+
+// - Boolean expressions
+//
+//   true   -> ``true``
+
+fn prose_of_bool_exp(value: bool) -> Prose {
+    Prose::code(code_of_bool_exp(value))
+}
+
+// - Numeric expressions
+//
+//   42   -> ``42``
+
+fn prose_of_num_exp(num: &pl::Num) -> Prose {
+    Prose::code(code_of_num_exp(num))
+}
+
+// - Text expressions
+//
+//   "a\nb"   -> ``"a\nb"``
+
+fn prose_of_text_exp(text_value: &str) -> Prose {
+    Prose::code(code_of_text_exp(text_value))
+}
+
+// - Variable expressions
+//
+//   n_max   -> ``n~max~``
+
+fn prose_of_var_exp(id: &pl::Id) -> Prose {
+    Prose::code(code_of_var_exp(id))
+}
+
+// - Negated checks
+//
+//   Match(direction_h, _EMPTY)   -> ``direction~h~`` does not match pattern ``{nbsp}~EMPTY~``
+//   nameIR_h <- nameIR'*         -> ``nameIR~h~`` is not in ``nameIR'^{asterisk}^``
+
+/// Describes the readable negation of a partial check when available.
+fn prose_of_negated_exp(exp: &pl::Exp) -> Option<Prose> {
+    match &exp.node.node {
+        ExpKind::Match(exp_elem, pattern) => {
+            let prose_elem = prose_of_exp(exp_elem);
+            let code_pattern = code_of_pattern(pattern);
+            let proses =
+                [prose_elem, Prose::text(" does not match pattern "), Prose::code(code_pattern)];
+            Some(Prose::seq(proses))
+        }
+        ExpKind::Sub(exp_elem, typ, _) => {
+            let code_elem = code_of_exp(exp_elem);
+            let code_typ = code_of_typ(typ);
+            let proses = [
+                Prose::code(code_elem),
+                Prose::text(" does not have type "),
+                Prose::code(code_typ),
+            ];
+            Some(Prose::seq(proses))
+        }
+        ExpKind::Mem(exp_elem, exp_set) => {
+            let code_elem = code_of_exp(exp_elem);
+            let code_set = code_of_exp(exp_set);
+            let proses =
+                [Prose::code(code_elem), Prose::text(" is not in "), Prose::code(code_set)];
+            Some(Prose::seq(proses))
+        }
+        ExpKind::Call(id, _, args) => {
+            // Unhinted calls fall back to negated code
+            let Some(hint) = &exp.hints.prose_false else {
+                let code_exp = code_of_exp(exp);
+                return Some(Prose::code(Code::seq([Code::token("~"), code_exp])));
+            };
+            let prose_call = alternate(
+                hint,
+                &|text_body| reindent_lines(0, text_body),
+                &prose_of_arg,
+                args,
+                false,
+            );
+            let link = Link::Subject(Subject::Function(id.node.clone()));
+            Some(Prose::link(link, prose_call))
+        }
+        _ => None,
+    }
+}
+
+// - Unary expressions
+//
+//   ~(nameIR_h <- nameIR'*)   -> ``nameIR~h~`` is not in ``nameIR'^{asterisk}^``
+//   ~b                        -> ``~b``
+
+fn prose_of_un_exp(op: &pl::UnOp, exp_inner: &pl::Exp) -> Prose {
+    // Boolean negation prefers the readable negated check
+    if let pl::UnOp::Bool(BoolUnOp::Not) = op
+        && let Some(prose_negated) = prose_of_negated_exp(exp_inner)
+    {
+        return prose_negated;
+    }
+
+    Prose::code(code_of_un_exp(op, exp_inner))
+}
+
+// - Binary expressions
+//
+//   b /\ c     -> ``b`` and ``c``
+//   b => c     -> if ``b``, then ``c``
+//   $(n + m)   -> ``n`` ``{plus}`` ``m``
+
+fn prose_of_bin_exp(op: &pl::BinOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Prose {
+    match op {
+        pl::BinOp::Bool(BoolBinOp::Impl) => {
+            let prose_l = prose_of_exp(exp_l);
+            let prose_r = prose_of_exp(exp_r);
+            Prose::seq([Prose::text("if "), prose_l, Prose::text(", then "), prose_r])
+        }
+        pl::BinOp::Bool(_) => {
+            let prose_l = prose_of_exp(exp_l);
+            let text_op = string_of_binop(*op);
+            let prose_r = prose_of_exp(exp_r);
+            Prose::seq([prose_l, Prose::text(format!(" {text_op} ")), prose_r])
+        }
+        _ => Prose::code(code_of_bin_exp(op, exp_l, exp_r)),
+    }
+}
+
+// - Comparison expressions
+//
+//   $(n < m)   -> ``n`` is less than ``m``
+
+fn prose_of_cmp_exp(op: &pl::CmpOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Prose {
+    let prose_l = prose_of_exp(exp_l);
+    let text_op = string_of_cmpop(*op);
+    let prose_r = prose_of_exp(exp_r);
+    Prose::seq([prose_l, Prose::text(format!(" {text_op} ")), prose_r])
+}
+
+// - Upcast expressions
+//
+//   UpCast(int, n)   -> ``n``
+
+fn prose_of_upcast_exp(exp_inner: &pl::Exp) -> Prose {
+    Prose::code(code_of_exp(exp_inner))
+}
+
+// - Downcast expressions
+//
+//   DownCast(nat, i)   -> ``i``
+
+fn prose_of_downcast_exp(exp_inner: &pl::Exp) -> Prose {
+    Prose::code(code_of_exp(exp_inner))
+}
+
+// - Subtype checks
+//
+//   v <: datum   -> ``v`` has type ``datum``
+
+fn prose_of_sub_exp(exp_inner: &pl::Exp, typ: &pl::Typ) -> Prose {
+    let code_inner = code_of_exp(exp_inner);
+    let code_typ = code_of_typ(typ);
+    Prose::seq([Prose::code(code_inner), Prose::text(" has type "), Prose::code(code_typ)])
+}
+
+// - Pattern checks
+//
+//   Match(b*, [])         -> ``b^{asterisk}^`` is an empty list
+//   Match(typeIR?, (_))   -> ``typeIR^?^`` is defined
+
+/// Describes a pattern check using its specialized list and option wording.
+fn prose_of_match_exp(exp: &pl::Exp, pattern: &pl::Pattern) -> Prose {
+    let prose_scrut = prose_of_exp(exp);
+    match pattern {
+        Pattern::Case(mixop) if mixop.arity() == 0 => {
+            let code_pattern = code_of_pattern(pattern);
+            Prose::seq([prose_scrut, Prose::text(" is "), Prose::code(code_pattern)])
+        }
+        Pattern::List(ListPattern::Nil) => {
+            Prose::seq([prose_scrut, Prose::text(" is an empty list")])
+        }
+        Pattern::List(ListPattern::Cons) => {
+            Prose::seq([prose_scrut, Prose::text(" is a non-empty list")])
+        }
+        Pattern::List(ListPattern::Fixed(num_elems)) => {
+            Prose::seq([prose_scrut, Prose::text(format!(" is a list of length {num_elems}"))])
+        }
+        Pattern::Opt(OptPattern::None) => Prose::seq([prose_scrut, Prose::text(" is none")]),
+        Pattern::Opt(OptPattern::Some) => Prose::seq([prose_scrut, Prose::text(" is defined")]),
+        Pattern::Case(_) => {
+            let code_pattern = code_of_pattern(pattern);
+            Prose::seq([prose_scrut, Prose::text(" matches pattern "), Prose::code(code_pattern)])
+        }
+    }
+}
+
+// - Tuple expressions
+//
+//   (n, m)   -> ( ``n``, ``m`` )
+
+fn prose_of_tuple_exp(exps: &[pl::Exp]) -> Prose {
+    let prose_exps = Prose::join(", ", exps.iter().map(prose_of_exp));
+    Prose::seq([Prose::text("( "), prose_exps, Prose::text(" )")])
+}
+
+// - Case expressions
+//
+//   INT n   -> ``+INT+`` ``n``
+
+fn prose_of_case_exp(exp: &pl::Exp, not_exp: &pl::NotExp) -> Prose {
+    // Hinted variant values link their prose to the type definition
+    if let (Some(hint), pl::TypKind::Var(id_typ, _)) = (&exp.hints.prose, &exp.node.note) {
+        let exps = not_exp.args();
+        let prose_case = alternate(
+            hint,
+            &|text_body| reindent_lines(0, text_body),
+            &|&exp| prose_of_exp(exp),
+            &exps,
+            false,
+        );
+        return Prose::link(Link::Direct(id_typ.node.clone()), prose_case);
+    }
+
+    Prose::code(code_of_case_exp(not_exp))
+}
+
+// - Struct expressions
+//
+//   {LEFT n, RIGHT m}   -> +{++LEFT+ ``n``, +RIGHT+ ``m``+}+
+
+fn prose_of_str_exp(fields: &[(pl::Atom, pl::Exp)]) -> Prose {
+    let proses_field = fields.iter().map(|(atom, exp_field)| {
+        let text_atom = string_of_atom(atom);
+        let prose_field = prose_of_exp(exp_field);
+        Prose::seq([Prose::text(text_atom), Prose::text(" "), prose_field])
+    });
+    let prose_fields = Prose::join(", ", proses_field);
+    Prose::seq([Prose::text("+{+"), prose_fields, Prose::text("+}+")])
+}
+
+// - Option expressions
+//
+//   eps   -> ``·``
+//   n     -> ``n``
+
+fn prose_of_opt_exp(exp_opt: Option<&pl::Exp>) -> Prose {
+    match exp_opt {
+        None => Prose::code(code_of_opt_exp(None)),
+        Some(exp_inner) => prose_of_exp(exp_inner),
+    }
+}
+
+// - List expressions
+//
+//   [n, m]   -> ``+[+`` ``n,`` ``m`` ``+]+``
+
+fn prose_of_list_exp(exps: &[pl::Exp]) -> Prose {
+    Prose::code(code_of_list_exp(exps))
+}
+
+// - Cons expressions
+//
+//   n :: n'*   -> ``n`` ``{two-colons}`` ``n'^{asterisk}^``
+
+fn prose_of_cons_exp(exp_head: &pl::Exp, exp_tail: &pl::Exp) -> Prose {
+    Prose::code(code_of_cons_exp(exp_head, exp_tail))
+}
+
+// - Concatenation expressions
+//
+//   n* ++ m*   -> ``n^{asterisk}^`` concatenated with ``m^{asterisk}^``
+
+fn prose_of_cat_exp(exp_l: &pl::Exp, exp_r: &pl::Exp) -> Prose {
+    let prose_l = prose_of_exp(exp_l);
+    let prose_r = prose_of_exp(exp_r);
+    Prose::seq([prose_l, Prose::text(" concatenated with "), prose_r])
+}
+
+// - Membership expressions
+//
+//   n <- m*   -> ``n`` is in ``m^{asterisk}^``
+
+fn prose_of_mem_exp(exp_elem: &pl::Exp, exp_set: &pl::Exp) -> Prose {
+    let prose_elem = prose_of_exp(exp_elem);
+    let prose_set = prose_of_exp(exp_set);
+    Prose::seq([prose_elem, Prose::text(" is in "), prose_set])
+}
+
+// - Length expressions
+//
+//   |n*|   -> the length of ``n^{asterisk}^``
+
+fn prose_of_len_exp(exp_inner: &pl::Exp) -> Prose {
+    let prose_inner = prose_of_exp(exp_inner);
+    Prose::seq([Prose::text("the length of "), prose_inner])
+}
+
+// - Field-access expressions
+//
+//   p.LEFT   -> ``p.+LEFT+``
+
+fn prose_of_dot_exp(exp_base: &pl::Exp, atom: &pl::Atom) -> Prose {
+    Prose::code(code_of_dot_exp(exp_base, atom))
+}
+
+// - Index expressions
+//
+//   n*[m]   -> ``n^{asterisk}^[m]``
+
+fn prose_of_idx_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp) -> Prose {
+    Prose::code(code_of_idx_exp(exp_base, exp_idx))
+}
+
+// - Slice expressions
+//
+//   n*[m : n']   -> ``n^{asterisk}^[m`` ``:`` ``n']``
+
+fn prose_of_slice_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp, exp_len: &pl::Exp) -> Prose {
+    Prose::code(code_of_slice_exp(exp_base, exp_idx, exp_len))
+}
+
+// - Update expressions
+//
+//   p[.LEFT = n]   -> ``p`` with ``+LEFT+`` set to ``n``
+
+fn prose_of_upd_exp(exp_base: &pl::Exp, path: &pl::Path, exp_field: &pl::Exp) -> Prose {
+    let code_base = code_of_exp(exp_base);
+    let code_path = code_of_path(path);
+    let code_field = code_of_exp(exp_field);
+    Prose::seq([
+        Prose::code(code_base),
+        Prose::text(" with "),
+        Prose::code(code_path),
+        Prose::text(" set to "),
+        Prose::code(code_field),
+    ])
+}
+
+// - Function calls
+//
+//   $modulo(n, 42), hinted %0 "mod" %1   -> xref:modulo[``n`` mod ``42``]
+//   $e_num(n), unhinted                  -> xref:e_num[``$e_num(n)``]
+
+fn prose_of_call_exp(exp: &pl::Exp, id: &pl::Id, targs: &[pl::Targ], args: &[pl::Arg]) -> Prose {
+    // Unhinted calls keep their code form
+    let Some(hint) = exp
+        .hints
+        .prose_in
+        .as_ref()
+        .or(exp.hints.prose_true.as_ref())
+    else {
+        return Prose::code(code_of_call_exp(id, targs, args));
+    };
+    let prose_call =
+        alternate(hint, &|text_body| reindent_lines(0, text_body), &prose_of_arg, args, false);
+    let link = Link::Subject(Subject::Function(id.node.clone()));
+    Prose::link(link, prose_call)
+}
+
+// - Iterated expressions
+//
+//   $e_num(n)*   -> xref:e_num[``$e_num(n)``]``^{asterisk}^``
+
+fn prose_of_iter_exp(exp_inner: &pl::Exp, iter_exp: &pl::ExpIter) -> Prose {
+    // Iterations without variables render as their body
+    if iter_exp.vars.is_empty() {
+        return prose_of_exp(exp_inner);
+    }
+
+    Prose::code(code_of_iter_exp(exp_inner, iter_exp))
+}
+
+// == Patterns
+//
+//   Nil        -> ``[]``
+//   Cons       -> ``_`` ``::`` ``_``
+//   Fixed(2)   -> ``[`` ``_/2`` ``]``
+//   Some       -> ``(_)``
+//   None       -> ``()``
 
 /// Renders a pattern in its prose-backend notation.
 fn code_of_pattern(pattern: &pl::Pattern) -> Code {
-    use crate::lang::il::ast::{ListPattern, OptPattern, Pattern};
     match pattern {
-        Pattern::Case(mixop) => code_of_mixfix(mixop, &|()| token("%")),
-        Pattern::List(ListPattern::Cons) => token("_ :: _"),
-        Pattern::List(ListPattern::Fixed(num_elems)) => token(format!("[ _/{num_elems} ]")),
-        Pattern::List(ListPattern::Nil) => token("[]"),
-        Pattern::Opt(OptPattern::Some) => token("(_)"),
-        Pattern::Opt(OptPattern::None) => token("()"),
+        Pattern::Case(mixop) => code_of_mixfix(mixop, &|()| Code::token("%")),
+        Pattern::List(ListPattern::Cons) => Code::token("_ :: _"),
+        Pattern::List(ListPattern::Fixed(num_elems)) => Code::token(format!("[ _/{num_elems} ]")),
+        Pattern::List(ListPattern::Nil) => Code::token("[]"),
+        Pattern::Opt(OptPattern::Some) => Code::token("(_)"),
+        Pattern::Opt(OptPattern::None) => Code::token("()"),
     }
 }
+
+// == Paths
+
+// - Path
+//
+//   p[.LEFT = n]           -> ``p`` with ``+LEFT+`` set to ``n``
+//   t[ [n_len] = t_new ]   -> ``t`` with ``[n~len~]`` set to ``t~new~``
 
 /// Renders an update path.
 fn code_of_path(path: &pl::Path) -> Code {
     match &path.node {
-        pl::PathKind::Root => Code::Empty,
-        pl::PathKind::Idx(path_base, exp_idx) => {
-            code([code_of_path(path_base), token("["), code_of_exp(exp_idx), token("]")])
+        pl::PathKind::Root => code_of_root_path(),
+        pl::PathKind::Idx(path_base, exp_idx) => code_of_idx_path(path_base, exp_idx),
+        pl::PathKind::Slice(path_base, exp_idx, exp_len) => {
+            code_of_slice_path(path_base, exp_idx, exp_len)
         }
-        pl::PathKind::Slice(path_base, exp_idx, exp_len) => code([
-            code_of_path(path_base),
-            token("["),
-            code_of_exp(exp_idx),
-            token(" : "),
-            code_of_exp(exp_len),
-            token("]"),
-        ]),
-        pl::PathKind::Dot(path_base, atom) if matches!(path_base.node, pl::PathKind::Root) => {
-            token(string_of_atom(atom))
-        }
-        pl::PathKind::Dot(path_base, atom) => {
-            code([code_of_path(path_base), token("."), token(string_of_atom(atom))])
-        }
+        pl::PathKind::Dot(path_base, atom) => code_of_dot_path(path_base, atom),
     }
 }
+
+// - Root paths
+//
+//   (root)   -> (empty)
+
+fn code_of_root_path() -> Code {
+    Code::Empty
+}
+
+// - Index paths
+//
+//   t[ [n_len] = t_new ]   -> ``t`` with ``[n~len~]`` set to ``t~new~``
+
+fn code_of_idx_path(path_base: &pl::Path, exp_idx: &pl::Exp) -> Code {
+    let code_base = code_of_path(path_base);
+    let code_idx = code_of_exp(exp_idx);
+    Code::seq([code_base, Code::token("["), code_idx, Code::token("]")])
+}
+
+// - Slice paths
+//
+//   p[[i : j] = n]   -> ``p`` with ``[i`` ``:`` ``j]`` set to ``n``
+
+fn code_of_slice_path(path_base: &pl::Path, exp_idx: &pl::Exp, exp_len: &pl::Exp) -> Code {
+    let code_base = code_of_path(path_base);
+    let code_idx = code_of_exp(exp_idx);
+    let code_len = code_of_exp(exp_len);
+    Code::seq([
+        code_base,
+        Code::token("["),
+        code_idx,
+        Code::token(" : "),
+        code_len,
+        Code::token("]"),
+    ])
+}
+
+// - Field paths
+//
+//   p[.LEFT = n]   -> ``p`` with ``+LEFT+`` set to ``n``
+
+fn code_of_dot_path(path_base: &pl::Path, atom: &pl::Atom) -> Code {
+    let text_atom = string_of_atom(atom);
+    // The first field in a path has no leading dot
+    if matches!(path_base.node, pl::PathKind::Root) {
+        return Code::token(text_atom);
+    }
+
+    let code_base = code_of_path(path_base);
+    Code::seq([code_base, Code::token("."), Code::token(text_atom)])
+}
+
+// == Parameters
+//
+//   $i_if(n, m), unhinted                    -> xref:i_if[$i_if(n, m)]
+//   table $is_defaultable_typeIR(typeIR'')   -> | (``typeIR''``) | Result
+
+fn code_of_param(param: &pl::Param) -> Code {
+    match &param.node {
+        pl::ParamKind::Exp(_, exp) => code_of_exp(exp),
+        pl::ParamKind::Def(id, _, _, _) => Code::token(string_of_defid(id)),
+    }
+}
+
+fn code_of_params(params: &[pl::Param]) -> Code {
+    if params.is_empty() {
+        return Code::Empty;
+    }
+
+    let code_params = Code::join(", ", params.iter().map(code_of_param));
+    Code::seq([Code::token("("), code_params, Code::token(")")])
+}
+
+fn prose_of_param(param: &pl::Param) -> Prose {
+    match &param.node {
+        pl::ParamKind::Exp(_, exp) => prose_of_exp(exp),
+        pl::ParamKind::Def(id, _, _, _) => Prose::code(Code::token(string_of_defid(id))),
+    }
+}
+
+fn prose_of_params(params: &[pl::Param]) -> Prose {
+    if params.is_empty() {
+        return Prose::Empty;
+    }
+
+    let prose_params = Prose::join(", ", params.iter().map(prose_of_param));
+    Prose::seq([Prose::text("("), prose_params, Prose::text(")")])
+}
+
+// == Type arguments
+//
+//   <nat, text>   -> <nat, text>
+//   (none)        -> (empty)
+
+fn string_of_targs(targs: &[pl::Targ]) -> String {
+    if targs.is_empty() {
+        return String::new();
+    }
+
+    let texts_targ: Vec<String> = targs.iter().map(Print::to_string).collect();
+    let text_targs = texts_targ.join(", ");
+    format!("<{text_targs}>")
+}
+
+// == Arguments
+//
+//   $e_num(n)   -> xref:e_num[``$e_num(n)``]
 
 fn code_of_arg(arg: &pl::Arg) -> Code {
     match &arg.node {
         pl::ArgKind::Exp(exp) => code_of_exp(exp),
-        pl::ArgKind::Def(id) => token(string_of_defid(id)),
+        pl::ArgKind::Def(id) => Code::token(string_of_defid(id)),
     }
 }
 
 /// Renders a nonempty argument list with parentheses.
 fn code_of_args(args: &[pl::Arg]) -> Code {
     if args.is_empty() {
-        Code::Empty
-    } else {
-        code([token("("), join_code(", ", args.iter().map(code_of_arg)), token(")")])
+        return Code::Empty;
     }
-}
 
-fn string_of_targs(targs: &[pl::Targ]) -> String {
-    if targs.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "<{}>",
-            targs
-                .iter()
-                .map(Print::to_string)
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    }
-}
-
-/// Renders an expression in compact code form.
-fn code_of_exp(exp: &pl::Exp) -> Code {
-    use pl::ExpKind;
-    match &exp.node.node {
-        ExpKind::Bool(value) => token(value.to_string()),
-        ExpKind::Num(num) => token(Print::to_string(num)),
-        ExpKind::Text(text_value) => token(format!("\"{}\"", escape_text(text_value))),
-        ExpKind::Id(id) => code_of_id(id),
-        ExpKind::Un(op, _, exp_inner) => {
-            code([token(Print::to_string(op)), code_of_exp(exp_inner)])
-        }
-        ExpKind::Bin(op, _, exp_l, exp_r) => code([
-            code_of_exp(exp_l),
-            token(format!(" {} ", Print::to_string(op).replace('+', "{plus}"))),
-            code_of_exp(exp_r),
-        ]),
-        ExpKind::Cmp(op, _, exp_l, exp_r) => code([
-            code_of_exp(exp_l),
-            token(format!(" {} ", Print::to_string(op))),
-            code_of_exp(exp_r),
-        ]),
-        ExpKind::UpCast(_, exp_inner) | ExpKind::DownCast(_, exp_inner) => code_of_exp(exp_inner),
-        ExpKind::Sub(exp_inner, typ, _) => {
-            code([code_of_exp(exp_inner), token(" has type "), code_of_typ(typ)])
-        }
-        ExpKind::Match(exp_inner, pattern) => code_of_match(exp_inner, pattern),
-        ExpKind::Tuple(exps) => code([token("( "), code_of_exps(exps, ", "), token(" )")]),
-        ExpKind::Case(not_exp) => code_of_mixfix(not_exp, &code_of_exp),
-        ExpKind::Str(fields) => code([
-            token("+{+"),
-            join_code(
-                ", ",
-                fields.iter().map(|(atom, exp_field)| {
-                    code([token(string_of_atom(atom)), token(" "), code_of_exp(exp_field)])
-                }),
-            ),
-            token("+}+"),
-        ]),
-        ExpKind::Opt(None) => token("·"),
-        ExpKind::Opt(Some(exp_inner)) => code_of_exp(exp_inner),
-        ExpKind::List(exps) if exps.is_empty() => token("·"),
-        ExpKind::List(exps) if exps.len() == 1 => code_of_exp(&exps[0]),
-        ExpKind::List(exps) => code([token("+[+ "), code_of_exps(exps, ", "), token(" +]+")]),
-        ExpKind::Cons(exp_head, exp_tail) => {
-            code([code_of_exp(exp_head), token(" {two-colons} "), code_of_exp(exp_tail)])
-        }
-        ExpKind::Cat(exp_l, exp_r) => {
-            code([code_of_exp(exp_l), token(" {pp} "), code_of_exp(exp_r)])
-        }
-        ExpKind::Mem(exp_elem, exp_set) => {
-            code([code_of_exp(exp_elem), token(" is in "), code_of_exp(exp_set)])
-        }
-        ExpKind::Len(exp_inner) => code([token("the length of "), code_of_exp(exp_inner)]),
-        ExpKind::Dot(exp_base, atom) => {
-            code([code_of_exp(exp_base), token("."), token(string_of_atom(atom))])
-        }
-        ExpKind::Idx(exp_base, exp_idx) => {
-            code([code_of_exp(exp_base), token("["), code_of_exp(exp_idx), token("]")])
-        }
-        ExpKind::Slice(exp_base, exp_idx, exp_len) => code([
-            code_of_exp(exp_base),
-            token("["),
-            code_of_exp(exp_idx),
-            token(" : "),
-            code_of_exp(exp_len),
-            token("]"),
-        ]),
-        ExpKind::Upd(exp_base, path, exp_field) => code([
-            code_of_exp(exp_base),
-            token("["),
-            code_of_path(path),
-            token(" = "),
-            code_of_exp(exp_field),
-            token("]"),
-        ]),
-        ExpKind::Call(id, targs, args) => subject_code(
-            Subject::Function(id.node.clone()),
-            code([token(string_of_defid(id)), token(string_of_targs(targs)), code_of_args(args)]),
-        ),
-        ExpKind::Iter(exp_inner, iter_exp) if iter_exp.vars.is_empty() => code_of_exp(exp_inner),
-        ExpKind::Iter(exp_inner, iter_exp) => {
-            let inner = code_of_exp(exp_inner);
-            let needs_parens = !matches!(exp_inner.node.node, ExpKind::Id(_) | ExpKind::Tuple(_))
-                && doc::ser_code(&inner).contains(' ');
-            if needs_parens {
-                code([token("( "), inner, token(" )"), token(code_of_iter(iter_exp.iter))])
-            } else {
-                code([inner, token(code_of_iter(iter_exp.iter))])
-            }
-        }
-    }
-}
-
-fn code_of_match(exp: &pl::Exp, pattern: &pl::Pattern) -> Code {
-    use crate::lang::il::ast::{ListPattern, OptPattern, Pattern};
-    let scrutinee = code_of_exp(exp);
-    match pattern {
-        Pattern::Case(mixop) if mixop.arity() == 0 => {
-            code([scrutinee, token(" is "), code_of_pattern(pattern)])
-        }
-        Pattern::List(ListPattern::Nil) => code([scrutinee, token(" is an empty list")]),
-        Pattern::List(ListPattern::Cons) => code([scrutinee, token(" is a non-empty list")]),
-        Pattern::List(ListPattern::Fixed(num_elems)) => {
-            code([scrutinee, token(format!(" is a list of length {num_elems}"))])
-        }
-        Pattern::Opt(OptPattern::None) => code([scrutinee, token(" is none")]),
-        Pattern::Opt(OptPattern::Some) => code([scrutinee, token(" is defined")]),
-        _ => code([scrutinee, token(" matches pattern "), code_of_pattern(pattern)]),
-    }
-}
-
-// == Expressions as prose
-
-fn prose_of_exps(exps: &[pl::Exp]) -> Prose {
-    prose_of_list(exps.iter().map(prose_of_exp).collect())
-}
-
-/// Describes a pattern check using its specialized list and option wording.
-fn prose_of_match(exp: &pl::Exp, pattern: &pl::Pattern) -> Prose {
-    use crate::lang::il::ast::{ListPattern, OptPattern, Pattern};
-    let scrutinee = prose_of_exp(exp);
-    match pattern {
-        Pattern::Case(mixop) if mixop.arity() == 0 => {
-            prose([scrutinee, text(" is "), code_prose(code_of_pattern(pattern))])
-        }
-        Pattern::List(ListPattern::Nil) => prose([scrutinee, text(" is an empty list")]),
-        Pattern::List(ListPattern::Cons) => prose([scrutinee, text(" is a non-empty list")]),
-        Pattern::List(ListPattern::Fixed(num_elems)) => {
-            prose([scrutinee, text(format!(" is a list of length {num_elems}"))])
-        }
-        Pattern::Opt(OptPattern::None) => prose([scrutinee, text(" is none")]),
-        Pattern::Opt(OptPattern::Some) => prose([scrutinee, text(" is defined")]),
-        _ => prose([scrutinee, text(" matches pattern "), code_prose(code_of_pattern(pattern))]),
-    }
-}
-
-/// Describes the readable negation of a partial check when available.
-fn prose_of_negated_exp(exp: &pl::Exp) -> Option<Prose> {
-    match &exp.node.node {
-        pl::ExpKind::Match(exp_elem, pattern) => Some(prose([
-            prose_of_exp(exp_elem),
-            text(" does not match pattern "),
-            code_prose(code_of_pattern(pattern)),
-        ])),
-        pl::ExpKind::Sub(exp_elem, typ, _) => Some(prose([
-            code_prose(code_of_exp(exp_elem)),
-            text(" does not have type "),
-            code_prose(code_of_typ(typ)),
-        ])),
-        pl::ExpKind::Mem(exp_elem, exp_set) => Some(prose([
-            code_prose(code_of_exp(exp_elem)),
-            text(" is not in "),
-            code_prose(code_of_exp(exp_set)),
-        ])),
-        pl::ExpKind::Call(id, _, args) => exp
-            .hints
-            .prose_false
-            .as_ref()
-            .map(|hint| {
-                subject_link(
-                    Subject::Function(id.node.clone()),
-                    alternate(
-                        hint,
-                        &|text_body| reindent_lines(0, text_body),
-                        &prose_of_arg,
-                        args,
-                        false,
-                    ),
-                )
-            })
-            .or_else(|| Some(code_prose(code([token("~"), code_of_exp(exp)])))),
-        _ => None,
-    }
-}
-
-/// Renders an expression in readable prose form.
-fn prose_of_exp(exp: &pl::Exp) -> Prose {
-    use crate::lang::common::prim::bool::{BinOp as BoolBin, UnOp as BoolUn};
-    use pl::ExpKind;
-    match &exp.node.node {
-        ExpKind::Un(pl::UnOp::Bool(BoolUn::Not), _, exp_inner) => {
-            prose_of_negated_exp(exp_inner).unwrap_or_else(|| code_prose(code_of_exp(exp)))
-        }
-        ExpKind::Bin(pl::BinOp::Bool(BoolBin::Impl), _, exp_l, exp_r) => {
-            prose([text("if "), prose_of_exp(exp_l), text(", then "), prose_of_exp(exp_r)])
-        }
-        ExpKind::Bin(op @ pl::BinOp::Bool(_), _, exp_l, exp_r) => prose([
-            prose_of_exp(exp_l),
-            text(format!(" {} ", string_of_binop(*op))),
-            prose_of_exp(exp_r),
-        ]),
-        ExpKind::Cmp(op, _, exp_l, exp_r) => prose([
-            prose_of_exp(exp_l),
-            text(format!(" {} ", string_of_cmpop(*op))),
-            prose_of_exp(exp_r),
-        ]),
-        ExpKind::UpCast(_, exp_inner) | ExpKind::DownCast(_, exp_inner) => {
-            code_prose(code_of_exp(exp_inner))
-        }
-        ExpKind::Sub(exp_inner, typ, _) => prose([
-            code_prose(code_of_exp(exp_inner)),
-            text(" has type "),
-            code_prose(code_of_typ(typ)),
-        ]),
-        ExpKind::Match(exp_inner, pattern) => prose_of_match(exp_inner, pattern),
-        ExpKind::Tuple(exps) => {
-            prose([text("( "), join_prose(", ", exps.iter().map(prose_of_exp)), text(" )")])
-        }
-        ExpKind::Case(not_exp) => {
-            if let (Some(hint), pl::TypKind::Var(id_typ, _)) = (&exp.hints.prose, &exp.node.note) {
-                let exps = not_exp.args();
-                direct_link(
-                    id_typ.node.clone(),
-                    alternate(
-                        hint,
-                        &|text_body| reindent_lines(0, text_body),
-                        &|&exp| prose_of_exp(exp),
-                        &exps,
-                        false,
-                    ),
-                )
-            } else {
-                code_prose(code_of_mixfix(not_exp, &code_of_exp))
-            }
-        }
-        ExpKind::Str(fields) => prose([
-            text("+{+"),
-            join_prose(
-                ", ",
-                fields.iter().map(|(atom, exp_field)| {
-                    prose([text(string_of_atom(atom)), text(" "), prose_of_exp(exp_field)])
-                }),
-            ),
-            text("+}+"),
-        ]),
-        ExpKind::Opt(Some(exp_inner)) => prose_of_exp(exp_inner),
-        ExpKind::Cat(exp_l, exp_r) => {
-            prose([prose_of_exp(exp_l), text(" concatenated with "), prose_of_exp(exp_r)])
-        }
-        ExpKind::Mem(exp_elem, exp_set) => {
-            prose([prose_of_exp(exp_elem), text(" is in "), prose_of_exp(exp_set)])
-        }
-        ExpKind::Len(exp_inner) => prose([text("the length of "), prose_of_exp(exp_inner)]),
-        ExpKind::Upd(exp_base, path, exp_field) => prose([
-            code_prose(code_of_exp(exp_base)),
-            text(" with "),
-            code_prose(code_of_path(path)),
-            text(" set to "),
-            code_prose(code_of_exp(exp_field)),
-        ]),
-        ExpKind::Call(id, _, args) => {
-            let hint_opt = exp
-                .hints
-                .prose_in
-                .as_ref()
-                .or(exp.hints.prose_true.as_ref());
-            hint_opt.map_or_else(
-                || code_prose(code_of_exp(exp)),
-                |hint| {
-                    subject_link(
-                        Subject::Function(id.node.clone()),
-                        alternate(
-                            hint,
-                            &|text_body| reindent_lines(0, text_body),
-                            &prose_of_arg,
-                            args,
-                            false,
-                        ),
-                    )
-                },
-            )
-        }
-        ExpKind::Iter(exp_inner, iter_exp) if iter_exp.vars.is_empty() => prose_of_exp(exp_inner),
-        ExpKind::Bool(_)
-        | ExpKind::Num(_)
-        | ExpKind::Text(_)
-        | ExpKind::Id(_)
-        | ExpKind::Un(..)
-        | ExpKind::Bin(..)
-        | ExpKind::Opt(None)
-        | ExpKind::List(_)
-        | ExpKind::Cons(..)
-        | ExpKind::Dot(..)
-        | ExpKind::Idx(..)
-        | ExpKind::Slice(..)
-        | ExpKind::Iter(..) => code_prose(code_of_exp(exp)),
-    }
-}
-
-fn code_of_param(param: &pl::Param) -> Code {
-    match &param.node {
-        pl::ParamKind::Exp(_, exp) => code_of_exp(exp),
-        pl::ParamKind::Def(id, _, _, _) => token(string_of_defid(id)),
-    }
-}
-
-fn code_of_params(params: &[pl::Param]) -> Code {
-    if params.is_empty() {
-        Code::Empty
-    } else {
-        code([token("("), join_code(", ", params.iter().map(code_of_param)), token(")")])
-    }
-}
-
-fn prose_of_param(param: &pl::Param) -> Prose {
-    match &param.node {
-        pl::ParamKind::Exp(_, exp) => prose_of_exp(exp),
-        pl::ParamKind::Def(id, _, _, _) => code_prose(token(string_of_defid(id))),
-    }
-}
-
-fn prose_of_params(params: &[pl::Param]) -> Prose {
-    if params.is_empty() {
-        Prose::Empty
-    } else {
-        prose([text("("), join_prose(", ", params.iter().map(prose_of_param)), text(")")])
-    }
+    let code_args = Code::join(", ", args.iter().map(code_of_arg));
+    Code::seq([Code::token("("), code_args, Code::token(")")])
 }
 
 fn prose_of_arg(arg: &pl::Arg) -> Prose {
     match &arg.node {
         pl::ArgKind::Exp(exp) => prose_of_exp(exp),
-        pl::ArgKind::Def(id) => code_prose(token(string_of_defid(id))),
+        pl::ArgKind::Def(id) => Prose::code(Code::token(string_of_defid(id))),
     }
 }
 
-// == Rendering context
+// == Case analysis
 
-/// Renders a document's definitions and fragments with shared arm counters.
-///
-/// Reuse one renderer when composing rule groups, dispatch, and otherwise
-/// fragments into a document. Create a new renderer for each new document.
-/// The free rendering functions each create an independent renderer.
-pub struct Renderer<'a> {
-    anchors: Anchors,
-    anchor: &'a dyn Fn(&Subject) -> Option<String>,
-}
-
-impl<'a> Renderer<'a> {
-    /// Starts a document with fresh arm counters and a subject resolver.
-    pub fn new(anchor: &'a dyn Fn(&Subject) -> Option<String>) -> Self {
-        Self { anchors: Anchors::default(), anchor }
-    }
-
-    /// Renders a rule group, reserving arm anchors within this document.
-    pub fn render_rulegroup(
-        &mut self,
-        hints: &Hints,
-        id_rel: &pl::Id,
-        signature: &pl::RelSignature,
-        exps: &[pl::Exp],
-        block: &pl::GroupBlock,
-    ) -> String {
-        render_rulegroup_inner(self, hints, id_rel, signature, exps, block)
-    }
-
-    /// Renders relation dispatch with counters shared by other fragments.
-    pub fn render_defined_rel_def_dispatch(&mut self, rel: &pl::DefinedRel) -> String {
-        render_defined_rel_dispatch_inner(self, rel)
-    }
-
-    /// Renders an otherwise fragment with counters shared by other fragments.
-    pub fn render_rulegroup_else(&mut self, id_rel: &pl::Id, block: &pl::DispatchBlock) -> String {
-        let ctx = Context { namespace: id_rel.node.clone(), next: None };
-        render_elseblock(
-            self,
-            Some(&fallthrough::anchor_of_else(&id_rel.node)),
-            &ctx,
-            render_dispatch_inline,
-            Some(block),
-        )
-        .trim()
-        .to_owned()
-    }
-
-    /// Renders a definition with counters shared by other document fragments.
-    pub fn render_def(&mut self, def: &pl::Def) -> Option<String> {
-        render_def_inner(self, def)
-    }
-
-    /// Renders definitions in order with this document's anchors and counters.
-    pub fn render_defs(&mut self, defs: &[pl::Def]) -> String {
-        defs.iter()
-            .filter_map(|def| self.render_def(def))
-            .collect::<Vec<_>>()
-            .join("\n\n")
-    }
-}
-
-// == Guards
+// - Guard
+//
+//   t'* matches []   -> ``t'^{asterisk}^`` matches pattern ``[]``
+//   let t_h be t'*   -> let ``t~h~`` be ``t'^{asterisk}^``
 
 /// Describes a case guard against its scrutinee.
 fn prose_of_guard(exp_scrut: &pl::Exp, guard: &pl::Guard) -> Prose {
     match guard {
-        pl::Guard::Bool(true) => prose_of_exp(exp_scrut),
-        pl::Guard::Bool(false) => prose_of_negated_exp(exp_scrut)
-            .unwrap_or_else(|| code_prose(code([token("~"), code_of_exp(exp_scrut)]))),
-        pl::Guard::Cmp(op, _, exp) => prose([
-            prose_of_exp(exp_scrut),
-            text(format!(" {} ", string_of_cmpop(*op))),
-            prose_of_exp(exp),
-        ]),
-        pl::Guard::Sub(typ, _) => prose([
-            code_prose(code_of_exp(exp_scrut)),
-            text(" has type "),
-            code_prose(code_of_typ(typ)),
-        ]),
-        pl::Guard::Match(pattern) => prose([
-            prose_of_exp(exp_scrut),
-            text(" matches pattern "),
-            code_prose(code_of_pattern(pattern)),
-        ]),
-        pl::Guard::Mem(exp) => prose([prose_of_exp(exp_scrut), text(" is in "), prose_of_exp(exp)]),
+        pl::Guard::Bool(true) => prose_of_true_guard(exp_scrut),
+        pl::Guard::Bool(false) => prose_of_false_guard(exp_scrut),
+        pl::Guard::Cmp(op, _, exp) => prose_of_cmp_guard(exp_scrut, op, exp),
+        pl::Guard::Sub(typ, _) => prose_of_sub_guard(exp_scrut, typ),
+        pl::Guard::Match(pattern) => prose_of_match_guard(exp_scrut, pattern),
+        pl::Guard::Mem(exp) => prose_of_mem_guard(exp_scrut, exp),
         pl::Guard::CheckLetSub(_, _, exp_target) | pl::Guard::CheckLetMatch(_, exp_target) => {
-            prose([
-                text("let "),
-                code_prose(code_of_exp(exp_target)),
-                text(" be "),
-                prose_of_exp(exp_scrut),
-            ])
+            prose_of_check_let_guard(exp_scrut, exp_target)
         }
     }
 }
 
-// == Partial constructs
+// - True guards
+//
+//   b, guarded by true   -> ``b``
 
-/// Reports whether evaluation of a path can fail.
-fn is_partial_path(path: &pl::Path) -> bool {
-    match &path.node {
-        pl::PathKind::Root => false,
-        pl::PathKind::Idx(path_base, exp_idx) => {
-            is_partial_path(path_base) || is_partial_exp(exp_idx)
-        }
-        pl::PathKind::Slice(path_base, exp_idx, exp_len) => {
-            is_partial_path(path_base) || is_partial_exp(exp_idx) || is_partial_exp(exp_len)
-        }
-        pl::PathKind::Dot(path_base, _) => is_partial_path(path_base),
-    }
+fn prose_of_true_guard(exp_scrut: &pl::Exp) -> Prose {
+    prose_of_exp(exp_scrut)
 }
 
-/// Reports whether evaluation of an expression can fail.
-fn is_partial_exp(exp: &pl::Exp) -> bool {
-    use pl::ExpKind;
-    match &exp.node.node {
-        ExpKind::Bool(_) | ExpKind::Num(_) | ExpKind::Text(_) | ExpKind::Id(_) => false,
-        ExpKind::Un(_, _, exp_inner)
-        | ExpKind::UpCast(_, exp_inner)
-        | ExpKind::DownCast(_, exp_inner)
-        | ExpKind::Sub(exp_inner, _, _)
-        | ExpKind::Match(exp_inner, _)
-        | ExpKind::Len(exp_inner)
-        | ExpKind::Dot(exp_inner, _)
-        | ExpKind::Iter(exp_inner, _) => is_partial_exp(exp_inner),
-        ExpKind::Bin(_, _, exp_l, exp_r)
-        | ExpKind::Cmp(_, _, exp_l, exp_r)
-        | ExpKind::Cons(exp_l, exp_r)
-        | ExpKind::Cat(exp_l, exp_r)
-        | ExpKind::Mem(exp_l, exp_r)
-        | ExpKind::Idx(exp_l, exp_r) => is_partial_exp(exp_l) || is_partial_exp(exp_r),
-        ExpKind::Tuple(exps) | ExpKind::List(exps) => exps.iter().any(is_partial_exp),
-        ExpKind::Case(not_exp) => not_exp.args().into_iter().any(is_partial_exp),
-        ExpKind::Str(fields) => fields.iter().any(|(_, exp)| is_partial_exp(exp)),
-        ExpKind::Opt(exp_opt) => exp_opt.as_deref().is_some_and(is_partial_exp),
-        ExpKind::Slice(exp_base, exp_idx, exp_len) => {
-            is_partial_exp(exp_base) || is_partial_exp(exp_idx) || is_partial_exp(exp_len)
-        }
-        ExpKind::Upd(exp_base, path, exp_field) => {
-            is_partial_exp(exp_base) || is_partial_path(path) || is_partial_exp(exp_field)
-        }
-        ExpKind::Call(..) => true,
-    }
+// - False guards
+//
+//   n <- m*, guarded by false   -> ``n`` is not in ``m^{asterisk}^``
+
+fn prose_of_false_guard(exp_scrut: &pl::Exp) -> Prose {
+    // Checks without readable negation fall back to negated code
+    prose_of_negated_exp(exp_scrut).unwrap_or_else(|| {
+        let code_scrut = code_of_exp(exp_scrut);
+        Prose::code(Code::seq([Code::token("~"), code_scrut]))
+    })
 }
 
-fn is_partial_guard(guard: &pl::Guard) -> bool {
-    match guard {
-        pl::Guard::Bool(_) | pl::Guard::Sub(..) | pl::Guard::Match(_) | pl::Guard::Mem(_) => false,
-        pl::Guard::Cmp(_, _, exp)
-        | pl::Guard::CheckLetSub(_, _, exp)
-        | pl::Guard::CheckLetMatch(_, exp) => is_partial_exp(exp),
-    }
+// - Comparison guards
+//
+//   b, guarded by = true   -> ``b`` is equal to ``true``
+
+fn prose_of_cmp_guard(exp_scrut: &pl::Exp, op: &pl::CmpOp, exp: &pl::Exp) -> Prose {
+    let prose_scrut = prose_of_exp(exp_scrut);
+    let text_op = string_of_cmpop(*op);
+    let prose_exp = prose_of_exp(exp);
+    Prose::seq([prose_scrut, Prose::text(format!(" {text_op} ")), prose_exp])
+}
+
+// - Subtype guards
+//
+//   v, guarded by <: datum   -> ``v`` has type ``datum``
+
+fn prose_of_sub_guard(exp_scrut: &pl::Exp, typ: &pl::Typ) -> Prose {
+    let code_scrut = code_of_exp(exp_scrut);
+    let code_typ = code_of_typ(typ);
+    Prose::seq([Prose::code(code_scrut), Prose::text(" has type "), Prose::code(code_typ)])
+}
+
+// - Pattern guards
+//
+//   t'*, guarded by []   -> ``t'^{asterisk}^`` matches pattern ``[]``
+
+fn prose_of_match_guard(exp_scrut: &pl::Exp, pattern: &pl::Pattern) -> Prose {
+    let prose_scrut = prose_of_exp(exp_scrut);
+    let code_pattern = code_of_pattern(pattern);
+    Prose::seq([prose_scrut, Prose::text(" matches pattern "), Prose::code(code_pattern)])
+}
+
+// - Membership guards
+//
+//   n, guarded by <- m*   -> ``n`` is in ``m^{asterisk}^``
+
+fn prose_of_mem_guard(exp_scrut: &pl::Exp, exp: &pl::Exp) -> Prose {
+    let prose_scrut = prose_of_exp(exp_scrut);
+    let prose_exp = prose_of_exp(exp);
+    Prose::seq([prose_scrut, Prose::text(" is in "), prose_exp])
+}
+
+// - Binding guards
+//
+//   t'*, bound to t_h   -> let ``t~h~`` be ``t'^{asterisk}^``
+
+fn prose_of_check_let_guard(exp_scrut: &pl::Exp, exp_target: &pl::Exp) -> Prose {
+    let code_target = code_of_exp(exp_target);
+    let prose_scrut = prose_of_exp(exp_scrut);
+    Prose::seq([Prose::text("let "), Prose::code(code_target), Prose::text(" be "), prose_scrut])
 }
 
 // == Instructions
+
+// - Tier results
+//
+//   Inline under ". If ``b`` is equal to ``true``:"
+//   -> . If ``b`` is equal to ``true``: return ``X~t~``.
+//
+//   InlineGoto under ". If ``nat'^{asterisk}^`` matches pattern ``[]``:"
+//   -> ... matches pattern ``[]``: goto xref:Even-nil[nil]
+//
+//   Nested under ". Else:"
+//   -> . Else:
+//       .. Let ``t~h~`` ``{two-colons}`` ``t~t~^{asterisk}^`` be ``t^{asterisk}^``.
 
 /// A tier instruction ready to fold inline or nest below its enclosing head.
 enum Rendered {
@@ -894,21 +1394,33 @@ type RenderTier<Tier> =
 /// Composes a tier result with the enclosing instruction head.
 fn compose(block_head: Option<Block>, singleton: bool, rendered: Rendered) -> Block {
     match rendered {
-        Rendered::Inline(prose_tail) => match block_head {
-            Some(block_head) => concat([block_head, inline(prose_tail)]),
-            None => inline(prose_tail),
-        },
-        Rendered::InlineGoto(prose_tail) => doc::capitalize_first_block(match block_head {
-            Some(block_head) => concat([block_head, inline(prose_tail)]),
-            None => inline(prose_tail),
-        }),
+        Rendered::Inline(prose_tail) => {
+            let block_tail = Block::inline(prose_tail);
+            match block_head {
+                Some(block_head) => Block::concat([block_head, block_tail]),
+                None => block_tail,
+            }
+        }
+        Rendered::InlineGoto(prose_tail) => {
+            let block_tail = Block::inline(prose_tail);
+            let block = match block_head {
+                Some(block_head) => Block::concat([block_head, block_tail]),
+                None => block_tail,
+            };
+            block.capitalize_first()
+        }
         Rendered::Nested(block) if !singleton => block,
         Rendered::Nested(block) => match block_head {
-            Some(block_head) => seq([block_head, block]),
-            None => concat([raw("\n"), seq([block])]),
+            Some(block_head) => Block::seq([block_head, block]),
+            None => Block::concat([Block::raw("\n"), Block::seq([block])]),
         },
     }
 }
+
+// - Instruction
+//
+//   -- if $(n < m)   -> . Check that ``n`` is less than ``m``.
+//   -- debug n       -> . (debug: ``n``)
 
 /// Renders one shared or tier-specific instruction.
 fn render_instr<Tier>(
@@ -933,30 +1445,24 @@ fn render_instr<Tier>(
         pl::InstrKind::Destruct(destruct_instr) => {
             render_destruct_instr(level, ctx, instr, destruct_instr)
         }
-        pl::InstrKind::CheckLetSub(check_instr) => render_check_let_instr(
-            renderer,
-            level,
-            ctx,
-            render_tier,
-            instr,
-            (&check_instr.exp_l, &check_instr.exp_r, &check_instr.block),
-        ),
-        pl::InstrKind::CheckLetMatch(check_instr) => render_check_let_instr(
-            renderer,
-            level,
-            ctx,
-            render_tier,
-            instr,
-            (&check_instr.exp_l, &check_instr.exp_r, &check_instr.block),
-        ),
+        pl::InstrKind::CheckLetSub(check_instr) => {
+            render_check_let_sub_instr(renderer, level, ctx, render_tier, instr, check_instr)
+        }
+        pl::InstrKind::CheckLetMatch(check_instr) => {
+            render_check_let_match_instr(renderer, level, ctx, render_tier, instr, check_instr)
+        }
         pl::InstrKind::OptionGet(option_instr) => {
             render_option_get_instr(renderer, level, ctx, render_tier, instr, option_instr)
         }
         pl::InstrKind::Tier(tier_instr) => {
-            compose(None, false, render_tier(renderer, level, ctx, false, instr, &tier_instr.tier))
+            render_tier_instr(renderer, level, ctx, render_tier, instr, tier_instr)
         }
     }
 }
+
+// - Instruction sequences
+//
+//   $ite<X>(true, X_t, X_f) = X_t   -> . If ``b`` is equal to ``true``: return ``X~t~``.
 
 /// Renders instructions under an optional heading.
 fn render_instrs<Tier>(
@@ -971,23 +1477,46 @@ fn render_instrs<Tier>(
     if let [instr] = instrs
         && let pl::InstrKind::Tier(tier_instr) = &instr.node.node
     {
-        return compose(
-            block_head,
-            true,
-            render_tier(renderer, level, ctx, true, instr, &tier_instr.tier),
-        );
+        let rendered = render_tier(renderer, level, ctx, true, instr, &tier_instr.tier);
+        return compose(block_head, true, rendered);
     }
 
     // Render general blocks as a sequence below the optional heading
-    let blocks_rendered = instrs
+    let blocks_rendered: Vec<Block> = instrs
         .iter()
         .map(|instr| render_instr(renderer, level, ctx, render_tier, instr))
-        .collect::<Vec<_>>();
+        .collect();
     match block_head {
-        Some(block_head) => seq(std::iter::once(block_head).chain(blocks_rendered)),
-        None => concat([raw("\n"), seq(blocks_rendered)]),
+        Some(block_head) => Block::seq(std::iter::once(block_head).chain(blocks_rendered)),
+        None => Block::concat([Block::raw("\n"), Block::seq(blocks_rendered)]),
     }
 }
+
+/// Appends continuation instructions below a check heading at the same level.
+fn render_continuation<Tier>(
+    renderer: &mut Renderer<'_>,
+    level: usize,
+    block_head: Block,
+    ctx: &Context,
+    render_tier: RenderTier<Tier>,
+    instrs: &[pl::Instr<Tier>],
+) -> Block {
+    // Empty continuations leave the heading alone
+    if instrs.is_empty() {
+        return block_head;
+    }
+
+    let blocks_rendered = instrs
+        .iter()
+        .map(|instr| render_instr(renderer, level, ctx, render_tier, instr));
+    Block::seq(std::iter::once(block_head).chain(blocks_rendered))
+}
+
+// - Otherwise blocks
+//
+//   def $starts_with(t, t_prefix) = false
+//     -- otherwise
+//   -> . +++<span id="starts_with-else"></span>+++Otherwise: return ``false``.
 
 /// Serializes an otherwise block with its optional anchor.
 fn render_elseblock<Tier>(
@@ -1005,79 +1534,67 @@ fn render_elseblock<Tier>(
     let text_anchor = anchor_else
         .map(|anchor| format!("+++<span id=\"{anchor}\"></span>+++"))
         .unwrap_or_default();
-    format!(
-        "\n\n. {text_anchor}Otherwise:{}",
-        doc::ser_block_with_anchor(
-            &render_instrs(renderer, 1, None, ctx, render_tier, block),
-            renderer.anchor,
-        )
-    )
+    let block_body = render_instrs(renderer, 1, None, ctx, render_tier, block);
+    let text_body = doc::ser_block(&block_body, renderer.anchor);
+    format!("\n\n. {text_anchor}Otherwise:{text_body}")
 }
 
-// - Iterations
-
-fn prose_of_in_itervar(iter: Iter, var: &pl::Var) -> Prose {
-    prose([
-        code_prose(code_of_var(var)),
-        text(" in "),
-        code_prose(code([code_of_var(var), token(code_of_iter(iter))])),
-    ])
-}
-
-fn prose_of_in_itervars(iter: Iter, vars: &[pl::Var]) -> Prose {
-    prose_of_list(
-        vars.iter()
-            .map(|var| prose_of_in_itervar(iter, var))
-            .collect(),
-    )
-}
-
-fn prose_of_out_itervars(iter: Iter, vars: &[&pl::Var]) -> Prose {
-    prose_of_list(
-        vars.iter()
-            .filter(|var| !var.id.node.starts_with('_'))
-            .map(|var| code_prose(code([code_of_var(var), token(code_of_iter(iter))])))
-            .collect(),
-    )
-}
+// - Iteration suffixes
+//
+//   -- if typeIR? matches (_), iterated over typeIR?*
+//   -> Check that ``typeIR^?^`` is defined, for all ``typeIR^?^`` in ``typeIR^?^^{asterisk}^``.
 
 fn prose_of_iterexp_suffix(iter_exps: &[pl::ExpIter]) -> Prose {
     // Collect every expression iterator binding in source order
-    let proses = iter_exps
+    let proses: Vec<Prose> = iter_exps
         .iter()
         .flat_map(|iter_exp| {
+            let iter = iter_exp.iter;
             iter_exp
                 .vars
                 .iter()
-                .map(|var| prose_of_in_itervar(iter_exp.iter, var))
+                .map(move |var| prose_of_in_itervar(iter, var))
         })
-        .collect::<Vec<_>>();
+        .collect();
     // Omit the quantifier when no variables are bound
     if proses.is_empty() {
-        Prose::Empty
-    } else {
-        prose([text(", for all "), prose_of_list(proses)])
+        return Prose::Empty;
     }
+
+    let prose_vars = prose_of_list(proses);
+    Prose::seq([Prose::text(", for all "), prose_vars])
 }
 
 fn prose_of_iterinstr_suffix(iter_instrs: &[pl::InstrIter]) -> Prose {
     // Collect every instruction iterator binding in source order
-    let proses = iter_instrs
+    let proses: Vec<Prose> = iter_instrs
         .iter()
         .flat_map(|iter_instr| {
+            let iter = iter_instr.iter;
             iter_instr
                 .vars_bound
                 .iter()
-                .map(|var| prose_of_in_itervar(iter_instr.iter, var))
+                .map(move |var| prose_of_in_itervar(iter, var))
         })
-        .collect::<Vec<_>>();
+        .collect();
     // Omit the quantifier when no variables are bound
     if proses.is_empty() {
-        Prose::Empty
-    } else {
-        prose([text(", for each "), prose_of_list(proses)])
+        return Prose::Empty;
     }
+
+    let prose_vars = prose_of_list(proses);
+    Prose::seq([Prose::text(", for each "), prose_vars])
 }
+
+// - Iteration blocks
+//
+//   -- (if m = $(n + 1))*   -> . For each ``n`` in ``n^{asterisk}^``:
+//                              +
+//                              --
+//                               ** Let ``m`` be ``n`` ``{plus}`` ``1``.
+//                              --
+//                              +
+//                              Let ``m^{asterisk}^`` be the resulting list.
 
 /// Wraps a body in nested iteration blocks and binds visible outputs.
 fn render_iterinstrs(
@@ -1086,56 +1603,59 @@ fn render_iterinstrs(
     iter_instrs: &[pl::InstrIter],
     render_body: &dyn Fn(usize) -> Block,
 ) -> Block {
-    fn go(
-        level: usize,
-        outermost: bool,
-        prose_fallthrough: &Prose,
-        iter_instrs: &[pl::InstrIter],
-        render_body: &dyn Fn(usize) -> Block,
-    ) -> Block {
-        // Finish recursion at the caller-supplied body
-        let Some((iter_instr, iter_instrs_tail)) = iter_instrs.split_last() else {
-            return render_body(level);
-        };
-        // Keep only outputs that appear in the rendered binding
-        let vars_output = iter_instr
-            .vars_bind
-            .iter()
-            .filter(|var| !var.id.node.starts_with('_'))
-            .collect::<Vec<_>>();
-        // Render inner iteration levels before their enclosing open block
-        let block_inner = go(level + 1, false, prose_fallthrough, iter_instrs_tail, render_body);
-        let prose_head = prose([
-            text("For each "),
-            prose_of_in_itervars(iter_instr.iter, &iter_instr.vars_bound),
-            text(":"),
-        ]);
-        let fallthrough = if outermost { prose_fallthrough.clone() } else { Prose::Empty };
-        // Bind visible outputs after closing the iteration body
-        let block_body = if vars_output.is_empty() {
-            concat([raw("+\n--\n"), block_inner, raw("\n--\n")])
-        } else {
-            let text_noun = string_of_iter(iter_instr.iter);
-            let text_suffix = if vars_output.len() > 1 { "s" } else { "" };
-            concat([
-                raw("+\n--\n"),
-                block_inner,
-                raw("\n--\n+\n"),
-                inline(prose([
-                    text("Let "),
-                    prose_of_out_itervars(iter_instr.iter, &vars_output),
-                    text(format!(" be the resulting {text_noun}{text_suffix}.")),
-                    fallthrough,
-                ])),
-            ])
-        };
-        ordered_body(level, None, prose_head, block_body)
-    }
-
-    go(level, true, &prose_fallthrough, iter_instrs, render_body)
+    render_iterinstr_levels(level, true, &prose_fallthrough, iter_instrs, render_body)
 }
 
-// - Shared instruction forms
+/// Opens one iteration block per level, attaching the fallthrough to the outermost one.
+fn render_iterinstr_levels(
+    level: usize,
+    outermost: bool,
+    prose_fallthrough: &Prose,
+    iter_instrs: &[pl::InstrIter],
+    render_body: &dyn Fn(usize) -> Block,
+) -> Block {
+    // Finish recursion at the caller-supplied body
+    let Some((iter_instr, iter_instrs_tail)) = iter_instrs.split_last() else {
+        return render_body(level);
+    };
+    // Keep only outputs that appear in the rendered binding
+    let vars_output: Vec<&pl::Var> = iter_instr
+        .vars_bind
+        .iter()
+        .filter(|var| !var.id.node.starts_with('_'))
+        .collect();
+    // Render inner iteration levels before their enclosing open block
+    let block_inner =
+        render_iterinstr_levels(level + 1, false, prose_fallthrough, iter_instrs_tail, render_body);
+    let prose_vars_bound = prose_of_in_itervars(iter_instr.iter, &iter_instr.vars_bound);
+    let prose_head = Prose::seq([Prose::text("For each "), prose_vars_bound, Prose::text(":")]);
+    // Bind visible outputs after closing the iteration body
+    let block_body = if vars_output.is_empty() {
+        Block::concat([Block::raw("+\n--\n"), block_inner, Block::raw("\n--\n")])
+    } else {
+        let prose_vars_output = prose_of_out_itervars(iter_instr.iter, &vars_output);
+        let text_noun = string_of_iter(iter_instr.iter);
+        let text_suffix = if vars_output.len() > 1 { "s" } else { "" };
+        let prose_label = if outermost { prose_fallthrough.clone() } else { Prose::Empty };
+        let prose_binding = Prose::seq([
+            Prose::text("Let "),
+            prose_vars_output,
+            Prose::text(format!(" be the resulting {text_noun}{text_suffix}.")),
+            prose_label,
+        ]);
+        Block::concat([
+            Block::raw("+\n--\n"),
+            block_inner,
+            Block::raw("\n--\n+\n"),
+            Block::inline(prose_binding),
+        ])
+    };
+    Block::item_ordered_body(level, None, prose_head, block_body)
+}
+
+// - If instructions
+//
+//   -- if $(n < m)   -> . Check that ``n`` is less than ``m``.
 
 /// Renders a conditional check and its continuation.
 fn render_if_instr<Tier>(
@@ -1147,27 +1667,67 @@ fn render_if_instr<Tier>(
     if_instr: &pl::IfInstr<Tier>,
 ) -> Block {
     // Build the check heading with its failure continuation
-    let block_head = ordered(
-        level,
-        prose([
-            text("Check that "),
-            prose_of_exp(&if_instr.exp),
-            prose_of_iterexp_suffix(&if_instr.iter_exps),
-            text("."),
-            fallthrough::prose_of_link(ctx, instr),
-        ]),
-    );
-    // Append a nonempty continuation below the heading
-    if if_instr.block.is_empty() {
-        block_head
-    } else {
-        seq(std::iter::once(block_head).chain(
-            if_instr
-                .block
-                .iter()
-                .map(|instr| render_instr(renderer, level, ctx, render_tier, instr)),
-        ))
-    }
+    let prose_cond = prose_of_exp(&if_instr.exp);
+    let prose_suffix = prose_of_iterexp_suffix(&if_instr.iter_exps);
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+    let prose_head = Prose::seq([
+        Prose::text("Check that "),
+        prose_cond,
+        prose_suffix,
+        Prose::text("."),
+        prose_fallthrough,
+    ]);
+    let block_head = Block::item_ordered(level, prose_head);
+    render_continuation(renderer, level, block_head, ctx, render_tier, &if_instr.block)
+}
+
+// - Hold instructions
+//
+//   rule Even/cons: |- n_a :: n_b :: n*
+//     -- Even: |- n*
+//   -> . If xref:Even[``n^{asterisk}^`` has even length]:+++<sub class="bk-mark">[FAIL]</sub>+++ then, the relation holds.
+
+/// Builds the heading of a positive or negative relation holding branch.
+fn render_hold_head<Tier>(
+    level: usize,
+    ctx: &Context,
+    instr: &pl::Instr<Tier>,
+    hold_instr: &pl::HoldInstr<Tier>,
+    hold: bool,
+) -> Block {
+    let hint_opt = if hold { &instr.hints.prose_true } else { &instr.hints.prose_false };
+    let link = Link::Subject(Subject::Relation(hold_instr.id.node.clone()));
+    let prose_cond = match hint_opt {
+        // Hinted relations describe the branch condition in prose
+        Some(hint) => {
+            let exps = hold_instr.not_exp.args();
+            let prose_hint = alternate(
+                hint,
+                &|text_body| reindent_lines(0, text_body),
+                &|&exp| prose_of_exp(exp),
+                &exps,
+                false,
+            );
+            Prose::link(link, prose_hint)
+        }
+        // Unhinted relations show their notation followed by the verdict
+        None => {
+            let code_not = code_of_mixfix(&hold_instr.not_exp, &code_of_exp);
+            let prose_rel = Prose::link(link, Prose::code(code_not));
+            let text_verdict = if hold { " holds" } else { " does not hold" };
+            Prose::seq([prose_rel, Prose::text(text_verdict)])
+        }
+    };
+    let prose_suffix = prose_of_iterexp_suffix(&hold_instr.iter_exps);
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+    let prose_head = Prose::seq([
+        Prose::text("If "),
+        prose_cond,
+        prose_suffix,
+        Prose::text(":"),
+        prose_fallthrough,
+    ]);
+    Block::item_ordered(level, prose_head)
 }
 
 /// Renders positive, negative, or two-sided relation holding branches.
@@ -1179,67 +1739,46 @@ fn render_hold_instr<Tier>(
     instr: &pl::Instr<Tier>,
     hold_instr: &pl::HoldInstr<Tier>,
 ) -> Block {
-    // Extract relation arguments once for hinted prose
-    let exps = hold_instr.not_exp.args();
-    let iter_suffix = prose_of_iterexp_suffix(&hold_instr.iter_exps);
-    // Build either the positive or negative branch heading
-    let make_head = |hold: bool| {
-        let hint_opt = if hold { &instr.hints.prose_true } else { &instr.hints.prose_false };
-        let prose_cond = hint_opt.as_ref().map_or_else(
-            || {
-                prose([
-                    subject_link(
-                        Subject::Relation(hold_instr.id.node.clone()),
-                        code_prose(code_of_mixfix(&hold_instr.not_exp, &code_of_exp)),
-                    ),
-                    text(if hold { " holds" } else { " does not hold" }),
-                ])
-            },
-            |hint| {
-                subject_link(
-                    Subject::Relation(hold_instr.id.node.clone()),
-                    alternate(
-                        hint,
-                        &|text_body| reindent_lines(0, text_body),
-                        &|&exp| prose_of_exp(exp),
-                        &exps,
-                        false,
-                    ),
-                )
-            },
-        );
-        ordered(
-            level,
-            prose([
-                text("If "),
-                prose_cond,
-                iter_suffix.clone(),
-                text(":"),
-                fallthrough::prose_of_link(ctx, instr),
-            ]),
-        )
-    };
     // Render the selected one-sided or two-sided branch structure
     match &hold_instr.hold_case {
         pl::HoldCase::Hold(block, _) => {
-            render_instrs(renderer, level + 1, Some(make_head(true)), ctx, render_tier, block)
+            let block_head = render_hold_head(level, ctx, instr, hold_instr, true);
+            render_instrs(renderer, level + 1, Some(block_head), ctx, render_tier, block)
         }
         pl::HoldCase::NotHold(block, _) => {
-            render_instrs(renderer, level + 1, Some(make_head(false)), ctx, render_tier, block)
+            let block_head = render_hold_head(level, ctx, instr, hold_instr, false);
+            render_instrs(renderer, level + 1, Some(block_head), ctx, render_tier, block)
         }
-        pl::HoldCase::Both(block_hold, block_not_hold) => seq([
-            render_instrs(renderer, level + 1, Some(make_head(true)), ctx, render_tier, block_hold),
-            render_instrs(
+        pl::HoldCase::Both(block_hold, block_not_hold) => {
+            let block_head_hold = render_hold_head(level, ctx, instr, hold_instr, true);
+            let block_branch_hold = render_instrs(
                 renderer,
                 level + 1,
-                Some(ordered(level, text("Else:"))),
+                Some(block_head_hold),
+                ctx,
+                render_tier,
+                block_hold,
+            );
+            let block_head_else = Block::item_ordered(level, Prose::text("Else:"));
+            let block_branch_else = render_instrs(
+                renderer,
+                level + 1,
+                Some(block_head_else),
                 ctx,
                 render_tier,
                 block_not_hold,
-            ),
-        ]),
+            );
+            Block::seq([block_branch_hold, block_branch_else])
+        }
     }
 }
+
+// - Case instructions
+//
+//   def $join_text(eps, t_sep) = ""
+//   def $join_text([ t_h ], t_sep) = t_h
+//   -> . If ``t'^{asterisk}^`` matches pattern ``[]``: return ``""``.
+//      . Else if let ``t~h~`` be ``t'^{asterisk}^``: return ``t~h~``.
 
 /// Renders a check or an if/else-if/else case ladder.
 fn render_case_instr<Tier>(
@@ -1250,27 +1789,18 @@ fn render_case_instr<Tier>(
     instr: &pl::Instr<Tier>,
     case_instr: &pl::CaseInstr<Tier>,
 ) -> Block {
-    let fallthrough = fallthrough::prose_of_link(ctx, instr);
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
     // Render a single arm as a check without an if ladder
     if let [case] = case_instr.cases.as_slice() {
-        let block_head = ordered(
-            level,
-            prose([
-                text("Check that "),
-                prose_of_guard(&case_instr.exp, &case.guard),
-                text("."),
-                fallthrough,
-            ]),
-        );
-        return if case.block.is_empty() {
-            block_head
-        } else {
-            seq(std::iter::once(block_head).chain(
-                case.block
-                    .iter()
-                    .map(|instr| render_instr(renderer, level, ctx, render_tier, instr)),
-            ))
-        };
+        let prose_guard = prose_of_guard(&case_instr.exp, &case.guard);
+        let prose_head = Prose::seq([
+            Prose::text("Check that "),
+            prose_guard,
+            Prose::text("."),
+            prose_fallthrough,
+        ]);
+        let block_head = Block::item_ordered(level, prose_head);
+        return render_continuation(renderer, level, block_head, ctx, render_tier, &case.block);
     }
 
     let num_cases = case_instr.cases.len();
@@ -1278,63 +1808,57 @@ fn render_case_instr<Tier>(
     for (idx, case) in case_instr.cases.iter().enumerate() {
         // Turn the final total arm into an otherwise branch
         if idx + 1 == num_cases && !case_instr.dangle {
-            let block_else = ordered(level, text("Else:"));
-            if matches!(case.guard, pl::Guard::CheckLetSub(..) | pl::Guard::CheckLetMatch(..)) {
-                let block_bind = ordered(
-                    level + 1,
-                    prose([
-                        doc::capitalize_first_prose(prose_of_guard(&case_instr.exp, &case.guard)),
-                        text("."),
-                    ]),
-                );
-                blocks_case.push(seq(std::iter::once(block_else)
-                    .chain(std::iter::once(block_bind))
-                    .chain(
-                        case.block.iter().map(|instr| {
-                            render_instr(renderer, level + 1, ctx, render_tier, instr)
-                        }),
-                    )));
+            let block_else = Block::item_ordered(level, Prose::text("Else:"));
+            let is_binding =
+                matches!(case.guard, pl::Guard::CheckLetSub(..) | pl::Guard::CheckLetMatch(..));
+            let block_case = if is_binding {
+                // A binding guard becomes the first step of the otherwise branch
+                let prose_guard = prose_of_guard(&case_instr.exp, &case.guard).capitalize_first();
+                let prose_bind = Prose::seq([prose_guard, Prose::text(".")]);
+                let block_bind = Block::item_ordered(level + 1, prose_bind);
+                let blocks_rendered = case
+                    .block
+                    .iter()
+                    .map(|instr| render_instr(renderer, level + 1, ctx, render_tier, instr));
+                Block::seq([block_else, block_bind].into_iter().chain(blocks_rendered))
             } else {
-                blocks_case.push(render_instrs(
-                    renderer,
-                    level + 1,
-                    Some(block_else),
-                    ctx,
-                    render_tier,
-                    &case.block,
-                ));
-            }
-        } else {
-            // Attach fallthrough only where evaluating the condition can fail
-            let label =
-                if is_partial_guard(&case.guard) || (idx == 0 && is_partial_exp(&case_instr.exp)) {
-                    fallthrough.clone()
-                } else {
-                    Prose::Empty
-                };
-            let keyword = if idx == 0 { "If " } else { "Else if " };
-            // Nest the selected case body below its condition
-            let block_head = ordered(
-                level,
-                prose([
-                    text(keyword),
-                    prose_of_guard(&case_instr.exp, &case.guard),
-                    text(":"),
-                    label,
-                ]),
-            );
-            blocks_case.push(render_instrs(
-                renderer,
-                level + 1,
-                Some(block_head),
-                ctx,
-                render_tier,
-                &case.block,
-            ));
+                render_instrs(renderer, level + 1, Some(block_else), ctx, render_tier, &case.block)
+            };
+            blocks_case.push(block_case);
+            continue;
         }
+
+        // Attach fallthrough only where evaluating the condition can fail
+        let is_partial =
+            is_partial_guard(&case.guard) || (idx == 0 && is_partial_exp(&case_instr.exp));
+        let prose_label = if is_partial { prose_fallthrough.clone() } else { Prose::Empty };
+        let keyword = if idx == 0 { "If " } else { "Else if " };
+        // Nest the selected case body below its condition
+        let prose_guard = prose_of_guard(&case_instr.exp, &case.guard);
+        let prose_head =
+            Prose::seq([Prose::text(keyword), prose_guard, Prose::text(":"), prose_label]);
+        let block_head = Block::item_ordered(level, prose_head);
+        let block_case =
+            render_instrs(renderer, level + 1, Some(block_head), ctx, render_tier, &case.block);
+        blocks_case.push(block_case);
     }
-    seq(blocks_case)
+    Block::seq(blocks_case)
 }
+
+// - Group dispatch links
+//
+//   Even/nil   -> goto xref:Even-nil[nil]
+
+fn prose_of_group_dispatch(id_rel: &pl::Id, id_group: &pl::Id) -> Prose {
+    let anchor_group = fallthrough::anchor_of_group(&id_rel.node, &id_group.node);
+    let prose_group = Prose::link(Link::Direct(anchor_group), Prose::text(id_group.node.clone()));
+    Prose::seq([Prose::text("goto "), prose_group])
+}
+
+// - Let instructions
+//
+//   -- if m = $(n + 1)            -> . Let ``m`` be ``n`` ``{plus}`` ``1``.
+//   -- if {LEFT n, RIGHT m} = p   -> . Let ``+{++LEFT+`` ``n,`` ``+RIGHT+`` ``m+}+`` be ``p``.
 
 /// Renders a binding and any instruction iterations around it.
 fn render_let_instr<Tier>(
@@ -1343,7 +1867,7 @@ fn render_let_instr<Tier>(
     instr: &pl::Instr<Tier>,
     let_instr: &pl::LetInstr,
 ) -> Block {
-    let fallthrough = fallthrough::prose_of_link(ctx, instr);
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
     // Detect outputs that require explicit iteration blocks
     let has_output = let_instr
         .iter_instrs
@@ -1352,372 +1876,39 @@ fn render_let_instr<Tier>(
         .any(|var| !var.id.node.starts_with('_'));
     // Keep output-free bindings inline with their iterator suffix
     if !has_output {
-        ordered(
-            level,
-            prose([
-                text("Let "),
-                code_prose(code_of_exp(&let_instr.exp_l)),
-                text(" be "),
-                prose_of_exp(&let_instr.exp_r),
-                prose_of_iterinstr_suffix(&let_instr.iter_instrs),
-                text("."),
-                fallthrough,
-            ]),
-        )
-    } else {
-        // Nest output-producing bindings under their iteration scopes
-        render_iterinstrs(level, fallthrough, &let_instr.iter_instrs, &|level| {
-            unordered(
-                level,
-                prose([
-                    text("Let "),
-                    code_prose(code_of_exp(&let_instr.exp_l)),
-                    text(" be "),
-                    prose_of_exp(&let_instr.exp_r),
-                    text("."),
-                ]),
-            )
-        })
+        let code_l = code_of_exp(&let_instr.exp_l);
+        let prose_r = prose_of_exp(&let_instr.exp_r);
+        let prose_suffix = prose_of_iterinstr_suffix(&let_instr.iter_instrs);
+        let prose_head = Prose::seq([
+            Prose::text("Let "),
+            Prose::code(code_l),
+            Prose::text(" be "),
+            prose_r,
+            prose_suffix,
+            Prose::text("."),
+            prose_fallthrough,
+        ]);
+        return Block::item_ordered(level, prose_head);
     }
+
+    // Nest output-producing bindings under their iteration scopes
+    render_iterinstrs(level, prose_fallthrough, &let_instr.iter_instrs, &|level| {
+        let code_l = code_of_exp(&let_instr.exp_l);
+        let prose_r = prose_of_exp(&let_instr.exp_r);
+        let prose_head = Prose::seq([
+            Prose::text("Let "),
+            Prose::code(code_l),
+            Prose::text(" be "),
+            prose_r,
+            Prose::text("."),
+        ]);
+        Block::item_unordered(level, prose_head)
+    })
 }
 
-fn render_debug_instr<Tier>(
-    level: usize,
-    ctx: &Context,
-    instr: &pl::Instr<Tier>,
-    debug_instr: &pl::DebugInstr,
-) -> Block {
-    ordered(
-        level,
-        prose([
-            text("(debug: "),
-            prose_of_exp(&debug_instr.exp),
-            text(")"),
-            fallthrough::prose_of_link(ctx, instr),
-        ]),
-    )
-}
-
-/// Renders named destructuring projections.
-fn render_destruct_instr<Tier>(
-    level: usize,
-    ctx: &Context,
-    instr: &pl::Instr<Tier>,
-    destruct_instr: &pl::DestructInstr,
-) -> Block {
-    // Discard unnamed projections from the prose binding
-    let projections = destruct_instr
-        .bindings
-        .iter()
-        .filter_map(|(name, exp)| name.as_ref().map(|name| (name, exp)))
-        .collect::<Vec<_>>();
-    let fallthrough = fallthrough::prose_of_link(ctx, instr);
-    // Use dedicated singular prose for one named projection
-    if let [(name, exp_target)] = projections.as_slice() {
-        ordered(
-            level,
-            prose([
-                text("Let "),
-                prose_of_exp(exp_target),
-                text(format!(" be the {name} of ")),
-                prose_of_exp(&destruct_instr.exp),
-                text("."),
-                fallthrough,
-            ]),
-        )
-    } else {
-        // Pair multiple targets with their projection names
-        ordered(
-            level,
-            prose([
-                text("Let "),
-                prose_of_list(
-                    projections
-                        .iter()
-                        .map(|(_, exp)| prose_of_exp(exp))
-                        .collect(),
-                ),
-                text(" be "),
-                prose_of_list(
-                    projections
-                        .iter()
-                        .map(|(name, _)| text(format!("the {name}")))
-                        .collect(),
-                ),
-                text(" of "),
-                prose_of_exp(&destruct_instr.exp),
-                text("."),
-                fallthrough,
-            ]),
-        )
-    }
-}
-
-/// Renders a partial subtype or pattern binding.
-fn render_check_let_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-    binding: (&pl::Exp, &pl::Exp, &[pl::Instr<Tier>]),
-) -> Block {
-    let (exp_l, exp_r, block) = binding;
-    // Build the partial binding heading with its failure continuation
-    let block_head = ordered(
-        level,
-        prose([
-            text("Let!~type~ "),
-            code_prose(code_of_exp(exp_l)),
-            text(" be "),
-            prose_of_exp(exp_r),
-            text("."),
-            fallthrough::prose_of_link(ctx, instr),
-        ]),
-    );
-    // Append a nonempty successful continuation below the heading
-    if block.is_empty() {
-        block_head
-    } else {
-        seq(std::iter::once(block_head).chain(
-            block
-                .iter()
-                .map(|instr| render_instr(renderer, level, ctx, render_tier, instr)),
-        ))
-    }
-}
-
-/// Renders a forced option binding.
-fn render_option_get_instr<Tier>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    render_tier: RenderTier<Tier>,
-    instr: &pl::Instr<Tier>,
-    option_instr: &pl::OptionGetInstr<Tier>,
-) -> Block {
-    // Build the forced binding heading with its failure continuation
-    let block_head = ordered(
-        level,
-        prose([
-            text("Let "),
-            code_prose(code_of_exp(&option_instr.exp_l)),
-            text(" be "),
-            text(super::utils::adoc_link("option_get", "*!*")),
-            text(" "),
-            prose_of_exp(&option_instr.exp_r),
-            text("."),
-            fallthrough::prose_of_link(ctx, instr),
-        ]),
-    );
-    // Append a nonempty successful continuation below the heading
-    if option_instr.block.is_empty() {
-        block_head
-    } else {
-        seq(std::iter::once(block_head).chain(
-            option_instr
-                .block
-                .iter()
-                .map(|instr| render_instr(renderer, level, ctx, render_tier, instr)),
-        ))
-    }
-}
-
-// == Relations
-
-/// Lifts a synthesized SL output expression into an unhinted PL expression.
-fn lift_synthesized_exp(exp_sl: &sl::ast::Exp) -> pl::Exp {
-    let exp_kind = match &exp_sl.node {
-        sl::ast::ExpKind::Id(id) => pl::ExpKind::Id(id.clone()),
-        sl::ast::ExpKind::Iter(exp_inner, iter_exp) => {
-            pl::ExpKind::Iter(Box::new(lift_synthesized_exp(exp_inner)), iter_exp.clone())
-        }
-        _ => panic!("relation title outputs are synthesized variables"),
-    };
-    crate::annotated_note_phrase! {
-        node: exp_kind,
-        note: exp_sl.note.as_ref().clone(),
-        span: exp_sl.span.clone(),
-    }
-}
-
-/// Fills relation inputs and leaves output positions as percent holes.
-fn prose_of_rel_title_math(signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
-    let mixop = signature.not_typ.node.to_mixop();
-    let num_outputs = mixop.arity() - exps.len();
-    let codes_args = input::combine(
-        &signature.input_hint,
-        exps.iter().map(code_of_exp).collect(),
-        (0..num_outputs).map(|_| token("%")).collect(),
-    )
-    .expect("validated relation input hint");
-    let not_exp = pl::Mixop::fill(&mixop, codes_args).expect("relation title fills its notation");
-    code_prose(code_of_mixfix(&not_exp, &Clone::clone))
-}
-
-/// Builds a relation title from input, output, truth, or notation prose.
-fn render_rel_title_block(
-    hints: &Hints,
-    id_rel: &pl::Id,
-    signature: &pl::RelSignature,
-    exps: &[pl::Exp],
-) -> Block {
-    // Prefer synthesized inputs when prosification changed title bindings
-    let exps_input = hints
-        .prose_input_exps
-        .as_ref()
-        .map(|exps| exps.iter().map(lift_synthesized_exp).collect::<Vec<_>>());
-    let exps_input = exps_input.as_deref().unwrap_or(exps);
-    // Build the shared linked heading before selecting the title form
-    let prose_title =
-        subject_link(Subject::Relation(id_rel.node.clone()), text(id_rel.node.clone()));
-    let block_header = concat([inline(prose([prose_title, text(":")])), raw("\n\n")]);
-    // Select paired, input-only, truth, or notation prose
-    match (&hints.prose_in, &hints.prose_out, &hints.prose_output_exps, &hints.prose_true) {
-        // Reject incomplete paired output hints
-        (Some(_), Some(_), None, _) => panic!("prose_out title requires synthesized outputs"),
-        (Some(hint_input), Some(hint_output), Some(exps_output_sl), _) => {
-            // Render paired input and synthesized output prose
-            let exps_output = exps_output_sl
-                .iter()
-                .map(lift_synthesized_exp)
-                .collect::<Vec<_>>();
-            concat([
-                block_header,
-                unordered(
-                    0,
-                    alternate(
-                        hint_input,
-                        &|text_body| reindent_lines(1, text_body),
-                        &prose_of_exp,
-                        exps_input,
-                        true,
-                    ),
-                ),
-                raw(":\n"),
-                unordered(
-                    0,
-                    prose([
-                        text("The result is "),
-                        alternate(
-                            hint_output,
-                            &|text_body| reindent_lines(1, text_body),
-                            &prose_of_exp,
-                            &exps_output,
-                            false,
-                        ),
-                    ]),
-                ),
-                raw("."),
-            ])
-        }
-        // Render input prose without a synthesized result
-        (Some(hint_input), _, _, _) => concat([
-            block_header,
-            unordered(
-                0,
-                alternate(
-                    hint_input,
-                    &|text_body| reindent_lines(1, text_body),
-                    &prose_of_exp,
-                    exps_input,
-                    true,
-                ),
-            ),
-            raw("."),
-        ]),
-        // Render a direct truth description
-        (_, _, _, Some(hint_true)) => concat([
-            block_header,
-            unordered(
-                0,
-                alternate(
-                    hint_true,
-                    &|text_body| reindent_lines(0, text_body),
-                    &prose_of_exp,
-                    exps,
-                    true,
-                ),
-            ),
-        ]),
-        // Fall back to the filled relation notation
-        _ => inline(subject_link(
-            Subject::Relation(id_rel.node.clone()),
-            prose([text(format!("{}: ", id_rel.node)), prose_of_rel_title_math(signature, exps)]),
-        )),
-    }
-}
-
-/// Renders a relation title using caller-supplied anchors.
-pub fn render_rel_title_with_anchor(
-    hints: &Hints,
-    id_rel: &pl::Id,
-    signature: &pl::RelSignature,
-    exps: &[pl::Exp],
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    doc::ser_block_with_anchor(&render_rel_title_block(hints, id_rel, signature, exps), anchor)
-}
-
-/// Renders a relation title with definition-name anchors.
-pub fn render_rel_title(
-    hints: &Hints,
-    id_rel: &pl::Id,
-    signature: &pl::RelSignature,
-    exps: &[pl::Exp],
-) -> String {
-    render_rel_title_with_anchor(hints, id_rel, signature, exps, &doc::subject_name)
-}
-
-// == Tier renderers
-
-/// Renders backtracking arms with derived next-arm targets.
-fn render_block_arms<Arm>(
-    renderer: &mut Renderer<'_>,
-    level: usize,
-    ctx: &Context,
-    arms: &[Arm],
-    render_arm: &dyn Fn(&mut Renderer<'_>, &Context, &Arm) -> Block,
-) -> Block {
-    // Allocate one shared namespace for every arm target
-    let anchor_block = renderer.anchors.fresh_block(&ctx.namespace);
-    let num_arms = arms.len();
-    let blocks_rendered = arms.iter().enumerate().map(|(idx, arm)| {
-        // Point each arm at its successor or the enclosing destination
-        let anchor_next_opt = if idx + 1 < num_arms {
-            Some(fallthrough::anchor_of_arm(&anchor_block, idx + 1))
-        } else {
-            ctx.next.clone()
-        };
-        let ctx_arm = Context { namespace: ctx.namespace.clone(), next: anchor_next_opt };
-        // Anchor the arm before rendering its body with the derived context
-        ordered_body(
-            level,
-            Some(fallthrough::anchor_of_arm(&anchor_block, idx)),
-            text(if idx == 0 { "Try:" } else { "Then, try:" }),
-            render_arm(renderer, &ctx_arm, arm),
-        )
-    });
-    seq(blocks_rendered)
-}
-
-/// Describes a relation result according to its output shape and hints.
-fn prose_of_result(hints: &Hints, signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
-    let typs = signature.not_typ.node.args();
-    if input::is_conditional(&signature.input_hint, &typs).expect("validated relation input hint") {
-        text("then, the relation holds.")
-    } else if let Some(hint) = &hints.prose_out {
-        prose([
-            text("the result is "),
-            alternate(hint, &|text_body| reindent_lines(0, text_body), &prose_of_exp, exps, false),
-            text("."),
-        ])
-    } else if exps.is_empty() {
-        text("the relation holds.")
-    } else {
-        prose([text("the result is "), prose_of_exps(exps), text(".")])
-    }
-}
+// - Rule instructions
+//
+//   -- Double: n_t* ~> m*   -> . Let xref:Double[``n~t~^{asterisk}^`` ``+~>+`` ``m^{asterisk}^``].
 
 /// Renders a relation application and its bound outputs.
 fn render_rule_instr(
@@ -1730,7 +1921,7 @@ fn render_rule_instr(
     let exps = rule_instr.not_exp.args();
     let (exps_input, exps_output) =
         input::split(&rule_instr.input_hint, exps).expect("validated rule input hint");
-    let fallthrough = fallthrough::prose_of_link(ctx, instr);
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
     // Detect outputs collected by an enclosing iteration
     let has_output = rule_instr
         .iter_instrs
@@ -1738,52 +1929,431 @@ fn render_rule_instr(
         .flat_map(|iter_instr| &iter_instr.vars_bind)
         .any(|var| !var.id.node.starts_with('_'));
     // Apply paired relation hints when both sides are available
-    let rule_body = if let (Some(hint_input), Some(hint_output)) =
+    let link = Link::Subject(Subject::Relation(rule_instr.id.node.clone()));
+    let prose_rule = if let (Some(hint_input), Some(hint_output)) =
         (&instr.hints.prose_in, &instr.hints.prose_out)
     {
         let prose_output =
             alternate(hint_output, &unindent_lines, &|&exp| prose_of_exp(exp), &exps_output, false);
-        prose([
-            text("Let "),
-            text(doc::ser_prose_in_link(&prose_output)),
-            text(" be the result of "),
-            subject_link(
-                Subject::Relation(rule_instr.id.node.clone()),
-                alternate(
-                    hint_input,
-                    &unindent_lines,
-                    &|&exp| prose_of_exp(exp),
-                    &exps_input,
-                    false,
-                ),
-            ),
+        let text_output = doc::ser_prose_in_link(&prose_output);
+        let prose_input =
+            alternate(hint_input, &unindent_lines, &|&exp| prose_of_exp(exp), &exps_input, false);
+        Prose::seq([
+            Prose::text("Let "),
+            Prose::text(text_output),
+            Prose::text(" be the result of "),
+            Prose::link(link, prose_input),
         ])
     } else {
-        prose([
-            text("Let "),
-            subject_link(
-                Subject::Relation(rule_instr.id.node.clone()),
-                code_prose(code_of_mixfix(&rule_instr.not_exp, &code_of_exp)),
-            ),
-        ])
+        let code_not = code_of_mixfix(&rule_instr.not_exp, &code_of_exp);
+        Prose::seq([Prose::text("Let "), Prose::link(link, Prose::code(code_not))])
     };
     // Wrap bindings that produce iterated outputs in open blocks
     if !has_output {
-        ordered(
-            level,
-            prose([
-                rule_body,
-                prose_of_iterinstr_suffix(&rule_instr.iter_instrs),
-                text("."),
-                fallthrough,
-            ]),
-        )
+        let prose_suffix = prose_of_iterinstr_suffix(&rule_instr.iter_instrs);
+        let prose_head =
+            Prose::seq([prose_rule, prose_suffix, Prose::text("."), prose_fallthrough]);
+        return Block::item_ordered(level, prose_head);
+    }
+
+    render_iterinstrs(level, prose_fallthrough, &rule_instr.iter_instrs, &|level| {
+        let prose_head = Prose::seq([prose_rule.clone(), Prose::text(".")]);
+        Block::item_unordered(level, prose_head)
+    })
+}
+
+// - Results
+//
+//   n* ~> true   -> the result is ``true``.
+//   |- eps       -> then, the relation holds.
+
+/// Describes a relation result according to its output shape and hints.
+fn prose_of_result(hints: &Hints, signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
+    let typs = signature.not_typ.node.args();
+    let is_conditional =
+        input::is_conditional(&signature.input_hint, &typs).expect("validated relation input hint");
+    if is_conditional {
+        Prose::text("then, the relation holds.")
+    } else if let Some(hint) = &hints.prose_out {
+        let prose_output =
+            alternate(hint, &|text_body| reindent_lines(0, text_body), &prose_of_exp, exps, false);
+        Prose::seq([Prose::text("the result is "), prose_output, Prose::text(".")])
+    } else if exps.is_empty() {
+        Prose::text("the relation holds.")
     } else {
-        render_iterinstrs(level, fallthrough, &rule_instr.iter_instrs, &|level| {
-            unordered(level, prose([rule_body.clone(), text(".")]))
-        })
+        let prose_exps = prose_of_exps(exps);
+        Prose::seq([Prose::text("the result is "), prose_exps, Prose::text(".")])
     }
 }
+
+// - Debug instructions
+//
+//   -- debug n   -> . (debug: ``n``)
+
+fn render_debug_instr<Tier>(
+    level: usize,
+    ctx: &Context,
+    instr: &pl::Instr<Tier>,
+    debug_instr: &pl::DebugInstr,
+) -> Block {
+    let prose_exp = prose_of_exp(&debug_instr.exp);
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+    let prose_head =
+        Prose::seq([Prose::text("(debug: "), prose_exp, Prose::text(")"), prose_fallthrough]);
+    Block::item_ordered(level, prose_head)
+}
+
+// - Destruct instructions
+//
+//   one named projection   -> . Let ``expressionIR`` be the expression of ``typedExpressionIR``.
+
+/// Renders named destructuring projections.
+fn render_destruct_instr<Tier>(
+    level: usize,
+    ctx: &Context,
+    instr: &pl::Instr<Tier>,
+    destruct_instr: &pl::DestructInstr,
+) -> Block {
+    // Discard unnamed projections from the prose binding
+    let projections: Vec<(&String, &pl::Exp)> = destruct_instr
+        .bindings
+        .iter()
+        .filter_map(|(name, exp)| name.as_ref().map(|name| (name, exp)))
+        .collect();
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+    // Use dedicated singular prose for one named projection
+    if let [(name, exp_target)] = projections.as_slice() {
+        let prose_target = prose_of_exp(exp_target);
+        let prose_source = prose_of_exp(&destruct_instr.exp);
+        let prose_head = Prose::seq([
+            Prose::text("Let "),
+            prose_target,
+            Prose::text(format!(" be the {name} of ")),
+            prose_source,
+            Prose::text("."),
+            prose_fallthrough,
+        ]);
+        return Block::item_ordered(level, prose_head);
+    }
+
+    // Pair multiple targets with their projection names
+    let proses_target = projections
+        .iter()
+        .map(|(_, exp)| prose_of_exp(exp))
+        .collect();
+    let prose_targets = prose_of_list(proses_target);
+    let proses_name = projections
+        .iter()
+        .map(|(name, _)| Prose::text(format!("the {name}")))
+        .collect();
+    let prose_names = prose_of_list(proses_name);
+    let prose_source = prose_of_exp(&destruct_instr.exp);
+    let prose_head = Prose::seq([
+        Prose::text("Let "),
+        prose_targets,
+        Prose::text(" be "),
+        prose_names,
+        Prose::text(" of "),
+        prose_source,
+        Prose::text("."),
+        prose_fallthrough,
+    ]);
+    Block::item_ordered(level, prose_head)
+}
+
+// - Check-let instructions
+//
+//   def $join_text(t_h1 :: t_h2 :: t_t*, t_sep) = ...
+//   -> .. Let!~type~ ``t~h2~`` ``{two-colons}`` ``t~t~^{asterisk}^`` be ``t^{asterisk}^``.+++<sub class="bk-mark">[FAIL]</sub>+++
+
+/// A partial binding and the instructions that continue after it succeeds.
+struct CheckLetBinding<'a, Tier> {
+    exp_l: &'a pl::Exp,
+    exp_r: &'a pl::Exp,
+    block: &'a [pl::Instr<Tier>],
+}
+
+/// Renders a partial subtype or pattern binding.
+fn render_check_let_instr<Tier>(
+    renderer: &mut Renderer<'_>,
+    level: usize,
+    ctx: &Context,
+    render_tier: RenderTier<Tier>,
+    instr: &pl::Instr<Tier>,
+    binding: CheckLetBinding<'_, Tier>,
+) -> Block {
+    let CheckLetBinding { exp_l, exp_r, block } = binding;
+    // Build the partial binding heading with its failure continuation
+    let code_l = code_of_exp(exp_l);
+    let prose_r = prose_of_exp(exp_r);
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+    let prose_head = Prose::seq([
+        Prose::text("Let!~type~ "),
+        Prose::code(code_l),
+        Prose::text(" be "),
+        prose_r,
+        Prose::text("."),
+        prose_fallthrough,
+    ]);
+    let block_head = Block::item_ordered(level, prose_head);
+    render_continuation(renderer, level, block_head, ctx, render_tier, block)
+}
+
+fn render_check_let_sub_instr<Tier>(
+    renderer: &mut Renderer<'_>,
+    level: usize,
+    ctx: &Context,
+    render_tier: RenderTier<Tier>,
+    instr: &pl::Instr<Tier>,
+    check_instr: &pl::CheckLetSubInstr<Tier>,
+) -> Block {
+    let pl::CheckLetSubInstr { exp_l, exp_r, block, .. } = check_instr;
+    let binding = CheckLetBinding { exp_l, exp_r, block };
+    render_check_let_instr(renderer, level, ctx, render_tier, instr, binding)
+}
+
+fn render_check_let_match_instr<Tier>(
+    renderer: &mut Renderer<'_>,
+    level: usize,
+    ctx: &Context,
+    render_tier: RenderTier<Tier>,
+    instr: &pl::Instr<Tier>,
+    check_instr: &pl::CheckLetMatchInstr<Tier>,
+) -> Block {
+    let pl::CheckLetMatchInstr { exp_l, exp_r, block, .. } = check_instr;
+    let binding = CheckLetBinding { exp_l, exp_r, block };
+    render_check_let_instr(renderer, level, ctx, render_tier, instr, binding)
+}
+
+// - Option-get instructions
+//
+//   -- if n_result = $modulo(n, 42)
+//   -> . Let ``n~result~`` be xref:option_get[*!*] xref:modulo[``n`` mod ``42``].+++<sub class="bk-mark">[FAIL]</sub>+++
+
+/// Renders a forced option binding.
+fn render_option_get_instr<Tier>(
+    renderer: &mut Renderer<'_>,
+    level: usize,
+    ctx: &Context,
+    render_tier: RenderTier<Tier>,
+    instr: &pl::Instr<Tier>,
+    option_instr: &pl::OptionGetInstr<Tier>,
+) -> Block {
+    // Build the forced binding heading with its failure continuation
+    let code_l = code_of_exp(&option_instr.exp_l);
+    let text_get = adoc_link("option_get", "*!*");
+    let prose_r = prose_of_exp(&option_instr.exp_r);
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+    let prose_head = Prose::seq([
+        Prose::text("Let "),
+        Prose::code(code_l),
+        Prose::text(" be "),
+        Prose::text(text_get),
+        Prose::text(" "),
+        prose_r,
+        Prose::text("."),
+        prose_fallthrough,
+    ]);
+    let block_head = Block::item_ordered(level, prose_head);
+    render_continuation(renderer, level, block_head, ctx, render_tier, &option_instr.block)
+}
+
+// - Tier instructions
+//
+//   return n   -> . Return ``n``.
+
+fn render_tier_instr<Tier>(
+    renderer: &mut Renderer<'_>,
+    level: usize,
+    ctx: &Context,
+    render_tier: RenderTier<Tier>,
+    instr: &pl::Instr<Tier>,
+    tier_instr: &pl::TierInstr<Tier>,
+) -> Block {
+    let rendered = render_tier(renderer, level, ctx, false, instr, &tier_instr.tier);
+    compose(None, false, rendered)
+}
+
+// == Relations
+
+// - Synthesized outputs
+//
+//   SL Iter(Id(m), *)   -> PL Iter(Id(m), *) with the same note and span
+
+/// Lifts a synthesized SL output expression into an unhinted PL expression.
+fn lift_synthesized_exp(exp_sl: &sl::ast::Exp) -> pl::Exp {
+    let exp_kind = match &exp_sl.node {
+        sl::ast::ExpKind::Id(id) => ExpKind::Id(id.clone()),
+        sl::ast::ExpKind::Iter(exp_inner_sl, iter_exp) => {
+            let exp_inner = lift_synthesized_exp(exp_inner_sl);
+            ExpKind::Iter(Box::new(exp_inner), iter_exp.clone())
+        }
+        _ => panic!("relation title outputs are synthesized variables"),
+    };
+    crate::annotated_note_phrase! {
+        node: exp_kind,
+        note: exp_sl.note.as_ref().clone(),
+        span: exp_sl.span.clone(),
+    }
+}
+
+// - Relation notation titles
+//
+//   Double: nat* ~> nat*, input %0   -> ``nat^{asterisk}^`` ``+~>+`` ``%``
+
+/// Fills relation inputs and leaves output positions as percent holes.
+fn prose_of_rel_title_math(signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
+    let mixop = signature.not_typ.node.to_mixop();
+    let num_outputs = mixop.arity() - exps.len();
+    let codes_input: Vec<Code> = exps.iter().map(code_of_exp).collect();
+    let codes_output: Vec<Code> = (0..num_outputs).map(|_| Code::token("%")).collect();
+    let codes_args = input::combine(&signature.input_hint, codes_input, codes_output)
+        .expect("validated relation input hint");
+    let not_exp = pl::Mixop::fill(&mixop, codes_args).expect("relation title fills its notation");
+    let code_not = code_of_mixfix(&not_exp, &Clone::clone);
+    Prose::code(code_not)
+}
+
+// - Relation titles
+//
+//   relation Even: |- nat*, hinted prose_true
+//   -> xref:Even[Even]:
+//
+//      * ``nat'^{asterisk}^`` has even length
+//
+//   relation Double: nat* ~> nat*, unhinted
+//   -> xref:Double[Double: ``nat^{asterisk}^`` ``+~>+`` ``%``]
+
+/// Builds a relation title from input, output, truth, or notation prose.
+fn render_rel_title_block(
+    hints: &Hints,
+    id_rel: &pl::Id,
+    signature: &pl::RelSignature,
+    exps: &[pl::Exp],
+) -> Block {
+    // Prefer synthesized inputs when prosification changed title bindings
+    let exps_synthesized = hints
+        .prose_input_exps
+        .as_ref()
+        .map(|exps| exps.iter().map(lift_synthesized_exp).collect::<Vec<_>>());
+    let exps_input = exps_synthesized.as_deref().unwrap_or(exps);
+    // Build the shared linked heading before selecting the title form
+    let link = Link::Subject(Subject::Relation(id_rel.node.clone()));
+    let prose_name = Prose::link(link.clone(), Prose::text(id_rel.node.clone()));
+    let prose_header = Prose::seq([prose_name, Prose::text(":")]);
+    let block_header = Block::concat([Block::inline(prose_header), Block::raw("\n\n")]);
+    // Select paired, input-only, truth, or notation prose
+    match (&hints.prose_in, &hints.prose_out, &hints.prose_output_exps, &hints.prose_true) {
+        // Reject incomplete paired output hints
+        (Some(_), Some(_), None, _) => panic!("prose_out title requires synthesized outputs"),
+        (Some(hint_input), Some(hint_output), Some(exps_output_sl), _) => {
+            // Render paired input and synthesized output prose
+            let exps_output: Vec<pl::Exp> =
+                exps_output_sl.iter().map(lift_synthesized_exp).collect();
+            let prose_input = alternate(
+                hint_input,
+                &|text_body| reindent_lines(1, text_body),
+                &prose_of_exp,
+                exps_input,
+                true,
+            );
+            let prose_output = alternate(
+                hint_output,
+                &|text_body| reindent_lines(1, text_body),
+                &prose_of_exp,
+                &exps_output,
+                false,
+            );
+            let prose_result = Prose::seq([Prose::text("The result is "), prose_output]);
+            Block::concat([
+                block_header,
+                Block::item_unordered(0, prose_input),
+                Block::raw(":\n"),
+                Block::item_unordered(0, prose_result),
+                Block::raw("."),
+            ])
+        }
+        // Render input prose without a synthesized result
+        (Some(hint_input), _, _, _) => {
+            let prose_input = alternate(
+                hint_input,
+                &|text_body| reindent_lines(1, text_body),
+                &prose_of_exp,
+                exps_input,
+                true,
+            );
+            Block::concat([block_header, Block::item_unordered(0, prose_input), Block::raw(".")])
+        }
+        // Render a direct truth description
+        (_, _, _, Some(hint_true)) => {
+            let prose_true = alternate(
+                hint_true,
+                &|text_body| reindent_lines(0, text_body),
+                &prose_of_exp,
+                exps,
+                true,
+            );
+            Block::concat([block_header, Block::item_unordered(0, prose_true)])
+        }
+        // Fall back to the filled relation notation
+        _ => {
+            let prose_math = prose_of_rel_title_math(signature, exps);
+            let prose_title = Prose::seq([Prose::text(format!("{}: ", id_rel.node)), prose_math]);
+            Block::inline(Prose::link(link, prose_title))
+        }
+    }
+}
+
+// == Tier renderers
+
+// - Backtracking arms
+//
+//   def $modulo(n_a, n_b) = $(n_a \ n_b)
+//     -- if n_b =/= 0
+//   def $modulo(n_a, n_b) = eps
+//     -- if n_b = 0
+//   -> . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-1"></span>+++Try:
+//       .. Check that ``n~b~`` is not equal to ``0``.
+//       .. Return ``n~a~`` ``\`` ``n~b~``.
+//      . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-2"></span>+++Then, try:
+//       .. Check that ``n~b~`` is equal to ``0``.
+//       .. Return ``·``.
+
+/// Renders backtracking arms with derived next-arm targets.
+fn render_block_arms<Arm>(
+    renderer: &mut Renderer<'_>,
+    level: usize,
+    ctx: &Context,
+    arms: &[Arm],
+    render_arm: &dyn Fn(&mut Renderer<'_>, &Context, &Arm) -> Block,
+) -> Block {
+    // Allocate one shared namespace for every arm target
+    let anchor_block = renderer.anchors.fresh_block(&ctx.namespace);
+    let num_arms = arms.len();
+    let mut blocks_arm = Vec::with_capacity(num_arms);
+    for (idx, arm) in arms.iter().enumerate() {
+        // Point each arm at its successor or the enclosing destination
+        let anchor_next_opt = if idx + 1 < num_arms {
+            Some(fallthrough::anchor_of_arm(&anchor_block, idx + 1))
+        } else {
+            ctx.next.clone()
+        };
+        let ctx_arm = Context { namespace: ctx.namespace.clone(), next: anchor_next_opt };
+        // Anchor the arm before rendering its body with the derived context
+        let anchor_arm = fallthrough::anchor_of_arm(&anchor_block, idx);
+        let text_head = if idx == 0 { "Try:" } else { "Then, try:" };
+        let block_body = render_arm(renderer, &ctx_arm, arm);
+        let block_arm =
+            Block::item_ordered_body(level, Some(anchor_arm), Prose::text(text_head), block_body);
+        blocks_arm.push(block_arm);
+    }
+    Block::seq(blocks_arm)
+}
+
+// - Group-body tier
+//
+//   return n           -> . Return ``n``.
+//   then n* ~> false   -> the result is ``false``.
 
 /// Renders a group-tier instruction.
 fn render_instr_group(
@@ -1795,84 +2365,115 @@ fn render_instr_group(
     tier: &pl::GroupInstr,
 ) -> Rendered {
     match tier {
-        pl::GroupInstr::Return(return_instr)
-            if singleton
-                && doc::width_prose(&prose_of_exp(&return_instr.exp)) <= ADOC_WIDTH_SHORT =>
-        {
-            Rendered::Inline(prose([
-                text(" return "),
-                prose_of_exp(&return_instr.exp),
-                text("."),
-                fallthrough::prose_of_link(ctx, instr),
-            ]))
+        pl::GroupInstr::Return(return_instr) => {
+            render_return_instr(level, ctx, singleton, instr, return_instr)
         }
-        pl::GroupInstr::Result(result_instr)
-            if singleton
-                && doc::width_prose(&prose_of_result(
-                    &instr.hints,
-                    &result_instr.rel_signature,
-                    &result_instr.exps_output,
-                )) <= ADOC_WIDTH_SHORT =>
-        {
-            Rendered::Inline(prose([
-                text(" "),
-                prose_of_result(
-                    &instr.hints,
-                    &result_instr.rel_signature,
-                    &result_instr.exps_output,
-                ),
-                fallthrough::prose_of_link(ctx, instr),
-            ]))
+        pl::GroupInstr::Result(result_instr) => {
+            render_result_instr(level, ctx, singleton, instr, result_instr)
         }
-        pl::GroupInstr::Return(return_instr) => Rendered::Nested(ordered(
-            level,
-            prose([
-                text("Return "),
-                prose_of_exp(&return_instr.exp),
-                text("."),
-                fallthrough::prose_of_link(ctx, instr),
-            ]),
-        )),
-        pl::GroupInstr::Result(result_instr) => Rendered::Nested(ordered(
-            level,
-            prose([
-                doc::capitalize_first_prose(prose_of_result(
-                    &instr.hints,
-                    &result_instr.rel_signature,
-                    &result_instr.exps_output,
-                )),
-                fallthrough::prose_of_link(ctx, instr),
-            ]),
-        )),
         pl::GroupInstr::Rule(rule_instr) => {
             Rendered::Nested(render_rule_instr(level, ctx, instr, rule_instr))
         }
         pl::GroupInstr::Backtrack(backtrack_instr) => {
-            let level_body = level + 1;
-            Rendered::Nested(render_block_arms(
-                renderer,
-                level,
-                ctx,
-                &backtrack_instr.blocks,
-                &|renderer, ctx_arm, arm| {
-                    seq(arm.iter().map(|instr| {
-                        render_instr(renderer, level_body, ctx_arm, render_instr_group, instr)
-                    }))
-                },
-            ))
+            render_backtrack_instr(renderer, level, ctx, backtrack_instr)
         }
     }
 }
 
-fn prose_of_group_dispatch(id_rel: &pl::Id, id_group: &pl::Id) -> Prose {
-    prose([
-        text("goto "),
-        direct_link(
-            fallthrough::anchor_of_group(&id_rel.node, &id_group.node),
-            text(id_group.node.clone()),
-        ),
-    ])
+// - Return instructions
+//
+//   def $e_bool(n) = true                 -> xref:e_bool[$e_bool(n)]
+//
+//                                             return ``true``.
+//   def $i_if(n, m) = n  -- if $(n < m)   -> . Return ``n``.
+
+fn render_return_instr(
+    level: usize,
+    ctx: &Context,
+    singleton: bool,
+    instr: &pl::Instr<pl::GroupInstr>,
+    return_instr: &pl::ReturnInstr,
+) -> Rendered {
+    let prose_exp = prose_of_exp(&return_instr.exp);
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+    // A short lone return folds onto its heading
+    if singleton && prose_exp.width() <= ADOC_WIDTH_SHORT {
+        let prose_tail =
+            Prose::seq([Prose::text(" return "), prose_exp, Prose::text("."), prose_fallthrough]);
+        return Rendered::Inline(prose_tail);
+    }
+
+    let prose_head =
+        Prose::seq([Prose::text("Return "), prose_exp, Prose::text("."), prose_fallthrough]);
+    Rendered::Nested(Block::item_ordered(level, prose_head))
 }
+
+// - Result instructions
+//
+//   rule Even/nil: |- eps
+//   -> xref:Even[``·`` has even length]:
+//       then, the relation holds.
+//
+//   rule Double/cons: n_h :: n_t* ~> n_h :: n_h :: m*
+//   -> . The result is ``n~h~`` ``{two-colons}`` ``n~h~`` ``{two-colons}`` ``m^{asterisk}^``.
+
+fn render_result_instr(
+    level: usize,
+    ctx: &Context,
+    singleton: bool,
+    instr: &pl::Instr<pl::GroupInstr>,
+    result_instr: &pl::ResultInstr,
+) -> Rendered {
+    let prose_result =
+        prose_of_result(&instr.hints, &result_instr.rel_signature, &result_instr.exps_output);
+    let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+    // A short lone result folds onto its heading
+    if singleton && prose_result.width() <= ADOC_WIDTH_SHORT {
+        let prose_tail = Prose::seq([Prose::text(" "), prose_result, prose_fallthrough]);
+        return Rendered::Inline(prose_tail);
+    }
+
+    let prose_head = Prose::seq([prose_result.capitalize_first(), prose_fallthrough]);
+    Rendered::Nested(Block::item_ordered(level, prose_head))
+}
+
+// - Backtrack instructions
+//
+//   two $modulo clauses
+//   -> . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-1"></span>+++Try:
+//       .. ...
+//      . +++<span class="bk-arm-anchor" id="bk-modulo-1-arm-2"></span>+++Then, try:
+//       .. ...
+
+fn render_backtrack_instr(
+    renderer: &mut Renderer<'_>,
+    level: usize,
+    ctx: &Context,
+    backtrack_instr: &pl::BacktrackInstr,
+) -> Rendered {
+    let level_body = level + 1;
+    let block_arms = render_block_arms(
+        renderer,
+        level,
+        ctx,
+        &backtrack_instr.blocks,
+        &|renderer, ctx_arm, arm| {
+            let blocks_rendered = arm.iter().map(|instr| {
+                render_instr(renderer, level_body, ctx_arm, render_instr_group, instr)
+            });
+            Block::seq(blocks_rendered)
+        },
+    );
+    Rendered::Nested(block_arms)
+}
+
+// - Dispatch tier
+//
+//   Even dispatch, first group
+//   -> . If ``nat'^{asterisk}^`` matches pattern ``[]``: goto xref:Even-nil[nil]
+//
+//   Sign dispatch, last group
+//   -> . Goto xref:Sign-zero[zero]
 
 /// Renders a dispatch-tier instruction.
 fn render_instr_dispatch(
@@ -1884,33 +2485,63 @@ fn render_instr_dispatch(
     tier: &pl::DispatchInstr,
 ) -> Rendered {
     match tier {
-        pl::DispatchInstr::Group(group_instr) if singleton => Rendered::InlineGoto(prose([
-            text(" "),
-            prose_of_group_dispatch(&group_instr.id_rel, &group_instr.id_group),
-        ])),
-        pl::DispatchInstr::Group(group_instr) => Rendered::Nested(ordered(
-            level,
-            doc::capitalize_first_prose(prose_of_group_dispatch(
-                &group_instr.id_rel,
-                &group_instr.id_group,
-            )),
-        )),
+        pl::DispatchInstr::Group(group_instr) => {
+            render_group_instr_dispatch(level, singleton, group_instr)
+        }
         pl::DispatchInstr::Route(route_instr) => {
-            let level_body = level + 1;
-            Rendered::Nested(render_block_arms(
-                renderer,
-                level,
-                ctx,
-                &route_instr.blocks,
-                &|renderer, ctx_arm, arm| {
-                    seq(arm.iter().map(|instr| {
-                        render_instr(renderer, level_body, ctx_arm, render_instr_dispatch, instr)
-                    }))
-                },
-            ))
+            render_route_instr(renderer, level, ctx, route_instr)
         }
     }
 }
+
+// - Group dispatch instructions
+//
+//   lone Even/nil under a check   -> ... goto xref:Even-nil[nil]
+//   nested Sign/zero              -> . Goto xref:Sign-zero[zero]
+
+fn render_group_instr_dispatch(
+    level: usize,
+    singleton: bool,
+    group_instr: &pl::RuleGroupInstr,
+) -> Rendered {
+    let prose_dispatch = prose_of_group_dispatch(&group_instr.id_rel, &group_instr.id_group);
+    // A lone dispatch folds onto its heading
+    if singleton {
+        return Rendered::InlineGoto(Prose::seq([Prose::text(" "), prose_dispatch]));
+    }
+
+    Rendered::Nested(Block::item_ordered(level, prose_dispatch.capitalize_first()))
+}
+
+// - Route instructions
+//
+//   Parity/even and Parity/odd
+//   -> . +++<span class="bk-arm-anchor" id="bk-Parity-1-arm-1"></span>+++Try:
+//       .. Goto xref:Parity-even[even]
+//      . +++<span class="bk-arm-anchor" id="bk-Parity-1-arm-2"></span>+++Then, try:
+//       .. Goto xref:Parity-odd[odd]
+
+fn render_route_instr(
+    renderer: &mut Renderer<'_>,
+    level: usize,
+    ctx: &Context,
+    route_instr: &pl::RouteInstr,
+) -> Rendered {
+    let level_body = level + 1;
+    let block_arms =
+        render_block_arms(renderer, level, ctx, &route_instr.blocks, &|renderer, ctx_arm, arm| {
+            let blocks_rendered = arm.iter().map(|instr| {
+                render_instr(renderer, level_body, ctx_arm, render_instr_dispatch, instr)
+            });
+            Block::seq(blocks_rendered)
+        });
+    Rendered::Nested(block_arms)
+}
+
+// - Inline dispatch tier
+//
+//   rule Sign/other: i ~> "nonzero"  -- otherwise
+//   -> .. xref:Sign[``i`` ``+~>+`` ``%``]: the result is ``"nonzero"``.
 
 /// Renders an otherwise dispatch group with its body inline.
 fn render_dispatch_inline(
@@ -1923,45 +2554,7 @@ fn render_dispatch_inline(
 ) -> Rendered {
     match tier {
         pl::DispatchInstr::Group(group_instr) => {
-            // Select hinted prose or filled relation notation for the title
-            let hint_opt = instr
-                .hints
-                .prose_in
-                .as_ref()
-                .or(instr.hints.prose_true.as_ref());
-            let prose_title = hint_opt.map_or_else(
-                || {
-                    subject_link(
-                        Subject::Relation(group_instr.id_rel.node.clone()),
-                        prose_of_rel_title_math(
-                            &group_instr.rel_signature,
-                            &group_instr.exps_input,
-                        ),
-                    )
-                },
-                |hint| {
-                    subject_link(
-                        Subject::Relation(group_instr.id_rel.node.clone()),
-                        alternate(
-                            hint,
-                            &|text_body| reindent_lines(0, text_body),
-                            &prose_of_exp,
-                            &group_instr.exps_input,
-                            true,
-                        ),
-                    )
-                },
-            );
-            // Render the group body below its linked title
-            let block_head = ordered(level, prose([prose_title, text(":")]));
-            Rendered::Nested(render_instrs(
-                renderer,
-                level + 1,
-                Some(block_head),
-                ctx,
-                render_instr_group,
-                &group_instr.block,
-            ))
+            render_group_instr_inline(renderer, level, ctx, instr, group_instr)
         }
         pl::DispatchInstr::Route(_) => {
             render_instr_dispatch(renderer, level, ctx, singleton, instr, tier)
@@ -1969,8 +2562,56 @@ fn render_dispatch_inline(
     }
 }
 
+// - Inline group instructions
+//
+//   rule Sign/other: i ~> "nonzero"  -- otherwise
+//   -> .. xref:Sign[``i`` ``+~>+`` ``%``]: the result is ``"nonzero"``.
+
+fn render_group_instr_inline(
+    renderer: &mut Renderer<'_>,
+    level: usize,
+    ctx: &Context,
+    instr: &pl::Instr<pl::DispatchInstr>,
+    group_instr: &pl::RuleGroupInstr,
+) -> Rendered {
+    // Select hinted prose or filled relation notation for the title
+    let hint_opt = instr
+        .hints
+        .prose_in
+        .as_ref()
+        .or(instr.hints.prose_true.as_ref());
+    let prose_body = match hint_opt {
+        Some(hint) => alternate(
+            hint,
+            &|text_body| reindent_lines(0, text_body),
+            &prose_of_exp,
+            &group_instr.exps_input,
+            true,
+        ),
+        None => prose_of_rel_title_math(&group_instr.rel_signature, &group_instr.exps_input),
+    };
+    let link = Link::Subject(Subject::Relation(group_instr.id_rel.node.clone()));
+    let prose_title = Prose::link(link, prose_body);
+    // Render the group body below its linked title
+    let block_head = Block::item_ordered(level, Prose::seq([prose_title, Prose::text(":")]));
+    let block_group = render_instrs(
+        renderer,
+        level + 1,
+        Some(block_head),
+        ctx,
+        render_instr_group,
+        &group_instr.block,
+    );
+    Rendered::Nested(block_group)
+}
+
 // == Relation definitions
 
+// - Rule groups
+//
+//   Even dispatch tree   -> [Even/nil, Even/cons], in document order
+
+/// A rule group instruction together with the hints of its dispatch step.
 struct GroupRef<'a> {
     hints: &'a Hints,
     group: &'a pl::RuleGroupInstr,
@@ -2013,117 +2654,35 @@ fn collect_groups<'a>(block: &'a pl::DispatchBlock, groups: &mut Vec<GroupRef<'a
     }
 }
 
-/// Renders a rule group while sharing document counters.
-fn render_rulegroup_inner(
-    renderer: &mut Renderer<'_>,
-    hints: &Hints,
-    id_rel: &pl::Id,
-    signature: &pl::RelSignature,
-    exps: &[pl::Exp],
-    block: &pl::GroupBlock,
-) -> String {
-    // Select hinted prose or filled relation notation for the title
-    let hint_opt = hints.prose_in.as_ref().or(hints.prose_true.as_ref());
-    let prose_title = hint_opt.map_or_else(
-        || {
-            subject_link(
-                Subject::Relation(id_rel.node.clone()),
-                prose_of_rel_title_math(signature, exps),
-            )
-        },
-        |hint| {
-            subject_link(
-                Subject::Relation(id_rel.node.clone()),
-                alternate(
-                    hint,
-                    &|text_body| reindent_lines(0, text_body),
-                    &prose_of_exp,
-                    exps,
-                    true,
-                ),
-            )
-        },
-    );
-    // Render the body with counters shared by the enclosing document
-    let ctx = Context { namespace: id_rel.node.clone(), next: None };
-    let block_body = render_instrs(renderer, 0, None, &ctx, render_instr_group, block);
-    // Serialize the linked title and body as one fragment
-    format!(
-        "{}:\n{}",
-        doc::ser_prose_with_anchor(&prose_title, renderer.anchor),
-        doc::ser_block_with_anchor(&block_body, renderer.anchor),
-    )
+// - External relation definition
+//
+//   extern relation Oracle: nat ~> nat   -> xref:Oracle[Oracle: ``nat`` ``+~>+`` ``%``]
+
+fn render_extern_rel_def(hints: &Hints, rel: &pl::ExternRel) -> Block {
+    render_rel_title_block(hints, &rel.id, &rel.rel_signature, &rel.exps_input)
 }
 
-/// Renders one rule-group fragment using caller-supplied anchors.
-///
-/// Use [`Renderer::render_rulegroup`] to compose fragments in one document.
-pub fn render_rulegroup_with_anchor(
-    hints: &Hints,
-    _id_group: &pl::Id,
-    id_rel: &pl::Id,
-    signature: &pl::RelSignature,
-    exps: &[pl::Exp],
-    block: &pl::GroupBlock,
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    Renderer::new(anchor).render_rulegroup(hints, id_rel, signature, exps, block)
-}
-
-/// Renders one rule-group fragment with definition-name anchors.
-///
-/// Use [`Renderer::render_rulegroup`] to compose fragments in one document.
-pub fn render_rulegroup(
-    hints: &Hints,
-    id_group: &pl::Id,
-    id_rel: &pl::Id,
-    signature: &pl::RelSignature,
-    exps: &[pl::Exp],
-    block: &pl::GroupBlock,
-) -> String {
-    render_rulegroup_with_anchor(
-        hints,
-        id_group,
-        id_rel,
-        signature,
-        exps,
-        block,
-        &doc::subject_name,
-    )
-}
-
-/// Renders dispatch while sharing the relation's counter state.
-fn render_defined_rel_dispatch_inner(renderer: &mut Renderer<'_>, rel: &pl::DefinedRel) -> String {
-    let ctx = Context { namespace: rel.id.node.clone(), next: None };
-    format!(
-        "{} dispatch:\n{}",
-        rel.id.node,
-        doc::ser_block_with_anchor(
-            &render_instrs(renderer, 0, None, &ctx, render_instr_dispatch, &rel.block),
-            renderer.anchor,
-        )
-    )
-}
-
-/// Renders a relation dispatch fragment using caller-supplied anchors.
-///
-/// Use [`Renderer::render_defined_rel_def_dispatch`] when composing fragments.
-pub fn render_defined_rel_def_dispatch_with_anchor(
-    rel: &pl::DefinedRel,
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    Renderer::new(anchor).render_defined_rel_def_dispatch(rel)
-}
-
-/// Renders a relation dispatch fragment with definition-name anchors.
-///
-/// Use [`Renderer::render_defined_rel_def_dispatch`] when composing fragments.
-pub fn render_defined_rel_def_dispatch(rel: &pl::DefinedRel) -> String {
-    render_defined_rel_def_dispatch_with_anchor(rel, &doc::subject_name)
-}
+// - Defined relation definition
+//
+//   relation Sign: int ~> text
+//   rule Sign/zero: 0 ~> "zero"
+//   rule Sign/other: i ~> "nonzero"
+//     -- otherwise
+//   -> xref:Sign[Sign: ``i`` ``+~>+`` ``%``]
+//
+//      xref:Sign[``0`` ``+~>+`` ``%``]:
+//       the result is ``"zero"``.
+//
+//      . +++<span id="Sign-else"></span>+++Otherwise:
+//       .. xref:Sign[``i`` ``+~>+`` ``%``]: the result is ``"nonzero"``.
+//
+//      Sign dispatch:
+//
+//      . Check that ``i`` is equal to ``0``.
+//      . Goto xref:Sign-zero[zero]
 
 /// Builds a complete relation block with source-compatible counter order.
-fn render_defined_rel_block(
+fn render_defined_rel_def(
     renderer: &mut Renderer<'_>,
     hints: &Hints,
     rel: &pl::DefinedRel,
@@ -2135,9 +2694,9 @@ fn render_defined_rel_block(
         .is_some_and(|block| !block.is_empty());
     let anchor_else = has_else.then(|| fallthrough::anchor_of_else(&rel.id.node));
     // Allocate counter-bearing fragments in OCaml right-to-left evaluation order
-    let dispatch_text = render_defined_rel_dispatch_inner(renderer, rel);
-    let ctx = Context { namespace: rel.id.node.clone(), next: None };
-    let else_text = render_elseblock(
+    let text_dispatch = renderer.render_defined_rel_def_dispatch(rel);
+    let ctx = Context::new(&rel.id.node);
+    let text_else = render_elseblock(
         renderer,
         anchor_else.as_deref(),
         &ctx,
@@ -2147,127 +2706,36 @@ fn render_defined_rel_block(
     // Extract each rule group from the dispatch tree in document order
     let mut groups = Vec::new();
     collect_groups(&rel.block, &mut groups);
-    let groups_text = groups
-        .into_iter()
-        .map(|group_ref| {
-            render_rulegroup_inner(
-                renderer,
-                group_ref.hints,
-                &group_ref.group.id_rel,
-                &group_ref.group.rel_signature,
-                &group_ref.group.exps_input,
-                &group_ref.group.block,
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n");
+    let mut texts_group = Vec::with_capacity(groups.len());
+    for group_ref in groups {
+        let GroupRef { hints: hints_group, group } = group_ref;
+        let text_group = renderer.render_rulegroup(
+            hints_group,
+            &group.id_rel,
+            &group.rel_signature,
+            &group.exps_input,
+            &group.block,
+        );
+        texts_group.push(text_group);
+    }
+    let text_groups = texts_group.join("\n\n");
     // Assemble fragments in their displayed order
-    concat([
-        render_rel_title_block(hints, &rel.id, &rel.rel_signature, &rel.exps_input),
-        raw("\n\n"),
-        raw(groups_text),
-        raw(else_text),
-        raw(format!("\n\n{dispatch_text}")),
+    let block_title = render_rel_title_block(hints, &rel.id, &rel.rel_signature, &rel.exps_input);
+    Block::concat([
+        block_title,
+        Block::raw("\n\n"),
+        Block::raw(text_groups),
+        Block::raw(text_else),
+        Block::raw(format!("\n\n{text_dispatch}")),
     ])
-}
-
-/// Renders a defined relation using caller-supplied anchors.
-pub fn render_defined_rel_def_with_anchor(
-    hints: &Hints,
-    rel: &pl::DefinedRel,
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    let mut renderer = Renderer::new(anchor);
-    doc::ser_block_with_anchor(&render_defined_rel_block(&mut renderer, hints, rel), anchor)
-}
-
-/// Renders a defined relation with definition-name anchors.
-pub fn render_defined_rel_def(hints: &Hints, rel: &pl::DefinedRel) -> String {
-    render_defined_rel_def_with_anchor(hints, rel, &doc::subject_name)
-}
-
-/// Renders an external relation using caller-supplied anchors.
-pub fn render_extern_rel_def_with_anchor(
-    hints: &Hints,
-    rel: &pl::ExternRel,
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    doc::ser_block_with_anchor(
-        &render_rel_title_block(hints, &rel.id, &rel.rel_signature, &rel.exps_input),
-        anchor,
-    )
-}
-
-/// Renders an external relation with definition-name anchors.
-pub fn render_extern_rel_def(hints: &Hints, rel: &pl::ExternRel) -> String {
-    render_extern_rel_def_with_anchor(hints, rel, &doc::subject_name)
-}
-
-/// Renders an otherwise rule-group fragment using caller-supplied anchors.
-///
-/// Use [`Renderer::render_rulegroup_else`] when composing fragments.
-pub fn render_rulegroup_else_with_anchor(
-    id_rel: &pl::Id,
-    block: &pl::DispatchBlock,
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    Renderer::new(anchor).render_rulegroup_else(id_rel, block)
-}
-
-/// Renders an otherwise rule-group fragment with definition-name anchors.
-///
-/// Use [`Renderer::render_rulegroup_else`] when composing fragments.
-pub fn render_rulegroup_else(id_rel: &pl::Id, block: &pl::DispatchBlock) -> String {
-    render_rulegroup_else_with_anchor(id_rel, block, &doc::subject_name)
 }
 
 // == Function definitions
 
-/// Builds the standalone title form of a function.
-fn render_func_title_block(
-    hints: &Hints,
-    id_func: &pl::Id,
-    tparams: &[pl::TParam],
-    params: &[pl::Param],
-) -> Block {
-    // Build the linked function name shared by both title forms
-    let prose_title =
-        subject_link(Subject::Function(id_func.node.clone()), text(string_of_defid(id_func)));
-    // Select prose-hinted or signature notation output
-    if let Some(hint) = hints.prose_in.as_ref().or(hints.prose_true.as_ref()) {
-        concat([
-            inline(prose([prose_title, text(":")])),
-            raw("\n\n"),
-            unordered(
-                0,
-                alternate(
-                    hint,
-                    &|text_body| reindent_lines(0, text_body),
-                    &prose_of_param,
-                    params,
-                    true,
-                ),
-            ),
-        ])
-    } else {
-        concat([
-            inline(prose_title),
-            raw(if tparams.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    "<{}>",
-                    tparams
-                        .iter()
-                        .map(Print::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }),
-            inline(Prose::PlainCode(code_of_params(params))),
-        ])
-    }
-}
+// - Function headers
+//
+//   dec $modulo(nat, nat) : nat?, hinted %0 "mod" %1   -> xref:modulo[``n~a~`` mod ``n~b~``]
+//   dec $i_if(nat, nat) : nat, unhinted                -> xref:i_if[$i_if(n, m)]
 
 /// Builds the linked inline header used before a body or table.
 fn render_func_header_block(
@@ -2276,103 +2744,68 @@ fn render_func_header_block(
     tparams: &[pl::TParam],
     params: &[pl::Param],
 ) -> Block {
+    let hint_opt = hints.prose_in.as_ref().or(hints.prose_true.as_ref());
     // Keep nested links visible to the final serializer
-    let prose_body = if let Some(hint) = hints.prose_in.as_ref().or(hints.prose_true.as_ref()) {
-        alternate(hint, &|text_body| reindent_lines(0, text_body), &prose_of_param, params, true)
-    } else {
+    let prose_body = match hint_opt {
+        Some(hint) => alternate(
+            hint,
+            &|text_body| reindent_lines(0, text_body),
+            &prose_of_param,
+            params,
+            true,
+        ),
         // Preserve plain signature text without pre-serializing its code
-        Prose::PlainCode(code([
-            token(string_of_defid(id_func)),
-            token(if tparams.is_empty() {
+        None => {
+            let text_id = string_of_defid(id_func);
+            let text_tparams = if tparams.is_empty() {
                 String::new()
             } else {
-                format!(
-                    "<{}>",
-                    tparams
-                        .iter()
-                        .map(Print::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            }),
-            code_of_params(params),
-        ]))
+                let texts_tparam: Vec<String> = tparams.iter().map(Print::to_string).collect();
+                let text_tparams = texts_tparam.join(", ");
+                format!("<{text_tparams}>")
+            };
+            let code_params = code_of_params(params);
+            let code_signature =
+                Code::seq([Code::token(text_id), Code::token(text_tparams), code_params]);
+            Prose::PlainCode(code_signature)
+        }
     };
-    inline(subject_link(Subject::Function(id_func.node.clone()), prose_body))
+    let link = Link::Subject(Subject::Function(id_func.node.clone()));
+    Block::inline(Prose::link(link, prose_body))
 }
 
-/// Renders a function title using caller-supplied anchors.
-pub fn render_func_title_with_anchor(
-    hints: &Hints,
-    id_func: &pl::Id,
-    tparams: &[pl::TParam],
-    params: &[pl::Param],
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    doc::ser_block_with_anchor(&render_func_title_block(hints, id_func, tparams, params), anchor)
+// - External function definition
+//
+//   extern $check(x), hinted "checking" %0   -> xref:check[Checking value ``x``]
+
+fn render_extern_func_def(hints: &Hints, func: &pl::ExternFunc) -> Block {
+    render_func_header_block(hints, &func.id, &func.tparams, &func.params)
 }
 
-/// Renders a function title with definition-name anchors.
-pub fn render_func_title(
-    hints: &Hints,
-    id_func: &pl::Id,
-    tparams: &[pl::TParam],
-    params: &[pl::Param],
-) -> String {
-    render_func_title_with_anchor(hints, id_func, tparams, params, &doc::subject_name)
+// - Builtin function definition
+//
+//   builtin dec $sum_nat(nat*) : nat   -> xref:sum_nat[Sum``+`(+`` ``nat^{asterisk}^`` ``+`)+``]
+
+fn render_builtin_func_def(hints: &Hints, func: &pl::BuiltinFunc) -> Block {
+    render_func_header_block(hints, &func.id, &func.tparams, &func.params)
 }
 
-/// Renders a function header using caller-supplied anchors.
-pub fn render_func_header_with_anchor(
-    hints: &Hints,
-    id_func: &pl::Id,
-    tparams: &[pl::TParam],
-    params: &[pl::Param],
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    doc::ser_block_with_anchor(&render_func_header_block(hints, id_func, tparams, params), anchor)
-}
-
-/// Renders a function header with definition-name anchors.
-pub fn render_func_header(
-    hints: &Hints,
-    id_func: &pl::Id,
-    tparams: &[pl::TParam],
-    params: &[pl::Param],
-) -> String {
-    render_func_header_with_anchor(hints, id_func, tparams, params, &doc::subject_name)
-}
-
-/// Renders an external function using caller-supplied anchors.
-pub fn render_extern_func_def_with_anchor(
-    hints: &Hints,
-    func: &pl::ExternFunc,
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    render_func_header_with_anchor(hints, &func.id, &func.tparams, &func.params, anchor)
-}
-
-/// Renders an external function with definition-name anchors.
-pub fn render_extern_func_def(hints: &Hints, func: &pl::ExternFunc) -> String {
-    render_extern_func_def_with_anchor(hints, func, &doc::subject_name)
-}
-
-/// Renders a builtin function using caller-supplied anchors.
-pub fn render_builtin_func_def_with_anchor(
-    hints: &Hints,
-    func: &pl::BuiltinFunc,
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    render_func_header_with_anchor(hints, &func.id, &func.tparams, &func.params, anchor)
-}
-
-/// Renders a builtin function with definition-name anchors.
-pub fn render_builtin_func_def(hints: &Hints, func: &pl::BuiltinFunc) -> String {
-    render_builtin_func_def_with_anchor(hints, func, &doc::subject_name)
-}
+// - Table function definition
+//
+//   tbl def $is_defaultable_typeIR =
+//     | BOOL => true
+//     | ERROR => true
+//   -> xref:is_defaultable_typeIR[``typeIR''`` can be default-initialized]:
+//      [cols="2", options="header"]
+//      |===
+//      | (``typeIR''``) | Result
+//
+//      | +BOOL+ | true
+//      | +ERROR+ | true
+//      ...
 
 /// Builds a table function with argument and result columns.
-fn render_table_func_block(hints: &Hints, func: &pl::TableFunc) -> Block {
+fn render_table_func_def(hints: &Hints, func: &pl::TableFunc) -> Block {
     // Retain code links until the enclosing document resolves its anchors
     let rows_table = func
         .rows
@@ -2380,32 +2813,33 @@ fn render_table_func_block(hints: &Hints, func: &pl::TableFunc) -> Block {
         .map(|row| vec![code_of_exps(&row.exps_input, ", "), code_of_exp(&row.exp)])
         .collect();
     // Assemble the linked header and table with one result column
-    concat([
-        render_func_header_block(hints, &func.id, &[], &func.params),
-        raw(":\n"),
-        Block::Table {
-            header: vec![prose_of_params(&func.params), text("Result")],
-            rows: rows_table,
-        },
-    ])
+    let block_header = render_func_header_block(hints, &func.id, &[], &func.params);
+    let prose_params = prose_of_params(&func.params);
+    let block_table =
+        Block::Table { header: vec![prose_params, Prose::text("Result")], rows: rows_table };
+    Block::concat([block_header, Block::raw(":\n"), block_table])
 }
 
-/// Renders a table function using caller-supplied anchors.
-pub fn render_table_func_def_with_anchor(
-    hints: &Hints,
-    func: &pl::TableFunc,
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    doc::ser_block_with_anchor(&render_table_func_block(hints, func), anchor)
-}
-
-/// Renders a table function with definition-name anchors.
-pub fn render_table_func_def(hints: &Hints, func: &pl::TableFunc) -> String {
-    render_table_func_def_with_anchor(hints, func, &doc::subject_name)
-}
+// - Defined function definition
+//
+//   def $c_sign(0) = "zero"
+//   def $c_sign(i) = "pos"
+//     -- if $(i > 0)
+//   def $c_sign(i) = "neg"
+//     -- otherwise
+//   -> xref:c_sign[$c_sign(i)]
+//
+//      . +++<span class="bk-arm-anchor" id="bk-c_sign-1-arm-1"></span>+++Try:
+//       .. Check that ``i`` is equal to ``0``.
+//       .. Return ``"zero"``.
+//      . +++<span class="bk-arm-anchor" id="bk-c_sign-1-arm-2"></span>+++Then, try:
+//       .. Check that ``i`` is greater than ``0``.
+//       .. Return ``"pos"``.
+//
+//      . +++<span id="c_sign-else"></span>+++Otherwise: return ``"neg"``.
 
 /// Builds a function body and its optional otherwise clause.
-fn render_defined_func_block(
+fn render_defined_func_def(
     renderer: &mut Renderer<'_>,
     hints: &Hints,
     func: &pl::DefinedFunc,
@@ -2415,130 +2849,179 @@ fn render_defined_func_block(
         .block_else_opt
         .as_ref()
         .is_some_and(|block| !block.is_empty());
-    let ctx = Context { namespace: func.id.node.clone(), next: None };
-    // Choose the compact boolean, backtracking, or general body form
-    let (block_body, anchor_else) = match func.block.as_slice() {
+    let ctx = Context::new(&func.id.node);
+    // Choose the compact boolean or general body form
+    let block_body;
+    let anchor_else;
+    match func.block.as_slice() {
         [instr]
             if let pl::InstrKind::Tier(tier_instr) = &instr.node.node
                 && let pl::GroupInstr::Return(return_instr) = &tier_instr.tier
-                && matches!(return_instr.exp.node.node, pl::ExpKind::Bool(_)) =>
+                && matches!(return_instr.exp.node.node, ExpKind::Bool(_)) =>
         {
             // Render a lone boolean return as inline prose
-            (
-                inline(prose([
-                    text(" return "),
-                    code_prose(code_of_exp(&return_instr.exp)),
-                    text("."),
-                ])),
-                None,
-            )
-        }
-        [instr]
-            if has_else
-                && matches!(
-                    instr.node.node,
-                    pl::InstrKind::Tier(pl::TierInstr { tier: pl::GroupInstr::Backtrack(_) })
-                ) =>
-        {
-            // Preserve an otherwise target for a lone backtrack
-            (
-                render_instr(renderer, 0, &ctx, render_instr_group, instr),
-                Some(fallthrough::anchor_of_else(&func.id.node)),
-            )
+            let code_exp = code_of_exp(&return_instr.exp);
+            let prose_tail =
+                Prose::seq([Prose::text(" return "), Prose::code(code_exp), Prose::text(".")]);
+            block_body = Block::inline(prose_tail);
+            anchor_else = None;
         }
         _ => {
             // Render the general instruction sequence with an optional target
-            (
-                seq(func
-                    .block
-                    .iter()
-                    .map(|instr| render_instr(renderer, 0, &ctx, render_instr_group, instr))),
-                has_else.then(|| fallthrough::anchor_of_else(&func.id.node)),
-            )
+            let blocks_rendered: Vec<Block> = func
+                .block
+                .iter()
+                .map(|instr| render_instr(renderer, 0, &ctx, render_instr_group, instr))
+                .collect();
+            block_body = Block::seq(blocks_rendered);
+            anchor_else = has_else.then(|| fallthrough::anchor_of_else(&func.id.node));
         }
-    };
+    }
     // Append the otherwise clause after the selected body form
-    concat([
-        render_func_header_block(hints, &func.id, &func.tparams, &func.params),
-        raw("\n\n"),
-        block_body,
-        raw(render_elseblock(
-            renderer,
-            anchor_else.as_deref(),
-            &ctx,
-            render_instr_group,
-            func.block_else_opt.as_deref(),
-        )),
-    ])
+    let block_header = render_func_header_block(hints, &func.id, &func.tparams, &func.params);
+    let text_else = render_elseblock(
+        renderer,
+        anchor_else.as_deref(),
+        &ctx,
+        render_instr_group,
+        func.block_else_opt.as_deref(),
+    );
+    Block::concat([block_header, Block::raw("\n\n"), block_body, Block::raw(text_else)])
 }
 
-/// Renders a defined function using caller-supplied anchors.
-pub fn render_defined_func_def_with_anchor(
-    hints: &Hints,
-    func: &pl::DefinedFunc,
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> String {
-    let mut renderer = Renderer::new(anchor);
-    doc::ser_block_with_anchor(&render_defined_func_block(&mut renderer, hints, func), anchor)
+// == Rendering context
+//
+//   two render_rulegroup calls on one Renderer   -> arm anchors bk-Rel-1-arm-1, then bk-Rel-2-arm-1
+//   one call on a fresh Renderer                 -> arm anchor bk-Rel-1-arm-1
+
+/// Renders a document's definitions and fragments with shared arm counters.
+///
+/// Reuse one renderer when composing rule groups, dispatch, and otherwise
+/// fragments into a document. Create a new renderer for each new document.
+pub struct Renderer<'a> {
+    anchors: Anchors,
+    anchor: &'a dyn Fn(&Subject) -> Option<String>,
 }
 
-/// Renders a defined function with definition-name anchors.
-pub fn render_defined_func_def(hints: &Hints, func: &pl::DefinedFunc) -> String {
-    render_defined_func_def_with_anchor(hints, func, &doc::subject_name)
-}
+impl<'a> Renderer<'a> {
+    /// Starts a document with fresh arm counters and a subject resolver.
+    pub fn new(anchor: &'a dyn Fn(&Subject) -> Option<String>) -> Self {
+        Self { anchors: Anchors::default(), anchor }
+    }
 
-// == Definitions
+    // - Rule group fragments
+    //
+    //   rule Even/nil: |- eps   -> xref:Even[``·`` has even length]:
+    //                               then, the relation holds.
 
-/// Renders one definition while sharing document counters.
-fn render_def_inner(renderer: &mut Renderer<'_>, def: &pl::Def) -> Option<String> {
-    match &def.node.node {
-        pl::DefKind::Typ(_) | pl::DefKind::Var(_) => None,
-        pl::DefKind::Rel(pl::RelDef::Extern(rel)) => Some(doc::ser_block_with_anchor(
-            &render_rel_title_block(&def.hints, &rel.id, &rel.rel_signature, &rel.exps_input),
-            renderer.anchor,
-        )),
-        pl::DefKind::Rel(pl::RelDef::Defined(rel)) => Some(doc::ser_block_with_anchor(
-            &render_defined_rel_block(renderer, &def.hints, rel),
-            renderer.anchor,
-        )),
-        pl::DefKind::MetaFunc(pl::MetaFuncDef::Extern(func)) => Some(doc::ser_block_with_anchor(
-            &render_func_header_block(&def.hints, &func.id, &func.tparams, &func.params),
-            renderer.anchor,
-        )),
-        pl::DefKind::MetaFunc(pl::MetaFuncDef::Builtin(func)) => Some(doc::ser_block_with_anchor(
-            &render_func_header_block(&def.hints, &func.id, &func.tparams, &func.params),
-            renderer.anchor,
-        )),
-        pl::DefKind::MetaFunc(pl::MetaFuncDef::Table(func)) => Some(doc::ser_block_with_anchor(
-            &render_table_func_block(&def.hints, func),
-            renderer.anchor,
-        )),
-        pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(func)) => Some(doc::ser_block_with_anchor(
-            &render_defined_func_block(renderer, &def.hints, func),
-            renderer.anchor,
-        )),
+    /// Renders a rule group, reserving arm anchors within this document.
+    pub fn render_rulegroup(
+        &mut self,
+        hints: &Hints,
+        id_rel: &pl::Id,
+        signature: &pl::RelSignature,
+        exps: &[pl::Exp],
+        block: &pl::GroupBlock,
+    ) -> String {
+        // Select hinted prose or filled relation notation for the title
+        let hint_opt = hints.prose_in.as_ref().or(hints.prose_true.as_ref());
+        let prose_body = match hint_opt {
+            Some(hint) => alternate(
+                hint,
+                &|text_body| reindent_lines(0, text_body),
+                &prose_of_exp,
+                exps,
+                true,
+            ),
+            None => prose_of_rel_title_math(signature, exps),
+        };
+        let link = Link::Subject(Subject::Relation(id_rel.node.clone()));
+        let prose_title = Prose::link(link, prose_body);
+        // Render the body with counters shared by the enclosing document
+        let ctx = Context::new(&id_rel.node);
+        let block_body = render_instrs(self, 0, None, &ctx, render_instr_group, block);
+        // Serialize the linked title and body as one fragment
+        let text_title = doc::ser_prose(&prose_title, self.anchor);
+        let text_body = doc::ser_block(&block_body, self.anchor);
+        format!("{text_title}:\n{text_body}")
+    }
+
+    // - Dispatch fragments
+    //
+    //   relation Sign   -> Sign dispatch:
+    //
+    //                      . Check that ``i`` is equal to ``0``.
+    //                      . Goto xref:Sign-zero[zero]
+
+    /// Renders relation dispatch with counters shared by other fragments.
+    pub fn render_defined_rel_def_dispatch(&mut self, rel: &pl::DefinedRel) -> String {
+        let ctx = Context::new(&rel.id.node);
+        let block_dispatch = render_instrs(self, 0, None, &ctx, render_instr_dispatch, &rel.block);
+        let text_dispatch = doc::ser_block(&block_dispatch, self.anchor);
+        format!("{} dispatch:\n{text_dispatch}", rel.id.node)
+    }
+
+    // - Otherwise fragments
+    //
+    //   rule Sign/other: i ~> "nonzero"  -- otherwise
+    //   -> . +++<span id="Sign-else"></span>+++Otherwise:
+    //       .. xref:Sign[``i`` ``+~>+`` ``%``]: the result is ``"nonzero"``.
+
+    /// Renders an otherwise fragment with counters shared by other fragments.
+    pub fn render_rulegroup_else(&mut self, id_rel: &pl::Id, block: &pl::DispatchBlock) -> String {
+        let ctx = Context::new(&id_rel.node);
+        let anchor_else = fallthrough::anchor_of_else(&id_rel.node);
+        let text_else =
+            render_elseblock(self, Some(&anchor_else), &ctx, render_dispatch_inline, Some(block));
+        text_else.trim().to_owned()
+    }
+
+    // - Definitions
+    //
+    //   syntax rec = {LEFT nat, RIGHT nat}   -> None
+    //   extern relation Oracle: nat ~> nat   -> Some("xref:Oracle[Oracle: ``nat`` ``+~>+`` ``%``]")
+
+    /// Renders a definition with counters shared by other document fragments.
+    pub fn render_def(&mut self, def: &pl::Def) -> Option<String> {
+        let block = match &def.node.node {
+            pl::DefKind::Typ(_) | pl::DefKind::Var(_) => return None,
+            pl::DefKind::Rel(pl::RelDef::Extern(rel)) => render_extern_rel_def(&def.hints, rel),
+            pl::DefKind::Rel(pl::RelDef::Defined(rel)) => {
+                render_defined_rel_def(self, &def.hints, rel)
+            }
+            pl::DefKind::MetaFunc(pl::MetaFuncDef::Extern(func)) => {
+                render_extern_func_def(&def.hints, func)
+            }
+            pl::DefKind::MetaFunc(pl::MetaFuncDef::Builtin(func)) => {
+                render_builtin_func_def(&def.hints, func)
+            }
+            pl::DefKind::MetaFunc(pl::MetaFuncDef::Table(func)) => {
+                render_table_func_def(&def.hints, func)
+            }
+            pl::DefKind::MetaFunc(pl::MetaFuncDef::Defined(func)) => {
+                render_defined_func_def(self, &def.hints, func)
+            }
+        };
+        Some(doc::ser_block(&block, self.anchor))
+    }
+
+    /// Renders definitions in order with this document's anchors and counters.
+    pub fn render_defs(&mut self, defs: &[pl::Def]) -> String {
+        let texts_def: Vec<String> = defs.iter().filter_map(|def| self.render_def(def)).collect();
+        texts_def.join("\n\n")
     }
 }
 
-/// Renders one definition using caller-supplied anchors.
-pub fn render_def_with_anchor(
-    def: &pl::Def,
-    anchor: &dyn Fn(&Subject) -> Option<String>,
-) -> Option<String> {
+// == Entry point
+//
+//   render_spec([Oracle, Sign])   -> the two definitions joined by a blank line
+
+/// Renders one definition, omitting type and variable declarations.
+pub fn render_def(def: &pl::Def, anchor: &dyn Fn(&Subject) -> Option<String>) -> Option<String> {
     Renderer::new(anchor).render_def(def)
 }
 
-/// Renders one prose definition, omitting type and variable declarations.
-pub fn render_def(def: &pl::Def) -> Option<String> {
-    render_def_with_anchor(def, &doc::subject_name)
-}
-
-/// Renders definitions with one shared fallthrough counter state.
-pub fn render_defs(defs: &[pl::Def]) -> String {
-    Renderer::new(&doc::subject_name).render_defs(defs)
-}
-
-/// Renders a complete prose specification.
+/// Renders a complete prose specification with definition-name anchors.
 pub fn render_spec(spec: &pl::Spec) -> String {
-    render_defs(spec)
+    Renderer::new(&doc::subject_name).render_defs(spec)
 }
