@@ -36,7 +36,10 @@ use crate::{
 };
 
 use super::{
-    doc::{self, Block, Code, Link, Prose, Subject},
+    doc::{
+        doc::{Block, Code, ItemKind, Link, Prose, Subject, Table},
+        serialize,
+    },
     fallthrough::{self, Anchors, Context},
     utils::{
         ADOC_WIDTH_SHORT, adoc_link, adoc_subscript, adoc_superscript, reindent_lines,
@@ -54,17 +57,19 @@ use super::{
 fn prose_of_list(proses: Vec<Prose>) -> Prose {
     let num_proses = proses.len();
     // The final separator depends on whether the list has two or more items
-    let proses_joined = doc::join_items(proses, |idx| {
-        let separator = if num_proses == 2 {
-            " and "
-        } else if idx + 1 == num_proses {
-            ", and "
-        } else {
-            ", "
-        };
-        Prose::text(separator)
-    });
-    Prose::seq(proses_joined)
+    Prose::join_with(
+        |idx| {
+            let separator = if num_proses == 2 {
+                " and "
+            } else if idx + 1 == num_proses {
+                ", and "
+            } else {
+                ", "
+            };
+            Prose::text(separator)
+        },
+        proses,
+    )
 }
 
 // == Alternation
@@ -660,7 +665,7 @@ fn code_of_iter_exp(exp_inner: &pl::Exp, iter_exp: &pl::ExpIter) -> Code {
     let text_iter = code_of_iter(iter_exp.iter);
     // Parenthesize compound bodies whose code contains spaces
     let needs_parens = !matches!(exp_inner.node.node, ExpKind::Id(_) | ExpKind::Tuple(_))
-        && doc::ser_code(&code_inner, &doc::subject_name).contains(' ');
+        && serialize::ser_code(&|_| None, &code_inner).contains(' ');
     if needs_parens {
         Code::seq([Code::token("( "), code_inner, Code::token(" )"), Code::token(text_iter)])
     } else {
@@ -1516,7 +1521,7 @@ fn render_elseblock<Tier>(
         .map(|anchor| format!("+++<span id=\"{anchor}\"></span>+++"))
         .unwrap_or_default();
     let block_body = render_instrs(renderer, 1, None, ctx, render_tier, block);
-    let text_body = doc::ser_block(&block_body, renderer.anchor);
+    let text_body = serialize::ser_block(renderer.anchor, &block_body);
     format!("\n\n. {text_anchor}Otherwise:{text_body}")
 }
 
@@ -1631,7 +1636,7 @@ fn render_iterinstr_levels(
             Block::inline(prose_binding),
         ])
     };
-    Block::item_ordered_body(level, None, prose_head, block_body)
+    Block::item(level, ItemKind::Ordered(None), prose_head, block_body)
 }
 
 // - If instructions
@@ -1915,7 +1920,7 @@ fn render_rule_instr(
     {
         let prose_output =
             alternate(hint_output, &unindent_lines, &|&exp| prose_of_exp(exp), &exps_output, false);
-        let text_output = doc::ser_prose_in_link(&prose_output);
+        let text_output = serialize::ser_prose_in_link(&prose_output);
         let prose_input =
             alternate(hint_input, &unindent_lines, &|&exp| prose_of_exp(exp), &exps_input, false);
         Prose::seq([
@@ -2323,8 +2328,12 @@ fn render_block_arms<Arm>(
         let anchor_arm = fallthrough::anchor_of_arm(&anchor_block, idx);
         let text_head = if idx == 0 { "Try:" } else { "Then, try:" };
         let block_body = render_arm(renderer, &ctx_arm, arm);
-        let block_arm =
-            Block::item_ordered_body(level, Some(anchor_arm), Prose::text(text_head), block_body);
+        let block_arm = Block::item(
+            level,
+            ItemKind::Ordered(Some(anchor_arm)),
+            Prose::text(text_head),
+            block_body,
+        );
         blocks_arm.push(block_arm);
     }
     Block::seq(blocks_arm)
@@ -2796,7 +2805,7 @@ fn render_table_func_def(hints: &Hints, func: &pl::TableFunc) -> Block {
     let block_header = render_func_header_block(hints, &func.id, &[], &func.params);
     let prose_params = prose_of_params(&func.params);
     let block_table =
-        Block::Table { header: vec![prose_params, Prose::text("Result")], rows: rows_table };
+        Block::Table(Table { header: vec![prose_params, Prose::text("Result")], rows: rows_table });
     Block::concat([block_header, Block::raw(":\n"), block_table])
 }
 
@@ -2921,8 +2930,8 @@ impl<'a> Renderer<'a> {
         let ctx = Context::new(&id_rel.node);
         let block_body = render_instrs(self, 0, None, &ctx, render_instr_group, block);
         // Serialize the linked title and body as one fragment
-        let text_title = doc::ser_prose(&prose_title, self.anchor);
-        let text_body = doc::ser_block(&block_body, self.anchor);
+        let text_title = serialize::ser_prose(self.anchor, &prose_title);
+        let text_body = serialize::ser_block(self.anchor, &block_body);
         format!("{text_title}:\n{text_body}")
     }
 
@@ -2937,7 +2946,7 @@ impl<'a> Renderer<'a> {
     pub fn render_defined_rel_def_dispatch(&mut self, rel: &pl::DefinedRel) -> String {
         let ctx = Context::new(&rel.id.node);
         let block_dispatch = render_instrs(self, 0, None, &ctx, render_instr_dispatch, &rel.block);
-        let text_dispatch = doc::ser_block(&block_dispatch, self.anchor);
+        let text_dispatch = serialize::ser_block(self.anchor, &block_dispatch);
         format!("{} dispatch:\n{text_dispatch}", rel.id.node)
     }
 
@@ -2982,7 +2991,7 @@ impl<'a> Renderer<'a> {
                 render_defined_func_def(self, &def.hints, func)
             }
         };
-        Some(doc::ser_block(&block, self.anchor))
+        Some(serialize::ser_block(self.anchor, &block))
     }
 
     /// Renders definitions in order with this document's anchors and counters.
@@ -3003,5 +3012,5 @@ pub fn render_def(def: &pl::Def, anchor: &dyn Fn(&Subject) -> Option<String>) ->
 
 /// Renders a complete prose specification with definition-name anchors.
 pub fn render_spec(spec: &pl::Spec) -> String {
-    Renderer::new(&doc::subject_name).render_defs(spec)
+    Renderer::new(&serialize::subject_name).render_defs(spec)
 }

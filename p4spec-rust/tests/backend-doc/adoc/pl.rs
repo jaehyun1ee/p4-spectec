@@ -1,7 +1,7 @@
 use p4spec_rust::{
     backend_doc::adoc::pl::{
         self as adoc,
-        doc::{Subject, subject_name},
+        doc::{doc::Subject, serialize::subject_name},
         render_def, render_spec,
     },
     lang::{

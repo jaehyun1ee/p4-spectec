@@ -18,7 +18,7 @@ use crate::{
     util::text::escape_text,
 };
 
-use super::doc::Doc;
+use super::doc::doc::Doc;
 
 // == Documents
 //

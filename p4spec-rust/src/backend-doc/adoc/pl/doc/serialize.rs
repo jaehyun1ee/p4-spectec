@@ -1,4 +1,4 @@
-//! AsciiDoc prose, code spans, and document blocks
+//! Serialization of AsciiDoc prose, code spans, and document blocks
 //!
 //! ```text
 //! Code(Seq([Token("a "), Link(Direct("f"), Token("b"))]))
@@ -13,373 +13,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::utils::{adoc_link, adoc_mono_chopped, adoc_ordered_bullet, adoc_unordered_bullet};
-
-// == Documents
-
-// - Prose
-//
-//   Seq([Text("the "), Code(Token("x y"))])   -> the ``x`` ``y``
-//   PlainCode(Token("x y"))                   -> x y
-
-/// Inline prose and embedded code.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Prose {
-    /// Emits AsciiDoc text verbatim, including any existing markup.
-    Text(String),
-    /// Renders linked code with monospace markup around each word.
-    Code(Code),
-    /// Renders linked code without adding monospace markup.
-    PlainCode(Code),
-    /// Links the body, suppressing resolved links nested inside it.
-    Link(Link, Box<Prose>),
-    /// Links to an arm or group using its anchor and displayed label.
-    Fallthrough(String, FallthroughLabel),
-    /// Concatenates prose without inserting separators.
-    Seq(Vec<Prose>),
-    /// Emits no text and permits capitalization to continue.
-    Empty,
-}
-
-// - Code
-//
-//   Seq([Token("a"), Token("b")])       -> ``ab``
-//   Link(Direct("f"), Token("f(x)"))   -> xref:f[``f(x)``]
-
-/// Code tokens with optional cross-references.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Code {
-    /// Emits pre-escaped code text, coalescing adjacent compatible tokens.
-    Token(String),
-    /// Links the enclosed code unless an outer link already owns the span.
-    Link(Link, Box<Code>),
-    /// Concatenates code without inserting separators or span boundaries.
-    Seq(Vec<Code>),
-    /// Emits no tokens and does not split a code span.
-    Empty,
-}
-
-// - Links
-//
-//   Link(Direct("t"), Text("x"))              -> xref:t[x]
-//   Link(Subject(Function("f")), Text("x"))   -> xref:f[x]
-//   ... with an unresolving anchor            -> x
-
-/// A concrete target or a reference resolved by the enclosing document.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Link {
-    /// Uses the target verbatim, bypassing the subject resolver.
-    Direct(String),
-    /// Resolves the subject, preserving only the body if unresolved.
-    Subject(Subject),
-}
-
-/// A definition referenced by prose.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Subject {
-    /// Identifies a function by its source name without the dollar prefix.
-    Function(String),
-    /// Identifies a relation by its source name.
-    Relation(String),
-}
-
-// - Fallthrough labels
-//
-//   Fallthrough("t", Explicit("else"))
-//   -> +++<sub class="bk-mark">[<a href="#t">→ else</a>]</sub>+++
-
-/// A fallthrough marker inferred from its target or supplied by a group.
-#[derive(Clone, Debug, PartialEq)]
-pub enum FallthroughLabel {
-    /// Uses the target arm's list marker from the same serialized block.
-    ///
-    /// Block serialization panics if the target has no ordered arm anchor.
-    /// Standalone prose serialization cannot resolve derived labels.
-    Derived,
-    /// Uses the supplied label, such as a group name or otherwise marker.
-    Explicit(String),
-}
-
-// - Blocks
-//
-//   Item { 0, Ordered(None), Text("A"), Empty }   -> . A
-//   Item { 1, Unordered, Text("B"), Empty }       ->  ** B
-//   Seq([Raw("x"), Raw("y")])                     -> x
-//                                                    y
-//   Concat([Raw("x"), Raw("y")])                  -> xy
-
-/// A list entry, optionally defining an ordered arm anchor.
-#[derive(Clone, Debug, PartialEq)]
-pub enum ItemKind {
-    /// Advances the ordered list, optionally defining an arm anchor.
-    Ordered(Option<String>),
-    /// Emits a bullet and resets the ordered counter at this level.
-    Unordered,
-}
-
-/// A document fragment with explicit list nesting and table boundaries.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Block {
-    /// Emits no text and does not advance list counters.
-    Empty,
-    /// Emits AsciiDoc verbatim without inspecting links or list markers.
-    Raw(String),
-    /// Renders prose without adding line breaks or a list marker.
-    Inline(Prose),
-    /// Renders a list heading followed by a nonempty body on the next line.
-    Item {
-        /// The zero-based nesting level used for bullets and arm labels.
-        level: usize,
-        /// The list style and optional ordered arm anchor.
-        kind: ItemKind,
-        /// The prose following the list marker.
-        prose_head: Prose,
-        /// The continuation, with nested entries carrying their own levels.
-        block_body: Box<Block>,
-    },
-    /// Concatenates blocks without inserting separators.
-    Concat(Vec<Block>),
-    /// Joins blocks with one newline between adjacent blocks.
-    Seq(Vec<Block>),
-    /// Renders a table with its column count derived from the header.
-    Table {
-        /// The header cells, including their inline prose formatting.
-        header: Vec<Prose>,
-        /// Code cells resolved at serialization without monospace markup.
-        ///
-        /// Each row must have as many cells as the header.
-        rows: Vec<Vec<Code>>,
-    },
-}
-
-// == Constructors
-
-// - Interleaving
-//
-//   join_items([a, b, c], |idx| s_idx)   -> [a, s_1, b, s_2, c]
-
-/// Interleaves items with separators selected by the following item's index.
-pub(super) fn join_items<Item>(
-    items: impl IntoIterator<Item = Item>,
-    mut separator: impl FnMut(usize) -> Item,
-) -> Vec<Item> {
-    let mut items_joined = Vec::new();
-    // Move each item into one buffer without allocating intermediate lists
-    for (idx, item) in items.into_iter().enumerate() {
-        // A separator belongs only between two items
-        if idx > 0 {
-            items_joined.push(separator(idx));
-        }
-        items_joined.push(item);
-    }
-    items_joined
-}
-
-impl Prose {
-    // - Prose constructors
-    //
-    //   Prose::text("x")            -> Text("x")
-    //   Prose::link(link, prose)    -> Link(link, prose)
-    //   Prose::fallthrough(a, l)    -> Fallthrough(a, l)
-    //   Prose::join(", ", [x, y])   -> Seq([x, Text(", "), y])
-
-    pub fn text(text: impl Into<String>) -> Prose {
-        Prose::Text(text.into())
-    }
-
-    pub fn code(code: Code) -> Prose {
-        Prose::Code(code)
-    }
-
-    pub fn link(link: Link, prose: Prose) -> Prose {
-        Prose::Link(link, Box::new(prose))
-    }
-
-    pub fn fallthrough(anchor: String, label: FallthroughLabel) -> Prose {
-        Prose::Fallthrough(anchor, label)
-    }
-
-    pub fn seq(proses: impl IntoIterator<Item = Prose>) -> Prose {
-        Prose::Seq(proses.into_iter().collect())
-    }
-
-    pub fn join(separator: &str, proses: impl IntoIterator<Item = Prose>) -> Prose {
-        let proses_joined = join_items(proses, |_| Prose::text(separator));
-        Prose::seq(proses_joined)
-    }
-}
-
-impl Code {
-    // - Code constructors
-    //
-    //   Code::token("x")           -> Token("x")
-    //   Code::join(", ", [x, y])   -> Seq([x, Token(", "), y])
-
-    pub fn token(text: impl Into<String>) -> Code {
-        Code::Token(text.into())
-    }
-
-    pub fn link(link: Link, code: Code) -> Code {
-        Code::Link(link, Box::new(code))
-    }
-
-    pub fn seq(codes: impl IntoIterator<Item = Code>) -> Code {
-        Code::Seq(codes.into_iter().collect())
-    }
-
-    pub fn join(separator: &str, codes: impl IntoIterator<Item = Code>) -> Code {
-        let codes_joined = join_items(codes, |_| Code::token(separator));
-        Code::seq(codes_joined)
-    }
-}
-
-impl Block {
-    // - Block constructors
-    //
-    //   Block::item_ordered(0, prose)     -> Item { 0, Ordered(None), prose, Empty }
-    //   Block::item_unordered(1, prose)   -> Item { 1, Unordered, prose, Empty }
-
-    pub fn raw(text: impl Into<String>) -> Block {
-        Block::Raw(text.into())
-    }
-
-    pub fn inline(prose: Prose) -> Block {
-        Block::Inline(prose)
-    }
-
-    pub fn concat(blocks: impl IntoIterator<Item = Block>) -> Block {
-        Block::Concat(blocks.into_iter().collect())
-    }
-
-    pub fn seq(blocks: impl IntoIterator<Item = Block>) -> Block {
-        Block::Seq(blocks.into_iter().collect())
-    }
-
-    pub fn item_ordered(level: usize, prose_head: Prose) -> Block {
-        Block::item_ordered_body(level, None, prose_head, Block::Empty)
-    }
-
-    pub fn item_ordered_body(
-        level: usize,
-        anchor: Option<String>,
-        prose_head: Prose,
-        block_body: Block,
-    ) -> Block {
-        let kind = ItemKind::Ordered(anchor);
-        Block::Item { level, kind, prose_head, block_body: Box::new(block_body) }
-    }
-
-    pub fn item_unordered(level: usize, prose_head: Prose) -> Block {
-        let kind = ItemKind::Unordered;
-        Block::Item { level, kind, prose_head, block_body: Box::new(Block::Empty) }
-    }
-}
-
-// == Capitalization
-
-/// Whether capitalization found text, can continue, or reached protected prose.
-enum CapStep {
-    /// Capitalized an initial letter, ending the search.
-    Done,
-    /// Found no eligible initial letter, allowing the next piece to be tried.
-    Skip,
-    /// Reached protected code or a link, ending the search without changes.
-    Stop,
-}
-
-impl Prose {
-    // - Prose capitalization
-    //
-    //   Seq([Empty, Text("hello")])               -> Hello
-    //   Seq([Text("("), Text("a")])               -> (A
-    //   Seq([Code(Token("x")), Text(" stays")])   -> ``x`` stays
-
-    fn capitalize_step(&mut self) -> CapStep {
-        match self {
-            Prose::Text(text) => {
-                // Capitalize only an initial ASCII letter
-                if text.starts_with(|character: char| character.is_ascii_alphabetic()) {
-                    text[..1].make_ascii_uppercase();
-                    CapStep::Done
-                } else {
-                    CapStep::Skip
-                }
-            }
-            Prose::Code(_) | Prose::PlainCode(_) | Prose::Link(..) | Prose::Fallthrough(..) => {
-                CapStep::Stop
-            }
-            Prose::Seq(proses) => {
-                // Empty or punctuation-only pieces leave the next piece eligible
-                for prose in proses {
-                    match prose.capitalize_step() {
-                        CapStep::Skip => {}
-                        step => return step,
-                    }
-                }
-                CapStep::Skip
-            }
-            Prose::Empty => CapStep::Skip,
-        }
-    }
-
-    /// Capitalizes the first eligible text without changing embedded code or links.
-    pub fn capitalize_first(mut self) -> Prose {
-        self.capitalize_step();
-        self
-    }
-}
-
-impl Block {
-    // - Block capitalization
-    //
-    //   Item { 0, Ordered(None), Text("if x"), Empty }                      -> . If x
-    //   Seq([Item { 0, Ordered(None), Empty, Empty }, Inline(Text("x"))])   -> .
-    //                                                                          X
-    //   Seq([Table { .. }, Inline(Text("x"))])                              -> x unchanged
-
-    fn capitalize_step(&mut self) -> CapStep {
-        match self {
-            Block::Empty | Block::Raw(_) => CapStep::Skip,
-            Block::Inline(prose) => prose.capitalize_step(),
-            Block::Item { prose_head, block_body, .. } => match prose_head.capitalize_step() {
-                // An item without eligible heading text continues into its body
-                CapStep::Skip => block_body.capitalize_step(),
-                step => step,
-            },
-            Block::Concat(blocks) | Block::Seq(blocks) => {
-                for block in blocks {
-                    match block.capitalize_step() {
-                        CapStep::Skip => {}
-                        step => return step,
-                    }
-                }
-                CapStep::Skip
-            }
-            Block::Table { .. } => CapStep::Stop,
-        }
-    }
-
-    /// Capitalizes the first eligible block heading or inline text.
-    pub fn capitalize_first(mut self) -> Block {
-        self.capitalize_step();
-        self
-    }
-}
+use super::doc::{Block, Code, FallthroughLabel, Item, ItemKind, Link, Prose, Subject, Table};
+use crate::backend_doc::adoc::pl::utils::{
+    adoc_link, adoc_mono_chopped, adoc_ordered_bullet, adoc_unordered_bullet,
+};
 
 // == Ordered-list markers
-
-// - Roman numerals
-//
-//   4    -> iv
-//   14   -> xiv
-//   90   -> xc
-
-fn roman_of_num(num: usize) -> String {
-    // Labels follow the source renderer's two-digit conversion
-    let units = ["", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix"];
-    let tens = ["", "x", "xx", "xxx", "xl", "l", "lx", "lxx", "lxxx", "xc"];
-    format!("{}{}", tens[num / 10 % 10], units[num % 10])
-}
 
 // - Ordered-list styles
 //
@@ -402,6 +41,19 @@ enum OrderedStyle {
 }
 
 impl OrderedStyle {
+    // - Roman numerals
+    //
+    //   4    -> iv
+    //   14   -> xiv
+    //   90   -> xc
+
+    fn roman_of_num(num: usize) -> String {
+        // Labels follow the source renderer's two-digit conversion
+        let units = ["", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix"];
+        let tens = ["", "x", "xx", "xxx", "xl", "l", "lx", "lxx", "lxxx", "xc"];
+        format!("{}{}", tens[num / 10 % 10], units[num % 10])
+    }
+
     fn of_level(level: usize) -> OrderedStyle {
         match level % 5 {
             0 => OrderedStyle::Arabic,
@@ -420,8 +72,8 @@ impl OrderedStyle {
             OrderedStyle::UpperAlpha if idx < 26 => char::from(b'A' + idx as u8).to_string(),
             // Alphabetic lists use an explicit fallback beyond the alphabet
             OrderedStyle::LowerAlpha | OrderedStyle::UpperAlpha => format!("arm{num}"),
-            OrderedStyle::LowerRoman => roman_of_num(num),
-            OrderedStyle::UpperRoman => roman_of_num(num).to_ascii_uppercase(),
+            OrderedStyle::LowerRoman => OrderedStyle::roman_of_num(num),
+            OrderedStyle::UpperRoman => OrderedStyle::roman_of_num(num).to_ascii_uppercase(),
         }
     }
 }
@@ -449,7 +101,7 @@ impl Block {
         ordinals: &mut BTreeMap<usize, usize>,
     ) {
         match self {
-            Block::Item { level, kind, block_body, .. } => {
+            Block::Item(Item { level, kind, block_body, .. }) => {
                 // A shallower entry starts new nested lists
                 ordinals.retain(|level_inner, _| level_inner <= level);
                 match kind {
@@ -475,7 +127,7 @@ impl Block {
                     block.collect_anchor_markers(markers, ordinals);
                 }
             }
-            Block::Empty | Block::Raw(_) | Block::Inline(_) | Block::Table { .. } => {}
+            Block::Empty | Block::Raw(_) | Block::Inline(_) | Block::Table(_) => {}
         }
     }
 }
@@ -516,17 +168,6 @@ enum CodeStyle {
     Mono,
     /// Emits code text as is, as in link labels and table cells.
     Plain,
-}
-
-impl Code {
-    fn is_empty(&self) -> bool {
-        match self {
-            Code::Token(text) => text.is_empty(),
-            Code::Link(_, code) => code.is_empty(),
-            Code::Seq(codes) => codes.iter().all(Code::is_empty),
-            Code::Empty => true,
-        }
-    }
 }
 
 /// Per-serialization anchor labels and warnings.
@@ -795,10 +436,8 @@ impl<'a> Serializer<'a> {
             Block::Inline(prose) => self.ser_prose(prose, None, true),
             Block::Concat(blocks) => self.ser_concat_block(blocks),
             Block::Seq(blocks) => self.ser_seq_block(blocks),
-            Block::Item { level, kind, prose_head, block_body } => {
-                self.ser_item_block(*level, kind, prose_head, block_body)
-            }
-            Block::Table { header, rows } => self.ser_table_block(header, rows),
+            Block::Item(item) => self.ser_item_block(item),
+            Block::Table(table) => self.ser_table_block(table),
         }
     }
 
@@ -849,13 +488,9 @@ impl<'a> Serializer<'a> {
     //   ->  .. +++<span class="bk-arm-anchor" id="arm"></span>+++If x
     //        ... Return y.
 
-    fn ser_item_block(
-        &mut self,
-        level: usize,
-        kind: &ItemKind,
-        prose_head: &Prose,
-        block_body: &Block,
-    ) -> String {
+    fn ser_item_block(&mut self, item: &Item) -> String {
+        let Item { level, kind, prose_head, block_body } = item;
+        let level = *level;
         let text_bullet = match kind {
             ItemKind::Unordered => adoc_unordered_bullet(level),
             ItemKind::Ordered(_) => adoc_ordered_bullet(level),
@@ -889,7 +524,8 @@ impl<'a> Serializer<'a> {
     //
     //      |===
 
-    fn ser_table_block(&mut self, header: &[Prose], rows: &[Vec<Code>]) -> String {
+    fn ser_table_block(&mut self, table: &Table) -> String {
+        let Table { header, rows } = table;
         // Use the header as the single source of the column count
         let cols = header.len();
         let texts_header: Vec<String> = header
@@ -915,17 +551,17 @@ impl<'a> Serializer<'a> {
 
 // - Entry points
 //
-//   ser_prose(Link(Subject(Function("f")), Text("x")), &subject_name)
+//   ser_prose(&subject_name, Link(Subject(Function("f")), Text("x")))
 //   -> xref:f[x]
 //
 //   ser_prose_in_link(Link(Direct("t"), Code(Token("x"))))
 //   -> ``x``
 //
-//   ser_code(Seq([Token("a "), Link(Direct("f"), Token("b"))]), &subject_name)
+//   ser_code(&subject_name, Seq([Token("a "), Link(Direct("f"), Token("b"))]))
 //   -> a xref:f[b]
 
 /// Serializes prose using the enclosing document's anchor resolver.
-pub fn ser_prose(prose: &Prose, anchor: &dyn Fn(&Subject) -> Option<String>) -> String {
+pub fn ser_prose(anchor: &dyn Fn(&Subject) -> Option<String>, prose: &Prose) -> String {
     let mut serializer = Serializer::new(anchor, BTreeMap::new());
     serializer.ser_prose(prose, None, true)
 }
@@ -937,46 +573,14 @@ pub fn ser_prose_in_link(prose: &Prose) -> String {
 }
 
 /// Serializes code without monospace markup using the given anchor resolver.
-pub fn ser_code(code: &Code, anchor: &dyn Fn(&Subject) -> Option<String>) -> String {
+pub fn ser_code(anchor: &dyn Fn(&Subject) -> Option<String>, code: &Code) -> String {
     let mut serializer = Serializer::new(anchor, BTreeMap::new());
     serializer.ser_code(CodeStyle::Plain, code, None, false)
 }
 
 /// Resolves arm labels before serializing a fragment with the given anchor resolver.
-pub fn ser_block(block: &Block, anchor: &dyn Fn(&Subject) -> Option<String>) -> String {
+pub fn ser_block(anchor: &dyn Fn(&Subject) -> Option<String>, block: &Block) -> String {
     let markers = block.anchor_markers();
     let mut serializer = Serializer::new(anchor, markers);
     serializer.ser_block(block)
-}
-
-// == Visible widths
-//
-//   Seq([Text("a "), Code(Token("bc"))]).width()   -> 4
-//   Fallthrough("t", Explicit("else")).width()     -> 8, counting the arrow label
-//   Fallthrough("t", Derived).width()              -> 0
-
-impl Prose {
-    /// Measures prose before adding code and link markup.
-    pub fn width(&self) -> usize {
-        match self {
-            Prose::Text(text) => text.len(),
-            Prose::Code(code) | Prose::PlainCode(code) => code.width(),
-            Prose::Link(_, prose) => prose.width(),
-            Prose::Fallthrough(_, FallthroughLabel::Derived) | Prose::Empty => 0,
-            Prose::Fallthrough(_, FallthroughLabel::Explicit(text)) => text.len() + 4,
-            Prose::Seq(proses) => proses.iter().map(Prose::width).sum(),
-        }
-    }
-}
-
-impl Code {
-    /// Measures code before adding monospace and link markup.
-    pub fn width(&self) -> usize {
-        match self {
-            Code::Token(text) => text.len(),
-            Code::Link(_, code) => code.width(),
-            Code::Seq(codes) => codes.iter().map(Code::width).sum(),
-            Code::Empty => 0,
-        }
-    }
 }
