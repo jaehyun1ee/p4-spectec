@@ -200,6 +200,18 @@ pub fn rename_args(ctx: &mut Context, renv: &mut RenameEnv, args: &[ast::Arg]) -
 
 // == Side-condition generation
 
+/// Source identifiers involved in a repeated binding.
+pub struct Origin {
+    pub id_bound: Id,
+    pub id_repeated: Id,
+}
+
+/// A multibind check and the identifiers that caused it.
+pub struct AnalyzedPrem {
+    pub prem_al: al::ast::Prem,
+    pub origin: Origin,
+}
+
 /// Builds `id = id_rename`.
 fn gen_exp_equality(id: &Id, id_rename: &Id, typ: &ast::Typ) -> ast::Exp {
     let exp_l = crate::note_phrase!(node: crate::lang::il::ast::ExpKind::Id(id.clone()), note: typ.node.clone(), span: id.span.clone());
@@ -265,18 +277,6 @@ fn generate_side_condition(
         .collect::<VEnv>();
     iter_ctx_side.add_vars_bound(venv);
     Some(iter_ctx_side.iterate_prem(prem))
-}
-
-/// Source identifiers involved in a repeated binding.
-pub struct Origin {
-    pub id_bound: Id,
-    pub id_repeated: Id,
-}
-
-/// A multibind check and the identifiers that caused it.
-pub struct AnalyzedPrem {
-    pub prem_al: al::ast::Prem,
-    pub origin: Origin,
 }
 
 /// Builds one check per repeated identifier with its source identifiers.
