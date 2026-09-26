@@ -28,6 +28,7 @@ use crate::{
         pl::{
             annot::Hints,
             ast::{self as pl, ExpKind},
+            rule_group,
         },
         sl,
         traits::{has_call::HasCall, print::Print},
@@ -1377,12 +1378,6 @@ enum Rendered {
 type RenderTier<'a, Tier> =
     fn(&mut Renderer<'a>, usize, &Context, bool, &pl::Instr<Tier>, &Tier) -> Rendered;
 
-/// A rule group instruction together with the hints of its dispatch step.
-struct GroupRef<'a> {
-    hints: &'a Hints,
-    group: &'a pl::RuleGroupInstr,
-}
-
 impl<'a> Renderer<'a> {
     /// Starts a document with fresh arm counters and a subject resolver.
     pub fn new(anchor: &'a dyn Fn(&Subject) -> Option<String>) -> Self {
@@ -2664,53 +2659,6 @@ impl<'a> Renderer<'a> {
 
     // == Defined relations
 
-    // - Rule groups
-    //
-    //   Even dispatch tree   -> [Even/nil, Even/cons], in document order
-
-    /// Collects rule groups from a dispatch tree in document order.
-    fn collect_groups<'b>(block: &'b pl::DispatchBlock, groups: &mut Vec<GroupRef<'b>>) {
-        for instr in block {
-            match &instr.node.node {
-                pl::InstrKind::If(if_instr) => Self::collect_groups(&if_instr.block, groups),
-                pl::InstrKind::Hold(hold_instr) => match &hold_instr.hold_case {
-                    pl::HoldCase::Both(block_l, block_r) => {
-                        Self::collect_groups(block_l, groups);
-                        Self::collect_groups(block_r, groups);
-                    }
-                    pl::HoldCase::Hold(block, _) | pl::HoldCase::NotHold(block, _) => {
-                        Self::collect_groups(block, groups);
-                    }
-                },
-                pl::InstrKind::Case(case_instr) => {
-                    for case in &case_instr.cases {
-                        Self::collect_groups(&case.block, groups);
-                    }
-                }
-                pl::InstrKind::CheckLetSub(check_instr) => {
-                    Self::collect_groups(&check_instr.block, groups)
-                }
-                pl::InstrKind::CheckLetMatch(check_instr) => {
-                    Self::collect_groups(&check_instr.block, groups)
-                }
-                pl::InstrKind::OptionGet(option_instr) => {
-                    Self::collect_groups(&option_instr.block, groups)
-                }
-                pl::InstrKind::Tier(tier_instr) => match &tier_instr.tier {
-                    pl::DispatchInstr::Route(route_instr) => {
-                        for arm in &route_instr.blocks {
-                            Self::collect_groups(arm, groups);
-                        }
-                    }
-                    pl::DispatchInstr::Group(group) => {
-                        groups.push(GroupRef { hints: &instr.hints, group });
-                    }
-                },
-                pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_) => {}
-            }
-        }
-    }
-
     // - Rule group fragments
     //
     //   rule Even/nil: |- eps   -> xref:Even[``·`` has even length]:
@@ -2820,17 +2768,15 @@ impl<'a> Renderer<'a> {
             rel.block_else_opt.as_deref(),
         );
         // Extract each rule group from the dispatch tree in document order
-        let mut groups = Vec::new();
-        Self::collect_groups(&rel.block, &mut groups);
-        let mut texts_group = Vec::with_capacity(groups.len());
-        for group_ref in groups {
-            let GroupRef { hints: hints_group, group } = group_ref;
+        let rule_groups = rule_group::collect_rule_groups(&rel.block);
+        let mut texts_group = Vec::with_capacity(rule_groups.len());
+        for rule_group in rule_groups {
             let text_group = self.render_rulegroup(
-                hints_group,
-                &group.id_rel,
-                &group.rel_signature,
-                &group.exps_input,
-                &group.block,
+                rule_group.hints,
+                rule_group.id_rel,
+                rule_group.rel_signature,
+                rule_group.exps_input,
+                rule_group.block,
             );
             texts_group.push(text_group);
         }

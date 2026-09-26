@@ -12,7 +12,10 @@
 
 use std::collections::HashMap;
 
-use crate::lang::{pl::ast as pl, traits::has_call::HasCall};
+use crate::lang::{
+    pl::{ast as pl, rule_group},
+    traits::has_call::HasCall,
+};
 
 /// Failure destination by rule-group name.
 type Fallthroughs = HashMap<String, pl::Fallthrough>;
@@ -339,48 +342,6 @@ fn stamp_defined_rel_def(mut def_rel: pl::DefinedRel) -> pl::DefinedRel {
     def_rel
 }
 
-/// Collects nested rule-group identifiers in depth-first source order.
-fn collect_ids_group<'a>(block: &'a pl::DispatchBlock, ids_group: &mut Vec<&'a pl::Id>) {
-    for instr in block {
-        match &instr.node.node {
-            pl::InstrKind::If(pl::IfInstr { block, .. }) => {
-                collect_ids_group(block, ids_group);
-            }
-            pl::InstrKind::Hold(pl::HoldInstr { hold_case, .. }) => match hold_case {
-                pl::HoldCase::Both(block_hold, block_not_hold) => {
-                    collect_ids_group(block_hold, ids_group);
-                    collect_ids_group(block_not_hold, ids_group);
-                }
-                pl::HoldCase::Hold(block, _) | pl::HoldCase::NotHold(block, _) => {
-                    collect_ids_group(block, ids_group);
-                }
-            },
-            pl::InstrKind::Case(pl::CaseInstr { cases, .. }) => {
-                for case in cases {
-                    collect_ids_group(&case.block, ids_group);
-                }
-            }
-            pl::InstrKind::CheckLetSub(pl::CheckLetSubInstr { block, .. })
-            | pl::InstrKind::CheckLetMatch(pl::CheckLetMatchInstr { block, .. })
-            | pl::InstrKind::OptionGet(pl::OptionGetInstr { block, .. }) => {
-                collect_ids_group(block, ids_group);
-            }
-            pl::InstrKind::Tier(pl::TierInstr {
-                tier: pl::DispatchInstr::Route(pl::RouteInstr { blocks }),
-            }) => {
-                for block in blocks {
-                    collect_ids_group(block, ids_group);
-                }
-            }
-            // A rule group is a destination; everything else only nests
-            pl::InstrKind::Tier(pl::TierInstr {
-                tier: pl::DispatchInstr::Group(pl::RuleGroupInstr { id_group, .. }),
-            }) => ids_group.push(id_group),
-            pl::InstrKind::Let(_) | pl::InstrKind::Debug(_) | pl::InstrKind::Destruct(_) => {}
-        }
-    }
-}
-
 /// Maps each rule group to the group tried after it fails.
 ///
 /// Groups are gathered per route arm; an arm falls through to the first group
@@ -403,8 +364,11 @@ fn collect_fallthroughs(
     let mut fallthrough = fallthrough_final;
     let mut ids_group_by_block = Vec::new();
     for block in blocks {
-        let mut ids_group = Vec::new();
-        collect_ids_group(block, &mut ids_group);
+        let rule_groups = rule_group::collect_rule_groups(block);
+        let ids_group: Vec<&pl::Id> = rule_groups
+            .iter()
+            .map(|rule_group| rule_group.id_group)
+            .collect();
         if !ids_group.is_empty() {
             ids_group_by_block.push(ids_group);
         }
