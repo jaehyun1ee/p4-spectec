@@ -14,9 +14,73 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::doc::{Block, Code, FallthroughLabel, Item, ItemKind, Link, Prose, Subject, Table};
-use crate::backend_doc::adoc::pl::utils::{
-    adoc_link, adoc_mono_chopped, adoc_ordered_bullet, adoc_unordered_bullet,
-};
+
+// == Markup
+
+// - Monospace
+//
+//   "a b"             -> ``a`` ``b``
+//   "a  b"            -> ``a``  ``b``
+//   "\"a b\""         -> ``"a`` ``b"``
+//   "a \"b\" \"c\""   -> ``a`` ``{quot}b{quot}`` ``{quot}c{quot}``
+
+/// Formats each nonempty word separately so code can wrap at spaces.
+fn adoc_mono_chopped(text: &str) -> String {
+    // Quotes spanning several phrases could start AsciiDoc quotation markup
+    let text_escaped =
+        if text.matches('"').count() > 2 { text.replace('"', "{quot}") } else { text.to_owned() };
+    let texts_word: Vec<String> = text_escaped
+        .split(' ')
+        .map(|text_word| match text_word {
+            "" => String::new(),
+            _ => format!("``{text_word}``"),
+        })
+        .collect();
+    texts_word.join(" ")
+}
+
+// - Cross-references
+//
+//   adoc_link("t", "x")      -> xref:t[x]
+//   adoc_link("t", "a[b]")   -> <<t,a[b]>>
+//   adoc_link("t", "a<b>")   -> xref:t[a<b>]
+
+/// Chooses cross-reference delimiters that do not collide with the label.
+fn adoc_link(target: &str, text: &str) -> String {
+    // Brackets require the alternate cross-reference syntax
+    if !text.contains(['[', ']']) {
+        format!("xref:{target}[{text}]")
+    } else if !text.contains(['<', '>']) {
+        format!("<<{target},{text}>>")
+    } else {
+        // Neither delimiter can represent this label
+        eprintln!(
+            "Warning: Asciidoc link text contains both brackets and angle brackets. \
+             Link may not render correctly.\n\t{text}"
+        );
+        text.to_owned()
+    }
+}
+
+// - List markers
+//
+//   adoc_ordered_bullet(0)     -> ". "
+//   adoc_ordered_bullet(2)     -> "  ... "
+//   adoc_unordered_bullet(1)   -> " ** "
+
+/// Returns an ordered-list marker at the requested nesting level.
+pub(in crate::backend_doc::adoc::pl) fn adoc_ordered_bullet(level: usize) -> String {
+    let indent = " ".repeat(level);
+    let marker = ".".repeat(level + 1);
+    format!("{indent}{marker} ")
+}
+
+/// Returns an unordered-list marker at the requested nesting level.
+pub(in crate::backend_doc::adoc::pl) fn adoc_unordered_bullet(level: usize) -> String {
+    let indent = " ".repeat(level);
+    let marker = "*".repeat(level + 1);
+    format!("{indent}{marker} ")
+}
 
 // == Ordered-list markers
 

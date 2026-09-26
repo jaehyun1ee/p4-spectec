@@ -42,13 +42,14 @@ use super::{
         serialize,
     },
     fallthrough::{self, Anchors, Context},
-    utils::{
-        ADOC_WIDTH_SHORT, adoc_link, adoc_subscript, adoc_superscript, reindent_lines,
-        unindent_lines,
-    },
 };
 
 // == Render utils
+
+/// The largest visible width kept inline by the prose renderer.
+const ADOC_WIDTH_SHORT: usize = 30;
+
+// - Lists
 //
 //   [x]         -> ``x``
 //   [x, y]      -> ``x`` and ``y``
@@ -73,6 +74,38 @@ impl Prose {
             proses,
         )
     }
+}
+
+// - Scripts
+//
+//   adoc_subscript("max")   -> ~max~
+//   adoc_superscript("?")   -> ^?^
+
+/// Formats a subscript.
+fn adoc_subscript(text: &str) -> String {
+    format!("~{text}~")
+}
+
+/// Formats a superscript.
+fn adoc_superscript(text: &str) -> String {
+    format!("^{text}^")
+}
+
+// - Line joins
+//
+//   reindent_lines(1, "x\ny")   -> x
+//                                   ** y
+//   unindent_lines("x\ny")      -> xy
+
+/// Starts continuation lines as unordered list entries.
+fn reindent_lines(level: usize, text: &str) -> String {
+    let bullet = serialize::adoc_unordered_bullet(level);
+    text.replace('\n', &format!("\n{bullet}"))
+}
+
+/// Joins lines without inserting a separator.
+fn unindent_lines(text: &str) -> String {
+    text.replace('\n', "")
 }
 
 // == Alternation
@@ -1599,7 +1632,8 @@ impl<'a> Renderer<'a> {
             .unwrap_or_default();
         let block_body = self.render_instrs(1, None, ctx, render_tier, block);
         let text_body = serialize::ser_block(self.anchor, &block_body);
-        format!("\n\n. {text_anchor}Otherwise:{text_body}")
+        let text_bullet = serialize::adoc_ordered_bullet(0);
+        format!("\n\n{text_bullet}{text_anchor}Otherwise:{text_body}")
     }
 }
 
@@ -2308,14 +2342,15 @@ impl<'a> Renderer<'a> {
     ) -> Block {
         // Build the forced binding heading with its failure continuation
         let code_l = Code::of_exp(&option_instr.exp_l);
-        let text_get = adoc_link("option_get", "*!*");
+        let link_get = Link::Direct("option_get".to_owned());
+        let prose_get = Prose::link(link_get, Prose::text("*!*"));
         let prose_r = Prose::of_exp(&option_instr.exp_r);
         let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         let prose_head = Prose::seq([
             Prose::text("Let "),
             Prose::code(code_l),
             Prose::text(" be "),
-            Prose::text(text_get),
+            prose_get,
             Prose::text(" "),
             prose_r,
             Prose::text("."),
