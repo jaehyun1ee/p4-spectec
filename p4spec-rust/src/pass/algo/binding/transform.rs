@@ -619,7 +619,6 @@ fn lower_iter_prem(
     }
     let mut iterations = vec![Iteration {
         iter: iter_prem_il.prem_iter.iter,
-        span_opt: Some(span.clone()),
         vars_bound: iter_prem_il.prem_iter.vars_bound.clone(),
         vars_bind: vec![],
     }];

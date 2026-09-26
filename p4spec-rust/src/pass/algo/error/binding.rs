@@ -107,19 +107,28 @@ pub(crate) fn equality_binding_invalid(span: &Span, benv_l: &BEnv, benv_r: &BEnv
 
 const ITERATION_LOOP_VARIABLE_MISSING: &str = "algo/iteration-loop-variable-missing";
 
-/// Reports an iteration whose length has no previously bound source variable.
+/// Reports an iteration with no externally bound variable to range over.
 pub(crate) fn iteration_loop_variable_missing(span: &Span, vars: &[ast::Var]) -> AlgoError {
-    let mut labels = vec![Label::primary(span, "this iteration has no iteration source")];
-    for var in vars {
-        labels
-            .push(Label::secondary(&var.id.span, format!("`{}` is newly bound here", var.id.node)));
-    }
+    // Describe the variables whose dimensions cannot determine a loop length
+    let vars: Vec<_> = vars
+        .iter()
+        .map(|var| format!("`{}`", var.to_string()))
+        .collect();
+    // Direct IL can also supply an iteration with no variables at all
+    let message = match vars.as_slice() {
+        [] => "iteration has no iter variable".into(),
+        [var] => format!("iteration has no iter variable because {var} is newly bound"),
+        _ => format!(
+            "iteration has no iter variable because variables {} are newly bound",
+            vars.join(", ")
+        ),
+    };
     cause(
         ITERATION_LOOP_VARIABLE_MISSING,
-        "this iteration has no previously bound variable to determine its length",
-        labels,
+        message,
+        vec![Label::primary(span, "")],
         vec![
-            "Bind a variable before this iteration so its values determine the iteration length."
+            "An iteration needs a variable bound outside it whose values it can iterate over."
                 .into(),
         ],
     )

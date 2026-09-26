@@ -1,11 +1,8 @@
-error[algo/iteration-loop-variable-missing]: this iteration has no previously bound variable to determine its length
-   ┌─ algo/dataflow-iter-binding-only.watsup:13:6
+error[algo/iteration-loop-variable-missing]: iteration has no iter variable because `x` is newly bound
+   ┌─ algo/dataflow-iter-binding-only.watsup:13:7
    │
 13 │   -- (if x = 0)*
-   │      ^^^^^^^^^^^
-   │      │   │
-   │      │   `x` is newly bound here
-   │      this iteration has no iteration source
+   │       ^^^^^^^^
    │
-   = Bind a variable before this iteration so its values determine the iteration length.
+   = An iteration needs a variable bound outside it whose values it can iterate over.
 

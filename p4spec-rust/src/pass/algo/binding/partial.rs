@@ -246,12 +246,7 @@ fn gen_prem_bind_match(
         iter_ctx
             .as_slice()
             .iter()
-            .map(|entry| Iteration {
-                iter: entry.iter,
-                span_opt: entry.span_opt.clone(),
-                vars_bound: vec![],
-                vars_bind: vec![],
-            })
+            .map(|entry| Iteration { iter: entry.iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
     iter_ctx_match.add_var_bound(
@@ -272,12 +267,7 @@ fn gen_prem_bind_match(
         iter_ctx
             .as_slice()
             .iter()
-            .map(|entry| Iteration {
-                iter: entry.iter,
-                span_opt: entry.span_opt.clone(),
-                vars_bound: vec![],
-                vars_bind: vec![],
-            })
+            .map(|entry| Iteration { iter: entry.iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
     iter_ctx_bind.add_vars_bind(dimension::infer_exp(exp_from));
@@ -323,12 +313,7 @@ fn gen_prem_bind_sub(
         iter_ctx
             .as_slice()
             .iter()
-            .map(|entry| Iteration {
-                iter: entry.iter,
-                span_opt: entry.span_opt.clone(),
-                vars_bound: vec![],
-                vars_bind: vec![],
-            })
+            .map(|entry| Iteration { iter: entry.iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
     iter_ctx_sub.add_var_bound(
@@ -354,12 +339,7 @@ fn gen_prem_bind_sub(
         iter_ctx
             .as_slice()
             .iter()
-            .map(|entry| Iteration {
-                iter: entry.iter,
-                span_opt: entry.span_opt.clone(),
-                vars_bound: vec![],
-                vars_bind: vec![],
-            })
+            .map(|entry| Iteration { iter: entry.iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
     iter_ctx_bind.add_vars_bind(dimension::infer_exp(exp_from));
@@ -657,12 +637,7 @@ fn rename_exp_bind(
         }
         ast::ExpKind::Iter(exp_inner, ast::ExpIter { iter, vars }) => {
             // Rewrite under a new iteration scope, keeping its variables
-            let iteration = Iteration {
-                iter,
-                span_opt: Some(span.clone()),
-                vars_bound: vars,
-                vars_bind: vec![],
-            };
+            let iteration = Iteration { iter, vars_bound: vars, vars_bind: vec![] };
             let mut iter_scope = iter_ctx.scope(iteration);
             let exp_inner = rename_exp(ctx, binds, renv, &mut iter_scope, *exp_inner)?;
             let iteration = iter_scope.finish();

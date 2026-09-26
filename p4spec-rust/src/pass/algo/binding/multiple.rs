@@ -256,7 +256,7 @@ fn generate_side_condition(
     let mut iter_ctx_side = ICtx::from_iterations(
         iterations
             .into_iter()
-            .map(|iter| Iteration { iter, span_opt: None, vars_bound: vec![], vars_bind: vec![] })
+            .map(|iter| Iteration { iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
     let venv = std::iter::once(&id_condition)
