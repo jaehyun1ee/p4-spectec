@@ -236,16 +236,17 @@ fn generate_side_condition(
     iter_ctx: &ICtx,
     id: &Id,
     ids_rename: &[Id],
-) -> Option<al::ast::Prem> {
+) -> Option<AnalyzedPrem> {
     let mut ids_repeated = ids_rename.iter().skip(1);
     let id_rename = ids_repeated.next()?;
+    let id_bound = ids_rename.first()?.clone();
     // Locate the condition at the last occurrence
-    let mut id_condition = id.clone();
-    id_condition.span = ids_rename.last()?.span.clone();
-    let mut exp = gen_exp_equality(&id_condition, id_rename, &dim.typ);
+    let mut id_repeated = id.clone();
+    id_repeated.span = ids_rename.last()?.span.clone();
+    let mut exp = gen_exp_equality(&id_repeated, id_rename, &dim.typ);
     // Conjoin one equality per renamed occurrence
     for id_rename in ids_repeated {
-        let exp_r = gen_exp_equality(&id_condition, id_rename, &dim.typ);
+        let exp_r = gen_exp_equality(&id_repeated, id_rename, &dim.typ);
         exp = note_phrase! {
             node: ast::ExpKind::Bin(
                 ast::BinOp::Bool(prim::bool::BinOp::And),
@@ -254,12 +255,12 @@ fn generate_side_condition(
                 Box::new(exp_r),
             ),
             note: ast::TypKind::Bool,
-            span: id_condition.span.clone(),
+            span: id_repeated.span.clone(),
         };
     }
     let prem = phrase! {
         node: al::ast::PremKind::If(al::ast::IfPrem { exp }),
-        span: id_condition.span.clone(),
+        span: id_repeated.span.clone(),
     };
 
     // Iterate over the identifier's own dimension and the enclosing iterations
@@ -271,12 +272,15 @@ fn generate_side_condition(
             .map(|iter| Iteration { iter, vars_bound: vec![], vars_bind: vec![] })
             .collect(),
     );
-    let venv = std::iter::once(&id_condition)
+    let venv = std::iter::once(&id_repeated)
         .chain(ids_rename)
         .map(|id| (id.clone(), Dim::new(dim.typ.clone(), vec![])))
         .collect::<VEnv>();
     iter_ctx_side.add_vars_bound(venv);
-    Some(iter_ctx_side.iterate_prem(prem))
+    Some(AnalyzedPrem {
+        prem_al: iter_ctx_side.iterate_prem(prem),
+        origin: Origin { id_bound, id_repeated },
+    })
 }
 
 /// Builds one check per repeated identifier with its source identifiers.
@@ -284,11 +288,7 @@ pub fn generate_side_conditions(iter_ctx: &ICtx, renv: &RenameEnv) -> Vec<Analyz
     renv.iter()
         .filter_map(|(id, ids_rename)| {
             let dim = renv.dimension(id)?;
-            let prem_al = generate_side_condition(dim, iter_ctx, id, ids_rename)?;
-            let id_bound = ids_rename.first()?.clone();
-            let mut id_repeated = id.clone();
-            id_repeated.span = ids_rename.last()?.span.clone();
-            Some(AnalyzedPrem { prem_al, origin: Origin { id_bound, id_repeated } })
+            generate_side_condition(dim, iter_ctx, id, ids_rename)
         })
         .collect()
 }
