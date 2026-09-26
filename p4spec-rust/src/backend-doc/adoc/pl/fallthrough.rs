@@ -85,57 +85,59 @@ pub fn anchor_of_else(namespace: &str) -> String {
 
 // == Rendering
 
-// - Fallthrough links
-//
-//   None   -> (empty)
-//   Fail   -> +++<sub class="bk-mark">[FAIL]</sub>+++
+impl Prose {
+    // - Fallthrough links
+    //
+    //   None   -> (empty)
+    //   Fail   -> +++<sub class="bk-mark">[FAIL]</sub>+++
 
-/// Renders an instruction's fallthrough marker.
-pub fn prose_of_link<Tier>(ctx: &Context, instr: &Instr<Tier>) -> Prose {
-    match &instr.node.note {
-        None => Prose::Empty,
-        Some(Fallthrough::Next) => prose_of_next_link(ctx),
-        Some(Fallthrough::Group(id_group)) => prose_of_group_link(ctx, &id_group.node),
-        Some(Fallthrough::Else) => prose_of_else_link(ctx),
-        Some(Fallthrough::Fail) => prose_of_fail_link(),
+    /// Renders an instruction's fallthrough marker.
+    pub(super) fn of_fallthrough_link<Tier>(ctx: &Context, instr: &Instr<Tier>) -> Prose {
+        match &instr.node.note {
+            None => Prose::Empty,
+            Some(Fallthrough::Next) => Prose::of_next_link(ctx),
+            Some(Fallthrough::Group(id_group)) => Prose::of_group_link(ctx, &id_group.node),
+            Some(Fallthrough::Else) => Prose::of_else_link(ctx),
+            Some(Fallthrough::Fail) => Prose::of_fail_link(),
+        }
     }
-}
 
-// - Next-arm links
-//
-//   next arm bk-f-1-arm-2, displayed as 2
-//   -> +++<sub class="bk-mark">[<a href="#bk-f-1-arm-2">→ 2</a>]</sub>+++
+    // - Next-arm links
+    //
+    //   next arm bk-f-1-arm-2, displayed as 2
+    //   -> +++<sub class="bk-mark">[<a href="#bk-f-1-arm-2">→ 2</a>]</sub>+++
 
-fn prose_of_next_link(ctx: &Context) -> Prose {
-    let anchor = ctx
-        .next
-        .clone()
-        .expect("Fallthrough::Next has a target arm");
-    Prose::fallthrough(anchor, FallthroughLabel::Derived)
-}
+    fn of_next_link(ctx: &Context) -> Prose {
+        let anchor = ctx
+            .next
+            .clone()
+            .expect("Fallthrough::Next has a target arm");
+        Prose::fallthrough(anchor, FallthroughLabel::Derived)
+    }
 
-// - Rule-group links
-//
-//   group g, in namespace Rel   -> +++<sub class="bk-mark">[<a href="#Rel-g">→ g</a>]</sub>+++
+    // - Rule-group links
+    //
+    //   group g, in namespace Rel   -> +++<sub class="bk-mark">[<a href="#Rel-g">→ g</a>]</sub>+++
 
-fn prose_of_group_link(ctx: &Context, id_group: &str) -> Prose {
-    let anchor = anchor_of_group(&ctx.namespace, id_group);
-    Prose::fallthrough(anchor, FallthroughLabel::Explicit(id_group.to_owned()))
-}
+    fn of_group_link(ctx: &Context, id_group: &str) -> Prose {
+        let anchor = anchor_of_group(&ctx.namespace, id_group);
+        Prose::fallthrough(anchor, FallthroughLabel::Explicit(id_group.to_owned()))
+    }
 
-// - Otherwise links
-//
-//   namespace f   -> +++<sub class="bk-mark">[<a href="#f-else">→ ⋅</a>]</sub>+++
+    // - Otherwise links
+    //
+    //   namespace f   -> +++<sub class="bk-mark">[<a href="#f-else">→ ⋅</a>]</sub>+++
 
-fn prose_of_else_link(ctx: &Context) -> Prose {
-    let anchor = anchor_of_else(&ctx.namespace);
-    Prose::fallthrough(anchor, FallthroughLabel::Explicit("⋅".to_owned()))
-}
+    fn of_else_link(ctx: &Context) -> Prose {
+        let anchor = anchor_of_else(&ctx.namespace);
+        Prose::fallthrough(anchor, FallthroughLabel::Explicit("⋅".to_owned()))
+    }
 
-// - Failure markers
-//
-//   Fail   -> +++<sub class="bk-mark">[FAIL]</sub>+++
+    // - Failure markers
+    //
+    //   Fail   -> +++<sub class="bk-mark">[FAIL]</sub>+++
 
-fn prose_of_fail_link() -> Prose {
-    Prose::text("+++<sub class=\"bk-mark\">[FAIL]</sub>+++")
+    fn of_fail_link() -> Prose {
+        Prose::text("+++<sub class=\"bk-mark\">[FAIL]</sub>+++")
+    }
 }

@@ -54,23 +54,25 @@ use super::{
 //   [x, y]      -> ``x`` and ``y``
 //   [x, y, z]   -> ``x``, ``y``, and ``z``
 
-/// Joins owned prose with an Oxford comma without cloning its trees.
-fn prose_of_list(proses: Vec<Prose>) -> Prose {
-    let num_proses = proses.len();
-    // The final separator depends on whether the list has two or more items
-    Prose::join_with(
-        |idx| {
-            let separator = if num_proses == 2 {
-                " and "
-            } else if idx + 1 == num_proses {
-                ", and "
-            } else {
-                ", "
-            };
-            Prose::text(separator)
-        },
-        proses,
-    )
+impl Prose {
+    /// Joins owned prose with an Oxford comma without cloning its trees.
+    fn of_list(proses: Vec<Prose>) -> Prose {
+        let num_proses = proses.len();
+        // The final separator depends on whether the list has two or more items
+        Prose::join_with(
+            |idx| {
+                let separator = if num_proses == 2 {
+                    " and "
+                } else if idx + 1 == num_proses {
+                    ", and "
+                } else {
+                    ", "
+                };
+                Prose::text(separator)
+            },
+            proses,
+        )
+    }
 }
 
 // == Alternation
@@ -134,37 +136,45 @@ fn alternate<Item>(
 //   INT n     -> ``+INT+`` ``n``
 //   n* ~> %   -> ``n^{asterisk}^`` ``+~>+`` ``%``
 
-/// Renders a mixfix tree with caller-rendered arguments.
-fn code_of_mixfix<T>(mixfix: &Mixfix<T>, render_arg: &dyn Fn(&T) -> Code) -> Code {
-    match mixfix {
-        Mixfix::Arg(arg) => render_arg(arg),
-        Mixfix::Atom(atom) => {
-            let text_atom = string_of_atom(atom);
-            Code::token(text_atom)
-        }
-        Mixfix::Brack(atom_l, mixfix_inner, atom_r) => {
-            let text_l = string_of_atom(atom_l);
-            let code_inner = code_of_mixfix(mixfix_inner, render_arg);
-            let text_r = string_of_atom(atom_r);
-            Code::seq([
-                Code::token(text_l),
-                Code::token(" "),
-                code_inner,
-                Code::token(" "),
-                Code::token(text_r),
-            ])
-        }
-        Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
-            let code_l = code_of_mixfix(mixfix_l, render_arg);
-            let text_atom = string_of_atom(atom);
-            let code_r = code_of_mixfix(mixfix_r, render_arg);
-            Code::seq([code_l, Code::token(" "), Code::token(text_atom), Code::token(" "), code_r])
-        }
-        Mixfix::Seq(mixfixes) => {
-            let codes = mixfixes
-                .iter()
-                .map(|mixfix| code_of_mixfix(mixfix, render_arg));
-            Code::join(" ", codes)
+impl Code {
+    /// Renders a mixfix tree with caller-rendered arguments.
+    fn of_mixfix<T>(mixfix: &Mixfix<T>, render_arg: &dyn Fn(&T) -> Code) -> Code {
+        match mixfix {
+            Mixfix::Arg(arg) => render_arg(arg),
+            Mixfix::Atom(atom) => {
+                let text_atom = string_of_atom(atom);
+                Code::token(text_atom)
+            }
+            Mixfix::Brack(atom_l, mixfix_inner, atom_r) => {
+                let text_l = string_of_atom(atom_l);
+                let code_inner = Code::of_mixfix(mixfix_inner, render_arg);
+                let text_r = string_of_atom(atom_r);
+                Code::seq([
+                    Code::token(text_l),
+                    Code::token(" "),
+                    code_inner,
+                    Code::token(" "),
+                    Code::token(text_r),
+                ])
+            }
+            Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
+                let code_l = Code::of_mixfix(mixfix_l, render_arg);
+                let text_atom = string_of_atom(atom);
+                let code_r = Code::of_mixfix(mixfix_r, render_arg);
+                Code::seq([
+                    code_l,
+                    Code::token(" "),
+                    Code::token(text_atom),
+                    Code::token(" "),
+                    code_r,
+                ])
+            }
+            Mixfix::Seq(mixfixes) => {
+                let codes = mixfixes
+                    .iter()
+                    .map(|mixfix| Code::of_mixfix(mixfix, render_arg));
+                Code::join(" ", codes)
+            }
         }
     }
 }
@@ -180,22 +190,24 @@ fn string_of_defid(id: &pl::Id) -> String {
     format!("${}", id.node)
 }
 
-/// Renders an identifier with its suffix as a subscript.
-fn code_of_id(id: &pl::Id) -> Code {
-    // Preserve the anonymous identifier literally
-    if id.node.starts_with('_') {
-        return Code::token("++_++");
-    }
+impl Code {
+    /// Renders an identifier with its suffix as a subscript.
+    fn of_id(id: &pl::Id) -> Code {
+        // Preserve the anonymous identifier literally
+        if id.node.starts_with('_') {
+            return Code::token("++_++");
+        }
 
-    // Render the base before any underscore suffix
-    let mut parts = id.node.split('_');
-    let base = parts.next().unwrap_or_default();
-    let subscript = parts.collect::<Vec<_>>().join("_");
-    if subscript.is_empty() {
-        Code::token(base)
-    } else {
-        let text_subscript = adoc_subscript(&subscript);
-        Code::token(format!("{base}{text_subscript}"))
+        // Render the base before any underscore suffix
+        let mut parts = id.node.split('_');
+        let base = parts.next().unwrap_or_default();
+        let subscript = parts.collect::<Vec<_>>().join("_");
+        if subscript.is_empty() {
+            Code::token(base)
+        } else {
+            let text_subscript = adoc_subscript(&subscript);
+            Code::token(format!("{base}{text_subscript}"))
+        }
     }
 }
 
@@ -229,12 +241,15 @@ fn string_of_atom(atom: &pl::Atom) -> String {
 //   *   -> ^{asterisk}^, list
 //   ?   -> ^?^, option
 
-fn code_of_iter(iter: Iter) -> String {
-    let text_iter = match iter {
-        Iter::List => "{asterisk}",
-        Iter::Opt => "?",
-    };
-    adoc_superscript(text_iter)
+impl Code {
+    fn of_iter(iter: Iter) -> Code {
+        let text_iter = match iter {
+            Iter::List => "{asterisk}",
+            Iter::Opt => "?",
+        };
+        let text_superscript = adoc_superscript(text_iter);
+        Code::token(text_superscript)
+    }
 }
 
 fn string_of_iter(iter: Iter) -> &'static str {
@@ -249,47 +264,50 @@ fn string_of_iter(iter: Iter) -> &'static str {
 //   n*        -> ``n^{asterisk}^``
 //   n in n*   -> ``n`` in ``n^{asterisk}^``
 
-fn code_of_var(var: &pl::Var) -> Code {
-    let code_id = code_of_id(&var.id);
-    let codes_iter = var
-        .iters
-        .iter()
-        .map(|iter| Code::token(code_of_iter(*iter)));
-    Code::seq(std::iter::once(code_id).chain(codes_iter))
+impl Code {
+    fn of_var(var: &pl::Var) -> Code {
+        let code_id = Code::of_id(&var.id);
+        let codes_iter = var.iters.iter().map(|iter| Code::of_iter(*iter));
+        Code::seq(std::iter::once(code_id).chain(codes_iter))
+    }
 }
 
-fn prose_of_in_itervar(iter: Iter, var: &pl::Var) -> Prose {
-    let code_var = code_of_var(var);
-    let code_iterated = Code::seq([code_of_var(var), Code::token(code_of_iter(iter))]);
-    Prose::seq([Prose::code(code_var), Prose::text(" in "), Prose::code(code_iterated)])
-}
+impl Prose {
+    fn of_in_itervar(iter: Iter, var: &pl::Var) -> Prose {
+        let code_var = Code::of_var(var);
+        let code_iterated = Code::seq([Code::of_var(var), Code::of_iter(iter)]);
+        Prose::seq([Prose::code(code_var), Prose::text(" in "), Prose::code(code_iterated)])
+    }
 
-fn prose_of_in_itervars(iter: Iter, vars: &[pl::Var]) -> Prose {
-    let proses = vars
-        .iter()
-        .map(|var| prose_of_in_itervar(iter, var))
-        .collect();
-    prose_of_list(proses)
-}
+    fn of_in_itervars(iter: Iter, vars: &[pl::Var]) -> Prose {
+        let proses = vars
+            .iter()
+            .map(|var| Prose::of_in_itervar(iter, var))
+            .collect();
+        Prose::of_list(proses)
+    }
 
-fn prose_of_out_itervars(iter: Iter, vars: &[&pl::Var]) -> Prose {
-    let proses = vars
-        .iter()
-        .filter(|var| !var.id.node.starts_with('_'))
-        .map(|var| {
-            let code_iterated = Code::seq([code_of_var(var), Code::token(code_of_iter(iter))]);
-            Prose::code(code_iterated)
-        })
-        .collect();
-    prose_of_list(proses)
+    fn of_out_itervars(iter: Iter, vars: &[&pl::Var]) -> Prose {
+        let proses = vars
+            .iter()
+            .filter(|var| !var.id.node.starts_with('_'))
+            .map(|var| {
+                let code_iterated = Code::seq([Code::of_var(var), Code::of_iter(iter)]);
+                Prose::code(code_iterated)
+            })
+            .collect();
+        Prose::of_list(proses)
+    }
 }
 
 // == Types
 //
 //   datum   -> ``datum``
 
-fn code_of_typ(typ: &pl::Typ) -> Code {
-    Code::token(Print::to_string(typ))
+impl Code {
+    fn of_typ(typ: &pl::Typ) -> Code {
+        Code::token(Print::to_string(typ))
+    }
 }
 
 // == Operators
@@ -322,769 +340,782 @@ fn string_of_cmpop(op: pl::CmpOp) -> &'static str {
 
 // == Expressions as code
 
-// - Expression
-//
-//   $e_num(n)   -> xref:e_num[``$e_num(n)``]
-//   n*[m]       -> ``n^{asterisk}^[m]``
+impl Code {
+    // - Expression
+    //
+    //   $e_num(n)   -> xref:e_num[``$e_num(n)``]
+    //   n*[m]       -> ``n^{asterisk}^[m]``
 
-/// Renders an expression in compact code form.
-fn code_of_exp(exp: &pl::Exp) -> Code {
-    match &exp.node.node {
-        ExpKind::Bool(value) => code_of_bool_exp(*value),
-        ExpKind::Num(num) => code_of_num_exp(num),
-        ExpKind::Text(text_value) => code_of_text_exp(text_value),
-        ExpKind::Id(id) => code_of_var_exp(id),
-        ExpKind::Un(op, _, exp_inner) => code_of_un_exp(op, exp_inner),
-        ExpKind::Bin(op, _, exp_l, exp_r) => code_of_bin_exp(op, exp_l, exp_r),
-        ExpKind::Cmp(op, _, exp_l, exp_r) => code_of_cmp_exp(op, exp_l, exp_r),
-        ExpKind::UpCast(_, exp_inner) => code_of_upcast_exp(exp_inner),
-        ExpKind::DownCast(_, exp_inner) => code_of_downcast_exp(exp_inner),
-        ExpKind::Sub(exp_inner, typ, _) => code_of_sub_exp(exp_inner, typ),
-        ExpKind::Match(exp_inner, pattern) => code_of_match_exp(exp_inner, pattern),
-        ExpKind::Tuple(exps) => code_of_tuple_exp(exps),
-        ExpKind::Case(not_exp) => code_of_case_exp(not_exp),
-        ExpKind::Str(fields) => code_of_str_exp(fields),
-        ExpKind::Opt(exp_opt) => code_of_opt_exp(exp_opt.as_deref()),
-        ExpKind::List(exps) => code_of_list_exp(exps),
-        ExpKind::Cons(exp_head, exp_tail) => code_of_cons_exp(exp_head, exp_tail),
-        ExpKind::Cat(exp_l, exp_r) => code_of_cat_exp(exp_l, exp_r),
-        ExpKind::Mem(exp_elem, exp_set) => code_of_mem_exp(exp_elem, exp_set),
-        ExpKind::Len(exp_inner) => code_of_len_exp(exp_inner),
-        ExpKind::Dot(exp_base, atom) => code_of_dot_exp(exp_base, atom),
-        ExpKind::Idx(exp_base, exp_idx) => code_of_idx_exp(exp_base, exp_idx),
-        ExpKind::Slice(exp_base, exp_idx, exp_len) => code_of_slice_exp(exp_base, exp_idx, exp_len),
-        ExpKind::Upd(exp_base, path, exp_field) => code_of_upd_exp(exp_base, path, exp_field),
-        ExpKind::Call(id, targs, args) => code_of_call_exp(id, targs, args),
-        ExpKind::Iter(exp_inner, iter_exp) => code_of_iter_exp(exp_inner, iter_exp),
-    }
-}
-
-fn code_of_exps(exps: &[pl::Exp], separator: &str) -> Code {
-    Code::join(separator, exps.iter().map(code_of_exp))
-}
-
-// - Boolean expressions
-//
-//   true   -> ``true``
-
-fn code_of_bool_exp(value: bool) -> Code {
-    Code::token(value.to_string())
-}
-
-// - Numeric expressions
-//
-//   42   -> ``42``
-
-fn code_of_num_exp(num: &pl::Num) -> Code {
-    Code::token(Print::to_string(num))
-}
-
-// - Text expressions
-//
-//   "a\nb"   -> ``"a\nb"``
-
-fn code_of_text_exp(text_value: &str) -> Code {
-    let text_escaped = escape_text(text_value);
-    Code::token(format!("\"{text_escaped}\""))
-}
-
-// - Variable expressions
-//
-//   n_max   -> ``n~max~``
-
-fn code_of_var_exp(id: &pl::Id) -> Code {
-    code_of_id(id)
-}
-
-// - Unary expressions
-//
-//   ~b   -> ``~b``
-
-fn code_of_un_exp(op: &pl::UnOp, exp_inner: &pl::Exp) -> Code {
-    let code_inner = code_of_exp(exp_inner);
-    Code::seq([Code::token(Print::to_string(op)), code_inner])
-}
-
-// - Binary expressions
-//
-//   b /\ c     -> ``b`` ``/\`` ``c``
-//   $(n + m)   -> ``n`` ``{plus}`` ``m``
-
-fn code_of_bin_exp(op: &pl::BinOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Code {
-    let code_l = code_of_exp(exp_l);
-    let text_op = Print::to_string(op).replace('+', "{plus}");
-    let code_r = code_of_exp(exp_r);
-    Code::seq([code_l, Code::token(format!(" {text_op} ")), code_r])
-}
-
-// - Comparison expressions
-//
-//   $(n < m)   -> ``n`` ``<`` ``m``
-
-fn code_of_cmp_exp(op: &pl::CmpOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Code {
-    let code_l = code_of_exp(exp_l);
-    let text_op = Print::to_string(op);
-    let code_r = code_of_exp(exp_r);
-    Code::seq([code_l, Code::token(format!(" {text_op} ")), code_r])
-}
-
-// - Upcast expressions
-//
-//   UpCast(int, n)   -> ``n``
-
-fn code_of_upcast_exp(exp_inner: &pl::Exp) -> Code {
-    code_of_exp(exp_inner)
-}
-
-// - Downcast expressions
-//
-//   DownCast(nat, i)   -> ``i``
-
-fn code_of_downcast_exp(exp_inner: &pl::Exp) -> Code {
-    code_of_exp(exp_inner)
-}
-
-// - Subtype checks
-//
-//   v <: datum   -> ``v`` ``has`` ``type`` ``datum``
-
-fn code_of_sub_exp(exp_inner: &pl::Exp, typ: &pl::Typ) -> Code {
-    let code_inner = code_of_exp(exp_inner);
-    let code_typ = code_of_typ(typ);
-    Code::seq([code_inner, Code::token(" has type "), code_typ])
-}
-
-// - Pattern checks
-//
-//   Match(b*, [])      -> ``b^{asterisk}^`` ``is`` ``an`` ``empty`` ``list``
-//   Match(k, _EMPTY)   -> ``k`` ``is`` ``{nbsp}~EMPTY~``
-
-fn code_of_match_exp(exp: &pl::Exp, pattern: &pl::Pattern) -> Code {
-    let code_scrut = code_of_exp(exp);
-    match pattern {
-        Pattern::Case(mixop) if mixop.arity() == 0 => {
-            let code_pattern = code_of_pattern(pattern);
-            Code::seq([code_scrut, Code::token(" is "), code_pattern])
-        }
-        Pattern::List(ListPattern::Nil) => {
-            Code::seq([code_scrut, Code::token(" is an empty list")])
-        }
-        Pattern::List(ListPattern::Cons) => {
-            Code::seq([code_scrut, Code::token(" is a non-empty list")])
-        }
-        Pattern::List(ListPattern::Fixed(num_elems)) => {
-            Code::seq([code_scrut, Code::token(format!(" is a list of length {num_elems}"))])
-        }
-        Pattern::Opt(OptPattern::None) => Code::seq([code_scrut, Code::token(" is none")]),
-        Pattern::Opt(OptPattern::Some) => Code::seq([code_scrut, Code::token(" is defined")]),
-        Pattern::Case(_) => {
-            let code_pattern = code_of_pattern(pattern);
-            Code::seq([code_scrut, Code::token(" matches pattern "), code_pattern])
+    /// Renders an expression in compact code form.
+    fn of_exp(exp: &pl::Exp) -> Code {
+        match &exp.node.node {
+            ExpKind::Bool(value) => Code::of_bool_exp(*value),
+            ExpKind::Num(num) => Code::of_num_exp(num),
+            ExpKind::Text(text_value) => Code::of_text_exp(text_value),
+            ExpKind::Id(id) => Code::of_var_exp(id),
+            ExpKind::Un(op, _, exp_inner) => Code::of_un_exp(op, exp_inner),
+            ExpKind::Bin(op, _, exp_l, exp_r) => Code::of_bin_exp(op, exp_l, exp_r),
+            ExpKind::Cmp(op, _, exp_l, exp_r) => Code::of_cmp_exp(op, exp_l, exp_r),
+            ExpKind::UpCast(_, exp_inner) => Code::of_upcast_exp(exp_inner),
+            ExpKind::DownCast(_, exp_inner) => Code::of_downcast_exp(exp_inner),
+            ExpKind::Sub(exp_inner, typ, _) => Code::of_sub_exp(exp_inner, typ),
+            ExpKind::Match(exp_inner, pattern) => Code::of_match_exp(exp_inner, pattern),
+            ExpKind::Tuple(exps) => Code::of_tuple_exp(exps),
+            ExpKind::Case(not_exp) => Code::of_case_exp(not_exp),
+            ExpKind::Str(fields) => Code::of_str_exp(fields),
+            ExpKind::Opt(exp_opt) => Code::of_opt_exp(exp_opt.as_deref()),
+            ExpKind::List(exps) => Code::of_list_exp(exps),
+            ExpKind::Cons(exp_head, exp_tail) => Code::of_cons_exp(exp_head, exp_tail),
+            ExpKind::Cat(exp_l, exp_r) => Code::of_cat_exp(exp_l, exp_r),
+            ExpKind::Mem(exp_elem, exp_set) => Code::of_mem_exp(exp_elem, exp_set),
+            ExpKind::Len(exp_inner) => Code::of_len_exp(exp_inner),
+            ExpKind::Dot(exp_base, atom) => Code::of_dot_exp(exp_base, atom),
+            ExpKind::Idx(exp_base, exp_idx) => Code::of_idx_exp(exp_base, exp_idx),
+            ExpKind::Slice(exp_base, exp_idx, exp_len) => {
+                Code::of_slice_exp(exp_base, exp_idx, exp_len)
+            }
+            ExpKind::Upd(exp_base, path, exp_field) => Code::of_upd_exp(exp_base, path, exp_field),
+            ExpKind::Call(id, targs, args) => Code::of_call_exp(id, targs, args),
+            ExpKind::Iter(exp_inner, iter_exp) => Code::of_iter_exp(exp_inner, iter_exp),
         }
     }
-}
 
-// - Tuple expressions
-//
-//   (n, m)   -> ``(`` ``n,`` ``m`` ``)``
+    fn of_exps(exps: &[pl::Exp], separator: &str) -> Code {
+        Code::join(separator, exps.iter().map(Code::of_exp))
+    }
 
-fn code_of_tuple_exp(exps: &[pl::Exp]) -> Code {
-    let code_exps = code_of_exps(exps, ", ");
-    Code::seq([Code::token("( "), code_exps, Code::token(" )")])
-}
+    // - Boolean expressions
+    //
+    //   true   -> ``true``
 
-// - Case expressions
-//
-//   INT n   -> ``+INT+`` ``n``
+    fn of_bool_exp(value: bool) -> Code {
+        Code::token(value.to_string())
+    }
 
-fn code_of_case_exp(not_exp: &pl::NotExp) -> Code {
-    code_of_mixfix(not_exp, &code_of_exp)
-}
+    // - Numeric expressions
+    //
+    //   42   -> ``42``
 
-// - Struct expressions
-//
-//   {LEFT n, RIGHT m}   -> ``+{++LEFT+`` ``n,`` ``+RIGHT+`` ``m+}+``
+    fn of_num_exp(num: &pl::Num) -> Code {
+        Code::token(Print::to_string(num))
+    }
 
-fn code_of_str_exp(fields: &[(pl::Atom, pl::Exp)]) -> Code {
-    let codes_field = fields.iter().map(|(atom, exp_field)| {
+    // - Text expressions
+    //
+    //   "a\nb"   -> ``"a\nb"``
+
+    fn of_text_exp(text_value: &str) -> Code {
+        let text_escaped = escape_text(text_value);
+        Code::token(format!("\"{text_escaped}\""))
+    }
+
+    // - Variable expressions
+    //
+    //   n_max   -> ``n~max~``
+
+    fn of_var_exp(id: &pl::Id) -> Code {
+        Code::of_id(id)
+    }
+
+    // - Unary expressions
+    //
+    //   ~b   -> ``~b``
+
+    fn of_un_exp(op: &pl::UnOp, exp_inner: &pl::Exp) -> Code {
+        let code_inner = Code::of_exp(exp_inner);
+        Code::seq([Code::token(Print::to_string(op)), code_inner])
+    }
+
+    // - Binary expressions
+    //
+    //   b /\ c     -> ``b`` ``/\`` ``c``
+    //   $(n + m)   -> ``n`` ``{plus}`` ``m``
+
+    fn of_bin_exp(op: &pl::BinOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Code {
+        let code_l = Code::of_exp(exp_l);
+        let text_op = Print::to_string(op).replace('+', "{plus}");
+        let code_r = Code::of_exp(exp_r);
+        Code::seq([code_l, Code::token(format!(" {text_op} ")), code_r])
+    }
+
+    // - Comparison expressions
+    //
+    //   $(n < m)   -> ``n`` ``<`` ``m``
+
+    fn of_cmp_exp(op: &pl::CmpOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Code {
+        let code_l = Code::of_exp(exp_l);
+        let text_op = Print::to_string(op);
+        let code_r = Code::of_exp(exp_r);
+        Code::seq([code_l, Code::token(format!(" {text_op} ")), code_r])
+    }
+
+    // - Upcast expressions
+    //
+    //   UpCast(int, n)   -> ``n``
+
+    fn of_upcast_exp(exp_inner: &pl::Exp) -> Code {
+        Code::of_exp(exp_inner)
+    }
+
+    // - Downcast expressions
+    //
+    //   DownCast(nat, i)   -> ``i``
+
+    fn of_downcast_exp(exp_inner: &pl::Exp) -> Code {
+        Code::of_exp(exp_inner)
+    }
+
+    // - Subtype checks
+    //
+    //   v <: datum   -> ``v`` ``has`` ``type`` ``datum``
+
+    fn of_sub_exp(exp_inner: &pl::Exp, typ: &pl::Typ) -> Code {
+        let code_inner = Code::of_exp(exp_inner);
+        let code_typ = Code::of_typ(typ);
+        Code::seq([code_inner, Code::token(" has type "), code_typ])
+    }
+
+    // - Pattern checks
+    //
+    //   Match(b*, [])      -> ``b^{asterisk}^`` ``is`` ``an`` ``empty`` ``list``
+    //   Match(k, _EMPTY)   -> ``k`` ``is`` ``{nbsp}~EMPTY~``
+
+    fn of_match_exp(exp: &pl::Exp, pattern: &pl::Pattern) -> Code {
+        let code_scrut = Code::of_exp(exp);
+        match pattern {
+            Pattern::Case(mixop) if mixop.arity() == 0 => {
+                let code_pattern = Code::of_pattern(pattern);
+                Code::seq([code_scrut, Code::token(" is "), code_pattern])
+            }
+            Pattern::List(ListPattern::Nil) => {
+                Code::seq([code_scrut, Code::token(" is an empty list")])
+            }
+            Pattern::List(ListPattern::Cons) => {
+                Code::seq([code_scrut, Code::token(" is a non-empty list")])
+            }
+            Pattern::List(ListPattern::Fixed(num_elems)) => {
+                Code::seq([code_scrut, Code::token(format!(" is a list of length {num_elems}"))])
+            }
+            Pattern::Opt(OptPattern::None) => Code::seq([code_scrut, Code::token(" is none")]),
+            Pattern::Opt(OptPattern::Some) => Code::seq([code_scrut, Code::token(" is defined")]),
+            Pattern::Case(_) => {
+                let code_pattern = Code::of_pattern(pattern);
+                Code::seq([code_scrut, Code::token(" matches pattern "), code_pattern])
+            }
+        }
+    }
+
+    // - Tuple expressions
+    //
+    //   (n, m)   -> ``(`` ``n,`` ``m`` ``)``
+
+    fn of_tuple_exp(exps: &[pl::Exp]) -> Code {
+        let code_exps = Code::of_exps(exps, ", ");
+        Code::seq([Code::token("( "), code_exps, Code::token(" )")])
+    }
+
+    // - Case expressions
+    //
+    //   INT n   -> ``+INT+`` ``n``
+
+    fn of_case_exp(not_exp: &pl::NotExp) -> Code {
+        Code::of_mixfix(not_exp, &Code::of_exp)
+    }
+
+    // - Struct expressions
+    //
+    //   {LEFT n, RIGHT m}   -> ``+{++LEFT+`` ``n,`` ``+RIGHT+`` ``m+}+``
+
+    fn of_str_exp(fields: &[(pl::Atom, pl::Exp)]) -> Code {
+        let codes_field = fields.iter().map(|(atom, exp_field)| {
+            let text_atom = string_of_atom(atom);
+            let code_field = Code::of_exp(exp_field);
+            Code::seq([Code::token(text_atom), Code::token(" "), code_field])
+        });
+        let code_fields = Code::join(", ", codes_field);
+        Code::seq([Code::token("+{+"), code_fields, Code::token("+}+")])
+    }
+
+    // - Option expressions
+    //
+    //   eps   -> ``·``
+    //   n     -> ``n``
+
+    fn of_opt_exp(exp_opt: Option<&pl::Exp>) -> Code {
+        match exp_opt {
+            None => Code::token("·"),
+            Some(exp_inner) => Code::of_exp(exp_inner),
+        }
+    }
+
+    // - List expressions
+    //
+    //   []       -> ``·``
+    //   [n]      -> ``n``
+    //   [n, m]   -> ``+[+`` ``n,`` ``m`` ``+]+``
+
+    fn of_list_exp(exps: &[pl::Exp]) -> Code {
+        match exps {
+            [] => Code::token("·"),
+            [exp] => Code::of_exp(exp),
+            _ => {
+                let code_exps = Code::of_exps(exps, ", ");
+                Code::seq([Code::token("+[+ "), code_exps, Code::token(" +]+")])
+            }
+        }
+    }
+
+    // - Cons expressions
+    //
+    //   n :: n'*   -> ``n`` ``{two-colons}`` ``n'^{asterisk}^``
+
+    fn of_cons_exp(exp_head: &pl::Exp, exp_tail: &pl::Exp) -> Code {
+        let code_head = Code::of_exp(exp_head);
+        let code_tail = Code::of_exp(exp_tail);
+        Code::seq([code_head, Code::token(" {two-colons} "), code_tail])
+    }
+
+    // - Concatenation expressions
+    //
+    //   n* ++ m*   -> ``n^{asterisk}^`` ``{pp}`` ``m^{asterisk}^``
+
+    fn of_cat_exp(exp_l: &pl::Exp, exp_r: &pl::Exp) -> Code {
+        let code_l = Code::of_exp(exp_l);
+        let code_r = Code::of_exp(exp_r);
+        Code::seq([code_l, Code::token(" {pp} "), code_r])
+    }
+
+    // - Membership expressions
+    //
+    //   n <- m*   -> ``n`` ``is`` ``in`` ``m^{asterisk}^``
+
+    fn of_mem_exp(exp_elem: &pl::Exp, exp_set: &pl::Exp) -> Code {
+        let code_elem = Code::of_exp(exp_elem);
+        let code_set = Code::of_exp(exp_set);
+        Code::seq([code_elem, Code::token(" is in "), code_set])
+    }
+
+    // - Length expressions
+    //
+    //   |n*|   -> ``the`` ``length`` ``of`` ``n^{asterisk}^``
+
+    fn of_len_exp(exp_inner: &pl::Exp) -> Code {
+        let code_inner = Code::of_exp(exp_inner);
+        Code::seq([Code::token("the length of "), code_inner])
+    }
+
+    // - Field-access expressions
+    //
+    //   p.LEFT   -> ``p.+LEFT+``
+
+    fn of_dot_exp(exp_base: &pl::Exp, atom: &pl::Atom) -> Code {
+        let code_base = Code::of_exp(exp_base);
         let text_atom = string_of_atom(atom);
-        let code_field = code_of_exp(exp_field);
-        Code::seq([Code::token(text_atom), Code::token(" "), code_field])
-    });
-    let code_fields = Code::join(", ", codes_field);
-    Code::seq([Code::token("+{+"), code_fields, Code::token("+}+")])
-}
-
-// - Option expressions
-//
-//   eps   -> ``·``
-//   n     -> ``n``
-
-fn code_of_opt_exp(exp_opt: Option<&pl::Exp>) -> Code {
-    match exp_opt {
-        None => Code::token("·"),
-        Some(exp_inner) => code_of_exp(exp_inner),
+        Code::seq([code_base, Code::token("."), Code::token(text_atom)])
     }
-}
 
-// - List expressions
-//
-//   []       -> ``·``
-//   [n]      -> ``n``
-//   [n, m]   -> ``+[+`` ``n,`` ``m`` ``+]+``
+    // - Index expressions
+    //
+    //   n*[m]   -> ``n^{asterisk}^[m]``
 
-fn code_of_list_exp(exps: &[pl::Exp]) -> Code {
-    match exps {
-        [] => Code::token("·"),
-        [exp] => code_of_exp(exp),
-        _ => {
-            let code_exps = code_of_exps(exps, ", ");
-            Code::seq([Code::token("+[+ "), code_exps, Code::token(" +]+")])
+    fn of_idx_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp) -> Code {
+        let code_base = Code::of_exp(exp_base);
+        let code_idx = Code::of_exp(exp_idx);
+        Code::seq([code_base, Code::token("["), code_idx, Code::token("]")])
+    }
+
+    // - Slice expressions
+    //
+    //   n*[m : n']   -> ``n^{asterisk}^[m`` ``:`` ``n']``
+
+    fn of_slice_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp, exp_len: &pl::Exp) -> Code {
+        let code_base = Code::of_exp(exp_base);
+        let code_idx = Code::of_exp(exp_idx);
+        let code_len = Code::of_exp(exp_len);
+        Code::seq([
+            code_base,
+            Code::token("["),
+            code_idx,
+            Code::token(" : "),
+            code_len,
+            Code::token("]"),
+        ])
+    }
+
+    // - Update expressions
+    //
+    //   p[.LEFT = n]   -> ``p[+LEFT+`` ``=`` ``n]``
+
+    fn of_upd_exp(exp_base: &pl::Exp, path: &pl::Path, exp_field: &pl::Exp) -> Code {
+        let code_base = Code::of_exp(exp_base);
+        let code_path = Code::of_path(path);
+        let code_field = Code::of_exp(exp_field);
+        Code::seq([
+            code_base,
+            Code::token("["),
+            code_path,
+            Code::token(" = "),
+            code_field,
+            Code::token("]"),
+        ])
+    }
+
+    // - Function calls
+    //
+    //   $e_num(n)   -> xref:e_num[``$e_num(n)``]
+
+    fn of_call_exp(id: &pl::Id, targs: &[pl::Targ], args: &[pl::Arg]) -> Code {
+        let text_id = string_of_defid(id);
+        let text_targs = string_of_targs(targs);
+        let code_args = Code::of_args(args);
+        let code_call = Code::seq([Code::token(text_id), Code::token(text_targs), code_args]);
+        let link = Link::Subject(Subject::Function(id.node.clone()));
+        Code::link(link, code_call)
+    }
+
+    // - Iterated expressions
+    //
+    //   $e_num(n)*   -> xref:e_num[``$e_num(n)``]``^{asterisk}^``
+
+    fn of_iter_exp(exp_inner: &pl::Exp, iter_exp: &pl::ExpIter) -> Code {
+        // Iterations without variables render as their body
+        if iter_exp.vars.is_empty() {
+            return Code::of_exp(exp_inner);
         }
-    }
-}
 
-// - Cons expressions
-//
-//   n :: n'*   -> ``n`` ``{two-colons}`` ``n'^{asterisk}^``
-
-fn code_of_cons_exp(exp_head: &pl::Exp, exp_tail: &pl::Exp) -> Code {
-    let code_head = code_of_exp(exp_head);
-    let code_tail = code_of_exp(exp_tail);
-    Code::seq([code_head, Code::token(" {two-colons} "), code_tail])
-}
-
-// - Concatenation expressions
-//
-//   n* ++ m*   -> ``n^{asterisk}^`` ``{pp}`` ``m^{asterisk}^``
-
-fn code_of_cat_exp(exp_l: &pl::Exp, exp_r: &pl::Exp) -> Code {
-    let code_l = code_of_exp(exp_l);
-    let code_r = code_of_exp(exp_r);
-    Code::seq([code_l, Code::token(" {pp} "), code_r])
-}
-
-// - Membership expressions
-//
-//   n <- m*   -> ``n`` ``is`` ``in`` ``m^{asterisk}^``
-
-fn code_of_mem_exp(exp_elem: &pl::Exp, exp_set: &pl::Exp) -> Code {
-    let code_elem = code_of_exp(exp_elem);
-    let code_set = code_of_exp(exp_set);
-    Code::seq([code_elem, Code::token(" is in "), code_set])
-}
-
-// - Length expressions
-//
-//   |n*|   -> ``the`` ``length`` ``of`` ``n^{asterisk}^``
-
-fn code_of_len_exp(exp_inner: &pl::Exp) -> Code {
-    let code_inner = code_of_exp(exp_inner);
-    Code::seq([Code::token("the length of "), code_inner])
-}
-
-// - Field-access expressions
-//
-//   p.LEFT   -> ``p.+LEFT+``
-
-fn code_of_dot_exp(exp_base: &pl::Exp, atom: &pl::Atom) -> Code {
-    let code_base = code_of_exp(exp_base);
-    let text_atom = string_of_atom(atom);
-    Code::seq([code_base, Code::token("."), Code::token(text_atom)])
-}
-
-// - Index expressions
-//
-//   n*[m]   -> ``n^{asterisk}^[m]``
-
-fn code_of_idx_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp) -> Code {
-    let code_base = code_of_exp(exp_base);
-    let code_idx = code_of_exp(exp_idx);
-    Code::seq([code_base, Code::token("["), code_idx, Code::token("]")])
-}
-
-// - Slice expressions
-//
-//   n*[m : n']   -> ``n^{asterisk}^[m`` ``:`` ``n']``
-
-fn code_of_slice_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp, exp_len: &pl::Exp) -> Code {
-    let code_base = code_of_exp(exp_base);
-    let code_idx = code_of_exp(exp_idx);
-    let code_len = code_of_exp(exp_len);
-    Code::seq([
-        code_base,
-        Code::token("["),
-        code_idx,
-        Code::token(" : "),
-        code_len,
-        Code::token("]"),
-    ])
-}
-
-// - Update expressions
-//
-//   p[.LEFT = n]   -> ``p[+LEFT+`` ``=`` ``n]``
-
-fn code_of_upd_exp(exp_base: &pl::Exp, path: &pl::Path, exp_field: &pl::Exp) -> Code {
-    let code_base = code_of_exp(exp_base);
-    let code_path = code_of_path(path);
-    let code_field = code_of_exp(exp_field);
-    Code::seq([
-        code_base,
-        Code::token("["),
-        code_path,
-        Code::token(" = "),
-        code_field,
-        Code::token("]"),
-    ])
-}
-
-// - Function calls
-//
-//   $e_num(n)   -> xref:e_num[``$e_num(n)``]
-
-fn code_of_call_exp(id: &pl::Id, targs: &[pl::Targ], args: &[pl::Arg]) -> Code {
-    let text_id = string_of_defid(id);
-    let text_targs = string_of_targs(targs);
-    let code_args = code_of_args(args);
-    let code_call = Code::seq([Code::token(text_id), Code::token(text_targs), code_args]);
-    let link = Link::Subject(Subject::Function(id.node.clone()));
-    Code::link(link, code_call)
-}
-
-// - Iterated expressions
-//
-//   $e_num(n)*   -> xref:e_num[``$e_num(n)``]``^{asterisk}^``
-
-fn code_of_iter_exp(exp_inner: &pl::Exp, iter_exp: &pl::ExpIter) -> Code {
-    // Iterations without variables render as their body
-    if iter_exp.vars.is_empty() {
-        return code_of_exp(exp_inner);
-    }
-
-    let code_inner = code_of_exp(exp_inner);
-    let text_iter = code_of_iter(iter_exp.iter);
-    // Parenthesize compound bodies whose code contains spaces
-    let needs_parens = !matches!(exp_inner.node.node, ExpKind::Id(_) | ExpKind::Tuple(_))
-        && serialize::ser_code(&|_| None, &code_inner).contains(' ');
-    if needs_parens {
-        Code::seq([Code::token("( "), code_inner, Code::token(" )"), Code::token(text_iter)])
-    } else {
-        Code::seq([code_inner, Code::token(text_iter)])
+        let code_inner = Code::of_exp(exp_inner);
+        let code_iter = Code::of_iter(iter_exp.iter);
+        // Parenthesize compound bodies whose code contains spaces
+        let needs_parens = !matches!(exp_inner.node.node, ExpKind::Id(_) | ExpKind::Tuple(_))
+            && serialize::ser_code(&|_| None, &code_inner).contains(' ');
+        if needs_parens {
+            Code::seq([Code::token("( "), code_inner, Code::token(" )"), code_iter])
+        } else {
+            Code::seq([code_inner, code_iter])
+        }
     }
 }
 
 // == Expressions as prose
 
-// - Expression
-//
-//   b /\ c   -> ``b`` and ``c``
-//   n = m    -> ``n`` is equal to ``m``
+impl Prose {
+    // - Expression
+    //
+    //   b /\ c   -> ``b`` and ``c``
+    //   n = m    -> ``n`` is equal to ``m``
 
-/// Renders an expression in readable prose form.
-fn prose_of_exp(exp: &pl::Exp) -> Prose {
-    match &exp.node.node {
-        ExpKind::Bool(value) => prose_of_bool_exp(*value),
-        ExpKind::Num(num) => prose_of_num_exp(num),
-        ExpKind::Text(text_value) => prose_of_text_exp(text_value),
-        ExpKind::Id(id) => prose_of_var_exp(id),
-        ExpKind::Un(op, _, exp_inner) => prose_of_un_exp(op, exp_inner),
-        ExpKind::Bin(op, _, exp_l, exp_r) => prose_of_bin_exp(op, exp_l, exp_r),
-        ExpKind::Cmp(op, _, exp_l, exp_r) => prose_of_cmp_exp(op, exp_l, exp_r),
-        ExpKind::UpCast(_, exp_inner) => prose_of_upcast_exp(exp_inner),
-        ExpKind::DownCast(_, exp_inner) => prose_of_downcast_exp(exp_inner),
-        ExpKind::Sub(exp_inner, typ, _) => prose_of_sub_exp(exp_inner, typ),
-        ExpKind::Match(exp_inner, pattern) => prose_of_match_exp(exp_inner, pattern),
-        ExpKind::Tuple(exps) => prose_of_tuple_exp(exps),
-        ExpKind::Case(not_exp) => prose_of_case_exp(exp, not_exp),
-        ExpKind::Str(fields) => prose_of_str_exp(fields),
-        ExpKind::Opt(exp_opt) => prose_of_opt_exp(exp_opt.as_deref()),
-        ExpKind::List(exps) => prose_of_list_exp(exps),
-        ExpKind::Cons(exp_head, exp_tail) => prose_of_cons_exp(exp_head, exp_tail),
-        ExpKind::Cat(exp_l, exp_r) => prose_of_cat_exp(exp_l, exp_r),
-        ExpKind::Mem(exp_elem, exp_set) => prose_of_mem_exp(exp_elem, exp_set),
-        ExpKind::Len(exp_inner) => prose_of_len_exp(exp_inner),
-        ExpKind::Dot(exp_base, atom) => prose_of_dot_exp(exp_base, atom),
-        ExpKind::Idx(exp_base, exp_idx) => prose_of_idx_exp(exp_base, exp_idx),
-        ExpKind::Slice(exp_base, exp_idx, exp_len) => {
-            prose_of_slice_exp(exp_base, exp_idx, exp_len)
+    /// Renders an expression in readable prose form.
+    fn of_exp(exp: &pl::Exp) -> Prose {
+        match &exp.node.node {
+            ExpKind::Bool(value) => Prose::of_bool_exp(*value),
+            ExpKind::Num(num) => Prose::of_num_exp(num),
+            ExpKind::Text(text_value) => Prose::of_text_exp(text_value),
+            ExpKind::Id(id) => Prose::of_var_exp(id),
+            ExpKind::Un(op, _, exp_inner) => Prose::of_un_exp(op, exp_inner),
+            ExpKind::Bin(op, _, exp_l, exp_r) => Prose::of_bin_exp(op, exp_l, exp_r),
+            ExpKind::Cmp(op, _, exp_l, exp_r) => Prose::of_cmp_exp(op, exp_l, exp_r),
+            ExpKind::UpCast(_, exp_inner) => Prose::of_upcast_exp(exp_inner),
+            ExpKind::DownCast(_, exp_inner) => Prose::of_downcast_exp(exp_inner),
+            ExpKind::Sub(exp_inner, typ, _) => Prose::of_sub_exp(exp_inner, typ),
+            ExpKind::Match(exp_inner, pattern) => Prose::of_match_exp(exp_inner, pattern),
+            ExpKind::Tuple(exps) => Prose::of_tuple_exp(exps),
+            ExpKind::Case(not_exp) => Prose::of_case_exp(exp, not_exp),
+            ExpKind::Str(fields) => Prose::of_str_exp(fields),
+            ExpKind::Opt(exp_opt) => Prose::of_opt_exp(exp_opt.as_deref()),
+            ExpKind::List(exps) => Prose::of_list_exp(exps),
+            ExpKind::Cons(exp_head, exp_tail) => Prose::of_cons_exp(exp_head, exp_tail),
+            ExpKind::Cat(exp_l, exp_r) => Prose::of_cat_exp(exp_l, exp_r),
+            ExpKind::Mem(exp_elem, exp_set) => Prose::of_mem_exp(exp_elem, exp_set),
+            ExpKind::Len(exp_inner) => Prose::of_len_exp(exp_inner),
+            ExpKind::Dot(exp_base, atom) => Prose::of_dot_exp(exp_base, atom),
+            ExpKind::Idx(exp_base, exp_idx) => Prose::of_idx_exp(exp_base, exp_idx),
+            ExpKind::Slice(exp_base, exp_idx, exp_len) => {
+                Prose::of_slice_exp(exp_base, exp_idx, exp_len)
+            }
+            ExpKind::Upd(exp_base, path, exp_field) => Prose::of_upd_exp(exp_base, path, exp_field),
+            ExpKind::Call(id, targs, args) => Prose::of_call_exp(exp, id, targs, args),
+            ExpKind::Iter(exp_inner, iter_exp) => Prose::of_iter_exp(exp_inner, iter_exp),
         }
-        ExpKind::Upd(exp_base, path, exp_field) => prose_of_upd_exp(exp_base, path, exp_field),
-        ExpKind::Call(id, targs, args) => prose_of_call_exp(exp, id, targs, args),
-        ExpKind::Iter(exp_inner, iter_exp) => prose_of_iter_exp(exp_inner, iter_exp),
     }
-}
 
-fn prose_of_exps(exps: &[pl::Exp]) -> Prose {
-    let proses = exps.iter().map(prose_of_exp).collect();
-    prose_of_list(proses)
-}
+    fn of_exps(exps: &[pl::Exp]) -> Prose {
+        let proses = exps.iter().map(Prose::of_exp).collect();
+        Prose::of_list(proses)
+    }
 
-// - Boolean expressions
-//
-//   true   -> ``true``
+    // - Boolean expressions
+    //
+    //   true   -> ``true``
 
-fn prose_of_bool_exp(value: bool) -> Prose {
-    Prose::code(code_of_bool_exp(value))
-}
+    fn of_bool_exp(value: bool) -> Prose {
+        Prose::code(Code::of_bool_exp(value))
+    }
 
-// - Numeric expressions
-//
-//   42   -> ``42``
+    // - Numeric expressions
+    //
+    //   42   -> ``42``
 
-fn prose_of_num_exp(num: &pl::Num) -> Prose {
-    Prose::code(code_of_num_exp(num))
-}
+    fn of_num_exp(num: &pl::Num) -> Prose {
+        Prose::code(Code::of_num_exp(num))
+    }
 
-// - Text expressions
-//
-//   "a\nb"   -> ``"a\nb"``
+    // - Text expressions
+    //
+    //   "a\nb"   -> ``"a\nb"``
 
-fn prose_of_text_exp(text_value: &str) -> Prose {
-    Prose::code(code_of_text_exp(text_value))
-}
+    fn of_text_exp(text_value: &str) -> Prose {
+        Prose::code(Code::of_text_exp(text_value))
+    }
 
-// - Variable expressions
-//
-//   n_max   -> ``n~max~``
+    // - Variable expressions
+    //
+    //   n_max   -> ``n~max~``
 
-fn prose_of_var_exp(id: &pl::Id) -> Prose {
-    Prose::code(code_of_var_exp(id))
-}
+    fn of_var_exp(id: &pl::Id) -> Prose {
+        Prose::code(Code::of_var_exp(id))
+    }
 
-// - Negated checks
-//
-//   Match(direction_h, _EMPTY)   -> ``direction~h~`` does not match pattern ``{nbsp}~EMPTY~``
-//   nameIR_h <- nameIR'*         -> ``nameIR~h~`` is not in ``nameIR'^{asterisk}^``
+    // - Negated checks
+    //
+    //   Match(direction_h, _EMPTY)   -> ``direction~h~`` does not match pattern ``{nbsp}~EMPTY~``
+    //   nameIR_h <- nameIR'*         -> ``nameIR~h~`` is not in ``nameIR'^{asterisk}^``
 
-/// Describes the readable negation of a partial check when available.
-fn prose_of_negated_exp(exp: &pl::Exp) -> Option<Prose> {
-    match &exp.node.node {
-        ExpKind::Match(exp_elem, pattern) => {
-            let prose_elem = prose_of_exp(exp_elem);
-            let code_pattern = code_of_pattern(pattern);
-            let proses =
-                [prose_elem, Prose::text(" does not match pattern "), Prose::code(code_pattern)];
-            Some(Prose::seq(proses))
+    /// Describes the readable negation of a partial check when available.
+    fn of_negated_exp(exp: &pl::Exp) -> Option<Prose> {
+        match &exp.node.node {
+            ExpKind::Match(exp_elem, pattern) => {
+                let prose_elem = Prose::of_exp(exp_elem);
+                let code_pattern = Code::of_pattern(pattern);
+                let proses = [
+                    prose_elem,
+                    Prose::text(" does not match pattern "),
+                    Prose::code(code_pattern),
+                ];
+                Some(Prose::seq(proses))
+            }
+            ExpKind::Sub(exp_elem, typ, _) => {
+                let code_elem = Code::of_exp(exp_elem);
+                let code_typ = Code::of_typ(typ);
+                let proses = [
+                    Prose::code(code_elem),
+                    Prose::text(" does not have type "),
+                    Prose::code(code_typ),
+                ];
+                Some(Prose::seq(proses))
+            }
+            ExpKind::Mem(exp_elem, exp_set) => {
+                let code_elem = Code::of_exp(exp_elem);
+                let code_set = Code::of_exp(exp_set);
+                let proses =
+                    [Prose::code(code_elem), Prose::text(" is not in "), Prose::code(code_set)];
+                Some(Prose::seq(proses))
+            }
+            ExpKind::Call(id, _, args) => {
+                // Unhinted calls fall back to negated code
+                let Some(hint) = &exp.hints.prose_false else {
+                    let code_exp = Code::of_exp(exp);
+                    return Some(Prose::code(Code::seq([Code::token("~"), code_exp])));
+                };
+                let prose_call = alternate(
+                    hint,
+                    &|text_body| reindent_lines(0, text_body),
+                    &Prose::of_arg,
+                    args,
+                    false,
+                );
+                let link = Link::Subject(Subject::Function(id.node.clone()));
+                Some(Prose::link(link, prose_call))
+            }
+            _ => None,
         }
-        ExpKind::Sub(exp_elem, typ, _) => {
-            let code_elem = code_of_exp(exp_elem);
-            let code_typ = code_of_typ(typ);
-            let proses = [
-                Prose::code(code_elem),
-                Prose::text(" does not have type "),
-                Prose::code(code_typ),
-            ];
-            Some(Prose::seq(proses))
+    }
+
+    // - Unary expressions
+    //
+    //   ~(nameIR_h <- nameIR'*)   -> ``nameIR~h~`` is not in ``nameIR'^{asterisk}^``
+    //   ~b                        -> ``~b``
+
+    fn of_un_exp(op: &pl::UnOp, exp_inner: &pl::Exp) -> Prose {
+        // Boolean negation prefers the readable negated check
+        if let pl::UnOp::Bool(BoolUnOp::Not) = op
+            && let Some(prose_negated) = Prose::of_negated_exp(exp_inner)
+        {
+            return prose_negated;
         }
-        ExpKind::Mem(exp_elem, exp_set) => {
-            let code_elem = code_of_exp(exp_elem);
-            let code_set = code_of_exp(exp_set);
-            let proses =
-                [Prose::code(code_elem), Prose::text(" is not in "), Prose::code(code_set)];
-            Some(Prose::seq(proses))
+
+        Prose::code(Code::of_un_exp(op, exp_inner))
+    }
+
+    // - Binary expressions
+    //
+    //   b /\ c     -> ``b`` and ``c``
+    //   b => c     -> if ``b``, then ``c``
+    //   $(n + m)   -> ``n`` ``{plus}`` ``m``
+
+    fn of_bin_exp(op: &pl::BinOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Prose {
+        match op {
+            pl::BinOp::Bool(BoolBinOp::Impl) => {
+                let prose_l = Prose::of_exp(exp_l);
+                let prose_r = Prose::of_exp(exp_r);
+                Prose::seq([Prose::text("if "), prose_l, Prose::text(", then "), prose_r])
+            }
+            pl::BinOp::Bool(_) => {
+                let prose_l = Prose::of_exp(exp_l);
+                let text_op = string_of_binop(*op);
+                let prose_r = Prose::of_exp(exp_r);
+                Prose::seq([prose_l, Prose::text(format!(" {text_op} ")), prose_r])
+            }
+            _ => Prose::code(Code::of_bin_exp(op, exp_l, exp_r)),
         }
-        ExpKind::Call(id, _, args) => {
-            // Unhinted calls fall back to negated code
-            let Some(hint) = &exp.hints.prose_false else {
-                let code_exp = code_of_exp(exp);
-                return Some(Prose::code(Code::seq([Code::token("~"), code_exp])));
-            };
-            let prose_call = alternate(
+    }
+
+    // - Comparison expressions
+    //
+    //   $(n < m)   -> ``n`` is less than ``m``
+
+    fn of_cmp_exp(op: &pl::CmpOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Prose {
+        let prose_l = Prose::of_exp(exp_l);
+        let text_op = string_of_cmpop(*op);
+        let prose_r = Prose::of_exp(exp_r);
+        Prose::seq([prose_l, Prose::text(format!(" {text_op} ")), prose_r])
+    }
+
+    // - Upcast expressions
+    //
+    //   UpCast(int, n)   -> ``n``
+
+    fn of_upcast_exp(exp_inner: &pl::Exp) -> Prose {
+        Prose::code(Code::of_exp(exp_inner))
+    }
+
+    // - Downcast expressions
+    //
+    //   DownCast(nat, i)   -> ``i``
+
+    fn of_downcast_exp(exp_inner: &pl::Exp) -> Prose {
+        Prose::code(Code::of_exp(exp_inner))
+    }
+
+    // - Subtype checks
+    //
+    //   v <: datum   -> ``v`` has type ``datum``
+
+    fn of_sub_exp(exp_inner: &pl::Exp, typ: &pl::Typ) -> Prose {
+        let code_inner = Code::of_exp(exp_inner);
+        let code_typ = Code::of_typ(typ);
+        Prose::seq([Prose::code(code_inner), Prose::text(" has type "), Prose::code(code_typ)])
+    }
+
+    // - Pattern checks
+    //
+    //   Match(b*, [])         -> ``b^{asterisk}^`` is an empty list
+    //   Match(typeIR?, (_))   -> ``typeIR^?^`` is defined
+
+    /// Describes a pattern check using its specialized list and option wording.
+    fn of_match_exp(exp: &pl::Exp, pattern: &pl::Pattern) -> Prose {
+        let prose_scrut = Prose::of_exp(exp);
+        match pattern {
+            Pattern::Case(mixop) if mixop.arity() == 0 => {
+                let code_pattern = Code::of_pattern(pattern);
+                Prose::seq([prose_scrut, Prose::text(" is "), Prose::code(code_pattern)])
+            }
+            Pattern::List(ListPattern::Nil) => {
+                Prose::seq([prose_scrut, Prose::text(" is an empty list")])
+            }
+            Pattern::List(ListPattern::Cons) => {
+                Prose::seq([prose_scrut, Prose::text(" is a non-empty list")])
+            }
+            Pattern::List(ListPattern::Fixed(num_elems)) => {
+                Prose::seq([prose_scrut, Prose::text(format!(" is a list of length {num_elems}"))])
+            }
+            Pattern::Opt(OptPattern::None) => Prose::seq([prose_scrut, Prose::text(" is none")]),
+            Pattern::Opt(OptPattern::Some) => Prose::seq([prose_scrut, Prose::text(" is defined")]),
+            Pattern::Case(_) => {
+                let code_pattern = Code::of_pattern(pattern);
+                Prose::seq([
+                    prose_scrut,
+                    Prose::text(" matches pattern "),
+                    Prose::code(code_pattern),
+                ])
+            }
+        }
+    }
+
+    // - Tuple expressions
+    //
+    //   (n, m)   -> ( ``n``, ``m`` )
+
+    fn of_tuple_exp(exps: &[pl::Exp]) -> Prose {
+        let prose_exps = Prose::join(", ", exps.iter().map(Prose::of_exp));
+        Prose::seq([Prose::text("( "), prose_exps, Prose::text(" )")])
+    }
+
+    // - Case expressions
+    //
+    //   INT n   -> ``+INT+`` ``n``
+
+    fn of_case_exp(exp: &pl::Exp, not_exp: &pl::NotExp) -> Prose {
+        // Hinted variant values link their prose to the type definition
+        if let (Some(hint), pl::TypKind::Var(id_typ, _)) = (&exp.hints.prose, &exp.node.note) {
+            let exps = not_exp.args();
+            let prose_case = alternate(
                 hint,
                 &|text_body| reindent_lines(0, text_body),
-                &prose_of_arg,
-                args,
+                &|&exp| Prose::of_exp(exp),
+                &exps,
                 false,
             );
-            let link = Link::Subject(Subject::Function(id.node.clone()));
-            Some(Prose::link(link, prose_call))
+            return Prose::link(Link::Direct(id_typ.node.clone()), prose_case);
         }
-        _ => None,
-    }
-}
 
-// - Unary expressions
-//
-//   ~(nameIR_h <- nameIR'*)   -> ``nameIR~h~`` is not in ``nameIR'^{asterisk}^``
-//   ~b                        -> ``~b``
-
-fn prose_of_un_exp(op: &pl::UnOp, exp_inner: &pl::Exp) -> Prose {
-    // Boolean negation prefers the readable negated check
-    if let pl::UnOp::Bool(BoolUnOp::Not) = op
-        && let Some(prose_negated) = prose_of_negated_exp(exp_inner)
-    {
-        return prose_negated;
+        Prose::code(Code::of_case_exp(not_exp))
     }
 
-    Prose::code(code_of_un_exp(op, exp_inner))
-}
+    // - Struct expressions
+    //
+    //   {LEFT n, RIGHT m}   -> +{++LEFT+ ``n``, +RIGHT+ ``m``+}+
 
-// - Binary expressions
-//
-//   b /\ c     -> ``b`` and ``c``
-//   b => c     -> if ``b``, then ``c``
-//   $(n + m)   -> ``n`` ``{plus}`` ``m``
-
-fn prose_of_bin_exp(op: &pl::BinOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Prose {
-    match op {
-        pl::BinOp::Bool(BoolBinOp::Impl) => {
-            let prose_l = prose_of_exp(exp_l);
-            let prose_r = prose_of_exp(exp_r);
-            Prose::seq([Prose::text("if "), prose_l, Prose::text(", then "), prose_r])
-        }
-        pl::BinOp::Bool(_) => {
-            let prose_l = prose_of_exp(exp_l);
-            let text_op = string_of_binop(*op);
-            let prose_r = prose_of_exp(exp_r);
-            Prose::seq([prose_l, Prose::text(format!(" {text_op} ")), prose_r])
-        }
-        _ => Prose::code(code_of_bin_exp(op, exp_l, exp_r)),
-    }
-}
-
-// - Comparison expressions
-//
-//   $(n < m)   -> ``n`` is less than ``m``
-
-fn prose_of_cmp_exp(op: &pl::CmpOp, exp_l: &pl::Exp, exp_r: &pl::Exp) -> Prose {
-    let prose_l = prose_of_exp(exp_l);
-    let text_op = string_of_cmpop(*op);
-    let prose_r = prose_of_exp(exp_r);
-    Prose::seq([prose_l, Prose::text(format!(" {text_op} ")), prose_r])
-}
-
-// - Upcast expressions
-//
-//   UpCast(int, n)   -> ``n``
-
-fn prose_of_upcast_exp(exp_inner: &pl::Exp) -> Prose {
-    Prose::code(code_of_exp(exp_inner))
-}
-
-// - Downcast expressions
-//
-//   DownCast(nat, i)   -> ``i``
-
-fn prose_of_downcast_exp(exp_inner: &pl::Exp) -> Prose {
-    Prose::code(code_of_exp(exp_inner))
-}
-
-// - Subtype checks
-//
-//   v <: datum   -> ``v`` has type ``datum``
-
-fn prose_of_sub_exp(exp_inner: &pl::Exp, typ: &pl::Typ) -> Prose {
-    let code_inner = code_of_exp(exp_inner);
-    let code_typ = code_of_typ(typ);
-    Prose::seq([Prose::code(code_inner), Prose::text(" has type "), Prose::code(code_typ)])
-}
-
-// - Pattern checks
-//
-//   Match(b*, [])         -> ``b^{asterisk}^`` is an empty list
-//   Match(typeIR?, (_))   -> ``typeIR^?^`` is defined
-
-/// Describes a pattern check using its specialized list and option wording.
-fn prose_of_match_exp(exp: &pl::Exp, pattern: &pl::Pattern) -> Prose {
-    let prose_scrut = prose_of_exp(exp);
-    match pattern {
-        Pattern::Case(mixop) if mixop.arity() == 0 => {
-            let code_pattern = code_of_pattern(pattern);
-            Prose::seq([prose_scrut, Prose::text(" is "), Prose::code(code_pattern)])
-        }
-        Pattern::List(ListPattern::Nil) => {
-            Prose::seq([prose_scrut, Prose::text(" is an empty list")])
-        }
-        Pattern::List(ListPattern::Cons) => {
-            Prose::seq([prose_scrut, Prose::text(" is a non-empty list")])
-        }
-        Pattern::List(ListPattern::Fixed(num_elems)) => {
-            Prose::seq([prose_scrut, Prose::text(format!(" is a list of length {num_elems}"))])
-        }
-        Pattern::Opt(OptPattern::None) => Prose::seq([prose_scrut, Prose::text(" is none")]),
-        Pattern::Opt(OptPattern::Some) => Prose::seq([prose_scrut, Prose::text(" is defined")]),
-        Pattern::Case(_) => {
-            let code_pattern = code_of_pattern(pattern);
-            Prose::seq([prose_scrut, Prose::text(" matches pattern "), Prose::code(code_pattern)])
-        }
-    }
-}
-
-// - Tuple expressions
-//
-//   (n, m)   -> ( ``n``, ``m`` )
-
-fn prose_of_tuple_exp(exps: &[pl::Exp]) -> Prose {
-    let prose_exps = Prose::join(", ", exps.iter().map(prose_of_exp));
-    Prose::seq([Prose::text("( "), prose_exps, Prose::text(" )")])
-}
-
-// - Case expressions
-//
-//   INT n   -> ``+INT+`` ``n``
-
-fn prose_of_case_exp(exp: &pl::Exp, not_exp: &pl::NotExp) -> Prose {
-    // Hinted variant values link their prose to the type definition
-    if let (Some(hint), pl::TypKind::Var(id_typ, _)) = (&exp.hints.prose, &exp.node.note) {
-        let exps = not_exp.args();
-        let prose_case = alternate(
-            hint,
-            &|text_body| reindent_lines(0, text_body),
-            &|&exp| prose_of_exp(exp),
-            &exps,
-            false,
-        );
-        return Prose::link(Link::Direct(id_typ.node.clone()), prose_case);
+    fn of_str_exp(fields: &[(pl::Atom, pl::Exp)]) -> Prose {
+        let proses_field = fields.iter().map(|(atom, exp_field)| {
+            let text_atom = string_of_atom(atom);
+            let prose_field = Prose::of_exp(exp_field);
+            Prose::seq([Prose::text(text_atom), Prose::text(" "), prose_field])
+        });
+        let prose_fields = Prose::join(", ", proses_field);
+        Prose::seq([Prose::text("+{+"), prose_fields, Prose::text("+}+")])
     }
 
-    Prose::code(code_of_case_exp(not_exp))
-}
+    // - Option expressions
+    //
+    //   eps   -> ``·``
+    //   n     -> ``n``
 
-// - Struct expressions
-//
-//   {LEFT n, RIGHT m}   -> +{++LEFT+ ``n``, +RIGHT+ ``m``+}+
-
-fn prose_of_str_exp(fields: &[(pl::Atom, pl::Exp)]) -> Prose {
-    let proses_field = fields.iter().map(|(atom, exp_field)| {
-        let text_atom = string_of_atom(atom);
-        let prose_field = prose_of_exp(exp_field);
-        Prose::seq([Prose::text(text_atom), Prose::text(" "), prose_field])
-    });
-    let prose_fields = Prose::join(", ", proses_field);
-    Prose::seq([Prose::text("+{+"), prose_fields, Prose::text("+}+")])
-}
-
-// - Option expressions
-//
-//   eps   -> ``·``
-//   n     -> ``n``
-
-fn prose_of_opt_exp(exp_opt: Option<&pl::Exp>) -> Prose {
-    match exp_opt {
-        None => Prose::code(code_of_opt_exp(None)),
-        Some(exp_inner) => prose_of_exp(exp_inner),
-    }
-}
-
-// - List expressions
-//
-//   [n, m]   -> ``+[+`` ``n,`` ``m`` ``+]+``
-
-fn prose_of_list_exp(exps: &[pl::Exp]) -> Prose {
-    Prose::code(code_of_list_exp(exps))
-}
-
-// - Cons expressions
-//
-//   n :: n'*   -> ``n`` ``{two-colons}`` ``n'^{asterisk}^``
-
-fn prose_of_cons_exp(exp_head: &pl::Exp, exp_tail: &pl::Exp) -> Prose {
-    Prose::code(code_of_cons_exp(exp_head, exp_tail))
-}
-
-// - Concatenation expressions
-//
-//   n* ++ m*   -> ``n^{asterisk}^`` concatenated with ``m^{asterisk}^``
-
-fn prose_of_cat_exp(exp_l: &pl::Exp, exp_r: &pl::Exp) -> Prose {
-    let prose_l = prose_of_exp(exp_l);
-    let prose_r = prose_of_exp(exp_r);
-    Prose::seq([prose_l, Prose::text(" concatenated with "), prose_r])
-}
-
-// - Membership expressions
-//
-//   n <- m*   -> ``n`` is in ``m^{asterisk}^``
-
-fn prose_of_mem_exp(exp_elem: &pl::Exp, exp_set: &pl::Exp) -> Prose {
-    let prose_elem = prose_of_exp(exp_elem);
-    let prose_set = prose_of_exp(exp_set);
-    Prose::seq([prose_elem, Prose::text(" is in "), prose_set])
-}
-
-// - Length expressions
-//
-//   |n*|   -> the length of ``n^{asterisk}^``
-
-fn prose_of_len_exp(exp_inner: &pl::Exp) -> Prose {
-    let prose_inner = prose_of_exp(exp_inner);
-    Prose::seq([Prose::text("the length of "), prose_inner])
-}
-
-// - Field-access expressions
-//
-//   p.LEFT   -> ``p.+LEFT+``
-
-fn prose_of_dot_exp(exp_base: &pl::Exp, atom: &pl::Atom) -> Prose {
-    Prose::code(code_of_dot_exp(exp_base, atom))
-}
-
-// - Index expressions
-//
-//   n*[m]   -> ``n^{asterisk}^[m]``
-
-fn prose_of_idx_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp) -> Prose {
-    Prose::code(code_of_idx_exp(exp_base, exp_idx))
-}
-
-// - Slice expressions
-//
-//   n*[m : n']   -> ``n^{asterisk}^[m`` ``:`` ``n']``
-
-fn prose_of_slice_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp, exp_len: &pl::Exp) -> Prose {
-    Prose::code(code_of_slice_exp(exp_base, exp_idx, exp_len))
-}
-
-// - Update expressions
-//
-//   p[.LEFT = n]   -> ``p`` with ``+LEFT+`` set to ``n``
-
-fn prose_of_upd_exp(exp_base: &pl::Exp, path: &pl::Path, exp_field: &pl::Exp) -> Prose {
-    let code_base = code_of_exp(exp_base);
-    let code_path = code_of_path(path);
-    let code_field = code_of_exp(exp_field);
-    Prose::seq([
-        Prose::code(code_base),
-        Prose::text(" with "),
-        Prose::code(code_path),
-        Prose::text(" set to "),
-        Prose::code(code_field),
-    ])
-}
-
-// - Function calls
-//
-//   $modulo(n, 42), hinted %0 "mod" %1   -> xref:modulo[``n`` mod ``42``]
-//   $e_num(n), unhinted                  -> xref:e_num[``$e_num(n)``]
-
-fn prose_of_call_exp(exp: &pl::Exp, id: &pl::Id, targs: &[pl::Targ], args: &[pl::Arg]) -> Prose {
-    // Unhinted calls keep their code form
-    let Some(hint) = exp
-        .hints
-        .prose_in
-        .as_ref()
-        .or(exp.hints.prose_true.as_ref())
-    else {
-        return Prose::code(code_of_call_exp(id, targs, args));
-    };
-    let prose_call =
-        alternate(hint, &|text_body| reindent_lines(0, text_body), &prose_of_arg, args, false);
-    let link = Link::Subject(Subject::Function(id.node.clone()));
-    Prose::link(link, prose_call)
-}
-
-// - Iterated expressions
-//
-//   $e_num(n)*   -> xref:e_num[``$e_num(n)``]``^{asterisk}^``
-
-fn prose_of_iter_exp(exp_inner: &pl::Exp, iter_exp: &pl::ExpIter) -> Prose {
-    // Iterations without variables render as their body
-    if iter_exp.vars.is_empty() {
-        return prose_of_exp(exp_inner);
+    fn of_opt_exp(exp_opt: Option<&pl::Exp>) -> Prose {
+        match exp_opt {
+            None => Prose::code(Code::of_opt_exp(None)),
+            Some(exp_inner) => Prose::of_exp(exp_inner),
+        }
     }
 
-    Prose::code(code_of_iter_exp(exp_inner, iter_exp))
+    // - List expressions
+    //
+    //   [n, m]   -> ``+[+`` ``n,`` ``m`` ``+]+``
+
+    fn of_list_exp(exps: &[pl::Exp]) -> Prose {
+        Prose::code(Code::of_list_exp(exps))
+    }
+
+    // - Cons expressions
+    //
+    //   n :: n'*   -> ``n`` ``{two-colons}`` ``n'^{asterisk}^``
+
+    fn of_cons_exp(exp_head: &pl::Exp, exp_tail: &pl::Exp) -> Prose {
+        Prose::code(Code::of_cons_exp(exp_head, exp_tail))
+    }
+
+    // - Concatenation expressions
+    //
+    //   n* ++ m*   -> ``n^{asterisk}^`` concatenated with ``m^{asterisk}^``
+
+    fn of_cat_exp(exp_l: &pl::Exp, exp_r: &pl::Exp) -> Prose {
+        let prose_l = Prose::of_exp(exp_l);
+        let prose_r = Prose::of_exp(exp_r);
+        Prose::seq([prose_l, Prose::text(" concatenated with "), prose_r])
+    }
+
+    // - Membership expressions
+    //
+    //   n <- m*   -> ``n`` is in ``m^{asterisk}^``
+
+    fn of_mem_exp(exp_elem: &pl::Exp, exp_set: &pl::Exp) -> Prose {
+        let prose_elem = Prose::of_exp(exp_elem);
+        let prose_set = Prose::of_exp(exp_set);
+        Prose::seq([prose_elem, Prose::text(" is in "), prose_set])
+    }
+
+    // - Length expressions
+    //
+    //   |n*|   -> the length of ``n^{asterisk}^``
+
+    fn of_len_exp(exp_inner: &pl::Exp) -> Prose {
+        let prose_inner = Prose::of_exp(exp_inner);
+        Prose::seq([Prose::text("the length of "), prose_inner])
+    }
+
+    // - Field-access expressions
+    //
+    //   p.LEFT   -> ``p.+LEFT+``
+
+    fn of_dot_exp(exp_base: &pl::Exp, atom: &pl::Atom) -> Prose {
+        Prose::code(Code::of_dot_exp(exp_base, atom))
+    }
+
+    // - Index expressions
+    //
+    //   n*[m]   -> ``n^{asterisk}^[m]``
+
+    fn of_idx_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp) -> Prose {
+        Prose::code(Code::of_idx_exp(exp_base, exp_idx))
+    }
+
+    // - Slice expressions
+    //
+    //   n*[m : n']   -> ``n^{asterisk}^[m`` ``:`` ``n']``
+
+    fn of_slice_exp(exp_base: &pl::Exp, exp_idx: &pl::Exp, exp_len: &pl::Exp) -> Prose {
+        Prose::code(Code::of_slice_exp(exp_base, exp_idx, exp_len))
+    }
+
+    // - Update expressions
+    //
+    //   p[.LEFT = n]   -> ``p`` with ``+LEFT+`` set to ``n``
+
+    fn of_upd_exp(exp_base: &pl::Exp, path: &pl::Path, exp_field: &pl::Exp) -> Prose {
+        let code_base = Code::of_exp(exp_base);
+        let code_path = Code::of_path(path);
+        let code_field = Code::of_exp(exp_field);
+        Prose::seq([
+            Prose::code(code_base),
+            Prose::text(" with "),
+            Prose::code(code_path),
+            Prose::text(" set to "),
+            Prose::code(code_field),
+        ])
+    }
+
+    // - Function calls
+    //
+    //   $modulo(n, 42), hinted %0 "mod" %1   -> xref:modulo[``n`` mod ``42``]
+    //   $e_num(n), unhinted                  -> xref:e_num[``$e_num(n)``]
+
+    fn of_call_exp(exp: &pl::Exp, id: &pl::Id, targs: &[pl::Targ], args: &[pl::Arg]) -> Prose {
+        // Unhinted calls keep their code form
+        let Some(hint) = exp
+            .hints
+            .prose_in
+            .as_ref()
+            .or(exp.hints.prose_true.as_ref())
+        else {
+            return Prose::code(Code::of_call_exp(id, targs, args));
+        };
+        let prose_call =
+            alternate(hint, &|text_body| reindent_lines(0, text_body), &Prose::of_arg, args, false);
+        let link = Link::Subject(Subject::Function(id.node.clone()));
+        Prose::link(link, prose_call)
+    }
+
+    // - Iterated expressions
+    //
+    //   $e_num(n)*   -> xref:e_num[``$e_num(n)``]``^{asterisk}^``
+
+    fn of_iter_exp(exp_inner: &pl::Exp, iter_exp: &pl::ExpIter) -> Prose {
+        // Iterations without variables render as their body
+        if iter_exp.vars.is_empty() {
+            return Prose::of_exp(exp_inner);
+        }
+
+        Prose::code(Code::of_iter_exp(exp_inner, iter_exp))
+    }
 }
 
 // == Patterns
@@ -1095,86 +1126,92 @@ fn prose_of_iter_exp(exp_inner: &pl::Exp, iter_exp: &pl::ExpIter) -> Prose {
 //   Some       -> ``(_)``
 //   None       -> ``()``
 
-/// Renders a pattern in its prose-backend notation.
-fn code_of_pattern(pattern: &pl::Pattern) -> Code {
-    match pattern {
-        Pattern::Case(mixop) => code_of_mixfix(mixop, &|()| Code::token("%")),
-        Pattern::List(ListPattern::Cons) => Code::token("_ :: _"),
-        Pattern::List(ListPattern::Fixed(num_elems)) => Code::token(format!("[ _/{num_elems} ]")),
-        Pattern::List(ListPattern::Nil) => Code::token("[]"),
-        Pattern::Opt(OptPattern::Some) => Code::token("(_)"),
-        Pattern::Opt(OptPattern::None) => Code::token("()"),
+impl Code {
+    /// Renders a pattern in its prose-backend notation.
+    fn of_pattern(pattern: &pl::Pattern) -> Code {
+        match pattern {
+            Pattern::Case(mixop) => Code::of_mixfix(mixop, &|()| Code::token("%")),
+            Pattern::List(ListPattern::Cons) => Code::token("_ :: _"),
+            Pattern::List(ListPattern::Fixed(num_elems)) => {
+                Code::token(format!("[ _/{num_elems} ]"))
+            }
+            Pattern::List(ListPattern::Nil) => Code::token("[]"),
+            Pattern::Opt(OptPattern::Some) => Code::token("(_)"),
+            Pattern::Opt(OptPattern::None) => Code::token("()"),
+        }
     }
 }
 
 // == Paths
 
-// - Path
-//
-//   p[.LEFT = n]           -> ``p`` with ``+LEFT+`` set to ``n``
-//   t[ [n_len] = t_new ]   -> ``t`` with ``[n~len~]`` set to ``t~new~``
+impl Code {
+    // - Path
+    //
+    //   p[.LEFT = n]           -> ``p`` with ``+LEFT+`` set to ``n``
+    //   t[ [n_len] = t_new ]   -> ``t`` with ``[n~len~]`` set to ``t~new~``
 
-/// Renders an update path.
-fn code_of_path(path: &pl::Path) -> Code {
-    match &path.node {
-        pl::PathKind::Root => code_of_root_path(),
-        pl::PathKind::Idx(path_base, exp_idx) => code_of_idx_path(path_base, exp_idx),
-        pl::PathKind::Slice(path_base, exp_idx, exp_len) => {
-            code_of_slice_path(path_base, exp_idx, exp_len)
+    /// Renders an update path.
+    fn of_path(path: &pl::Path) -> Code {
+        match &path.node {
+            pl::PathKind::Root => Code::of_root_path(),
+            pl::PathKind::Idx(path_base, exp_idx) => Code::of_idx_path(path_base, exp_idx),
+            pl::PathKind::Slice(path_base, exp_idx, exp_len) => {
+                Code::of_slice_path(path_base, exp_idx, exp_len)
+            }
+            pl::PathKind::Dot(path_base, atom) => Code::of_dot_path(path_base, atom),
         }
-        pl::PathKind::Dot(path_base, atom) => code_of_dot_path(path_base, atom),
-    }
-}
-
-// - Root paths
-//
-//   (root)   -> (empty)
-
-fn code_of_root_path() -> Code {
-    Code::Empty
-}
-
-// - Index paths
-//
-//   t[ [n_len] = t_new ]   -> ``t`` with ``[n~len~]`` set to ``t~new~``
-
-fn code_of_idx_path(path_base: &pl::Path, exp_idx: &pl::Exp) -> Code {
-    let code_base = code_of_path(path_base);
-    let code_idx = code_of_exp(exp_idx);
-    Code::seq([code_base, Code::token("["), code_idx, Code::token("]")])
-}
-
-// - Slice paths
-//
-//   p[[i : j] = n]   -> ``p`` with ``[i`` ``:`` ``j]`` set to ``n``
-
-fn code_of_slice_path(path_base: &pl::Path, exp_idx: &pl::Exp, exp_len: &pl::Exp) -> Code {
-    let code_base = code_of_path(path_base);
-    let code_idx = code_of_exp(exp_idx);
-    let code_len = code_of_exp(exp_len);
-    Code::seq([
-        code_base,
-        Code::token("["),
-        code_idx,
-        Code::token(" : "),
-        code_len,
-        Code::token("]"),
-    ])
-}
-
-// - Field paths
-//
-//   p[.LEFT = n]   -> ``p`` with ``+LEFT+`` set to ``n``
-
-fn code_of_dot_path(path_base: &pl::Path, atom: &pl::Atom) -> Code {
-    let text_atom = string_of_atom(atom);
-    // The first field in a path has no leading dot
-    if matches!(path_base.node, pl::PathKind::Root) {
-        return Code::token(text_atom);
     }
 
-    let code_base = code_of_path(path_base);
-    Code::seq([code_base, Code::token("."), Code::token(text_atom)])
+    // - Root paths
+    //
+    //   (root)   -> (empty)
+
+    fn of_root_path() -> Code {
+        Code::Empty
+    }
+
+    // - Index paths
+    //
+    //   t[ [n_len] = t_new ]   -> ``t`` with ``[n~len~]`` set to ``t~new~``
+
+    fn of_idx_path(path_base: &pl::Path, exp_idx: &pl::Exp) -> Code {
+        let code_base = Code::of_path(path_base);
+        let code_idx = Code::of_exp(exp_idx);
+        Code::seq([code_base, Code::token("["), code_idx, Code::token("]")])
+    }
+
+    // - Slice paths
+    //
+    //   p[[i : j] = n]   -> ``p`` with ``[i`` ``:`` ``j]`` set to ``n``
+
+    fn of_slice_path(path_base: &pl::Path, exp_idx: &pl::Exp, exp_len: &pl::Exp) -> Code {
+        let code_base = Code::of_path(path_base);
+        let code_idx = Code::of_exp(exp_idx);
+        let code_len = Code::of_exp(exp_len);
+        Code::seq([
+            code_base,
+            Code::token("["),
+            code_idx,
+            Code::token(" : "),
+            code_len,
+            Code::token("]"),
+        ])
+    }
+
+    // - Field paths
+    //
+    //   p[.LEFT = n]   -> ``p`` with ``+LEFT+`` set to ``n``
+
+    fn of_dot_path(path_base: &pl::Path, atom: &pl::Atom) -> Code {
+        let text_atom = string_of_atom(atom);
+        // The first field in a path has no leading dot
+        if matches!(path_base.node, pl::PathKind::Root) {
+            return Code::token(text_atom);
+        }
+
+        let code_base = Code::of_path(path_base);
+        Code::seq([code_base, Code::token("."), Code::token(text_atom)])
+    }
 }
 
 // == Parameters
@@ -1182,36 +1219,40 @@ fn code_of_dot_path(path_base: &pl::Path, atom: &pl::Atom) -> Code {
 //   $i_if(n, m), unhinted                    -> xref:i_if[$i_if(n, m)]
 //   table $is_defaultable_typeIR(typeIR'')   -> | (``typeIR''``) | Result
 
-fn code_of_param(param: &pl::Param) -> Code {
-    match &param.node {
-        pl::ParamKind::Exp(_, exp) => code_of_exp(exp),
-        pl::ParamKind::Def(id, _, _, _) => Code::token(string_of_defid(id)),
+impl Code {
+    fn of_param(param: &pl::Param) -> Code {
+        match &param.node {
+            pl::ParamKind::Exp(_, exp) => Code::of_exp(exp),
+            pl::ParamKind::Def(id, _, _, _) => Code::token(string_of_defid(id)),
+        }
+    }
+
+    fn of_params(params: &[pl::Param]) -> Code {
+        if params.is_empty() {
+            return Code::Empty;
+        }
+
+        let code_params = Code::join(", ", params.iter().map(Code::of_param));
+        Code::seq([Code::token("("), code_params, Code::token(")")])
     }
 }
 
-fn code_of_params(params: &[pl::Param]) -> Code {
-    if params.is_empty() {
-        return Code::Empty;
+impl Prose {
+    fn of_param(param: &pl::Param) -> Prose {
+        match &param.node {
+            pl::ParamKind::Exp(_, exp) => Prose::of_exp(exp),
+            pl::ParamKind::Def(id, _, _, _) => Prose::code(Code::token(string_of_defid(id))),
+        }
     }
 
-    let code_params = Code::join(", ", params.iter().map(code_of_param));
-    Code::seq([Code::token("("), code_params, Code::token(")")])
-}
+    fn of_params(params: &[pl::Param]) -> Prose {
+        if params.is_empty() {
+            return Prose::Empty;
+        }
 
-fn prose_of_param(param: &pl::Param) -> Prose {
-    match &param.node {
-        pl::ParamKind::Exp(_, exp) => prose_of_exp(exp),
-        pl::ParamKind::Def(id, _, _, _) => Prose::code(Code::token(string_of_defid(id))),
+        let prose_params = Prose::join(", ", params.iter().map(Prose::of_param));
+        Prose::seq([Prose::text("("), prose_params, Prose::text(")")])
     }
-}
-
-fn prose_of_params(params: &[pl::Param]) -> Prose {
-    if params.is_empty() {
-        return Prose::Empty;
-    }
-
-    let prose_params = Prose::join(", ", params.iter().map(prose_of_param));
-    Prose::seq([Prose::text("("), prose_params, Prose::text(")")])
 }
 
 // == Type arguments
@@ -1233,121 +1274,132 @@ fn string_of_targs(targs: &[pl::Targ]) -> String {
 //
 //   $e_num(n)   -> xref:e_num[``$e_num(n)``]
 
-fn code_of_arg(arg: &pl::Arg) -> Code {
-    match &arg.node {
-        pl::ArgKind::Exp(exp) => code_of_exp(exp),
-        pl::ArgKind::Def(id) => Code::token(string_of_defid(id)),
+impl Code {
+    fn of_arg(arg: &pl::Arg) -> Code {
+        match &arg.node {
+            pl::ArgKind::Exp(exp) => Code::of_exp(exp),
+            pl::ArgKind::Def(id) => Code::token(string_of_defid(id)),
+        }
+    }
+
+    /// Renders a nonempty argument list with parentheses.
+    fn of_args(args: &[pl::Arg]) -> Code {
+        if args.is_empty() {
+            return Code::Empty;
+        }
+
+        let code_args = Code::join(", ", args.iter().map(Code::of_arg));
+        Code::seq([Code::token("("), code_args, Code::token(")")])
     }
 }
 
-/// Renders a nonempty argument list with parentheses.
-fn code_of_args(args: &[pl::Arg]) -> Code {
-    if args.is_empty() {
-        return Code::Empty;
-    }
-
-    let code_args = Code::join(", ", args.iter().map(code_of_arg));
-    Code::seq([Code::token("("), code_args, Code::token(")")])
-}
-
-fn prose_of_arg(arg: &pl::Arg) -> Prose {
-    match &arg.node {
-        pl::ArgKind::Exp(exp) => prose_of_exp(exp),
-        pl::ArgKind::Def(id) => Prose::code(Code::token(string_of_defid(id))),
+impl Prose {
+    fn of_arg(arg: &pl::Arg) -> Prose {
+        match &arg.node {
+            pl::ArgKind::Exp(exp) => Prose::of_exp(exp),
+            pl::ArgKind::Def(id) => Prose::code(Code::token(string_of_defid(id))),
+        }
     }
 }
 
 // == Case analysis
 
-// - Guard
-//
-//   t'* matches []   -> ``t'^{asterisk}^`` matches pattern ``[]``
-//   let t_h be t'*   -> let ``t~h~`` be ``t'^{asterisk}^``
+impl Prose {
+    // - Guard
+    //
+    //   t'* matches []   -> ``t'^{asterisk}^`` matches pattern ``[]``
+    //   let t_h be t'*   -> let ``t~h~`` be ``t'^{asterisk}^``
 
-/// Describes a case guard against its scrutinee.
-fn prose_of_guard(exp_scrut: &pl::Exp, guard: &pl::Guard) -> Prose {
-    match guard {
-        pl::Guard::Bool(true) => prose_of_true_guard(exp_scrut),
-        pl::Guard::Bool(false) => prose_of_false_guard(exp_scrut),
-        pl::Guard::Cmp(op, _, exp) => prose_of_cmp_guard(exp_scrut, op, exp),
-        pl::Guard::Sub(typ, _) => prose_of_sub_guard(exp_scrut, typ),
-        pl::Guard::Match(pattern) => prose_of_match_guard(exp_scrut, pattern),
-        pl::Guard::Mem(exp) => prose_of_mem_guard(exp_scrut, exp),
-        pl::Guard::CheckLetSub(_, _, exp_target) | pl::Guard::CheckLetMatch(_, exp_target) => {
-            prose_of_check_let_guard(exp_scrut, exp_target)
+    /// Describes a case guard against its scrutinee.
+    fn of_guard(exp_scrut: &pl::Exp, guard: &pl::Guard) -> Prose {
+        match guard {
+            pl::Guard::Bool(true) => Prose::of_true_guard(exp_scrut),
+            pl::Guard::Bool(false) => Prose::of_false_guard(exp_scrut),
+            pl::Guard::Cmp(op, _, exp) => Prose::of_cmp_guard(exp_scrut, op, exp),
+            pl::Guard::Sub(typ, _) => Prose::of_sub_guard(exp_scrut, typ),
+            pl::Guard::Match(pattern) => Prose::of_match_guard(exp_scrut, pattern),
+            pl::Guard::Mem(exp) => Prose::of_mem_guard(exp_scrut, exp),
+            pl::Guard::CheckLetSub(_, _, exp_target) | pl::Guard::CheckLetMatch(_, exp_target) => {
+                Prose::of_check_let_guard(exp_scrut, exp_target)
+            }
         }
     }
-}
 
-// - True guards
-//
-//   b, guarded by true   -> ``b``
+    // - True guards
+    //
+    //   b, guarded by true   -> ``b``
 
-fn prose_of_true_guard(exp_scrut: &pl::Exp) -> Prose {
-    prose_of_exp(exp_scrut)
-}
+    fn of_true_guard(exp_scrut: &pl::Exp) -> Prose {
+        Prose::of_exp(exp_scrut)
+    }
 
-// - False guards
-//
-//   n <- m*, guarded by false   -> ``n`` is not in ``m^{asterisk}^``
+    // - False guards
+    //
+    //   n <- m*, guarded by false   -> ``n`` is not in ``m^{asterisk}^``
 
-fn prose_of_false_guard(exp_scrut: &pl::Exp) -> Prose {
-    // Checks without readable negation fall back to negated code
-    prose_of_negated_exp(exp_scrut).unwrap_or_else(|| {
-        let code_scrut = code_of_exp(exp_scrut);
-        Prose::code(Code::seq([Code::token("~"), code_scrut]))
-    })
-}
+    fn of_false_guard(exp_scrut: &pl::Exp) -> Prose {
+        // Checks without readable negation fall back to negated code
+        Prose::of_negated_exp(exp_scrut).unwrap_or_else(|| {
+            let code_scrut = Code::of_exp(exp_scrut);
+            Prose::code(Code::seq([Code::token("~"), code_scrut]))
+        })
+    }
 
-// - Comparison guards
-//
-//   b, guarded by = true   -> ``b`` is equal to ``true``
+    // - Comparison guards
+    //
+    //   b, guarded by = true   -> ``b`` is equal to ``true``
 
-fn prose_of_cmp_guard(exp_scrut: &pl::Exp, op: &pl::CmpOp, exp: &pl::Exp) -> Prose {
-    let prose_scrut = prose_of_exp(exp_scrut);
-    let text_op = string_of_cmpop(*op);
-    let prose_exp = prose_of_exp(exp);
-    Prose::seq([prose_scrut, Prose::text(format!(" {text_op} ")), prose_exp])
-}
+    fn of_cmp_guard(exp_scrut: &pl::Exp, op: &pl::CmpOp, exp: &pl::Exp) -> Prose {
+        let prose_scrut = Prose::of_exp(exp_scrut);
+        let text_op = string_of_cmpop(*op);
+        let prose_exp = Prose::of_exp(exp);
+        Prose::seq([prose_scrut, Prose::text(format!(" {text_op} ")), prose_exp])
+    }
 
-// - Subtype guards
-//
-//   v, guarded by <: datum   -> ``v`` has type ``datum``
+    // - Subtype guards
+    //
+    //   v, guarded by <: datum   -> ``v`` has type ``datum``
 
-fn prose_of_sub_guard(exp_scrut: &pl::Exp, typ: &pl::Typ) -> Prose {
-    let code_scrut = code_of_exp(exp_scrut);
-    let code_typ = code_of_typ(typ);
-    Prose::seq([Prose::code(code_scrut), Prose::text(" has type "), Prose::code(code_typ)])
-}
+    fn of_sub_guard(exp_scrut: &pl::Exp, typ: &pl::Typ) -> Prose {
+        let code_scrut = Code::of_exp(exp_scrut);
+        let code_typ = Code::of_typ(typ);
+        Prose::seq([Prose::code(code_scrut), Prose::text(" has type "), Prose::code(code_typ)])
+    }
 
-// - Pattern guards
-//
-//   t'*, guarded by []   -> ``t'^{asterisk}^`` matches pattern ``[]``
+    // - Pattern guards
+    //
+    //   t'*, guarded by []   -> ``t'^{asterisk}^`` matches pattern ``[]``
 
-fn prose_of_match_guard(exp_scrut: &pl::Exp, pattern: &pl::Pattern) -> Prose {
-    let prose_scrut = prose_of_exp(exp_scrut);
-    let code_pattern = code_of_pattern(pattern);
-    Prose::seq([prose_scrut, Prose::text(" matches pattern "), Prose::code(code_pattern)])
-}
+    fn of_match_guard(exp_scrut: &pl::Exp, pattern: &pl::Pattern) -> Prose {
+        let prose_scrut = Prose::of_exp(exp_scrut);
+        let code_pattern = Code::of_pattern(pattern);
+        Prose::seq([prose_scrut, Prose::text(" matches pattern "), Prose::code(code_pattern)])
+    }
 
-// - Membership guards
-//
-//   n, guarded by <- m*   -> ``n`` is in ``m^{asterisk}^``
+    // - Membership guards
+    //
+    //   n, guarded by <- m*   -> ``n`` is in ``m^{asterisk}^``
 
-fn prose_of_mem_guard(exp_scrut: &pl::Exp, exp: &pl::Exp) -> Prose {
-    let prose_scrut = prose_of_exp(exp_scrut);
-    let prose_exp = prose_of_exp(exp);
-    Prose::seq([prose_scrut, Prose::text(" is in "), prose_exp])
-}
+    fn of_mem_guard(exp_scrut: &pl::Exp, exp: &pl::Exp) -> Prose {
+        let prose_scrut = Prose::of_exp(exp_scrut);
+        let prose_exp = Prose::of_exp(exp);
+        Prose::seq([prose_scrut, Prose::text(" is in "), prose_exp])
+    }
 
-// - Binding guards
-//
-//   t'*, bound to t_h   -> let ``t~h~`` be ``t'^{asterisk}^``
+    // - Binding guards
+    //
+    //   t'*, bound to t_h   -> let ``t~h~`` be ``t'^{asterisk}^``
 
-fn prose_of_check_let_guard(exp_scrut: &pl::Exp, exp_target: &pl::Exp) -> Prose {
-    let code_target = code_of_exp(exp_target);
-    let prose_scrut = prose_of_exp(exp_scrut);
-    Prose::seq([Prose::text("let "), Prose::code(code_target), Prose::text(" be "), prose_scrut])
+    fn of_check_let_guard(exp_scrut: &pl::Exp, exp_target: &pl::Exp) -> Prose {
+        let code_target = Code::of_exp(exp_target);
+        let prose_scrut = Prose::of_exp(exp_scrut);
+        Prose::seq([
+            Prose::text("let "),
+            Prose::code(code_target),
+            Prose::text(" be "),
+            prose_scrut,
+        ])
+    }
 }
 
 // == Rendering context
@@ -1383,9 +1435,11 @@ impl<'a> Renderer<'a> {
     pub fn new(anchor: &'a dyn Fn(&Subject) -> Option<String>) -> Self {
         Self { anchors: Anchors::default(), anchor }
     }
+}
 
-    // == Instructions
+// == Instructions
 
+impl<'a> Renderer<'a> {
     // - Tier results
     //
     //   Inline under ". If ``b`` is equal to ``true``:"
@@ -1547,13 +1601,15 @@ impl<'a> Renderer<'a> {
         let text_body = serialize::ser_block(self.anchor, &block_body);
         format!("\n\n. {text_anchor}Otherwise:{text_body}")
     }
+}
 
+impl Prose {
     // - Iteration suffixes
     //
     //   -- if typeIR? matches (_), iterated over typeIR?*
     //   -> Check that ``typeIR^?^`` is defined, for all ``typeIR^?^`` in ``typeIR^?^^{asterisk}^``.
 
-    fn prose_of_iterexp_suffix(iter_exps: &[pl::ExpIter]) -> Prose {
+    fn of_iterexp_suffix(iter_exps: &[pl::ExpIter]) -> Prose {
         // Collect every expression iterator binding in source order
         let proses: Vec<Prose> = iter_exps
             .iter()
@@ -1562,7 +1618,7 @@ impl<'a> Renderer<'a> {
                 iter_exp
                     .vars
                     .iter()
-                    .map(move |var| prose_of_in_itervar(iter, var))
+                    .map(move |var| Prose::of_in_itervar(iter, var))
             })
             .collect();
         // Omit the quantifier when no variables are bound
@@ -1570,11 +1626,11 @@ impl<'a> Renderer<'a> {
             return Prose::Empty;
         }
 
-        let prose_vars = prose_of_list(proses);
+        let prose_vars = Prose::of_list(proses);
         Prose::seq([Prose::text(", for all "), prose_vars])
     }
 
-    fn prose_of_iterinstr_suffix(iter_instrs: &[pl::InstrIter]) -> Prose {
+    fn of_iterinstr_suffix(iter_instrs: &[pl::InstrIter]) -> Prose {
         // Collect every instruction iterator binding in source order
         let proses: Vec<Prose> = iter_instrs
             .iter()
@@ -1583,7 +1639,7 @@ impl<'a> Renderer<'a> {
                 iter_instr
                     .vars_bound
                     .iter()
-                    .map(move |var| prose_of_in_itervar(iter, var))
+                    .map(move |var| Prose::of_in_itervar(iter, var))
             })
             .collect();
         // Omit the quantifier when no variables are bound
@@ -1591,10 +1647,12 @@ impl<'a> Renderer<'a> {
             return Prose::Empty;
         }
 
-        let prose_vars = prose_of_list(proses);
+        let prose_vars = Prose::of_list(proses);
         Prose::seq([Prose::text(", for each "), prose_vars])
     }
+}
 
+impl<'a> Renderer<'a> {
     // - Iteration blocks
     //
     //   -- (if m = $(n + 1))*   -> . For each ``n`` in ``n^{asterisk}^``:
@@ -1641,13 +1699,13 @@ impl<'a> Renderer<'a> {
             iter_instrs_tail,
             render_body,
         );
-        let prose_vars_bound = prose_of_in_itervars(iter_instr.iter, &iter_instr.vars_bound);
+        let prose_vars_bound = Prose::of_in_itervars(iter_instr.iter, &iter_instr.vars_bound);
         let prose_head = Prose::seq([Prose::text("For each "), prose_vars_bound, Prose::text(":")]);
         // Bind visible outputs after closing the iteration body
         let block_body = if vars_output.is_empty() {
             Block::concat([Block::raw("+\n--\n"), block_inner, Block::raw("\n--\n")])
         } else {
-            let prose_vars_output = prose_of_out_itervars(iter_instr.iter, &vars_output);
+            let prose_vars_output = Prose::of_out_itervars(iter_instr.iter, &vars_output);
             let text_noun = string_of_iter(iter_instr.iter);
             let text_suffix = if vars_output.len() > 1 { "s" } else { "" };
             let prose_label = if outermost { prose_fallthrough.clone() } else { Prose::Empty };
@@ -1681,9 +1739,9 @@ impl<'a> Renderer<'a> {
         if_instr: &pl::IfInstr<Tier>,
     ) -> Block {
         // Build the check heading with its failure continuation
-        let prose_cond = prose_of_exp(&if_instr.exp);
-        let prose_suffix = Self::prose_of_iterexp_suffix(&if_instr.iter_exps);
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_cond = Prose::of_exp(&if_instr.exp);
+        let prose_suffix = Prose::of_iterexp_suffix(&if_instr.iter_exps);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         let prose_head = Prose::seq([
             Prose::text("Check that "),
             prose_cond,
@@ -1718,7 +1776,7 @@ impl<'a> Renderer<'a> {
                 let prose_hint = alternate(
                     hint,
                     &|text_body| reindent_lines(0, text_body),
-                    &|&exp| prose_of_exp(exp),
+                    &|&exp| Prose::of_exp(exp),
                     &exps,
                     false,
                 );
@@ -1726,14 +1784,14 @@ impl<'a> Renderer<'a> {
             }
             // Unhinted relations show their notation followed by the verdict
             None => {
-                let code_not = code_of_mixfix(&hold_instr.not_exp, &code_of_exp);
+                let code_not = Code::of_mixfix(&hold_instr.not_exp, &Code::of_exp);
                 let prose_rel = Prose::link(link, Prose::code(code_not));
                 let text_verdict = if hold { " holds" } else { " does not hold" };
                 Prose::seq([prose_rel, Prose::text(text_verdict)])
             }
         };
-        let prose_suffix = Self::prose_of_iterexp_suffix(&hold_instr.iter_exps);
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_suffix = Prose::of_iterexp_suffix(&hold_instr.iter_exps);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         let prose_head = Prose::seq([
             Prose::text("If "),
             prose_cond,
@@ -1801,10 +1859,10 @@ impl<'a> Renderer<'a> {
         instr: &pl::Instr<Tier>,
         case_instr: &pl::CaseInstr<Tier>,
     ) -> Block {
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         // Render a single arm as a check without an if ladder
         if let [case] = case_instr.cases.as_slice() {
-            let prose_guard = prose_of_guard(&case_instr.exp, &case.guard);
+            let prose_guard = Prose::of_guard(&case_instr.exp, &case.guard);
             let prose_head = Prose::seq([
                 Prose::text("Check that "),
                 prose_guard,
@@ -1826,7 +1884,7 @@ impl<'a> Renderer<'a> {
                 let block_case = if is_binding {
                     // A binding guard becomes the first step of the otherwise branch
                     let prose_guard =
-                        prose_of_guard(&case_instr.exp, &case.guard).capitalize_first();
+                        Prose::of_guard(&case_instr.exp, &case.guard).capitalize_first();
                     let prose_bind = Prose::seq([prose_guard, Prose::text(".")]);
                     let block_bind = Block::item_ordered(level + 1, prose_bind);
                     let blocks_rendered = case
@@ -1846,7 +1904,7 @@ impl<'a> Renderer<'a> {
             let prose_label = if can_fail { prose_fallthrough.clone() } else { Prose::Empty };
             let keyword = if idx == 0 { "If " } else { "Else if " };
             // Nest the selected case body below its condition
-            let prose_guard = prose_of_guard(&case_instr.exp, &case.guard);
+            let prose_guard = Prose::of_guard(&case_instr.exp, &case.guard);
             let prose_head =
                 Prose::seq([Prose::text(keyword), prose_guard, Prose::text(":"), prose_label]);
             let block_head = Block::item_ordered(level, prose_head);
@@ -1856,18 +1914,22 @@ impl<'a> Renderer<'a> {
         }
         Block::seq(blocks_case)
     }
+}
 
+impl Prose {
     // - Group dispatch links
     //
     //   Even/nil   -> goto xref:Even-nil[nil]
 
-    fn prose_of_group_dispatch(id_rel: &pl::Id, id_group: &pl::Id) -> Prose {
+    fn of_group_dispatch(id_rel: &pl::Id, id_group: &pl::Id) -> Prose {
         let anchor_group = fallthrough::anchor_of_group(&id_rel.node, &id_group.node);
         let prose_group =
             Prose::link(Link::Direct(anchor_group), Prose::text(id_group.node.clone()));
         Prose::seq([Prose::text("goto "), prose_group])
     }
+}
 
+impl<'a> Renderer<'a> {
     // - Group dispatch instructions
     //
     //   lone Even/nil under a check   -> ... goto xref:Even-nil[nil]
@@ -1878,8 +1940,7 @@ impl<'a> Renderer<'a> {
         singleton: bool,
         group_instr: &pl::RuleGroupInstr,
     ) -> Rendered {
-        let prose_dispatch =
-            Self::prose_of_group_dispatch(&group_instr.id_rel, &group_instr.id_group);
+        let prose_dispatch = Prose::of_group_dispatch(&group_instr.id_rel, &group_instr.id_group);
         // A lone dispatch folds onto its heading
         if singleton {
             return Rendered::InlineGoto(Prose::seq([Prose::text(" "), prose_dispatch]));
@@ -1900,7 +1961,7 @@ impl<'a> Renderer<'a> {
         instr: &pl::Instr<Tier>,
         let_instr: &pl::LetInstr,
     ) -> Block {
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         // Detect outputs that require explicit iteration blocks
         let has_output = let_instr
             .iter_instrs
@@ -1909,9 +1970,9 @@ impl<'a> Renderer<'a> {
             .any(|var| !var.id.node.starts_with('_'));
         // Keep output-free bindings inline with their iterator suffix
         if !has_output {
-            let code_l = code_of_exp(&let_instr.exp_l);
-            let prose_r = prose_of_exp(&let_instr.exp_r);
-            let prose_suffix = Self::prose_of_iterinstr_suffix(&let_instr.iter_instrs);
+            let code_l = Code::of_exp(&let_instr.exp_l);
+            let prose_r = Prose::of_exp(&let_instr.exp_r);
+            let prose_suffix = Prose::of_iterinstr_suffix(&let_instr.iter_instrs);
             let prose_head = Prose::seq([
                 Prose::text("Let "),
                 Prose::code(code_l),
@@ -1926,8 +1987,8 @@ impl<'a> Renderer<'a> {
 
         // Nest output-producing bindings under their iteration scopes
         Self::render_iterinstrs(level, prose_fallthrough, &let_instr.iter_instrs, &|level| {
-            let code_l = code_of_exp(&let_instr.exp_l);
-            let prose_r = prose_of_exp(&let_instr.exp_r);
+            let code_l = Code::of_exp(&let_instr.exp_l);
+            let prose_r = Prose::of_exp(&let_instr.exp_r);
             let prose_head = Prose::seq([
                 Prose::text("Let "),
                 Prose::code(code_l),
@@ -1954,7 +2015,7 @@ impl<'a> Renderer<'a> {
         let exps = rule_instr.not_exp.args();
         let (exps_input, exps_output) =
             input::split(&rule_instr.input_hint, exps).expect("validated rule input hint");
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         // Detect outputs collected by an enclosing iteration
         let has_output = rule_instr
             .iter_instrs
@@ -1969,7 +2030,7 @@ impl<'a> Renderer<'a> {
             let prose_output = alternate(
                 hint_output,
                 &unindent_lines,
-                &|&exp| prose_of_exp(exp),
+                &|&exp| Prose::of_exp(exp),
                 &exps_output,
                 false,
             );
@@ -1977,7 +2038,7 @@ impl<'a> Renderer<'a> {
             let prose_input = alternate(
                 hint_input,
                 &unindent_lines,
-                &|&exp| prose_of_exp(exp),
+                &|&exp| Prose::of_exp(exp),
                 &exps_input,
                 false,
             );
@@ -1988,12 +2049,12 @@ impl<'a> Renderer<'a> {
                 Prose::link(link, prose_input),
             ])
         } else {
-            let code_not = code_of_mixfix(&rule_instr.not_exp, &code_of_exp);
+            let code_not = Code::of_mixfix(&rule_instr.not_exp, &Code::of_exp);
             Prose::seq([Prose::text("Let "), Prose::link(link, Prose::code(code_not))])
         };
         // Wrap bindings that produce iterated outputs in open blocks
         if !has_output {
-            let prose_suffix = Self::prose_of_iterinstr_suffix(&rule_instr.iter_instrs);
+            let prose_suffix = Prose::of_iterinstr_suffix(&rule_instr.iter_instrs);
             let prose_head =
                 Prose::seq([prose_rule, prose_suffix, Prose::text("."), prose_fallthrough]);
             return Block::item_ordered(level, prose_head);
@@ -2004,14 +2065,16 @@ impl<'a> Renderer<'a> {
             Block::item_unordered(level, prose_head)
         })
     }
+}
 
+impl Prose {
     // - Results
     //
     //   n* ~> true   -> the result is ``true``.
     //   |- eps       -> then, the relation holds.
 
     /// Describes a relation result according to its output shape and hints.
-    fn prose_of_result(hints: &Hints, signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
+    fn of_result(hints: &Hints, signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
         let typs = signature.not_typ.node.args();
         let is_conditional = input::is_conditional(&signature.input_hint, &typs)
             .expect("validated relation input hint");
@@ -2021,7 +2084,7 @@ impl<'a> Renderer<'a> {
             let prose_output = alternate(
                 hint,
                 &|text_body| reindent_lines(0, text_body),
-                &prose_of_exp,
+                &Prose::of_exp,
                 exps,
                 false,
             );
@@ -2029,11 +2092,13 @@ impl<'a> Renderer<'a> {
         } else if exps.is_empty() {
             Prose::text("the relation holds.")
         } else {
-            let prose_exps = prose_of_exps(exps);
+            let prose_exps = Prose::of_exps(exps);
             Prose::seq([Prose::text("the result is "), prose_exps, Prose::text(".")])
         }
     }
+}
 
+impl<'a> Renderer<'a> {
     // - Result instructions
     //
     //   rule Even/nil: |- eps
@@ -2050,12 +2115,9 @@ impl<'a> Renderer<'a> {
         instr: &pl::Instr<pl::GroupInstr>,
         result_instr: &pl::ResultInstr,
     ) -> Rendered {
-        let prose_result = Self::prose_of_result(
-            &instr.hints,
-            &result_instr.rel_signature,
-            &result_instr.exps_output,
-        );
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_result =
+            Prose::of_result(&instr.hints, &result_instr.rel_signature, &result_instr.exps_output);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         // A short lone result folds onto its heading
         if singleton && prose_result.width() <= ADOC_WIDTH_SHORT {
             let prose_tail = Prose::seq([Prose::text(" "), prose_result, prose_fallthrough]);
@@ -2080,8 +2142,8 @@ impl<'a> Renderer<'a> {
         instr: &pl::Instr<pl::GroupInstr>,
         return_instr: &pl::ReturnInstr,
     ) -> Rendered {
-        let prose_exp = prose_of_exp(&return_instr.exp);
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_exp = Prose::of_exp(&return_instr.exp);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         // A short lone return folds onto its heading
         if singleton && prose_exp.width() <= ADOC_WIDTH_SHORT {
             let prose_tail = Prose::seq([
@@ -2108,8 +2170,8 @@ impl<'a> Renderer<'a> {
         instr: &pl::Instr<Tier>,
         debug_instr: &pl::DebugInstr,
     ) -> Block {
-        let prose_exp = prose_of_exp(&debug_instr.exp);
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_exp = Prose::of_exp(&debug_instr.exp);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         let prose_head =
             Prose::seq([Prose::text("(debug: "), prose_exp, Prose::text(")"), prose_fallthrough]);
         Block::item_ordered(level, prose_head)
@@ -2132,11 +2194,11 @@ impl<'a> Renderer<'a> {
             .iter()
             .filter_map(|(name, exp)| name.as_ref().map(|name| (name, exp)))
             .collect();
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         // Use dedicated singular prose for one named projection
         if let [(name, exp_target)] = projections.as_slice() {
-            let prose_target = prose_of_exp(exp_target);
-            let prose_source = prose_of_exp(&destruct_instr.exp);
+            let prose_target = Prose::of_exp(exp_target);
+            let prose_source = Prose::of_exp(&destruct_instr.exp);
             let prose_head = Prose::seq([
                 Prose::text("Let "),
                 prose_target,
@@ -2151,15 +2213,15 @@ impl<'a> Renderer<'a> {
         // Pair multiple targets with their projection names
         let proses_target = projections
             .iter()
-            .map(|(_, exp)| prose_of_exp(exp))
+            .map(|(_, exp)| Prose::of_exp(exp))
             .collect();
-        let prose_targets = prose_of_list(proses_target);
+        let prose_targets = Prose::of_list(proses_target);
         let proses_name = projections
             .iter()
             .map(|(name, _)| Prose::text(format!("the {name}")))
             .collect();
-        let prose_names = prose_of_list(proses_name);
-        let prose_source = prose_of_exp(&destruct_instr.exp);
+        let prose_names = Prose::of_list(proses_name);
+        let prose_source = Prose::of_exp(&destruct_instr.exp);
         let prose_head = Prose::seq([
             Prose::text("Let "),
             prose_targets,
@@ -2189,9 +2251,9 @@ impl<'a> Renderer<'a> {
     ) -> Block {
         let pl::CheckLetSubInstr { exp_l, exp_r, block, .. } = check_instr;
         // Build the partial binding heading with its failure continuation
-        let code_l = code_of_exp(exp_l);
-        let prose_r = prose_of_exp(exp_r);
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let code_l = Code::of_exp(exp_l);
+        let prose_r = Prose::of_exp(exp_r);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         let prose_head = Prose::seq([
             Prose::text("Let!~type~ "),
             Prose::code(code_l),
@@ -2215,9 +2277,9 @@ impl<'a> Renderer<'a> {
     ) -> Block {
         let pl::CheckLetMatchInstr { exp_l, exp_r, block, .. } = check_instr;
         // Build the partial binding heading with its failure continuation
-        let code_l = code_of_exp(exp_l);
-        let prose_r = prose_of_exp(exp_r);
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let code_l = Code::of_exp(exp_l);
+        let prose_r = Prose::of_exp(exp_r);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         let prose_head = Prose::seq([
             Prose::text("Let!~type~ "),
             Prose::code(code_l),
@@ -2245,10 +2307,10 @@ impl<'a> Renderer<'a> {
         option_instr: &pl::OptionGetInstr<Tier>,
     ) -> Block {
         // Build the forced binding heading with its failure continuation
-        let code_l = code_of_exp(&option_instr.exp_l);
+        let code_l = Code::of_exp(&option_instr.exp_l);
         let text_get = adoc_link("option_get", "*!*");
-        let prose_r = prose_of_exp(&option_instr.exp_r);
-        let prose_fallthrough = fallthrough::prose_of_link(ctx, instr);
+        let prose_r = Prose::of_exp(&option_instr.exp_r);
+        let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
         let prose_head = Prose::seq([
             Prose::text("Let "),
             Prose::code(code_l),
@@ -2278,9 +2340,11 @@ impl<'a> Renderer<'a> {
         let rendered = render_tier(self, level, ctx, false, instr, &tier_instr.tier);
         Self::compose(None, false, rendered)
     }
+}
 
-    // == Relations
+// == Relations
 
+impl<'a> Renderer<'a> {
     // - Synthesized outputs
     //
     //   SL Iter(Id(m), *)   -> PL Iter(Id(m), *) with the same note and span
@@ -2301,25 +2365,29 @@ impl<'a> Renderer<'a> {
             span: exp_sl.span.clone(),
         }
     }
+}
 
+impl Prose {
     // - Relation notation titles
     //
     //   Double: nat* ~> nat*, input %0   -> ``nat^{asterisk}^`` ``+~>+`` ``%``
 
     /// Fills relation inputs and leaves output positions as percent holes.
-    fn prose_of_rel_title_math(signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
+    fn of_rel_title_math(signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
         let mixop = signature.not_typ.node.to_mixop();
         let num_outputs = mixop.arity() - exps.len();
-        let codes_input: Vec<Code> = exps.iter().map(code_of_exp).collect();
+        let codes_input: Vec<Code> = exps.iter().map(Code::of_exp).collect();
         let codes_output: Vec<Code> = (0..num_outputs).map(|_| Code::token("%")).collect();
         let codes_args = input::combine(&signature.input_hint, codes_input, codes_output)
             .expect("validated relation input hint");
         let not_exp =
             pl::Mixop::fill(&mixop, codes_args).expect("relation title fills its notation");
-        let code_not = code_of_mixfix(&not_exp, &Clone::clone);
+        let code_not = Code::of_mixfix(&not_exp, &Clone::clone);
         Prose::code(code_not)
     }
+}
 
+impl<'a> Renderer<'a> {
     // - Relation titles
     //
     //   relation Even: |- nat*, hinted prose_true
@@ -2362,14 +2430,14 @@ impl<'a> Renderer<'a> {
                 let prose_input = alternate(
                     hint_input,
                     &|text_body| reindent_lines(1, text_body),
-                    &prose_of_exp,
+                    &Prose::of_exp,
                     exps_input,
                     true,
                 );
                 let prose_output = alternate(
                     hint_output,
                     &|text_body| reindent_lines(1, text_body),
-                    &prose_of_exp,
+                    &Prose::of_exp,
                     &exps_output,
                     false,
                 );
@@ -2387,7 +2455,7 @@ impl<'a> Renderer<'a> {
                 let prose_input = alternate(
                     hint_input,
                     &|text_body| reindent_lines(1, text_body),
-                    &prose_of_exp,
+                    &Prose::of_exp,
                     exps_input,
                     true,
                 );
@@ -2402,7 +2470,7 @@ impl<'a> Renderer<'a> {
                 let prose_true = alternate(
                     hint_true,
                     &|text_body| reindent_lines(0, text_body),
-                    &prose_of_exp,
+                    &Prose::of_exp,
                     exps,
                     true,
                 );
@@ -2410,16 +2478,18 @@ impl<'a> Renderer<'a> {
             }
             // Fall back to the filled relation notation
             _ => {
-                let prose_math = Self::prose_of_rel_title_math(signature, exps);
+                let prose_math = Prose::of_rel_title_math(signature, exps);
                 let prose_title =
                     Prose::seq([Prose::text(format!("{}: ", id_rel.node)), prose_math]);
                 Block::inline(Prose::link(link, prose_title))
             }
         }
     }
+}
 
-    // == External relations
+// == External relations
 
+impl<'a> Renderer<'a> {
     // - External relation definition
     //
     //   extern relation Oracle: nat ~> nat   -> xref:Oracle[Oracle: ``nat`` ``+~>+`` ``%``]
@@ -2427,9 +2497,11 @@ impl<'a> Renderer<'a> {
     fn render_extern_rel_def(hints: &Hints, rel: &pl::ExternRel) -> Block {
         Self::render_rel_title_block(hints, &rel.id, &rel.rel_signature, &rel.exps_input)
     }
+}
 
-    // == Tier renderers
+// == Tier renderers
 
+impl<'a> Renderer<'a> {
     // - Backtracking arms
     //
     //   def $modulo(n_a, n_b) = $(n_a \ n_b)
@@ -2635,13 +2707,11 @@ impl<'a> Renderer<'a> {
             Some(hint) => alternate(
                 hint,
                 &|text_body| reindent_lines(0, text_body),
-                &prose_of_exp,
+                &Prose::of_exp,
                 &group_instr.exps_input,
                 true,
             ),
-            None => {
-                Self::prose_of_rel_title_math(&group_instr.rel_signature, &group_instr.exps_input)
-            }
+            None => Prose::of_rel_title_math(&group_instr.rel_signature, &group_instr.exps_input),
         };
         let link = Link::Subject(Subject::Relation(group_instr.id_rel.node.clone()));
         let prose_title = Prose::link(link, prose_body);
@@ -2656,9 +2726,11 @@ impl<'a> Renderer<'a> {
         );
         Rendered::Nested(block_group)
     }
+}
 
-    // == Defined relations
+// == Defined relations
 
+impl<'a> Renderer<'a> {
     // - Rule group fragments
     //
     //   rule Even/nil: |- eps   -> xref:Even[``·`` has even length]:
@@ -2679,11 +2751,11 @@ impl<'a> Renderer<'a> {
             Some(hint) => alternate(
                 hint,
                 &|text_body| reindent_lines(0, text_body),
-                &prose_of_exp,
+                &Prose::of_exp,
                 exps,
                 true,
             ),
-            None => Self::prose_of_rel_title_math(signature, exps),
+            None => Prose::of_rel_title_math(signature, exps),
         };
         let link = Link::Subject(Subject::Relation(id_rel.node.clone()));
         let prose_title = Prose::link(link, prose_body);
@@ -2792,9 +2864,11 @@ impl<'a> Renderer<'a> {
             Block::raw(format!("\n\n{text_dispatch}")),
         ])
     }
+}
 
-    // == Function definitions
+// == Function definitions
 
+impl<'a> Renderer<'a> {
     // - Function headers
     //
     //   dec $modulo(nat, nat) : nat?, hinted %0 "mod" %1   -> xref:modulo[``n~a~`` mod ``n~b~``]
@@ -2813,7 +2887,7 @@ impl<'a> Renderer<'a> {
             Some(hint) => alternate(
                 hint,
                 &|text_body| reindent_lines(0, text_body),
-                &prose_of_param,
+                &Prose::of_param,
                 params,
                 true,
             ),
@@ -2827,7 +2901,7 @@ impl<'a> Renderer<'a> {
                     let text_tparams = texts_tparam.join(", ");
                     format!("<{text_tparams}>")
                 };
-                let code_params = code_of_params(params);
+                let code_params = Code::of_params(params);
                 let code_signature =
                     Code::seq([Code::token(text_id), Code::token(text_tparams), code_params]);
                 Prose::PlainCode(code_signature)
@@ -2873,11 +2947,11 @@ impl<'a> Renderer<'a> {
         let rows_table = func
             .rows
             .iter()
-            .map(|row| vec![code_of_exps(&row.exps_input, ", "), code_of_exp(&row.exp)])
+            .map(|row| vec![Code::of_exps(&row.exps_input, ", "), Code::of_exp(&row.exp)])
             .collect();
         // Assemble the linked header and table with one result column
         let block_header = Self::render_func_header_block(hints, &func.id, &[], &func.params);
-        let prose_params = prose_of_params(&func.params);
+        let prose_params = Prose::of_params(&func.params);
         let block_table = Block::Table(Table {
             header: vec![prose_params, Prose::text("Result")],
             rows: rows_table,
@@ -2921,7 +2995,7 @@ impl<'a> Renderer<'a> {
                     && matches!(return_instr.exp.node.node, ExpKind::Bool(_)) =>
             {
                 // Render a lone boolean return as inline prose
-                let code_exp = code_of_exp(&return_instr.exp);
+                let code_exp = Code::of_exp(&return_instr.exp);
                 let prose_tail =
                     Prose::seq([Prose::text(" return "), Prose::code(code_exp), Prose::text(".")]);
                 block_body = Block::inline(prose_tail);
@@ -2949,9 +3023,11 @@ impl<'a> Renderer<'a> {
         );
         Block::concat([block_header, Block::raw("\n\n"), block_body, Block::raw(text_else)])
     }
+}
 
-    // == Definitions
+// == Definitions
 
+impl<'a> Renderer<'a> {
     // - Definition
     //
     //   syntax rec = {LEFT nat, RIGHT nat}   -> None
