@@ -1,7 +1,7 @@
 use crate::{Error, Result, snapshot};
 use expect_test::expect_file;
 use p4spec_rust::{
-    backend::adoc,
+    backend_doc::adoc,
     frontend::parse::parse_files,
     pass::{algo, elaborate, prosify, structure},
 };

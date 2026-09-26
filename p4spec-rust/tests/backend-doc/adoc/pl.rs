@@ -1,5 +1,5 @@
 use p4spec_rust::{
-    backend::adoc::pl::{
+    backend_doc::adoc::pl::{
         self as adoc,
         doc::{Subject, subject_name},
         render_def, render_spec,

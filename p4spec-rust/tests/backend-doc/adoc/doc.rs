@@ -1,4 +1,4 @@
-use p4spec_rust::backend::adoc::pl::doc::{
+use p4spec_rust::backend_doc::adoc::pl::doc::{
     self as doc, Block, Code, FallthroughLabel, ItemKind, Link, Prose, Subject,
 };
 
