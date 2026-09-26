@@ -170,7 +170,7 @@ pub(crate) enum Symbol {
     RightBrace,
 }
 
-/// Identifies a local HTML anchor validated by `target_of_string`.
+/// Identifies a local HTML anchor validated by `Target::of_string`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Target(pub(super) String);
 
