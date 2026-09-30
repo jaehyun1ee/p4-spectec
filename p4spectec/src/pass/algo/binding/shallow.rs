@@ -38,7 +38,7 @@ pub fn check_exp(exp: &ast::Exp) -> bool {
         ast::ExpKind::UpCast(_, exp) => {
             matches!(&exp.node, ast::ExpKind::Id(_) | ast::ExpKind::Case(_))
         }
-        ast::ExpKind::Case(not_exp) => not_exp.args().into_iter().all(is_iterated_id_exp),
+        ast::ExpKind::Case(not_exp) => not_exp.exps.iter().all(is_iterated_id_exp),
         _ => false,
     }
 }
@@ -97,7 +97,7 @@ fn check_repeated_binding<'a>(
         }
         ast::ExpKind::Case(not_exp) => {
             // Visit case arguments from left to right
-            for exp in not_exp.args() {
+            for exp in &not_exp.exps {
                 check_repeated_binding(venv, ids_seen, exp)?;
             }
         }

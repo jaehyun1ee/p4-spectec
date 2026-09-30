@@ -153,8 +153,7 @@ fn assign_case_exp<Ctx: WriteContext>(
     not_exp: &ast::NotExp,
     values: &[Value],
 ) -> Backtrack<Ctx> {
-    let exps = not_exp.args();
-    assign_exps(arena, ctx, &exps, values)
+    assign_exps(arena, ctx, &not_exp.exps, values)
 }
 
 // - Struct expression

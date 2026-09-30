@@ -15,7 +15,11 @@ use crate::lang::sl::ast::*;
 
 // - Parameters
 
-impl<I: Print, V: Print> Print for Param<I, V> {
+impl<P: Stage> Print for Param<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ParamKind::Exp(_, exp) => exp.print(printer),
@@ -35,7 +39,11 @@ impl<I: Print, V: Print> Print for Param<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for [Param<I, V>] {
+impl<P: Stage> Print for [Param<P>]
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         if self.is_empty() {
             return Ok(());
@@ -53,20 +61,28 @@ impl<I: Print, V: Print> Print for [Param<I, V>] {
 
 // - Instructions
 
-impl<I: Print, V: Print> Print for Instr<I, V> {
+impl<P: Stage> Print for Instr<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         write_instr_with(printer, self, false, 0, 0)
     }
 }
 
 /// Prints one instruction as a numbered step, then its blocks unless `short`.
-fn write_instr_with<I: Print, V: Print>(
+fn write_instr_with<P: Stage>(
     output: &mut Printer<'_>,
-    instr: &Instr<I, V>,
+    instr: &Instr<P>,
     short: bool,
     level: usize,
     index: usize,
-) -> fmt::Result {
+) -> fmt::Result
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     // The step number is omitted in short form
     let order = format!("{}{index}. ", "  ".repeat(level));
     let mut write_order = || {
@@ -236,7 +252,11 @@ fn write_instr_with<I: Print, V: Print>(
 
 // - Case analysis
 
-impl<I: Print, V: Print> Print for Guard<I, V> {
+impl<P: Stage> Print for Guard<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
             Guard::Bool(value) => write!(printer, "{value}"),
@@ -267,11 +287,15 @@ impl<I: Print, V: Print> Print for Guard<I, V> {
 }
 
 /// Prints the arms of a case analysis, numbered from one.
-fn write_cases_with<I: Print, V: Print>(
+fn write_cases_with<P: Stage>(
     output: &mut Printer<'_>,
-    cases: &[Case<I, V>],
+    cases: &[Case<P>],
     level: usize,
-) -> fmt::Result {
+) -> fmt::Result
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     for (index, case) in cases.iter().enumerate() {
         if index != 0 {
             output.write_str("\n\n")?;
@@ -282,12 +306,16 @@ fn write_cases_with<I: Print, V: Print>(
 }
 
 /// Prints one arm as `Case guard` and its block.
-fn write_case_with<I: Print, V: Print>(
+fn write_case_with<P: Stage>(
     output: &mut Printer<'_>,
-    case: &Case<I, V>,
+    case: &Case<P>,
     level: usize,
     index: usize,
-) -> fmt::Result {
+) -> fmt::Result
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     write!(output, "{}{index}. Case ", "  ".repeat(level))?;
     case.guard.print(output)?;
     output.write_str("\n\n")?;
@@ -296,19 +324,27 @@ fn write_case_with<I: Print, V: Print>(
 
 // - Blocks
 
-impl<I: Print, V: Print> Print for Block<I, V> {
+impl<P: Stage> Print for Block<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         write_block_with(printer, self, 0, 0)
     }
 }
 
 /// Prints a block's instructions as consecutive steps.
-fn write_block_with<I: Print, V: Print>(
+fn write_block_with<P: Stage>(
     output: &mut Printer<'_>,
-    block: &Block<I, V>,
+    block: &Block<P>,
     level: usize,
     index: usize,
-) -> fmt::Result {
+) -> fmt::Result
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     for (offset, instr) in block.iter().enumerate() {
         if offset != 0 {
             output.write_str("\n\n")?;
@@ -319,12 +355,16 @@ fn write_block_with<I: Print, V: Print>(
 }
 
 /// Prints the otherwise block, if present.
-fn write_elseblock_opt_with<I: Print, V: Print>(
+fn write_elseblock_opt_with<P: Stage>(
     output: &mut Printer<'_>,
-    block: &Option<ElseBlock<I, V>>,
+    block: &Option<ElseBlock<P>>,
     level: usize,
     index: usize,
-) -> fmt::Result {
+) -> fmt::Result
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     if let Some(block) = block {
         output.write_str("\n\n")?;
         write_elseblock_with(output, block, level, index)?;
@@ -333,19 +373,27 @@ fn write_elseblock_opt_with<I: Print, V: Print>(
 }
 
 /// Prints the otherwise block as the next step, `Otherwise,`.
-fn write_elseblock_with<I: Print, V: Print>(
+fn write_elseblock_with<P: Stage>(
     output: &mut Printer<'_>,
-    block: &ElseBlock<I, V>,
+    block: &ElseBlock<P>,
     level: usize,
     index: usize,
-) -> fmt::Result {
+) -> fmt::Result
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     write!(output, "{}{next}. Otherwise,\n\n", "  ".repeat(level), next = index + 1)?;
     write_block_with(output, block, level + 1, 0)
 }
 
 // - Table rows
 
-impl<I: Print, V: Print> Print for TableRow<I, V> {
+impl<P: Stage> Print for TableRow<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_str("\n  Row : ")?;
         printer.separated(&self.exps_input, ", ")?;
@@ -356,7 +404,11 @@ impl<I: Print, V: Print> Print for TableRow<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for [TableRow<I, V>] {
+impl<P: Stage> Print for [TableRow<P>]
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for (index, table_row) in self.iter().enumerate() {
             if index != 0 {
@@ -394,7 +446,11 @@ impl Print for TypDef {
 
 // == Relation definitions
 
-impl<I: Print, V: Print> Print for RelDef<I, V> {
+impl<P: Stage> Print for RelDef<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
             Self::Extern(relation) => {
@@ -409,7 +465,11 @@ impl<I: Print, V: Print> Print for RelDef<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for ExternRel<I, V> {
+impl<P: Stage> Print for ExternRel<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.id.print(printer)?;
         printer.write_str(": ")?;
@@ -417,7 +477,11 @@ impl<I: Print, V: Print> Print for ExternRel<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for DefinedRel<I, V> {
+impl<P: Stage> Print for DefinedRel<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.id.print(printer)?;
         printer.write_str(": ")?;
@@ -429,11 +493,15 @@ impl<I: Print, V: Print> Print for DefinedRel<I, V> {
 }
 
 /// Fills the input expressions into the notation at the hint's positions.
-fn write_relinput<I: Print, V: Print>(
+fn write_relinput<P: Stage>(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
-    exps_input: &[Exp<I, V>],
-) -> fmt::Result {
+    exps_input: &[Exp<P>],
+) -> fmt::Result
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     let not_typ = &rel_signature.not_typ;
     let idxs_input = rel_signature.input_hint.indices();
     assert_eq!(idxs_input.len(), exps_input.len());
@@ -453,11 +521,15 @@ fn write_relinput<I: Print, V: Print>(
 }
 
 /// Fills the output expressions into the notation at the non-input positions.
-fn write_reloutput<I: Print, V: Print>(
+fn write_reloutput<P: Stage>(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
-    exps_output: &[Exp<I, V>],
-) -> fmt::Result {
+    exps_output: &[Exp<P>],
+) -> fmt::Result
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     let not_typ = &rel_signature.not_typ;
     let idxs_input = rel_signature.input_hint.indices();
     // Outputs are the positions the hint leaves
@@ -481,7 +553,11 @@ fn write_reloutput<I: Print, V: Print>(
 
 // == Meta-function definitions
 
-impl<I: Print, V: Print> Print for MetaFuncDef<I, V> {
+impl<P: Stage> Print for MetaFuncDef<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
             Self::Extern(func) => {
@@ -504,7 +580,11 @@ impl<I: Print, V: Print> Print for MetaFuncDef<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for ExternFunc<I, V> {
+impl<P: Stage> Print for ExternFunc<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -517,7 +597,11 @@ impl<I: Print, V: Print> Print for ExternFunc<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for BuiltinFunc<I, V> {
+impl<P: Stage> Print for BuiltinFunc<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -530,7 +614,11 @@ impl<I: Print, V: Print> Print for BuiltinFunc<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for TableFunc<I, V> {
+impl<P: Stage> Print for TableFunc<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -546,7 +634,11 @@ impl<I: Print, V: Print> Print for TableFunc<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for DefinedFunc<I, V> {
+impl<P: Stage> Print for DefinedFunc<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -564,7 +656,11 @@ impl<I: Print, V: Print> Print for DefinedFunc<I, V> {
 
 // == Definitions
 
-impl<I: Print, V: Print> Print for Def<I, V> {
+impl<P: Stage> Print for Def<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             DefKind::Typ(typ_def) => typ_def.print(printer),
@@ -580,7 +676,11 @@ impl<I: Print, V: Print> Print for Def<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for [Def<I, V>] {
+impl<P: Stage> Print for [Def<P>]
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for (index, def) in self.iter().enumerate() {
             if index != 0 {
@@ -594,7 +694,11 @@ impl<I: Print, V: Print> Print for [Def<I, V>] {
 
 // == Specifications
 
-impl<I: Print, V: Print> Print for Spec<I, V> {
+impl<P: Stage> Print for Spec<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.as_slice().print(printer)
     }

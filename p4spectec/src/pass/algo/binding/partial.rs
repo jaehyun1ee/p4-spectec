@@ -25,7 +25,7 @@
 //! Generated premises retain the iteration context of the source pattern.
 
 use crate::lang::{
-    common::{ds::set::IdSet, notation::mixop::Mixop, prim, source::Span},
+    common::{ds::set::IdSet, prim, source::Span},
     traits::free::FreeIds,
 };
 
@@ -173,7 +173,7 @@ fn gen_prem_bound(
             (
                 ast::ExpKind::Match(
                     Box::new(exp_l),
-                    ast::Pattern::Case(Box::new(not_exp.to_mixop())),
+                    ast::Pattern::Case(Box::new(not_exp.notation.as_ref().clone())),
                 ),
                 Origin::Match(exp_from.span.clone(), "variant case"),
             )
@@ -541,11 +541,10 @@ fn rename_exp_bind(
             Ok(exp)
         }
         ast::ExpKind::Case(not_exp) => {
-            let mixop = not_exp.to_mixop();
-            let args = not_exp.into_args();
-            let args = rename_exps(ctx, binds, renv, iter_ctx, args)?;
-            let not_exp = Mixop::fill(&mixop, args)
-                .expect("arguments obtained from the same mixfix must match its arity");
+            let ast::NotExp { notation, exps } = *not_exp;
+            let mixop = notation.as_ref().clone();
+            let exps = rename_exps(ctx, binds, renv, iter_ctx, exps)?;
+            let not_exp = ast::NotExp { notation, exps };
             let exp_from = note_phrase! {
                 node: ast::ExpKind::Case(Box::new(not_exp)),
                 note: note.clone(),

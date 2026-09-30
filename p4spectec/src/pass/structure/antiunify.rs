@@ -5,6 +5,8 @@
 //!
 //! Inputs -> shared template -> binding premises prepended to each path
 
+use std::rc::Rc;
+
 use crate::lang::{
     common::ds::{map::IdMap, set::IdSet},
     traits::{
@@ -80,11 +82,9 @@ fn populate_exp_template(uenv: &UEnv, exp_template: &Exp, exp: &Exp) -> Vec<Prem
             populate_exps_templates(uenv, exps_template.iter(), exps.iter())
         }
         (ExpKind::Case(not_exp_template), ExpKind::Case(not_exp))
-            if not_exp_template.eq_shape(not_exp) =>
+            if not_exp_template.notation.eq_shape(&not_exp.notation) =>
         {
-            let exps_template = not_exp_template.args();
-            let exps = not_exp.args();
-            populate_exps_templates(uenv, exps_template.into_iter(), exps.into_iter())
+            populate_exps_templates(uenv, not_exp_template.exps.iter(), not_exp.exps.iter())
         }
         (ExpKind::Str(exp_fields_template), ExpKind::Str(exp_fields)) => {
             let exps_template = exp_fields_template.iter().map(|ExpField { exp, .. }| exp);
@@ -173,7 +173,7 @@ fn antiunify_exp(frees: &mut IdSet, uenv: &mut UEnv, exp_template: &Exp, exp: &E
             ExpKind::Tuple(exps_template)
         }
         (ExpKind::Case(not_exp_template), ExpKind::Case(not_exp))
-            if not_exp_template.eq_shape(not_exp) =>
+            if not_exp_template.notation.eq_shape(&not_exp.notation) =>
         {
             antiunify_case_exp(frees, uenv, not_exp_template, not_exp)
         }
@@ -248,15 +248,13 @@ fn antiunify_case_exp(
     not_exp_template: &NotExp,
     not_exp: &NotExp,
 ) -> ExpKind {
-    let (mixop, exps_template) = not_exp_template.split();
-    let exps = not_exp.args();
     let mut exps_unified = vec![];
-    for (exp_template, exp) in exps_template.iter().zip(exps) {
+    for (exp_template, exp) in not_exp_template.exps.iter().zip(&not_exp.exps) {
         let exp_unified = antiunify_exp(frees, uenv, exp_template, exp);
         exps_unified.push(exp_unified);
     }
-    let not_exp_template = Mixop::fill(&mixop, exps_unified)
-        .expect("matching mixfix shapes have equal argument counts");
+    let not_exp_template =
+        NotExp { notation: Rc::clone(&not_exp_template.notation), exps: exps_unified };
     let not_exp_template = Box::new(not_exp_template);
     ExpKind::Case(not_exp_template)
 }

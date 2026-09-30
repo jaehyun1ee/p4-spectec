@@ -235,7 +235,11 @@ fn write_notval_with(
 
 // - Expressions
 
-impl<I: Print, V: Print> Print for Exp<I, V> {
+impl<P: Stage> Print for Exp<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ExpKind::Bool(value) => write!(printer, "{value}"),
@@ -374,15 +378,26 @@ impl<I: Print, V: Print> Print for Exp<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for [Exp<I, V>] {
+impl<P: Stage> Print for [Exp<P>]
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.separated(self, ", ")
     }
 }
 
-impl<I: Print, V: Print> Print for NotExp<I, V> {
+impl<P: Stage> Print for NotExp<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.print_with(printer, |exp, printer| exp.print(printer))
+        // Fill the notation with borrowed expressions and print it in place
+        Mixop::fill(self.notation.mixop(), &self.exps)
+            .expect("a notation expression fills every argument position")
+            .print_with(printer, |exp, printer| exp.print(printer))
     }
 }
 
@@ -429,7 +444,11 @@ impl Print for Pattern {
 
 // - Paths
 
-impl<I: Print, V: Print> Print for Path<I, V> {
+impl<P: Stage> Print for Path<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             PathKind::Root => Ok(()),
@@ -497,7 +516,11 @@ impl Print for [Param] {
 
 // - Arguments
 
-impl<I: Print, V: Print> Print for Arg<I, V> {
+impl<P: Stage> Print for Arg<P>
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ArgKind::Exp(exp) => exp.print(printer),
@@ -509,7 +532,11 @@ impl<I: Print, V: Print> Print for Arg<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for [Arg<I, V>] {
+impl<P: Stage> Print for [Arg<P>]
+where
+    P::Id: Print,
+    P::Var: Print,
+{
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         if self.is_empty() {
             return Ok(());

@@ -8,7 +8,6 @@
 use crate::lang::{
     common::{
         ds::{map::IdMap, set::IdSet},
-        notation::mixop::Mixop,
         source::Span,
     },
     hints::input,
@@ -146,7 +145,9 @@ impl Replacer {
             }
             ExpKind::Tuple(exps) => ExpKind::Tuple(self.replace_exps(exps)),
             ExpKind::Case(not_exp) => {
-                ExpKind::Case(Box::new(not_exp.map(|exp| self.replace_exp(exp.clone()))))
+                let NotExp { notation, exps } = *not_exp;
+                let exps = self.replace_exps(exps);
+                ExpKind::Case(Box::new(NotExp { notation, exps }))
             }
             ExpKind::Str(exp_fields) => ExpKind::Str(
                 exp_fields
@@ -322,7 +323,8 @@ impl Replacer {
 
     fn replace_hold_instr(&self, instr_ol: ol::HoldInstr) -> ol::InstrKind {
         let ol::HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
-        let not_exp = not_exp.map(|exp| self.replace_exp(exp.clone()));
+        let ol::NotExp { notation, exps } = not_exp;
+        let not_exp = ol::NotExp { notation, exps: self.replace_exps(exps) };
         let iter_exps = self.replace_iterexps(iter_exps);
         let block_hold = self.replace_block(block_hold);
         let block_not_hold = self.replace_block(block_not_hold);
@@ -372,7 +374,7 @@ impl Replacer {
     fn replace_rule_instr(&self, instr_ol: ol::RuleInstr) -> ol::InstrKind {
         let ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
         // Split the arguments by the input hint
-        let exps = not_exp.args().into_iter().cloned().collect();
+        let ol::NotExp { notation, exps } = not_exp;
         // Elaboration validates hints; OL rewrites preserve notation arity
         let (exps_input, exps_output) =
             input::split(&input_hint, exps).expect("validated relation hints and argument counts");
@@ -389,9 +391,7 @@ impl Replacer {
         // Renaming preserves the argument counts returned by input::split
         let exps = input::combine(&input_hint, exps_input, exps_output)
             .expect("validated relation hints and argument counts");
-        let mixop = not_exp.to_mixop();
-        let not_exp =
-            Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
+        let not_exp = ol::NotExp { notation, exps };
         let iter_instrs = replacer.replace_iterinstrs_bound(iter_instrs);
         let block = replacer.replace_block(block);
         ol::InstrKind::Rule(ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block })

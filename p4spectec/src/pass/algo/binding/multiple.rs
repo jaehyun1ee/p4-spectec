@@ -12,6 +12,8 @@
 //! -- let (int, int', int'') = ...,
 //! -- if int = int' && int = int''
 
+use std::rc::Rc;
+
 use crate::lang::{
     common::{
         Id,
@@ -120,7 +122,8 @@ pub fn rename_exp(ctx: &mut Context, renv: &mut RenameEnv, exp: &ast::Exp) -> as
         ast::ExpKind::Tuple(exps) => ast::ExpKind::Tuple(rename_exps(ctx, renv, exps)),
         // Case: rename the arguments
         ast::ExpKind::Case(not_exp) => {
-            let not_exp = not_exp.map(|exp| rename_exp(ctx, renv, exp));
+            let exps = rename_exps(ctx, renv, &not_exp.exps);
+            let not_exp = ast::NotExp { notation: Rc::clone(&not_exp.notation), exps };
             ast::ExpKind::Case(Box::new(not_exp))
         }
         // Struct: rename the fields

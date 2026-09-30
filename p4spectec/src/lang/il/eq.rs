@@ -99,7 +99,11 @@ impl SyntaxEq for OpTyp {
 
 // - Expressions
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpKind<I, V> {
+impl<P: Stage> SyntaxEq for ExpKind<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (ExpKind::Bool(value_l), ExpKind::Bool(value_r)) => value_l == value_r,
@@ -139,9 +143,7 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpKind<I, V> {
             }
             (ExpKind::Tuple(exps_l), ExpKind::Tuple(exps_r))
             | (ExpKind::List(exps_l), ExpKind::List(exps_r)) => exps_l.syntax_eq(exps_r),
-            (ExpKind::Case(not_exp_l), ExpKind::Case(not_exp_r)) => {
-                not_exp_l.eq_by(not_exp_r, SyntaxEq::syntax_eq)
-            }
+            (ExpKind::Case(not_exp_l), ExpKind::Case(not_exp_r)) => not_exp_l.syntax_eq(not_exp_r),
             (ExpKind::Str(fields_l), ExpKind::Str(fields_r)) => fields_l.syntax_eq(fields_r),
             (ExpKind::Opt(Some(exp_l)), ExpKind::Opt(Some(exp_r))) => exp_l.syntax_eq(exp_r),
             (ExpKind::Opt(None), ExpKind::Opt(None)) => true,
@@ -184,9 +186,23 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpKind<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpField<I, V> {
+impl<P: Stage> SyntaxEq for ExpField<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.atom.syntax_eq(&other.atom) && self.exp.syntax_eq(&other.exp)
+    }
+}
+
+impl<P: Stage> SyntaxEq for NotExp<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
+    fn syntax_eq(&self, other: &Self) -> bool {
+        self.notation.mixop().syntax_eq(other.notation.mixop()) && self.exps.syntax_eq(&other.exps)
     }
 }
 
@@ -223,7 +239,11 @@ impl SyntaxEq for OptPattern {
 
 // - Paths
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for PathKind<I, V> {
+impl<P: Stage> SyntaxEq for PathKind<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (PathKind::Root, PathKind::Root) => true,
@@ -268,7 +288,11 @@ impl SyntaxEq for ParamKind {
 
 // - Arguments
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ArgKind<I, V> {
+impl<P: Stage> SyntaxEq for ArgKind<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (ArgKind::Exp(exp_l), ArgKind::Exp(exp_r)) => exp_l.syntax_eq(exp_r),

@@ -1,13 +1,15 @@
 //! Slot instantiation of shared IL syntax
 //!
-//! The type aliases name the slot-resolved IL forms;
-//! the `Prepare` impls rewrite each node.
+//! `Prepared` is the IL stage with frame slots for identifiers and variables;
+//! the type aliases name its forms, and the `Prepare` impls rewrite each node.
 //! Iterations also register the outer variable `x*` for every iterated `x`,
 //! so `eval::iter` can find its slot.
 
+use std::rc::Rc;
+
 use crate::lang::data::var::{IdSlot, VarSlot};
 
-use crate::lang::il::ast as source;
+use crate::lang::il::ast::{self as source, Stage};
 
 pub use crate::lang::il::ast::{
     Atom, BinOp, CmpOp, DefTyp, DefTypKind, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter,
@@ -22,6 +24,18 @@ use super::Prepare;
 
 // == Prepared syntax
 
+// - Stage
+
+/// IL syntax whose identifiers and variables are resolved to frame slots.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Prepared;
+
+impl Stage for Prepared {
+    type Id = IdSlot;
+    type Var = VarSlot;
+    type Notation = Rc<Mixop>;
+}
+
 // - Variables
 
 /// A variable with its frame slot.
@@ -30,23 +44,23 @@ pub type Var = VarSlot;
 // - Expressions
 
 /// An expression over slot-resolved identifiers.
-pub type Exp = source::Exp<IdSlot, VarSlot>;
-pub type ExpField = source::ExpField<IdSlot, VarSlot>;
-pub type ExpKind = source::ExpKind<IdSlot, VarSlot>;
-pub type NotExp = source::NotExp<IdSlot, VarSlot>;
+pub type Exp = source::Exp<Prepared>;
+pub type ExpField = source::ExpField<Prepared>;
+pub type ExpKind = source::ExpKind<Prepared>;
+pub type NotExp = source::NotExp<Prepared>;
 pub type ExpIter = source::ExpIter<VarSlot>;
 
 // - Paths
 
 /// A path over slot-resolved identifiers.
-pub type Path = source::Path<IdSlot, VarSlot>;
-pub type PathKind = source::PathKind<IdSlot, VarSlot>;
+pub type Path = source::Path<Prepared>;
+pub type PathKind = source::PathKind<Prepared>;
 
 // - Arguments
 
 /// An argument over slot-resolved identifiers.
-pub type Arg = source::Arg<IdSlot, VarSlot>;
-pub type ArgKind = source::ArgKind<IdSlot, VarSlot>;
+pub type Arg = source::Arg<Prepared>;
+pub type ArgKind = source::ArgKind<Prepared>;
 
 // - Premises
 
@@ -129,6 +143,15 @@ impl Prepare for source::ExpKind {
                 ExpKind::Iter(exp_inner, exp_iter_inner)
             }
         }
+    }
+}
+
+impl Prepare for source::NotExp {
+    type Output = NotExp;
+
+    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+        let source::NotExp { notation, exps } = self;
+        NotExp { notation, exps: exps.prepare(layout) }
     }
 }
 

@@ -153,7 +153,7 @@ impl FreeVars for Exp {
             }
             ExpKind::Case(not_exp) => {
                 let mut vars_free = Vec::new();
-                for exp in not_exp.args() {
+                for exp in &not_exp.exps {
                     exp.free_vars_into(&mut vars_free);
                 }
                 vars_free
@@ -192,6 +192,12 @@ impl FreeVars for Exp {
                 vars_free
             }
         }
+    }
+}
+
+impl FreeIds for NotExp {
+    fn free_ids_into(&self, free: &mut IdSet) {
+        self.exps.as_slice().free_ids_into(free);
     }
 }
 

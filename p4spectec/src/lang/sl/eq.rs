@@ -13,7 +13,11 @@ use super::ast::*;
 
 // - Parameters
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ParamKind<I, V> {
+impl<P: Stage> SyntaxEq for ParamKind<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (ParamKind::Exp(typ_l, exp_l), ParamKind::Exp(typ_r, exp_r)) => {
@@ -35,7 +39,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ParamKind<I, V> {
 
 // - Instructions
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for InstrKind<I, V> {
+impl<P: Stage> SyntaxEq for InstrKind<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (InstrKind::If(instr_l), InstrKind::If(instr_r)) => instr_l.syntax_eq(instr_r),
@@ -52,7 +60,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for InstrKind<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for IfInstr<I, V> {
+impl<P: Stage> SyntaxEq for IfInstr<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exp.syntax_eq(&other.exp)
             && self
@@ -64,7 +76,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for IfInstr<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for HoldInstr<I, V> {
+impl<P: Stage> SyntaxEq for HoldInstr<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.not_exp.syntax_eq(&other.not_exp)
@@ -76,7 +92,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for HoldInstr<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for CaseInstr<I, V> {
+impl<P: Stage> SyntaxEq for CaseInstr<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exp.syntax_eq(&other.exp)
             && self.cases.syntax_eq(&other.cases)
@@ -84,7 +104,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for CaseInstr<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for GroupInstr<I, V> {
+impl<P: Stage> SyntaxEq for GroupInstr<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.rel_signature.syntax_eq(&other.rel_signature)
@@ -93,7 +117,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for GroupInstr<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for LetInstr<I, V> {
+impl<P: Stage> SyntaxEq for LetInstr<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exp_l.syntax_eq(&other.exp_l)
             && self.exp_r.syntax_eq(&other.exp_r)
@@ -102,7 +130,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for LetInstr<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for RuleInstr<I, V> {
+impl<P: Stage> SyntaxEq for RuleInstr<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.not_exp.syntax_eq(&other.not_exp)
@@ -112,19 +144,31 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for RuleInstr<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ResultInstr<I, V> {
+impl<P: Stage> SyntaxEq for ResultInstr<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.rel_signature.syntax_eq(&other.rel_signature) && self.exps.syntax_eq(&other.exps)
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ReturnInstr<I, V> {
+impl<P: Stage> SyntaxEq for ReturnInstr<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exp.syntax_eq(&other.exp)
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for DebugInstr<I, V> {
+impl<P: Stage> SyntaxEq for DebugInstr<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exp.syntax_eq(&other.exp) && self.instr.syntax_eq(&other.instr)
     }
@@ -132,7 +176,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for DebugInstr<I, V> {
 
 // - Holding conditions
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for HoldCase<I, V> {
+impl<P: Stage> SyntaxEq for HoldCase<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
@@ -152,7 +200,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for HoldCase<I, V> {
 
 // - Case analysis
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for Guard<I, V> {
+impl<P: Stage> SyntaxEq for Guard<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Guard::Bool(value_l), Guard::Bool(value_r)) => value_l == value_r,
@@ -167,7 +219,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for Guard<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for Case<I, V> {
+impl<P: Stage> SyntaxEq for Case<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.guard.syntax_eq(&other.guard) && self.block.syntax_eq(&other.block)
     }
@@ -175,13 +231,21 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for Case<I, V> {
 
 // - Blocks
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for Block<I, V> {
+impl<P: Stage> SyntaxEq for Block<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.as_slice().syntax_eq(other.as_slice())
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for Option<ElseBlock<I, V>> {
+impl<P: Stage> SyntaxEq for Option<ElseBlock<P>>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Some(block_l), Some(block_r)) => block_l.syntax_eq(block_r),
@@ -193,7 +257,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for Option<ElseBlock<I, V>> {
 
 // - Table rows
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for TableRow<I, V> {
+impl<P: Stage> SyntaxEq for TableRow<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exps_input.syntax_eq(&other.exps_input)
             && self.exp.syntax_eq(&other.exp)
@@ -244,7 +312,11 @@ impl SyntaxEq for VarDef {
 
 // == Relation definitions
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for RelDef<I, V> {
+impl<P: Stage> SyntaxEq for RelDef<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Extern(extern_rel_l), Self::Extern(extern_rel_r)) => {
@@ -258,7 +330,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for RelDef<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExternRel<I, V> {
+impl<P: Stage> SyntaxEq for ExternRel<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.rel_signature.syntax_eq(&other.rel_signature)
@@ -267,7 +343,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExternRel<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for DefinedRel<I, V> {
+impl<P: Stage> SyntaxEq for DefinedRel<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.rel_signature.syntax_eq(&other.rel_signature)
@@ -286,7 +366,11 @@ impl SyntaxEq for RelSignature {
 
 // == Meta-function definitions
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for MetaFuncDef<I, V> {
+impl<P: Stage> SyntaxEq for MetaFuncDef<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Extern(extern_func_l), Self::Extern(extern_func_r)) => {
@@ -306,7 +390,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for MetaFuncDef<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExternFunc<I, V> {
+impl<P: Stage> SyntaxEq for ExternFunc<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.tparams.syntax_eq(&other.tparams)
@@ -316,7 +404,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExternFunc<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for BuiltinFunc<I, V> {
+impl<P: Stage> SyntaxEq for BuiltinFunc<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.tparams.syntax_eq(&other.tparams)
@@ -326,7 +418,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for BuiltinFunc<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for TableFunc<I, V> {
+impl<P: Stage> SyntaxEq for TableFunc<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.params.syntax_eq(&other.params)
@@ -336,7 +432,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for TableFunc<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for DefinedFunc<I, V> {
+impl<P: Stage> SyntaxEq for DefinedFunc<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.tparams.syntax_eq(&other.tparams)
@@ -350,7 +450,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for DefinedFunc<I, V> {
 
 // == Definitions
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for DefKind<I, V> {
+impl<P: Stage> SyntaxEq for DefKind<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (DefKind::Typ(typ_def_l), DefKind::Typ(typ_def_r)) => typ_def_l.syntax_eq(typ_def_r),
@@ -366,7 +470,11 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for DefKind<I, V> {
 
 // == Specifications
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for Spec<I, V> {
+impl<P: Stage> SyntaxEq for Spec<P>
+where
+    P::Id: SyntaxEq,
+    P::Var: SyntaxEq,
+{
     fn syntax_eq(&self, other: &Self) -> bool {
         self.as_slice().syntax_eq(other.as_slice())
     }

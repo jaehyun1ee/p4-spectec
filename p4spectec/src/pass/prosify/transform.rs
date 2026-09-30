@@ -14,7 +14,7 @@
 //! block, so the prose reads as consecutive numbered steps.
 
 use crate::lang::{
-    common::{ds::set::IdSet, notation::mixfix::Mixfix, source::Span},
+    common::{ds::set::IdSet, source::Span},
     hints::{alter, fields, input},
     traits::at::At,
 };
@@ -330,13 +330,13 @@ fn prosify_case_exp(
     // The variant is looked up by the expression's type and its mixfix operator
     let mut hints = annot::Hints::default();
     if let il::TypKind::Var(id_typ, _) = exp_sl.note.as_ref()
-        && let Some(hints_case) = ctx.hints_case(id_typ, &not_exp_sl.to_mixop())
+        && let Some(hints_case) = ctx.hints_case(id_typ, &not_exp_sl.notation)
     {
         hints.span = hints_case.span.clone();
         hints.node.prose = hints_case.node.prose.clone();
         hints.node.prose_fields = hints_case.node.prose_fields.clone();
         // Holes and field names count the notation's arguments
-        let num_args = not_exp_sl.args().len();
+        let num_args = not_exp_sl.arity();
         validate_hint_prose(&hints, num_args)?;
         validate_hint_fields(&hints, num_args)?;
     }
@@ -620,30 +620,13 @@ fn prosify_exps(ctx: &Context, exps_sl: &[sl::Exp]) -> Result<Vec<pl::Exp>, Pros
 
 /// Converts the arguments of a notation, keeping its shape.
 fn prosify_not_exp(ctx: &Context, not_exp_sl: &sl::NotExp) -> Result<pl::NotExp, ProseError> {
-    let not_exp_pl = match not_exp_sl {
-        Mixfix::Arg(exp_sl) => {
-            let exp_pl = prosify_exp(ctx, exp_sl)?;
-            Mixfix::Arg(exp_pl)
-        }
-        Mixfix::Atom(atom) => Mixfix::Atom(atom.clone()),
-        Mixfix::Brack(atom_l, not_exp_inner_sl, atom_r) => {
-            let not_exp_inner_pl = prosify_not_exp(ctx, not_exp_inner_sl)?;
-            Mixfix::Brack(atom_l.clone(), Box::new(not_exp_inner_pl), atom_r.clone())
-        }
-        Mixfix::Infix(not_exp_l_sl, atom, not_exp_r_sl) => {
-            let not_exp_l_pl = prosify_not_exp(ctx, not_exp_l_sl)?;
-            let not_exp_r_pl = prosify_not_exp(ctx, not_exp_r_sl)?;
-            Mixfix::Infix(Box::new(not_exp_l_pl), atom.clone(), Box::new(not_exp_r_pl))
-        }
-        Mixfix::Seq(not_exps_sl) => {
-            let mut not_exps_pl = Vec::with_capacity(not_exps_sl.len());
-            for not_exp_sl in not_exps_sl {
-                let not_exp_pl = prosify_not_exp(ctx, not_exp_sl)?;
-                not_exps_pl.push(not_exp_pl);
-            }
-            Mixfix::Seq(not_exps_pl)
-        }
-    };
+    let mut exps_pl = Vec::with_capacity(not_exp_sl.exps.len());
+    for exp_sl in &not_exp_sl.exps {
+        let exp_pl = prosify_exp(ctx, exp_sl)?;
+        exps_pl.push(exp_pl);
+    }
+    let not_exp_pl = sl::Mixop::fill(&not_exp_sl.notation, exps_pl)
+        .expect("a notation expression fills every argument position");
     Ok(not_exp_pl)
 }
 
@@ -894,7 +877,7 @@ fn prosify_dispatch_hold_instr(
         hints.node.prose_true = hints_rel.node.prose_true.clone();
         hints.node.prose_false = hints_rel.node.prose_false.clone();
         // Holes count the notation's arguments
-        let num_args = instr_sl.not_exp.args().len();
+        let num_args = instr_sl.not_exp.arity();
         validate_hint_prose_true(&hints, num_args)?;
         validate_hint_prose_false(&hints, num_args)?;
     }
@@ -1169,7 +1152,7 @@ fn prosify_group_hold_instr(
         hints.node.prose_true = hints_rel.node.prose_true.clone();
         hints.node.prose_false = hints_rel.node.prose_false.clone();
         // Holes count the notation's arguments
-        let num_args = instr_sl.not_exp.args().len();
+        let num_args = instr_sl.not_exp.arity();
         validate_hint_prose_true(&hints, num_args)?;
         validate_hint_prose_false(&hints, num_args)?;
     }
@@ -1327,7 +1310,7 @@ fn prosify_group_rule_instr(
             .as_ref()
             .map(|hint| alter::realign(hint, &instr_sl.input_hint));
         // Elaboration validates indices; structure and expansion preserve arity
-        let num_args = instr_sl.not_exp.args().len();
+        let num_args = instr_sl.not_exp.arity();
         let num_inputs = instr_sl.input_hint.indices().len();
         let num_outputs = num_args - num_inputs;
         validate_hint_prose_in(&hints, num_inputs)?;

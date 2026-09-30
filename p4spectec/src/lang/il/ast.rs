@@ -1,11 +1,13 @@
 //! Internal language model
 //!
 //! Expressions and paths are `NotePhrase`s whose note is the type.
-//! `ExpKind` and friends take identifier and variable parameters `I` and `V`
-//! so the interpreters can instantiate them with frame slots;
-//! the defaults are the plain `Id` and `Var`.
+//! `ExpKind` and friends take one stage parameter `P` (`Stage`),
+//! which chooses identifiers, variables, and how a notation is referred to.
+//! The default `Source` stage uses plain `Id`, `Var`, and an `Rc<Mixop>`;
+//! the interpreters prepare syntax into a stage with frame slots.
+//! A notation expression (`NotExp`) keeps its expressions in notation order.
 
-use std::rc::Rc;
+use std::{fmt, rc::Rc};
 
 use crate::lang::{
     common::{
@@ -19,6 +21,43 @@ use crate::lang::{
 };
 
 use crate::lang::el;
+
+// Stages
+
+/// A notation as a stage refers to it, exposing its mixop.
+pub trait NotationRef: Clone + fmt::Debug + PartialEq {
+    /// The notation's atoms and argument positions.
+    fn mixop(&self) -> &Mixop;
+}
+
+/// The parts of syntax that differ between source and prepared forms.
+///
+/// Printing, syntax equality, and free identifiers read a notation
+/// through `NotationRef::mixop`, so they behave alike at every stage.
+pub trait Stage: Clone + fmt::Debug + PartialEq {
+    /// Identifier occurrences.
+    type Id: Clone + fmt::Debug + PartialEq;
+    /// Variable occurrences.
+    type Var: Clone + fmt::Debug + PartialEq;
+    /// Notations of notation expressions.
+    type Notation: NotationRef;
+}
+
+/// Syntax as elaboration and the passes produce it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Source;
+
+impl Stage for Source {
+    type Id = Id;
+    type Var = Var;
+    type Notation = Rc<Mixop>;
+}
+
+impl NotationRef for Rc<Mixop> {
+    fn mixop(&self) -> &Mixop {
+        self
+    }
+}
 
 // Numbers
 
@@ -159,11 +198,11 @@ pub enum OpTyp {
 // Expressions
 
 /// A typed expression: its form, its span, and its type as the note.
-pub type Exp<I = Id, V = Var> = NotePhrase<ExpKind<I, V>, Rc<TypKind>>;
+pub type Exp<P = Source> = NotePhrase<ExpKind<P>, Rc<TypKind>>;
 
 /// The forms of a typed expression.
 #[derive(Clone, Debug, PartialEq)]
-pub enum ExpKind<I = Id, V = Var> {
+pub enum ExpKind<P: Stage = Source> {
     /// `bool`
     Bool(bool),
     /// `num`
@@ -171,61 +210,91 @@ pub enum ExpKind<I = Id, V = Var> {
     /// `text`
     Text(Text),
     /// `varid`
-    Id(I),
+    Id(P::Id),
     /// `unop exp`
-    Un(UnOp, OpTyp, Box<Exp<I, V>>),
+    Un(UnOp, OpTyp, Box<Exp<P>>),
     /// `exp binop exp`
-    Bin(BinOp, OpTyp, Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Bin(BinOp, OpTyp, Box<Exp<P>>, Box<Exp<P>>),
     /// `exp cmpop exp`
-    Cmp(CmpOp, OpTyp, Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Cmp(CmpOp, OpTyp, Box<Exp<P>>, Box<Exp<P>>),
     /// `exp as typ`
-    UpCast(Box<Typ>, Box<Exp<I, V>>),
+    UpCast(Box<Typ>, Box<Exp<P>>),
     /// `exp as typ`
-    DownCast(Box<Typ>, Box<Exp<I, V>>),
+    DownCast(Box<Typ>, Box<Exp<P>>),
     /// `exp <: typ`
-    Sub(Box<Exp<I, V>>, Box<Typ>, Box<Subcheck>),
+    Sub(Box<Exp<P>>, Box<Typ>, Box<Subcheck>),
     /// `exp matches pattern`
-    Match(Box<Exp<I, V>>, Pattern),
+    Match(Box<Exp<P>>, Pattern),
     /// `(` exp* `)`
-    Tuple(Vec<Exp<I, V>>),
+    Tuple(Vec<Exp<P>>),
     /// `notexp`
-    Case(Box<NotExp<I, V>>),
+    Case(Box<NotExp<P>>),
     /// `{` expfield* `}`
-    Str(Vec<ExpField<I, V>>),
+    Str(Vec<ExpField<P>>),
     /// `exp?`
-    Opt(Option<Box<Exp<I, V>>>),
+    Opt(Option<Box<Exp<P>>>),
     /// `[` exp* `]`
-    List(Vec<Exp<I, V>>),
+    List(Vec<Exp<P>>),
     /// `exp :: exp`
-    Cons(Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Cons(Box<Exp<P>>, Box<Exp<P>>),
     /// `exp ++ exp`
-    Cat(Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Cat(Box<Exp<P>>, Box<Exp<P>>),
     /// `exp <- exp`
-    Mem(Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Mem(Box<Exp<P>>, Box<Exp<P>>),
     /// `|` exp `|`
-    Len(Box<Exp<I, V>>),
+    Len(Box<Exp<P>>),
     /// `exp.atom`
-    Dot(Box<Exp<I, V>>, Atom),
+    Dot(Box<Exp<P>>, Atom),
     /// `exp [` exp `]`
-    Idx(Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Idx(Box<Exp<P>>, Box<Exp<P>>),
     /// `exp [` exp `:` exp `]`
-    Slice(Box<Exp<I, V>>, Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Slice(Box<Exp<P>>, Box<Exp<P>>, Box<Exp<P>>),
     /// `exp [` path `=` exp `]`
-    Upd(Box<Exp<I, V>>, Box<Path<I, V>>, Box<Exp<I, V>>),
+    Upd(Box<Exp<P>>, Box<Path<P>>, Box<Exp<P>>),
     /// `$id<` targ* `>(` arg* `)`
-    Call(Id, Vec<Targ>, Vec<Arg<I, V>>),
+    Call(Id, Vec<Targ>, Vec<Arg<P>>),
     /// `exp iterexp`
-    Iter(Box<Exp<I, V>>, ExpIter<V>),
+    Iter(Box<Exp<P>>, ExpIter<P::Var>),
 }
 
-/// A notation expression: a mixfix skeleton with expressions as arguments.
-pub type NotExp<I = Id, V = Var> = Mixfix<Exp<I, V>>;
+/// A notation expression: a notation and its argument expressions.
+///
+/// For `LEFT n`, the notation is `LEFT %` and `exps` is `[n]`;
+/// `exps` has one expression per argument position, left to right.
+#[derive(Clone, Debug, PartialEq)]
+pub struct NotExp<P: Stage = Source> {
+    /// The notation, as the stage refers to it.
+    pub notation: P::Notation,
+    /// Argument expressions in notation order.
+    pub exps: Vec<Exp<P>>,
+}
+
+impl<P: Stage> NotExp<P> {
+    /// The number of argument positions.
+    pub fn arity(&self) -> usize {
+        self.exps.len()
+    }
+
+    /// Rebuilds the filled notation, for code that works on its structure.
+    pub fn to_mixfix(&self) -> Mixfix<Exp<P>> {
+        Mixop::fill(self.notation.mixop(), self.exps.iter().cloned())
+            .expect("a notation expression fills every argument position")
+    }
+}
+
+impl NotExp {
+    /// Separates a filled notation into its mixop and argument expressions.
+    pub fn from_mixfix(mixfix: Mixfix<Exp>) -> Self {
+        let notation = Rc::new(mixfix.to_mixop());
+        Self { notation, exps: mixfix.into_args() }
+    }
+}
 
 /// One field of a struct expression.
 #[derive(Clone, Debug, PartialEq)]
-pub struct ExpField<I = Id, V = Var> {
+pub struct ExpField<P: Stage = Source> {
     pub atom: Atom,
-    pub exp: Exp<I, V>,
+    pub exp: Exp<P>,
 }
 
 /// An iteration over an expression and the variables it iterates.
@@ -271,19 +340,19 @@ pub enum OptPattern {
 // Paths
 
 /// A typed path into a value, for updates.
-pub type Path<I = Id, V = Var> = NotePhrase<PathKind<I, V>, Rc<TypKind>>;
+pub type Path<P = Source> = NotePhrase<PathKind<P>, Rc<TypKind>>;
 
 /// The steps of a path, from the root outward.
 #[derive(Clone, Debug, PartialEq)]
-pub enum PathKind<I = Id, V = Var> {
+pub enum PathKind<P: Stage = Source> {
     /// The value itself.
     Root,
     /// `path [` exp `]`
-    Idx(Box<Path<I, V>>, Box<Exp<I, V>>),
+    Idx(Box<Path<P>>, Box<Exp<P>>),
     /// `path [` exp `:` exp `]`
-    Slice(Box<Path<I, V>>, Box<Exp<I, V>>, Box<Exp<I, V>>),
+    Slice(Box<Path<P>>, Box<Exp<P>>, Box<Exp<P>>),
     /// `path . atom`
-    Dot(Box<Path<I, V>>, Atom),
+    Dot(Box<Path<P>>, Atom),
 }
 
 // Parameters
@@ -308,13 +377,13 @@ pub type TParam = common::TId;
 // Arguments
 
 /// A call argument with its span.
-pub type Arg<I = Id, V = Var> = Phrase<ArgKind<I, V>>;
+pub type Arg<P = Source> = Phrase<ArgKind<P>>;
 
 /// An argument: a value expression or a function name.
 #[derive(Clone, Debug, PartialEq)]
-pub enum ArgKind<I = Id, V = Var> {
+pub enum ArgKind<P: Stage = Source> {
     /// `exp`
-    Exp(Box<Exp<I, V>>),
+    Exp(Box<Exp<P>>),
     /// `$id`
     Def(Id),
 }

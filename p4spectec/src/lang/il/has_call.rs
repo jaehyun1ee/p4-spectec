@@ -35,11 +35,7 @@ impl HasCall for Exp {
             ExpKind::Tuple(exps) | ExpKind::List(exps) => {
                 exps.iter().flat_map(HasCall::nested_call).collect()
             }
-            ExpKind::Case(not_exp) => not_exp
-                .args()
-                .into_iter()
-                .flat_map(HasCall::nested_call)
-                .collect(),
+            ExpKind::Case(not_exp) => not_exp.exps.iter().flat_map(HasCall::nested_call).collect(),
             ExpKind::Str(fields) => fields
                 .iter()
                 .flat_map(|ExpField { exp, .. }| exp.nested_call())

@@ -63,9 +63,7 @@ fn infer_exp_inner(venv: &mut VEnv, exp: &ast::Exp, iters: &[ast::Iter]) {
         }
         // Case: the arguments
         ast::ExpKind::Case(not_exp) => {
-            for exp in not_exp.args() {
-                infer_exp_inner(venv, exp, iters);
-            }
+            infer_exps_inner(venv, &not_exp.exps, iters);
         }
         // Struct: the fields
         ast::ExpKind::Str(fields) => {

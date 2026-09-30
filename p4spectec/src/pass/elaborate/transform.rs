@@ -1855,6 +1855,7 @@ fn notation_shape_matches(mixfix: &Mixfix<il::Typ>, exp: &el::Exp) -> bool {
 /// Elaborates notation with its declaration and zero-based argument positions.
 fn elab_not_exp(ctx: &mut Context, expect: &NotExpect<'_>, exp: &el::Exp) -> Backtrack<il::NotExp> {
     elab_not_exp_inner(ctx, &expect.not_typ_il.node, exp, expect, &mut 0)
+        .map(il::NotExp::from_mixfix)
 }
 
 /// Matches notation in source order without changing candidate boundaries.
@@ -1864,7 +1865,7 @@ fn elab_not_exp_inner(
     exp: &el::Exp,
     expect: &NotExpect<'_>,
     arg_idx: &mut usize,
-) -> Backtrack<il::NotExp> {
+) -> Backtrack<Mixfix<il::Exp>> {
     // Parentheses around notation are transparent
     if let el::ExpKind::Paren(exp) = &exp.node {
         return elab_not_exp_inner(ctx, mixfix, exp, expect, arg_idx);
@@ -2590,8 +2591,7 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Backtrack<il::PremK
         elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp)
             .recoverable_as_failure()
     );
-    let exps_il = not_exp_il.args();
-    let conditional = match input::is_conditional(&input_hint, &exps_il) {
+    let conditional = match input::is_conditional(&input_hint, &not_exp_il.exps) {
         Ok(conditional) => conditional,
         Err(error) => {
             return fatal!(error: error::prem::relation_input_hint_mismatch(&prem.exp.span, error.to_string()));
@@ -2621,7 +2621,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il
         elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp)
             .recoverable_as_failure()
     );
-    let exps_il = not_exp_il.args();
+    let exps_il = not_exp_il.exps.iter().collect::<Vec<_>>();
     let (_, exps_output_il) = match input::split(&input_hint, exps_il) {
         Ok(parts) => parts,
         Err(error) => {

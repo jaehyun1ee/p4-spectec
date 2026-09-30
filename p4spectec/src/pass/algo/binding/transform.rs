@@ -40,6 +40,8 @@
 //! - `VarE`, `TupleE`, `CaseE` of a singleton case, or `StrE`
 //! - `IterE` of the above cases
 
+use std::rc::Rc;
+
 use crate::lang::{
     common::{
         notation::mixop::Mixop,
@@ -412,13 +414,7 @@ fn lower_rule_prem(
     span: &Span,
     rule_prem_il: &ast::RulePrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<AnalyzedPrem>), AlgoError> {
-    let mixop = rule_prem_il.not_exp.to_mixop();
-    let exps_il = rule_prem_il
-        .not_exp
-        .args()
-        .into_iter()
-        .cloned()
-        .collect::<Vec<_>>();
+    let exps_il = rule_prem_il.not_exp.exps.clone();
     let (exps_input_il, exps_output_il) = input::split(&rule_prem_il.input_hint, exps_il)
         .map_err(|error| input_error(error, span.clone()))?;
     // Inputs are bound, outputs are binders
@@ -432,8 +428,8 @@ fn lower_rule_prem(
     let exps_al =
         input::combine(&rule_prem_il.input_hint, exps_input_il.clone(), exps_output_al.clone())
             .map_err(|error| input_error(error, span.clone()))?;
-    let not_exp_al = Mixop::fill(&mixop, exps_al)
-        .expect("arguments obtained from the same mixfix must match its arity");
+    let not_exp_al =
+        al::ast::NotExp { notation: Rc::clone(&rule_prem_il.not_exp.notation), exps: exps_al };
     let prem_al = phrase! {
         node: al::ast::PremKind::Rule(al::ast::RulePrem {
             id: rule_prem_il.id.clone(),
@@ -523,7 +519,7 @@ fn lower_if_hold_prem(
     if_prem_il: &ast::IfHoldPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<AnalyzedPrem>), AlgoError> {
     // Every argument must already be bound
-    for exp_il in if_prem_il.not_exp.args() {
+    for exp_il in &if_prem_il.not_exp.exps {
         analyze_exp_as_bound(ctx, exp_il)?;
     }
     let prem_al = phrase! {
@@ -546,7 +542,7 @@ fn lower_if_not_hold_prem(
     if_prem_il: &ast::IfNotHoldPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<AnalyzedPrem>), AlgoError> {
     // Every argument must already be bound
-    for exp_il in if_prem_il.not_exp.args() {
+    for exp_il in &if_prem_il.not_exp.exps {
         analyze_exp_as_bound(ctx, exp_il)?;
     }
     let prem_al = phrase! {
@@ -740,7 +736,7 @@ fn lower_rule_group(
         let ast::RuleKind { id, not_exp, prems } = rule_il.node;
         ids.push(id);
         prems_by_rule_il.push(prems);
-        let exps_il = not_exp.into_args();
+        let exps_il = not_exp.exps;
         let (exps_input_il, exps_output_il) =
             input::split(inputs, exps_il).map_err(|error| input_error(error, rule_span))?;
         exps_input_by_rule_il.push(exps_input_il);
@@ -884,8 +880,12 @@ fn pattern_set_covered_by_exp(ctx: &Context, exp_al: &ast::Exp) -> Result<Patter
         ast::ExpKind::UpCast(_, exp_inner) => pattern_set_covered_by_exp(ctx, exp_inner),
         // A case covers exactly its notation
         ast::ExpKind::Case(not_exp) => {
-            let not_typ =
-                not_exp.map(|exp| phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone()));
+            let typs = not_exp
+                .exps
+                .iter()
+                .map(|exp| phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone()));
+            let not_typ = Mixop::fill(&not_exp.notation, typs)
+                .expect("a notation expression fills every argument position");
             let not_typ = phrase!(node: not_typ, span: exp_al.span.clone());
             Ok([not_typ].into_iter().collect())
         }

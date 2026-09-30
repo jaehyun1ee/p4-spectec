@@ -472,11 +472,11 @@ fn disjoint_exp_literal(exp_a: &Exp, exp_b: &Exp) -> bool {
         ),
         // A(1) vs B(1) -> disjoint; A(1) vs A(2) -> compare arguments
         (ExpKind::Case(notexp_a), ExpKind::Case(notexp_b)) => {
-            if !notexp_a.eq_shape(notexp_b) {
+            if !notexp_a.notation.eq_shape(&notexp_b.notation) {
                 return true;
             }
-            let exps_a = notexp_a.args();
-            let exps_b = notexp_b.args();
+            let exps_a = notexp_a.exps.iter().collect::<Vec<_>>();
+            let exps_b = notexp_b.exps.iter().collect::<Vec<_>>();
             disjoint_exps_literal(&exps_a, &exps_b)
         }
         // [] vs [1] -> disjoint by length; [1] vs [2] -> compare elements

@@ -19,7 +19,7 @@
 use crate::lang::{common::ds::set::IdSet, hints::input, traits::free::FreeIds};
 
 use crate::lang::il::{
-    ast::{Arg, Exp, Mixop},
+    ast::{Arg, Exp},
     fresh,
 };
 
@@ -152,7 +152,12 @@ fn downstream_hold_instr(
     instr_ol: HoldInstr,
 ) -> InstrKind {
     let HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
-    let not_exp = not_exp.map(|exp| downstream_exp(renamer, changed, ids_revive, exp.clone()));
+    let NotExp { notation, exps } = not_exp;
+    let exps = exps
+        .into_iter()
+        .map(|exp| downstream_exp(renamer, changed, ids_revive, exp))
+        .collect();
+    let not_exp = NotExp { notation, exps };
     let iter_exps = renamer.rename_iterexps(changed, iter_exps);
     let block_hold = downstream_block(renamer, changed, ids_revive, block_hold);
     let block_not_hold = downstream_block(renamer, changed, ids_revive, block_not_hold);
@@ -231,7 +236,7 @@ fn downstream_rule_instr(
     instr_ol: RuleInstr,
 ) -> InstrKind {
     let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
-    let exps = not_exp.args().into_iter().cloned().collect();
+    let NotExp { notation, exps } = not_exp;
     // Elaboration validates hints; OL rewrites preserve notation arity
     let (exps_input, exps_output) =
         input::split(&input_hint, exps).expect("validated relation hints and argument counts");
@@ -241,8 +246,7 @@ fn downstream_rule_instr(
     // Renaming preserves the argument counts returned by input::split
     let exps = input::combine(&input_hint, exps_input, exps_output)
         .expect("validated relation hints and argument counts");
-    let mixop = not_exp.to_mixop();
-    let not_exp = Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
+    let not_exp = NotExp { notation, exps };
     let iter_instrs = renamer.rename_iterinstrs_bound(changed, iter_instrs);
     let renamer = renamer.filter(|id, _| !ids_bound.contains(id));
     let block = downstream_block(&renamer, changed, ids_revive, block);
@@ -391,7 +395,7 @@ fn upstream_let_instr(changed: &mut bool, frees: &IdSet, instr_ol: LetInstr) -> 
 /// Proposes names for the rule call's outputs, keeps used ones, and renames.
 fn upstream_rule_instr(changed: &mut bool, frees: &IdSet, instr_ol: RuleInstr) -> InstrKind {
     let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
-    let exps = not_exp.args().into_iter().cloned().collect();
+    let NotExp { notation, exps } = not_exp;
     // Elaboration validates hints; OL rewrites preserve notation arity
     let (exps_input, exps_output) =
         input::split(&input_hint, exps).expect("validated relation hints and argument counts");
@@ -405,8 +409,7 @@ fn upstream_rule_instr(changed: &mut bool, frees: &IdSet, instr_ol: RuleInstr) -
     // Renaming preserves the argument counts returned by input::split
     let exps = input::combine(&input_hint, exps_input, exps_output)
         .expect("validated relation hints and argument counts");
-    let mixop = not_exp.to_mixop();
-    let not_exp = Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
+    let not_exp = NotExp { notation, exps };
     let iter_instrs = renamer.rename_iterinstrs_bind(changed, iter_instrs);
     let instr = RuleInstr { id, not_exp, input_hint, iter_instrs, block };
     InstrKind::Rule(instr)

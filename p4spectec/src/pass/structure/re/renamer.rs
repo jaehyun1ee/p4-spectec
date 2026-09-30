@@ -5,10 +5,7 @@
 //! The local binder is renamed so it does not capture the introduced `y`.
 
 use crate::lang::{
-    common::{
-        ds::{map::IdMap, set::IdSet},
-        notation::mixop::Mixop,
-    },
+    common::ds::{map::IdMap, set::IdSet},
     hints::input,
     traits::free::FreeIds,
 };
@@ -165,7 +162,9 @@ impl Renamer {
             }
             ExpKind::Tuple(exps) => ExpKind::Tuple(self.rename_exps(changed, exps)),
             ExpKind::Case(not_exp) => {
-                ExpKind::Case(Box::new(not_exp.map(|exp| self.rename_exp(changed, exp.clone()))))
+                let NotExp { notation, exps } = *not_exp;
+                let exps = self.rename_exps(changed, exps);
+                ExpKind::Case(Box::new(NotExp { notation, exps }))
             }
             ExpKind::Str(exp_fields) => ExpKind::Str(
                 exp_fields
@@ -359,7 +358,8 @@ impl Renamer {
 
     fn rename_hold_instr(&self, changed: &mut bool, instr_ol: ol::HoldInstr) -> ol::InstrKind {
         let ol::HoldInstr { id, not_exp, iter_exps, block_hold, block_not_hold } = instr_ol;
-        let not_exp = not_exp.map(|exp| self.rename_exp(changed, exp.clone()));
+        let ol::NotExp { notation, exps } = not_exp;
+        let not_exp = ol::NotExp { notation, exps: self.rename_exps(changed, exps) };
         let iter_exps = self.rename_iterexps(changed, iter_exps);
         let block_hold = self.rename_block(changed, block_hold);
         let block_not_hold = self.rename_block(changed, block_not_hold);
@@ -413,7 +413,7 @@ impl Renamer {
     fn rename_rule_instr(&self, changed: &mut bool, instr_ol: ol::RuleInstr) -> ol::InstrKind {
         let ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
         // Split the arguments by the input hint
-        let exps = not_exp.args().into_iter().cloned().collect();
+        let ol::NotExp { notation, exps } = not_exp;
         // Elaboration validates hints; OL rewrites preserve notation arity
         let (exps_input, exps_output) =
             input::split(&input_hint, exps).expect("validated relation hints and argument counts");
@@ -434,9 +434,7 @@ impl Renamer {
         // Renaming preserves the argument counts returned by input::split
         let exps = input::combine(&input_hint, exps_input, exps_output)
             .expect("validated relation hints and argument counts");
-        let mixop = not_exp.to_mixop();
-        let not_exp =
-            Mixop::fill(&mixop, exps).expect("validated arguments preserve the mixfix arity");
+        let not_exp = ol::NotExp { notation, exps };
         let iter_instrs = renamer.rename_iterinstrs_bound(changed, iter_instrs);
         let block = renamer.rename_block(changed, block);
         ol::InstrKind::Rule(ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block })

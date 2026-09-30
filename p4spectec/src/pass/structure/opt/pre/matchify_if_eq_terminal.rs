@@ -48,12 +48,12 @@ fn matchify_exp(exp: Exp) -> Exp {
         }
         // x == STOP or STOP == x -> x matches STOP
         (CmpOp::Bool(BoolCmpOp::Eq), _, ExpKind::Case(not_exp)) if not_exp.arity() == 0 => {
-            let mixop = not_exp.to_mixop();
+            let mixop = not_exp.notation.as_ref().clone();
             let pattern = Pattern::Case(Box::new(mixop));
             ExpKind::Match(exp_l, pattern)
         }
         (CmpOp::Bool(BoolCmpOp::Eq), ExpKind::Case(not_exp), _) if not_exp.arity() == 0 => {
-            let mixop = not_exp.to_mixop();
+            let mixop = not_exp.notation.as_ref().clone();
             let pattern = Pattern::Case(Box::new(mixop));
             ExpKind::Match(exp_r, pattern)
         }
@@ -73,7 +73,7 @@ fn matchify_exp(exp: Exp) -> Exp {
         }
         // x != STOP or STOP != x -> not (x matches STOP)
         (CmpOp::Bool(BoolCmpOp::Ne), _, ExpKind::Case(not_exp)) if not_exp.arity() == 0 => {
-            let mixop = not_exp.to_mixop();
+            let mixop = not_exp.notation.as_ref().clone();
             let pattern = Pattern::Case(Box::new(mixop));
             let exp_kind = ExpKind::Match(exp_l, pattern);
             let exp_match =
@@ -81,7 +81,7 @@ fn matchify_exp(exp: Exp) -> Exp {
             ExpKind::Un(UnOp::Bool(BoolUnOp::Not), OpTyp::Bool, Box::new(exp_match))
         }
         (CmpOp::Bool(BoolCmpOp::Ne), ExpKind::Case(not_exp), _) if not_exp.arity() == 0 => {
-            let mixop = not_exp.to_mixop();
+            let mixop = not_exp.notation.as_ref().clone();
             let pattern = Pattern::Case(Box::new(mixop));
             let exp_kind = ExpKind::Match(exp_r, pattern);
             let exp_match =

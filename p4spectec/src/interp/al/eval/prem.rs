@@ -64,7 +64,7 @@ fn eval_rule_prem<'global, Iface: Interface, Ext: Extern>(
     prem: &ast::RulePrem,
 ) -> Backtrack<Context<'global>> {
     // Split by the input hint, evaluate inputs, bind outputs
-    let exps = prem.not_exp.args();
+    let exps = prem.not_exp.exps.iter().collect();
     let (exps_input, exps_output) =
         input::split(&prem.input_hint, exps).expect("input hint must fit relation");
     let values_input = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps_input));
@@ -96,8 +96,7 @@ fn eval_if_hold_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IfHoldPrem,
 ) -> Backtrack<Context<'global>> {
-    let exps: Vec<_> = prem.not_exp.args();
-    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps));
+    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, &prem.not_exp.exps));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         // The relation applied: the premise passes
         ok!(_) => ok!(ctx),
@@ -122,8 +121,7 @@ fn eval_if_not_hold_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IfNotHoldPrem,
 ) -> Backtrack<Context<'global>> {
-    let exps: Vec<_> = prem.not_exp.args();
-    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps));
+    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, &prem.not_exp.exps));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         // The relation applied: the premise fails
         ok!(_) => unmatch!(

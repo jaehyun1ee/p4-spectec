@@ -10,9 +10,10 @@ use std::{borrow::Borrow, rc::Rc};
 use crate::lang::{
     common::source::Span,
     data::{
-        value::{Value, ValueKind, get, make},
+        value::{Value, ValueCase, ValueKind, get, make},
         var::IdSlot,
     },
+    il::ast::NotationRef,
     traits::print::Print,
 };
 
@@ -24,7 +25,7 @@ use crate::runtime::{
 use crate::runner::{Extern, Interface, RunnerContext};
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, WithFrame, fatal, ok, unmatch, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, WithFrame, ok, unwrap, unwrap_from_result},
     prepare::ast,
     util::find_slot_of_exp,
 };
@@ -263,18 +264,24 @@ fn eval_case_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
     typ: &Rc<ast::TypKind>,
     not_exp: &ast::NotExp,
 ) -> Backtrack<Value> {
-    // Evaluate and rebuild in one traversal, preserving early failure and order
-    let eval_exp_arg = |exp: &ast::Exp| match eval_exp(runner_ctx, ctx, exp) {
-        ok!(value) => Ok(value),
-        fatal!(errors) => Err(fatal!(errors)),
-        unmatch!(errors) => Err(unmatch!(errors)),
-    };
-    let case = match not_exp.try_map(eval_exp_arg) {
-        Ok(case) => case,
-        Err(result) => return result,
-    };
+    // Evaluate the arguments in notation order, stopping at the first failure
+    let values = unwrap!(eval_exps(runner_ctx, ctx, &not_exp.exps));
+    // Intern the notation once every argument has a value
+    let value_case = unwrap_from_result!(
+        ValueCase::from_notation(
+            runner_ctx.arena_mut().shapes_mut(),
+            not_exp.notation.mixop(),
+            values
+        ),
+        span
+    );
     let value = unwrap_from_result!(
-        make::case(runner_ctx.arena_mut(), typ.clone(), case, Span::default()),
+        make::new(
+            runner_ctx.arena_mut(),
+            ValueKind::Case(value_case),
+            typ.clone(),
+            Span::default()
+        ),
         span
     );
     ok!(value)
