@@ -7,6 +7,7 @@
 //! values for a case value, `()` for the bare shape (`Mixop`).
 //! Comparison, hashing, and equality look at atom names and arguments,
 //! never at atom spans; `eq_shape` compares atoms only.
+//! The layout is that of the former `Mixfix` enum; a test pins its size.
 
 use std::{
     cmp::Ordering,
@@ -171,6 +172,8 @@ impl<T> Mixfix<T> {
     }
 }
 
+// Tree identity: atoms by name, never by span; a shape compares spans exactly
+
 impl<T: PartialEq> PartialEq for Mixfix<T> {
     fn eq(&self, mixfix_other: &Self) -> bool {
         self.eq_by(mixfix_other, PartialEq::eq)
@@ -207,6 +210,7 @@ impl<T: Ord> PartialOrd for Mixfix<T> {
 
 // == Hashing
 
+// Hashes atom names only, agreeing with the span-blind equality
 impl<T: Hash> Hash for Mixfix<T> {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         // Hash the shape first so different variants rarely collide

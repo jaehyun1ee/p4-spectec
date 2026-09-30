@@ -132,6 +132,9 @@ impl fmt::Debug for ShapeKind {
 
 // = Canonical equality and hashing
 
+// Canonical identity: atom names and children's canonical ids, so spans
+// are ignored as a tree ignores them
+
 impl CanonEq for ShapeKind {
     fn canon_eq(&self, interner: &CanonInterner<Self>, _: &(), kind_r: &Self) -> bool {
         // Children compare by canonical id, computed when they were interned

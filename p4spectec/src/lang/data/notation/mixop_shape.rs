@@ -8,7 +8,7 @@
 use std::{fmt, rc::Rc};
 
 use crate::lang::{
-    il::ast::NotationRef,
+    il::stage::NotationRef,
     traits::{
         eq::SyntaxEq,
         print::{Print, Printer},
