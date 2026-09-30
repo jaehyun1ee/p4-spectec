@@ -74,6 +74,14 @@ impl ValueCase {
 
     // - Notation comparison
 
+    /// Whether the case has the shape's structure and atom names.
+    ///
+    /// Compares canonical identities, so atom spans are not compared;
+    /// `shape` must belong to `shapes`.
+    pub fn matches_shape(&self, shapes: &ShapeArena, shape: Shape) -> bool {
+        shapes.canon_eq(self.shape, shape)
+    }
+
     /// Whether the case has a notation's structure and atom names.
     ///
     /// Atom spans and arguments are not compared.

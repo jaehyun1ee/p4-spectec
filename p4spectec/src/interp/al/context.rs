@@ -4,7 +4,10 @@
 //! `Context` retains the shared scope, binding, and iteration operations;
 //! `FuncSignature` extracts types from prepared AL function definitions.
 
-use crate::lang::data::typ::{FuncTyp, make};
+use crate::lang::data::{
+    shape::ShapeArena,
+    typ::{FuncTyp, make},
+};
 
 use crate::lang::al::ast as source;
 
@@ -33,9 +36,12 @@ pub type Context<'global> = shared::Context<'global, ast::RelDef, ast::MetaFuncD
 impl Global {
     /// Loads a specification and prepares its callables for slot execution.
     ///
+    /// Also returns the shapes the prepared notations refer to;
+    /// they must stay with the definitions, as a runner's arena keeps them.
     /// Panics if a global definition is repeated.
-    pub fn load(spec: source::Spec) -> Result<Self, Error> {
+    pub fn load(spec: source::Spec) -> Result<(Self, ShapeArena), Error> {
         let mut loaded = Self::new();
+        let mut shapes = ShapeArena::new();
         // Prepare definitions before inserting them into their namespaces
         for def in spec {
             match def.node {
@@ -54,7 +60,7 @@ impl Global {
                 source::DefKind::Var(_) => {}
                 source::DefKind::Rel(rel) => {
                     // Relations are prepared into callables with a frame layout
-                    let rel = Callable::prepare(rel);
+                    let rel = Callable::prepare(rel, &mut shapes);
                     let id = match &rel.def {
                         ast::RelDef::Extern(rel) => &rel.id,
                         ast::RelDef::Defined(rel) => &rel.id,
@@ -63,7 +69,7 @@ impl Global {
                 }
                 source::DefKind::MetaFunc(func) => {
                     // Prepare functions before sharing them with local bindings
-                    let func = Callable::prepare(func);
+                    let func = Callable::prepare(func, &mut shapes);
                     let id = match &func.def {
                         ast::MetaFuncDef::Extern(func) => &func.id,
                         ast::MetaFuncDef::Builtin(func) => &func.id,
@@ -74,7 +80,7 @@ impl Global {
                 }
             }
         }
-        Ok(loaded)
+        Ok((loaded, shapes))
     }
 }
 

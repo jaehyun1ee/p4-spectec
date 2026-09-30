@@ -59,6 +59,12 @@ impl NotationRef for Rc<Mixop> {
     }
 }
 
+impl NotationRef for data::shape::MixopShape {
+    fn mixop(&self) -> &Mixop {
+        &self.mixop
+    }
+}
+
 // Numbers
 
 /// A numeric literal value.

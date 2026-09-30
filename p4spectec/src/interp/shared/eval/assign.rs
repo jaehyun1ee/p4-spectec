@@ -70,7 +70,7 @@ pub fn assign_exp<Ctx: WriteContext>(
             let values = values.to_vec();
             assign_tuple_exp(arena, ctx, exps, &values)
         }
-        // Case: the arguments
+        // Case: the arguments pairwise, both in notation order
         (ast::ExpKind::Case(not_exp), ValueKind::Case(value_case)) => {
             let values = value_case.args().to_vec();
             assign_case_exp(arena, ctx, not_exp, &values)

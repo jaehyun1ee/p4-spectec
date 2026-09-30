@@ -11,7 +11,7 @@ use crate::lang::data::value::{Arena, Value};
 use crate::runtime::envs::interp::pl::ast_prepared as ast;
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, ok, unwrap},
+    backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
     eval::assign as shared,
 };
 
@@ -30,7 +30,7 @@ pub(super) fn assign_exp<'g>(
     exp: &ast::Exp,
     value: Value,
 ) -> Backtrack<Context<'g>> {
-    let exp_shared = strip_exp(exp);
+    let exp_shared = unwrap_from_result!(strip_exp(arena.shapes_mut(), exp), &exp.node.span);
     shared::assign_exp(arena, ctx, &exp_shared, value)
 }
 
@@ -41,10 +41,12 @@ pub(super) fn assign_exps<'g, T: Borrow<ast::Exp>>(
     exps: &[T],
     values: &[Value],
 ) -> Backtrack<Context<'g>> {
-    let exps_shared = exps
-        .iter()
-        .map(|exp| strip_exp(exp.borrow()))
-        .collect::<Vec<_>>();
+    let mut exps_shared = Vec::with_capacity(exps.len());
+    for exp in exps {
+        let exp = exp.borrow();
+        let exp_shared = unwrap_from_result!(strip_exp(arena.shapes_mut(), exp), &exp.node.span);
+        exps_shared.push(exp_shared);
+    }
     shared::assign_exps(arena, ctx, &exps_shared, values)
 }
 

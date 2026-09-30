@@ -1,16 +1,20 @@
 //! Prepared callable syntax and its local frame layout
 //!
 //! `Callable::prepare` runs the `Prepare` traversal once,
-//! resolving every name to a slot and recording the layout its frames follow.
+//! resolving every name to a slot and recording the layout its frames follow;
+//! notations are interned into the specification's shapes on the way.
 
 use std::{fmt, rc::Rc};
 
-use crate::lang::traits::{
-    eq::SyntaxEq,
-    print::{Print, Printer},
+use crate::lang::{
+    data::shape::ShapeArena,
+    traits::{
+        eq::SyntaxEq,
+        print::{Print, Printer},
+    },
 };
 
-use crate::interp::shared::prepare::Prepare;
+use crate::interp::shared::prepare::{Prepare, PrepareContext};
 
 use super::frame::FrameLayout;
 
@@ -25,10 +29,13 @@ pub struct Callable<T> {
 
 impl<T> Callable<T> {
     /// Prepares a definition, collecting its slot layout.
-    pub fn prepare<S: Prepare<Output = T>>(source: S) -> Self {
+    ///
+    /// Notations are interned into `shapes`,
+    /// which must stay with the prepared definition for evaluation.
+    pub fn prepare<S: Prepare<Output = T>>(source: S, shapes: &mut ShapeArena) -> Self {
         // The traversal fills the layout as it resolves names
         let mut layout = FrameLayout::default();
-        let def = source.prepare(&mut layout);
+        let def = source.prepare(&mut PrepareContext { layout: &mut layout, shapes });
         Self { def, layout: Rc::new(layout) }
     }
 }

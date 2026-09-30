@@ -12,7 +12,10 @@ use crate::runtime::envs::interp::pl::ast_prepared as ast;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 
-use crate::interp::shared::{backtrack::Backtrack, eval::expr as shared};
+use crate::interp::shared::{
+    backtrack::{Backtrack, unwrap_from_result},
+    eval::expr as shared,
+};
 
 use crate::interp::pl::{PlInterp, context::Context};
 
@@ -26,7 +29,8 @@ pub(super) fn eval_exp<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     exp: &ast::Exp,
 ) -> Backtrack<Value> {
-    let exp_shared = strip_exp(exp);
+    let exp_shared =
+        unwrap_from_result!(strip_exp(runner_ctx.arena_mut().shapes_mut(), exp), &exp.node.span);
     shared::eval_exp(runner_ctx, ctx, &exp_shared)
 }
 
@@ -36,9 +40,14 @@ pub(super) fn eval_exps<Iface: Interface, Ext: Extern, T: Borrow<ast::Exp>>(
     ctx: &Context<'_>,
     exps: &[T],
 ) -> Backtrack<Vec<Value>> {
-    let exps_shared = exps
-        .iter()
-        .map(|exp| strip_exp(exp.borrow()))
-        .collect::<Vec<_>>();
+    let mut exps_shared = Vec::with_capacity(exps.len());
+    for exp in exps {
+        let exp = exp.borrow();
+        let exp_shared = unwrap_from_result!(
+            strip_exp(runner_ctx.arena_mut().shapes_mut(), exp),
+            &exp.node.span
+        );
+        exps_shared.push(exp_shared);
+    }
     shared::eval_exps(runner_ctx, ctx, &exps_shared)
 }

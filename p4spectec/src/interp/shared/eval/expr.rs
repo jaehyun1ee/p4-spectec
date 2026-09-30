@@ -13,7 +13,6 @@ use crate::lang::{
         value::{Value, ValueCase, ValueKind, get, make},
         var::IdSlot,
     },
-    il::ast::NotationRef,
     traits::print::Print,
 };
 
@@ -256,7 +255,7 @@ fn eval_tuple_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: E
 
 // - Case expression
 
-/// Evaluates the arguments in notation order and rebuilds the case value.
+/// Evaluates the arguments in notation order and fills the prepared shape.
 fn eval_case_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
@@ -266,13 +265,9 @@ fn eval_case_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
 ) -> Backtrack<Value> {
     // Evaluate the arguments in notation order, stopping at the first failure
     let values = unwrap!(eval_exps(runner_ctx, ctx, &not_exp.exps));
-    // Intern the notation once every argument has a value
+    // The shape was interned during preparation
     let value_case = unwrap_from_result!(
-        ValueCase::from_notation(
-            runner_ctx.arena_mut().shapes_mut(),
-            not_exp.notation.mixop(),
-            values
-        ),
+        ValueCase::from_shape(not_exp.notation.shape, not_exp.exps.len(), values),
         span
     );
     let value = unwrap_from_result!(
