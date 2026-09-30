@@ -4,11 +4,14 @@
 //! `make` allocates values of each kind with their type,
 //! `get` projects a kind back out or fails with `ValueError`.
 //! A case value's notation lives in the arena's `ShapeArena` (`ValueCase`).
+//! Bodies are `ValueKindF` over handle children (`ValueKind`)
+//! or tree children (`external::indep::ValueKind`).
 //! Primitive types are allocated once per thread and shared.
 
 mod arena;
 mod case;
 pub mod external;
+mod kind;
 #[allow(clippy::module_inception, reason = "separate facade and implementation")]
 mod value;
 
@@ -30,6 +33,7 @@ use crate::lang::{
 
 pub use arena::Arena;
 pub use case::ValueCase;
+pub use kind::{ValueKindF, ValueRepr, ValueTag};
 pub use value::*;
 
 // = Smart constructors

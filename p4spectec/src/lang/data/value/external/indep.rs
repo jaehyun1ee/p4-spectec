@@ -2,10 +2,13 @@
 //!
 //! A tree contains its child values and annotations, without arena handles,
 //! so it can be written to JSON and read into any arena.
+//! `Indep` holds a body's children as trees;
+//! `from_arena` and `into_arena` convert through `ValueKindF::map` and
+//! `ValueKindF::try_map`, interning children before their parent.
 
-use std::rc::Rc;
+use std::{fmt, rc::Rc};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::util::json::json;
 
@@ -21,27 +24,125 @@ use crate::lang::{
 
 use super::super::{
     Arena, Value as ArenaValue, ValueCase as ArenaValueCase, ValueError,
-    ValueKind as ArenaValueKind,
+    ValueKind as ArenaValueKind, ValueKindF, ValueRepr,
 };
 
 // == Types
+
+/// Children held as trees, each with its type and span.
+#[derive(Clone, Copy, Debug)]
+pub struct Indep;
+
+impl ValueRepr for Indep {
+    type Elem = Value;
+    type OptElem = Box<Value>;
+    type Case = Mixfix<Box<Value>>;
+    type Json = json;
+
+    fn opt_into_elem(value: Box<Value>) -> Value {
+        *value
+    }
+}
 
 /// A value tree with its type; children are trees, not handles.
 pub type Value = NotePhrase<ValueKind, TypKind>;
 
 /// A value body whose children are trees.
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ValueKind {
-    Bool(bool),
-    Num(Number),
-    Text(String),
-    Struct(Vec<(Phrase<Atom>, Value)>),
-    Case(Mixfix<Box<Value>>),
-    Tuple(Vec<Value>),
-    Opt(Option<Box<Value>>),
-    List(Vec<Value>),
-    Func(Id),
-    Extern(json),
+pub type ValueKind = ValueKindF<Indep>;
+
+// - Debugging
+
+// The same text a derive prints: variant names and fields, no type name
+impl fmt::Debug for ValueKind {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Bool(value) => fmt.debug_tuple("Bool").field(value).finish(),
+            Self::Num(num) => fmt.debug_tuple("Num").field(num).finish(),
+            Self::Text(text) => fmt.debug_tuple("Text").field(text).finish(),
+            Self::Struct(fields) => fmt.debug_tuple("Struct").field(fields).finish(),
+            Self::Case(mixfix) => fmt.debug_tuple("Case").field(mixfix).finish(),
+            Self::Tuple(values) => fmt.debug_tuple("Tuple").field(values).finish(),
+            Self::Opt(value) => fmt.debug_tuple("Opt").field(value).finish(),
+            Self::List(values) => fmt.debug_tuple("List").field(values).finish(),
+            Self::Func(id) => fmt.debug_tuple("Func").field(id).finish(),
+            Self::Extern(json) => fmt.debug_tuple("Extern").field(json).finish(),
+        }
+    }
+}
+
+// == Serialization
+
+// Written through local enums rather than derived on the generic body:
+// a derive would bound the body on its own elements, which contain it,
+// and the local enums keep the former derive's variant names and shapes
+
+// - Encode
+
+impl Serialize for ValueKind {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        #[serde(rename = "ValueKind")]
+        enum ValueKindRef<'a> {
+            Bool(&'a bool),
+            Num(&'a Number),
+            Text(&'a String),
+            Struct(&'a [(Phrase<Atom>, Value)]),
+            Case(&'a Mixfix<Box<Value>>),
+            Tuple(&'a [Value]),
+            Opt(&'a Option<Box<Value>>),
+            List(&'a [Value]),
+            Func(&'a Id),
+            Extern(&'a json),
+        }
+
+        let kind = match self {
+            Self::Bool(value) => ValueKindRef::Bool(value),
+            Self::Num(num) => ValueKindRef::Num(num),
+            Self::Text(text) => ValueKindRef::Text(text),
+            Self::Struct(fields) => ValueKindRef::Struct(fields),
+            Self::Case(mixfix) => ValueKindRef::Case(mixfix),
+            Self::Tuple(values) => ValueKindRef::Tuple(values),
+            Self::Opt(value) => ValueKindRef::Opt(value),
+            Self::List(values) => ValueKindRef::List(values),
+            Self::Func(id) => ValueKindRef::Func(id),
+            Self::Extern(json) => ValueKindRef::Extern(json),
+        };
+        kind.serialize(serializer)
+    }
+}
+
+// - Decode
+
+impl<'de> Deserialize<'de> for ValueKind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(rename = "ValueKind")]
+        enum ValueKindOwned {
+            Bool(bool),
+            Num(Number),
+            Text(String),
+            Struct(Vec<(Phrase<Atom>, Value)>),
+            Case(Mixfix<Box<Value>>),
+            Tuple(Vec<Value>),
+            Opt(Option<Box<Value>>),
+            List(Vec<Value>),
+            Func(Id),
+            Extern(json),
+        }
+
+        Ok(match ValueKindOwned::deserialize(deserializer)? {
+            ValueKindOwned::Bool(value) => Self::Bool(value),
+            ValueKindOwned::Num(num) => Self::Num(num),
+            ValueKindOwned::Text(text) => Self::Text(text),
+            ValueKindOwned::Struct(fields) => Self::Struct(fields),
+            ValueKindOwned::Case(mixfix) => Self::Case(mixfix),
+            ValueKindOwned::Tuple(values) => Self::Tuple(values),
+            ValueKindOwned::Opt(value) => Self::Opt(value),
+            ValueKindOwned::List(values) => Self::List(values),
+            ValueKindOwned::Func(id) => Self::Func(id),
+            ValueKindOwned::Extern(json) => Self::Extern(json),
+        })
+    }
 }
 
 // == Arena conversion
@@ -62,104 +163,35 @@ pub fn into_arena(arena: &mut Arena, value: Value) -> Result<ArenaValue, ValueEr
 }
 
 impl ValueKind {
-    /// Expands child handles into values and copies extern JSON unchanged.
+    /// Expands child handles into trees and copies extern JSON unchanged.
     pub(super) fn from_arena(arena: &Arena, kind: &ArenaValueKind) -> Self {
-        match kind {
-            ArenaValueKind::Bool(value) => Self::Bool(*value),
-            ArenaValueKind::Num(num) => Self::Num(num.clone()),
-            ArenaValueKind::Text(text) => Self::Text(text.clone()),
-            ArenaValueKind::Struct(fields) => Self::Struct(
-                fields
-                    .iter()
-                    .map(|(atom, value)| (atom.clone(), from_arena(arena, value)))
-                    .collect(),
-            ),
-            ArenaValueKind::Case(value_case) => Self::Case(
+        kind.map(
+            |value| from_arena(arena, value),
+            |value_case| {
                 value_case
                     .to_mixfix(arena.shapes())
-                    .map(|value| Box::new(from_arena(arena, value))),
-            ),
-            ArenaValueKind::Tuple(values) => Self::Tuple(
-                values
-                    .iter()
-                    .map(|value| from_arena(arena, value))
-                    .collect(),
-            ),
-            ArenaValueKind::Opt(value) => Self::Opt(
-                value
-                    .as_ref()
-                    .map(|value| Box::new(from_arena(arena, value))),
-            ),
-            ArenaValueKind::List(values) => Self::List(
-                values
-                    .iter()
-                    .map(|value| from_arena(arena, value))
-                    .collect(),
-            ),
-            ArenaValueKind::Func(id) => Self::Func(id.clone()),
-            ArenaValueKind::Extern(json) => Self::Extern(json.as_ref().clone()),
-        }
+                    .map(|value| Box::new(from_arena(arena, value)))
+            },
+            |json| json.as_ref().clone(),
+        )
     }
 
-    /// Converts child values to arena handles and keeps extern JSON unchanged.
+    /// Interns child trees in field and element order, keeping extern JSON.
     pub(super) fn into_arena(self, arena: &mut Arena) -> Result<ArenaValueKind, ValueError> {
-        Ok(match self {
-            Self::Bool(value) => ArenaValueKind::Bool(value),
-            Self::Num(num) => ArenaValueKind::Num(num),
-            Self::Text(text) => ArenaValueKind::Text(text),
-            Self::Struct(fields) => ArenaValueKind::Struct(
-                fields
-                    .into_iter()
-                    .map(|(atom, value)| Ok((atom, into_arena(arena, value)?)))
-                    .collect::<Result<_, ValueError>>()?,
-            ),
-            Self::Case(mixfix) => {
-                // Arguments first, then the notation's shape
-                let mixfix = Self::into_arena_case(arena, mixfix)?;
-                ArenaValueKind::Case(ArenaValueCase::from_mixfix(arena.shapes_mut(), mixfix)?)
-            }
-            Self::Tuple(values) => ArenaValueKind::Tuple(
-                values
-                    .into_iter()
-                    .map(|value| into_arena(arena, value))
-                    .collect::<Result<_, _>>()?,
-            ),
-            Self::Opt(value) => {
-                ArenaValueKind::Opt(value.map(|value| into_arena(arena, *value)).transpose()?)
-            }
-            Self::List(values) => ArenaValueKind::List(
-                values
-                    .into_iter()
-                    .map(|value| into_arena(arena, value))
-                    .collect::<Result<_, _>>()?,
-            ),
-            Self::Func(id) => ArenaValueKind::Func(id),
-            Self::Extern(json) => ArenaValueKind::Extern(Rc::new(json)),
-        })
+        self.try_map(arena, into_arena, into_arena_case, |json| Ok(Rc::new(json)))
     }
+}
 
-    /// Converts case arguments to arena values, preserving atoms and brackets.
-    fn into_arena_case(
-        arena: &mut Arena,
-        mixfix: Mixfix<Box<Value>>,
-    ) -> Result<Mixfix<ArenaValue>, ValueError> {
-        Ok(match mixfix {
-            Mixfix::Arg(value) => Mixfix::Arg(into_arena(arena, *value)?),
-            Mixfix::Atom(atom) => Mixfix::Atom(atom),
-            Mixfix::Brack(atom_l, mixfix, atom_r) => {
-                Mixfix::Brack(atom_l, Box::new(Self::into_arena_case(arena, *mixfix)?), atom_r)
-            }
-            Mixfix::Infix(mixfix_l, atom, mixfix_r) => Mixfix::Infix(
-                Box::new(Self::into_arena_case(arena, *mixfix_l)?),
-                atom,
-                Box::new(Self::into_arena_case(arena, *mixfix_r)?),
-            ),
-            Mixfix::Seq(mixfixes) => Mixfix::Seq(
-                mixfixes
-                    .into_iter()
-                    .map(|mixfix| Self::into_arena_case(arena, mixfix))
-                    .collect::<Result<_, _>>()?,
-            ),
-        })
-    }
+/// Interns a case's arguments in notation order, then its notation.
+fn into_arena_case(
+    arena: &mut Arena,
+    mixfix: Mixfix<Box<Value>>,
+) -> Result<ArenaValueCase, ValueError> {
+    let mixop = mixfix.to_mixop();
+    let values = mixfix
+        .into_args()
+        .into_iter()
+        .map(|value| into_arena(arena, *value))
+        .collect::<Result<Vec<_>, _>>()?;
+    ArenaValueCase::from_notation(arena.shapes_mut(), &mixop, values)
 }

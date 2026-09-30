@@ -4,25 +4,25 @@
 //! Bodies are stored exactly, spans included, so two values that print alike
 //! may still be distinct entries;
 //! the canonical identity ignores spans and is what syntax equality uses.
-//! A case body is a shape handle and its arguments (`ValueCase`).
+//! `ValueKind` is the body with handle children (`Stored`);
+//! a case body is a shape handle and its arguments (`ValueCase`).
 
 use std::{
     cmp::Ordering,
+    fmt,
     hash::{Hash, Hasher},
     num::TryFromIntError,
     rc::Rc,
 };
 
-use serde_derive_state::{DeserializeState, SerializeState};
 use thiserror::Error;
 
 use crate::util::json::json;
 
 use crate::lang::{
     common::{
-        Id,
         notation::atom::Atom,
-        prim::num::{self, Number},
+        prim::num,
         source::{NotePhrase, Phrase, Span},
     },
     data::{
@@ -33,7 +33,11 @@ use crate::lang::{
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
 
-use super::{arena::Arena, case::ValueCase};
+use super::{
+    arena::Arena,
+    case::ValueCase,
+    kind::{ValueKindF, ValueRepr, ValueTag},
+};
 
 // = Value types
 
@@ -53,72 +57,89 @@ pub struct ValueRef<'a> {
 
 // - Bodies
 
-#[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
-#[serde(serialize_state = "super::external::EncodeContext<'arena>", ser_parameters = "'arena")]
-#[serde(deserialize_state = "super::external::DecodeContext<'de>")]
+/// Children held as handles into the same `Arena`.
+#[derive(Clone, Copy, Debug)]
+pub struct Stored;
+
+impl ValueRepr for Stored {
+    type Elem = Value;
+    type OptElem = Value;
+    type Case = ValueCase;
+    type Json = Rc<json>;
+
+    fn opt_into_elem(value: Value) -> Value {
+        value
+    }
+}
+
 /// A value body; children are handles into the same arena.
-pub enum ValueKind {
-    /// A boolean.
-    Bool(bool),
-    /// A natural or integer.
-    Num(Number),
-    /// A text.
-    Text(String),
-    /// Named fields in declaration order.
-    Struct(#[serde(state)] Vec<ValueField>),
-    /// A variant case with its arguments.
-    Case(#[serde(state)] ValueCase),
-    /// A fixed-length tuple.
-    Tuple(#[serde(state)] Vec<Value>),
-    /// An optional value.
-    Opt(#[serde(state)] Option<Value>),
-    /// A list.
-    List(#[serde(state)] Vec<Value>),
-    /// A function, by name.
-    Func(#[serde(state)] Id),
-    /// A host-owned value, opaque to the specification.
-    Extern(Rc<json>),
+pub type ValueKind = ValueKindF<Stored>;
+
+// = Exact body equality and hashing
+
+// Exact identity: every field as stored, a case by its shape handle,
+// which the shape arena interns with atom spans
+
+impl PartialEq for ValueKind {
+    fn eq(&self, kind_other: &Self) -> bool {
+        match (self, kind_other) {
+            (Self::Bool(value_l), Self::Bool(value_r)) => value_l == value_r,
+            (Self::Num(value_l), Self::Num(value_r)) => value_l == value_r,
+            (Self::Text(value_l), Self::Text(value_r)) => value_l == value_r,
+            (Self::Struct(value_fields_l), Self::Struct(value_fields_r)) => {
+                value_fields_l == value_fields_r
+            }
+            (Self::Case(value_case_l), Self::Case(value_case_r)) => value_case_l == value_case_r,
+            (Self::Tuple(values_l), Self::Tuple(values_r))
+            | (Self::List(values_l), Self::List(values_r)) => values_l == values_r,
+            (Self::Opt(value_l), Self::Opt(value_r)) => value_l == value_r,
+            (Self::Func(id_l), Self::Func(id_r)) => id_l == id_r,
+            (Self::Extern(json_l), Self::Extern(json_r)) => json_l == json_r,
+            _ => false,
+        }
+    }
 }
 
-// - Tags
+impl Eq for ValueKind {}
 
-/// The kind of a value without its payload, for errors and ordering.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ValueTag {
-    Bool,
-    Num,
-    Text,
-    Struct,
-    Case,
-    Tuple,
-    Opt,
-    List,
-    Func,
-    Extern,
-}
-
-impl ValueKind {
-    /// The kind of this body.
-    pub(super) fn tag(&self) -> ValueTag {
+impl Hash for ValueKind {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.tag().hash(hasher);
         match self {
-            Self::Bool(_) => ValueTag::Bool,
-            Self::Num(_) => ValueTag::Num,
-            Self::Text(_) => ValueTag::Text,
-            Self::Struct(_) => ValueTag::Struct,
-            Self::Case(_) => ValueTag::Case,
-            Self::Tuple(_) => ValueTag::Tuple,
-            Self::Opt(_) => ValueTag::Opt,
-            Self::List(_) => ValueTag::List,
-            Self::Func(_) => ValueTag::Func,
-            Self::Extern(_) => ValueTag::Extern,
+            Self::Bool(value) => value.hash(hasher),
+            Self::Num(value) => value.hash(hasher),
+            Self::Text(value) => value.hash(hasher),
+            Self::Struct(value_fields) => value_fields.hash(hasher),
+            Self::Case(value_case) => value_case.hash(hasher),
+            Self::Tuple(values) | Self::List(values) => values.hash(hasher),
+            Self::Opt(value) => value.hash(hasher),
+            Self::Func(id) => id.hash(hasher),
+            Self::Extern(json) => json.hash(hasher),
+        }
+    }
+}
+
+// - Debugging
+
+// The same text a derive prints: variant names and fields, no type name
+impl fmt::Debug for ValueKind {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Bool(value) => fmt.debug_tuple("Bool").field(value).finish(),
+            Self::Num(num) => fmt.debug_tuple("Num").field(num).finish(),
+            Self::Text(text) => fmt.debug_tuple("Text").field(text).finish(),
+            Self::Struct(value_fields) => fmt.debug_tuple("Struct").field(value_fields).finish(),
+            Self::Case(value_case) => fmt.debug_tuple("Case").field(value_case).finish(),
+            Self::Tuple(values) => fmt.debug_tuple("Tuple").field(values).finish(),
+            Self::Opt(value) => fmt.debug_tuple("Opt").field(value).finish(),
+            Self::List(values) => fmt.debug_tuple("List").field(values).finish(),
+            Self::Func(id) => fmt.debug_tuple("Func").field(id).finish(),
+            Self::Extern(json) => fmt.debug_tuple("Extern").field(json).finish(),
         }
     }
 }
 
 // = Canonical equality and hashing
-
-// Exact equality and hashing are derived: a case compares its shape handle,
-// which the shape arena interns with atom spans
 
 impl CanonEq<ShapeArena> for ValueKind {
     fn canon_eq(&self, interner: &CanonInterner<Self>, shapes: &ShapeArena, kind_r: &Self) -> bool {
