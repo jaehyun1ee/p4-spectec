@@ -1,7 +1,8 @@
 //! Case values as a notation shape and arguments in notation order
 //!
 //! `LEFT n` is stored as the shape of `LEFT _` and the argument list `[n]`.
-//! Constructors intern the notation into the arena's `ShapeArena`;
+//! Constructors intern the notation into the arena's `ShapeArena`,
+//! or take a shape interned while preparing (`from_shape`);
 //! comparisons, printing, and serialization walk the shape
 //! and take arguments from the list as positions are reached.
 
@@ -126,18 +127,18 @@ impl ValueCase {
     pub(super) fn cmp_by(
         &self,
         shapes: &ShapeArena,
-        case_other: &Self,
+        value_case_other: &Self,
         shapes_other: &ShapeArena,
         mut compare_arg: impl FnMut(&Value, &Value) -> Ordering,
     ) -> Ordering {
-        let mut cmp = ShapeCmp {
+        ShapeCmp {
             shapes_l: shapes,
             shapes_r: shapes_other,
             args_l: self.args.iter(),
-            args_r: case_other.args.iter(),
+            args_r: value_case_other.args.iter(),
             compare_arg: &mut compare_arg,
-        };
-        cmp.cmp_shape(self.shape, case_other.shape)
+        }
+        .cmp_shape(self.shape, value_case_other.shape)
     }
 }
 

@@ -1,6 +1,7 @@
 //! Slot instantiation of shared IL syntax
 //!
-//! `Prepared` is the IL stage with frame slots for identifiers and variables;
+//! `Prepared` is the IL stage with frame slots for identifiers and variables
+//! and notations paired with their interned shapes (`MixopShape`);
 //! the type aliases name its forms, and the `Prepare` impls rewrite each node.
 //! Iterations also register the outer variable `x*` for every iterated `x`,
 //! so `eval::iter` can find its slot.
@@ -27,7 +28,7 @@ use super::{Prepare, PrepareContext};
 
 // - Stage
 
-/// IL syntax whose identifiers and variables are resolved to frame slots.
+/// IL syntax with frame slots and notations interned as shapes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Prepared;
 
