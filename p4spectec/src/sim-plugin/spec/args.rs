@@ -3,7 +3,7 @@
 //! The specification passes parameter names and argument values as two lists;
 //! `assoc` zips them and `find` looks one up.
 
-use crate::lang::data::value::{Value, ValueArena, ValueError, get};
+use crate::lang::data::value::{Arena, Value, ValueError, get};
 
 use crate::runner::ExternError;
 
@@ -13,7 +13,7 @@ use crate::sim_plugin::error;
 
 /// Pairs parameter names with argument values; the counts must match.
 pub fn assoc(
-    arena: &ValueArena,
+    arena: &Arena,
     value_ids: Value,
     value_args: Value,
 ) -> Result<Vec<(String, Value)>, ExternError> {

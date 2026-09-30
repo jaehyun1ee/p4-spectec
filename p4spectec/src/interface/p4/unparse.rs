@@ -15,7 +15,7 @@ use crate::lang::{
         notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
         prim::num::Number,
     },
-    data::value::{Value, ValueArena, ValueCase, ValueKind},
+    data::value::{Arena, Value, ValueCase, ValueKind},
     hints::alter::{self, AlterHint, Renderer},
     traits::print::Print,
 };
@@ -112,7 +112,7 @@ impl P4Unparser {
     // - Rendering
 
     /// Renders a value as P4 text.
-    pub fn render(&self, arena: &ValueArena, value: &Value) -> Result<String, P4UnparseError> {
+    pub fn render(&self, arena: &Arena, value: &Value) -> Result<String, P4UnparseError> {
         match arena.kind(value) {
             // Primitives print as themselves
             ValueKind::Bool(value) => Ok(value.to_string()),
@@ -142,25 +142,26 @@ impl P4Unparser {
     /// Renders a case by its print hint when the type has one, else by shape.
     fn render_case(
         &self,
-        arena: &ValueArena,
+        arena: &Arena,
         typ: &TypKind,
         value_case: &ValueCase,
     ) -> Result<String, P4UnparseError> {
-        let (mixop, values) = value_case.split();
+        let mixfix = value_case.to_mixfix(arena.shapes());
+        let (mixop, values) = mixfix.split();
         if let TypKind::Var(type_id, _) = typ
             && let Some(hint) = self.hints.get(&(type_id.node.clone(), mixop))
         {
             return self.render_hint(arena, hint, &values);
         }
         let mut rendered = Vec::new();
-        self.render_mixfix(arena, value_case, &mut rendered)?;
+        self.render_mixfix(arena, &mixfix, &mut rendered)?;
         Ok(rendered.join(" "))
     }
 
     /// Renders the case arguments through a print-hint template.
     fn render_hint(
         &self,
-        arena: &ValueArena,
+        arena: &Arena,
         hint: &AlterHint,
         values: &[&Value],
     ) -> Result<String, P4UnparseError> {
@@ -174,7 +175,7 @@ impl P4Unparser {
     /// Renders values joined by a separator.
     fn render_values(
         &self,
-        arena: &ValueArena,
+        arena: &Arena,
         values: &[Value],
         separator: &str,
     ) -> Result<String, P4UnparseError> {
@@ -206,8 +207,8 @@ impl P4Unparser {
     /// Renders a case by its shape, skipping atoms that print as nothing.
     fn render_mixfix(
         &self,
-        arena: &ValueArena,
-        mixfix: &ValueCase,
+        arena: &Arena,
+        mixfix: &Mixfix<Value>,
         rendered: &mut Vec<String>,
     ) -> Result<(), P4UnparseError> {
         match mixfix {
@@ -258,7 +259,7 @@ impl P4Unparser {
 // == Print-hint rendering
 
 /// The print-hint renderer producing P4 text.
-struct ValueRenderer<'a>(&'a P4Unparser, &'a ValueArena);
+struct ValueRenderer<'a>(&'a P4Unparser, &'a Arena);
 
 impl Renderer<&Value> for ValueRenderer<'_> {
     type Output = Result<String, P4UnparseError>;

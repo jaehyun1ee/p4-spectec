@@ -10,7 +10,7 @@
 use std::{borrow::Cow, rc::Rc};
 
 use crate::lang::{
-    data::value::{Value, ValueArena, ValueKind},
+    data::value::{Arena, Value, ValueKind},
     hints::input,
 };
 
@@ -57,7 +57,7 @@ enum RelResult {
 
 /// Checks the input count and, with `guard`, the input types.
 pub(in crate::interp::sl) fn check_rel_inputs(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
@@ -90,7 +90,7 @@ pub(in crate::interp::sl) fn check_rel_inputs(
 
 /// Checks argument counts and, with `guard`, the argument types.
 pub(in crate::interp::sl) fn check_func_inputs(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
@@ -118,7 +118,7 @@ pub(in crate::interp::sl) fn check_func_inputs(
 
 /// Checks each value against its type, failing with `error`.
 fn check_values(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     typs: &[ast::Typ],
@@ -141,7 +141,7 @@ fn check_values(
 
 /// Type-checks a function result with the type parameters substituted.
 fn check_func_output(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     tparams: &[ast::TParam],

@@ -13,7 +13,7 @@ use crate::lang::{
         prim::num::{Number, Typ as NumTyp},
         source::Span,
     },
-    data::value::{Value, ValueArena, ValueKind},
+    data::value::{Arena, Value, ValueKind},
 };
 
 use crate::lang::il::ast::{
@@ -55,7 +55,7 @@ pub enum MatchError {
 
 /// Tests whether `value` inhabits `typ`.
 pub fn sub<'env, F>(
-    arena: &ValueArena,
+    arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
     typ: &Typ,
@@ -131,18 +131,17 @@ where
                         (DefTypKind::Variant(typ_cases), ValueKind::Case(value_case)) => {
                             for TypCase { not_typ, .. } in typ_cases {
                                 // Skip cases of a different shape
-                                if !not_typ.node.eq_shape(value_case) {
+                                if !value_case.eq_shape(arena.shapes(), &not_typ.node) {
                                     continue;
                                 }
                                 let not_typ = subst_not_typ(&|id| theta.get(id), not_typ)?;
                                 let typs = not_typ.node.args();
-                                let values = value_case.args();
                                 if subs_inner(
                                     arena,
                                     find_typdef_opt,
                                     find_func,
                                     typs.into_iter(),
-                                    values.into_iter(),
+                                    value_case.args().iter(),
                                 )? {
                                     return Ok(true);
                                 }
@@ -203,7 +202,7 @@ where
 
 /// Tests values against types pairwise.
 pub fn subs<'env, F>(
-    arena: &ValueArena,
+    arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
     typs: &[Typ],
@@ -217,7 +216,7 @@ where
 
 /// Pairwise membership; differing counts fail.
 fn subs_inner<'env, 'typ, 'value, F, T, V>(
-    arena: &ValueArena,
+    arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
     typs: T,
@@ -243,7 +242,7 @@ where
 
 /// Runs a precomputed subtype check on a value.
 pub fn check<'env, F>(
-    arena: &ValueArena,
+    arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
     subcheck: &Subcheck,
@@ -256,9 +255,9 @@ where
         // Statically known to hold
         (Subcheck::Skip, _) => Ok(true),
         // Variant case: the tag must be one of the accepted
-        (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => {
-            Ok(mixops.iter().any(|mixop| mixop.eq_shape(value_case)))
-        }
+        (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => Ok(mixops
+            .iter()
+            .any(|mixop| value_case.eq_shape(arena.shapes(), mixop))),
         // Componentwise
         (Subcheck::Tuple(subchecks), ValueKind::Tuple(values)) => {
             if subchecks.len() != values.len() {

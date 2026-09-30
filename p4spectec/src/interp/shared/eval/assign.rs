@@ -13,7 +13,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, ValueArena, ValueKind, get, make},
+        value::{Arena, Value, ValueKind, get, make},
         var::IdSlot,
     },
     traits::at::At,
@@ -57,7 +57,7 @@ pub fn assign_tparams<Ctx: WriteContext>(
 
 /// Matches `value` against the pattern `exp`, binding its variables.
 pub fn assign_exp<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: Ctx,
     exp: &ast::Exp,
     value: Value,
@@ -72,8 +72,7 @@ pub fn assign_exp<Ctx: WriteContext>(
         }
         // Case: the arguments
         (ast::ExpKind::Case(not_exp), ValueKind::Case(value_case)) => {
-            let mut values = Vec::new();
-            value_case.iter(|value| values.push(*value));
+            let values = value_case.args().to_vec();
             assign_case_exp(arena, ctx, not_exp, &values)
         }
         // Struct: the fields in order
@@ -110,7 +109,7 @@ pub fn assign_exp<Ctx: WriteContext>(
 
 /// Assigns values to patterns pairwise, requiring equal counts.
 pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp> + At>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     mut ctx: Ctx,
     exps: &[T],
     values: &[Value],
@@ -126,7 +125,7 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp> + At>(
 // - Identifier expression
 
 fn assign_id_exp<Ctx: WriteContext>(
-    _arena: &mut ValueArena,
+    _arena: &mut Arena,
     mut ctx: Ctx,
     id: &IdSlot,
     value: Value,
@@ -138,7 +137,7 @@ fn assign_id_exp<Ctx: WriteContext>(
 // - Tuple expression
 
 fn assign_tuple_exp<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: Ctx,
     exps: &[ast::Exp],
     values: &[Value],
@@ -149,7 +148,7 @@ fn assign_tuple_exp<Ctx: WriteContext>(
 // - Case expression
 
 fn assign_case_exp<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: Ctx,
     not_exp: &ast::NotExp,
     values: &[Value],
@@ -161,7 +160,7 @@ fn assign_case_exp<Ctx: WriteContext>(
 // - Struct expression
 
 fn assign_str_exp<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: Ctx,
     exp_fields: &[ast::ExpField],
     values: &[Value],
@@ -177,7 +176,7 @@ fn assign_str_exp<Ctx: WriteContext>(
 
 /// Assigns an option: a payload to a payload, absence to absence.
 fn assign_opt_exp<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: Ctx,
     exp_opt: &Option<Box<ast::Exp>>,
     value_opt: &Option<Value>,
@@ -195,7 +194,7 @@ fn assign_opt_exp<Ctx: WriteContext>(
 // - List expression
 
 fn assign_list_exp<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: Ctx,
     exps: &[ast::Exp],
     values: &[Value],
@@ -207,7 +206,7 @@ fn assign_list_exp<Ctx: WriteContext>(
 
 /// Splits a non-empty list into head and tail and assigns each.
 fn assign_cons_exp<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: Ctx,
     exp: &ast::Exp,
     exp_head: &ast::Exp,
@@ -232,7 +231,7 @@ fn assign_cons_exp<Ctx: WriteContext>(
 
 /// Assigns an iterated pattern, binding its variables one iteration outward.
 fn assign_iter_exp<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     mut ctx: Ctx,
     exp: &ast::Exp,
     exp_inner: &ast::Exp,
@@ -307,7 +306,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
 
 /// Assigns an argument value: to a pattern, or as a function definition.
 pub fn assign_arg<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx_caller: &impl ReadContext<Func = Ctx::Func>,
     ctx_callee: Ctx,
     arg: &ast::Arg,
@@ -321,7 +320,7 @@ pub fn assign_arg<Ctx: WriteContext>(
 
 /// Assigns values to arguments pairwise, requiring equal counts.
 pub fn assign_args<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx_caller: &impl ReadContext<Func = Ctx::Func>,
     ctx_callee: Ctx,
     args: &[ast::Arg],
@@ -339,7 +338,7 @@ pub fn assign_args<Ctx: WriteContext>(
 // - Expression argument
 
 fn assign_exp_arg<Ctx: WriteContext>(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: Ctx,
     exp: &ast::Exp,
     value: Value,
@@ -351,7 +350,7 @@ fn assign_exp_arg<Ctx: WriteContext>(
 
 /// Binds a function argument in the callee from its definition in the caller.
 pub fn assign_def<Ctx: WriteContext>(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx_caller: &impl ReadContext<Func = Ctx::Func>,
     mut ctx_callee: Ctx,
     id: &ast::Id,

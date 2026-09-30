@@ -134,7 +134,7 @@ pub type Value = data::value::Value;
 pub type ValueKind = data::value::ValueKind;
 /// One field of a struct value.
 pub type ValueField = data::value::ValueField;
-/// A variant value: a mixfix skeleton with values as arguments.
+/// A variant value: a notation shape with values as arguments.
 pub type ValueCase = data::value::ValueCase;
 
 // Operators

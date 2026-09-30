@@ -4,6 +4,7 @@
 //! Bodies are stored exactly, spans included, so two values that print alike
 //! may still be distinct entries;
 //! the canonical identity ignores spans and is what syntax equality uses.
+//! A case body is a shape handle and its arguments (`ValueCase`).
 
 use std::{
     cmp::Ordering,
@@ -20,18 +21,19 @@ use crate::util::json::json;
 use crate::lang::{
     common::{
         Id,
-        notation::{atom::Atom, mixfix::Mixfix},
+        notation::atom::Atom,
         prim::num::{self, Number},
         source::{NotePhrase, Phrase, Span},
     },
     data::{
         intern::{CanonEq, CanonHash, CanonInterner, Interned},
+        shape::ShapeArena,
         typ::TypKind,
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
 
-use super::arena::ValueArena;
+use super::{arena::Arena, case::ValueCase};
 
 // = Value types
 
@@ -39,21 +41,19 @@ use super::arena::ValueArena;
 pub type Value = NotePhrase<Interned<ValueKind>, Interned<TypKind>, Interned<Span>>;
 /// A struct field: atom and value.
 pub type ValueField = (Phrase<Atom>, Value);
-/// A variant case: a notation filled with values.
-pub type ValueCase = Mixfix<Value>;
 
 // - Borrowed views
 
 /// A value together with its arena, for comparisons that must read bodies.
 #[derive(Clone, Copy, Debug)]
 pub struct ValueRef<'a> {
-    pub(super) arena: &'a ValueArena,
+    pub(super) arena: &'a Arena,
     pub(super) value: Value,
 }
 
 // - Bodies
 
-#[derive(Debug, SerializeState, DeserializeState)]
+#[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
 #[serde(serialize_state = "super::external::EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "super::external::DecodeContext<'de>")]
 /// A value body; children are handles into the same arena.
@@ -115,113 +115,13 @@ impl ValueKind {
     }
 }
 
-// = Exact body equality and hashing
-
-// Mixfix's general Eq/Hash ignore atom spans; exact value storage retains them,
-// so cases get their own span-sensitive equality and hash
-
-impl PartialEq for ValueKind {
-    fn eq(&self, kind_other: &Self) -> bool {
-        /// Case equality including atom spans.
-        fn eq_case(value_case_l: &ValueCase, value_case_r: &ValueCase) -> bool {
-            match (value_case_l, value_case_r) {
-                (Mixfix::Arg(value_l), Mixfix::Arg(value_r)) => value_l == value_r,
-                (Mixfix::Atom(atom_l), Mixfix::Atom(atom_r)) => atom_l == atom_r,
-                (
-                    Mixfix::Brack(atom_l_l, value_case_l, atom_l_r),
-                    Mixfix::Brack(atom_r_l, value_case_r, atom_r_r),
-                ) => {
-                    atom_l_l == atom_r_l
-                        && eq_case(value_case_l, value_case_r)
-                        && atom_l_r == atom_r_r
-                }
-                (
-                    Mixfix::Infix(value_case_l_l, atom_l, value_case_l_r),
-                    Mixfix::Infix(value_case_r_l, atom_r, value_case_r_r),
-                ) => {
-                    eq_case(value_case_l_l, value_case_r_l)
-                        && atom_l == atom_r
-                        && eq_case(value_case_l_r, value_case_r_r)
-                }
-                (Mixfix::Seq(value_cases_l), Mixfix::Seq(value_cases_r)) => {
-                    value_cases_l.len() == value_cases_r.len()
-                        && value_cases_l
-                            .iter()
-                            .zip(value_cases_r)
-                            .all(|(value_case_l, value_case_r)| eq_case(value_case_l, value_case_r))
-                }
-                _ => false,
-            }
-        }
-
-        match (self, kind_other) {
-            (Self::Bool(value_l), Self::Bool(value_r)) => value_l == value_r,
-            (Self::Num(value_l), Self::Num(value_r)) => value_l == value_r,
-            (Self::Text(value_l), Self::Text(value_r)) => value_l == value_r,
-            (Self::Struct(value_fields_l), Self::Struct(value_fields_r)) => {
-                value_fields_l == value_fields_r
-            }
-            (Self::Case(value_case_l), Self::Case(value_case_r)) => {
-                eq_case(value_case_l, value_case_r)
-            }
-            (Self::Tuple(values_l), Self::Tuple(values_r))
-            | (Self::List(values_l), Self::List(values_r)) => values_l == values_r,
-            (Self::Opt(value_l), Self::Opt(value_r)) => value_l == value_r,
-            (Self::Func(id_l), Self::Func(id_r)) => id_l == id_r,
-            (Self::Extern(json_l), Self::Extern(json_r)) => json_l == json_r,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for ValueKind {}
-
-impl Hash for ValueKind {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        /// Case hash including atom spans.
-        fn hash_case<H: Hasher>(value_case: &ValueCase, hasher: &mut H) {
-            std::mem::discriminant(value_case).hash(hasher);
-            match value_case {
-                Mixfix::Arg(value) => value.hash(hasher),
-                Mixfix::Atom(atom) => atom.hash(hasher),
-                Mixfix::Brack(atom_l, value_case, atom_r) => {
-                    atom_l.hash(hasher);
-                    hash_case(value_case, hasher);
-                    atom_r.hash(hasher);
-                }
-                Mixfix::Infix(value_case_l, atom, value_case_r) => {
-                    hash_case(value_case_l, hasher);
-                    atom.hash(hasher);
-                    hash_case(value_case_r, hasher);
-                }
-                Mixfix::Seq(value_cases) => {
-                    value_cases.len().hash(hasher);
-                    for value_case in value_cases {
-                        hash_case(value_case, hasher);
-                    }
-                }
-            }
-        }
-
-        std::mem::discriminant(self).hash(hasher);
-        match self {
-            Self::Bool(value) => value.hash(hasher),
-            Self::Num(value) => value.hash(hasher),
-            Self::Text(value) => value.hash(hasher),
-            Self::Struct(value_fields) => value_fields.hash(hasher),
-            Self::Case(value_case) => hash_case(value_case, hasher),
-            Self::Tuple(values) | Self::List(values) => values.hash(hasher),
-            Self::Opt(value) => value.hash(hasher),
-            Self::Func(id) => id.hash(hasher),
-            Self::Extern(json) => json.hash(hasher),
-        }
-    }
-}
-
 // = Canonical equality and hashing
 
-impl CanonEq for ValueKind {
-    fn canon_eq(&self, interner: &CanonInterner<Self>, _: &(), kind_r: &Self) -> bool {
+// Exact equality and hashing are derived: a case compares its shape handle,
+// which the shape arena interns with atom spans
+
+impl CanonEq<ShapeArena> for ValueKind {
+    fn canon_eq(&self, interner: &CanonInterner<Self>, shapes: &ShapeArena, kind_r: &Self) -> bool {
         // Children compare by canonical id, computed when they were interned
         let eq_value = |value_l: &Value, value_r: &Value| {
             interner.canon_id(value_l.node) == interner.canon_id(value_r.node)
@@ -239,7 +139,13 @@ impl CanonEq for ValueKind {
                     )
             }
             (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => {
-                value_case_l.eq_by(value_case_r, eq_value)
+                shapes.canon_eq(value_case_l.shape(), value_case_r.shape())
+                    && value_case_l.args().len() == value_case_r.args().len()
+                    && value_case_l
+                        .args()
+                        .iter()
+                        .zip(value_case_r.args())
+                        .all(|(value_l, value_r)| eq_value(value_l, value_r))
             }
             (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
             | (ValueKind::List(values_l), ValueKind::List(values_r)) => {
@@ -261,37 +167,13 @@ impl CanonEq for ValueKind {
     }
 }
 
-impl CanonHash for ValueKind {
-    fn canon_hash<H: Hasher>(&self, interner: &CanonInterner<Self>, _: &(), hasher: &mut H) {
-        /// Case hash over atom names and children's canonical ids.
-        fn canon_hash_case<H: Hasher>(
-            value_case: &ValueCase,
-            interner: &CanonInterner<ValueKind>,
-            hasher: &mut H,
-        ) {
-            std::mem::discriminant(value_case).hash(hasher);
-            match value_case {
-                Mixfix::Arg(value) => interner.canon_id(value.node).hash(hasher),
-                Mixfix::Atom(atom) => atom.node.hash(hasher),
-                Mixfix::Brack(atom_l, value_case, atom_r) => {
-                    atom_l.node.hash(hasher);
-                    canon_hash_case(value_case, interner, hasher);
-                    atom_r.node.hash(hasher);
-                }
-                Mixfix::Infix(value_case_l, atom, value_case_r) => {
-                    canon_hash_case(value_case_l, interner, hasher);
-                    atom.node.hash(hasher);
-                    canon_hash_case(value_case_r, interner, hasher);
-                }
-                Mixfix::Seq(value_cases) => {
-                    value_cases.len().hash(hasher);
-                    for value_case in value_cases {
-                        canon_hash_case(value_case, interner, hasher);
-                    }
-                }
-            }
-        }
-
+impl CanonHash<ShapeArena> for ValueKind {
+    fn canon_hash<H: Hasher>(
+        &self,
+        interner: &CanonInterner<Self>,
+        shapes: &ShapeArena,
+        hasher: &mut H,
+    ) {
         std::mem::discriminant(self).hash(hasher);
         match self {
             ValueKind::Bool(value) => value.hash(hasher),
@@ -304,7 +186,13 @@ impl CanonHash for ValueKind {
                     interner.canon_id(value.node).hash(hasher);
                 }
             }
-            ValueKind::Case(value_case) => canon_hash_case(value_case, interner, hasher),
+            ValueKind::Case(value_case) => {
+                shapes.canon_id(value_case.shape()).hash(hasher);
+                value_case.args().len().hash(hasher);
+                for value in value_case.args() {
+                    interner.canon_id(value.node).hash(hasher);
+                }
+            }
             ValueKind::Tuple(values) | ValueKind::List(values) => {
                 values.len().hash(hasher);
                 for value in values {
@@ -368,9 +256,12 @@ impl SyntaxCmp for ValueRef<'_> {
                     .find(|order| !order.is_eq())
                     .unwrap_or_else(|| value_fields_l.len().cmp(&value_fields_r.len()))
             }
-            (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => {
-                value_case_l.cmp_by(value_case_r, compare_value)
-            }
+            (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => value_case_l.cmp_by(
+                self.arena.shapes(),
+                value_case_r,
+                value_other.arena.shapes(),
+                compare_value,
+            ),
             (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
             | (ValueKind::List(values_l), ValueKind::List(values_r)) => {
                 compare_values(values_l, values_r)

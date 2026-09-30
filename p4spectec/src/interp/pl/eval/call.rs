@@ -9,7 +9,7 @@
 use std::rc::Rc;
 
 use crate::lang::{
-    data::value::{Value, ValueArena, ValueKind},
+    data::value::{Arena, Value, ValueKind},
     hints::input,
 };
 
@@ -45,7 +45,7 @@ use super::{
 
 /// Checks the input count and, with `guard`, the input types.
 pub(crate) fn check_rel_inputs(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
@@ -86,7 +86,7 @@ pub(crate) fn check_rel_inputs(
 
 /// Checks argument counts and, with `guard`, the argument types.
 pub(crate) fn check_func_inputs(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
@@ -114,7 +114,7 @@ pub(crate) fn check_func_inputs(
 
 /// Checks each value against its type, failing with the supplied guard error.
 fn check_values(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     typs: &[ast::Typ],
@@ -137,7 +137,7 @@ fn check_values(
 
 /// Type-checks a function result with its type arguments substituted.
 fn check_func_output(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     tparams: &[ast::TParam],

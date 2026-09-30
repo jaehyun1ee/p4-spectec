@@ -5,6 +5,8 @@
 //! The caller supplies the matching arena, lifetime, and encoding
 //! for relative data.
 //! Independent payloads are trees (`indep`) that any arena can intern.
+//! A case body is written as its filled notation in both modes,
+//! so shape handles never appear in a payload.
 
 pub mod indep;
 
@@ -14,11 +16,11 @@ use serde_state::{DeserializeState, SerializeState};
 use crate::util::json::json;
 
 use crate::lang::{
-    common::source::Span,
+    common::{notation::mixfix::Mixfix, source::Span},
     data::{intern::Interned, typ::TypKind},
 };
 
-use super::{ValueArena, ValueKind};
+use super::{Arena, ValueCase, ValueKind};
 
 // = Configuration
 
@@ -54,37 +56,47 @@ impl std::fmt::Display for Encoding {
     }
 }
 
-/// What an encoder needs: nothing for relative, the arena for independent.
+/// What an encoder needs: the encoding, and the arena where one is required.
+///
+/// Relative handles need no arena, but a case body does:
+/// its notation is expanded from the arena's shapes.
 pub enum EncodeContext<'arena> {
-    /// Write handles as indices.
+    /// Write handles as indices; case bodies cannot be written.
     ArenaRelative,
+    /// Write handles as indices and expand case notation through this arena.
+    ArenaRelativeWithArena(&'arena Arena),
     /// Resolve handles through this arena.
-    ArenaIndependent(&'arena ValueArena),
+    ArenaIndependent(&'arena Arena),
 }
 
 impl<'arena> EncodeContext<'arena> {
-    /// The context for an encoding.
-    pub fn new(arena: &'arena ValueArena, encoding: Encoding) -> Self {
+    /// The context for an encoding, keeping the arena for case notation.
+    pub fn new(arena: &'arena Arena, encoding: Encoding) -> Self {
         match encoding {
-            Encoding::ArenaRelative => Self::ArenaRelative,
+            Encoding::ArenaRelative => Self::ArenaRelativeWithArena(arena),
             Encoding::ArenaIndependent => Self::ArenaIndependent(arena),
         }
     }
 }
 
-/// What a decoder needs: nothing for relative, a mutable arena for independent.
+/// What a decoder needs: the encoding, and the arena where one is required.
+///
+/// Relative handles need no arena, but a case body does:
+/// its notation is interned into the arena's shapes.
 pub enum DecodeContext<'arena> {
-    /// Read handles as indices.
+    /// Read handles as indices; case bodies cannot be read.
     ArenaRelative,
+    /// Read handles as indices and intern case notation into this arena.
+    ArenaRelativeWithArena(&'arena mut Arena),
     /// Intern contents into this arena.
-    ArenaIndependent(&'arena mut ValueArena),
+    ArenaIndependent(&'arena mut Arena),
 }
 
 impl<'arena> DecodeContext<'arena> {
-    /// The context for an encoding.
-    pub fn new(arena: &'arena mut ValueArena, encoding: Encoding) -> Self {
+    /// The context for an encoding, keeping the arena for case notation.
+    pub fn new(arena: &'arena mut Arena, encoding: Encoding) -> Self {
         match encoding {
-            Encoding::ArenaRelative => Self::ArenaRelative,
+            Encoding::ArenaRelative => Self::ArenaRelativeWithArena(arena),
             Encoding::ArenaIndependent => Self::ArenaIndependent(arena),
         }
     }
@@ -95,7 +107,7 @@ impl<'arena> DecodeContext<'arena> {
 // - Entry points
 
 /// Keeps the arena-independent JSON and annotation contract.
-pub fn encode<T>(arena: &ValueArena, data: &T) -> Result<json, serde_json::Error>
+pub fn encode<T>(arena: &Arena, data: &T) -> Result<json, serde_json::Error>
 where
     T: for<'arena> SerializeState<EncodeContext<'arena>> + ?Sized,
 {
@@ -104,7 +116,7 @@ where
 
 /// Encodes with the chosen encoding.
 pub fn encode_with<T>(
-    arena: &ValueArena,
+    arena: &Arena,
     encoding: Encoding,
     data: &T,
 ) -> Result<json, serde_json::Error>
@@ -133,9 +145,11 @@ impl SerializeState<EncodeContext<'_>> for Interned<ValueKind> {
     ) -> Result<S::Ok, S::Error> {
         match ctx {
             // Relative: the index; independent: the body as a tree
-            EncodeContext::ArenaRelative => self.index().serialize(serializer),
+            EncodeContext::ArenaRelative | EncodeContext::ArenaRelativeWithArena(_) => {
+                self.index().serialize(serializer)
+            }
             EncodeContext::ArenaIndependent(arena) => {
-                indep::ValueKind::from_arena(arena, arena.values.get(*self)).serialize(serializer)
+                indep::ValueKind::from_arena(arena, arena.kind_of(*self)).serialize(serializer)
             }
         }
     }
@@ -148,8 +162,10 @@ impl SerializeState<EncodeContext<'_>> for Interned<TypKind> {
         ctx: &EncodeContext<'_>,
     ) -> Result<S::Ok, S::Error> {
         match ctx {
-            EncodeContext::ArenaRelative => self.index().serialize(serializer),
-            EncodeContext::ArenaIndependent(arena) => arena.types.get(*self).serialize(serializer),
+            EncodeContext::ArenaRelative | EncodeContext::ArenaRelativeWithArena(_) => {
+                self.index().serialize(serializer)
+            }
+            EncodeContext::ArenaIndependent(arena) => arena.typ_of(*self).serialize(serializer),
         }
     }
 }
@@ -161,8 +177,10 @@ impl SerializeState<EncodeContext<'_>> for Interned<Span> {
         ctx: &EncodeContext<'_>,
     ) -> Result<S::Ok, S::Error> {
         match ctx {
-            EncodeContext::ArenaRelative => self.index().serialize(serializer),
-            EncodeContext::ArenaIndependent(arena) => arena.spans.get(*self).serialize(serializer),
+            EncodeContext::ArenaRelative | EncodeContext::ArenaRelativeWithArena(_) => {
+                self.index().serialize(serializer)
+            }
+            EncodeContext::ArenaIndependent(arena) => arena.span_of(*self).serialize(serializer),
         }
     }
 }
@@ -171,9 +189,10 @@ impl SerializeState<EncodeContext<'_>> for Interned<Span> {
 
 // - Entry points
 
-/// Decodes with the chosen encoding, interning into `arena` when independent.
+/// Decodes with the chosen encoding, interning contents when independent
+/// and case notation in both modes.
 pub fn decode_with<'de, T>(
-    arena: &'de mut ValueArena,
+    arena: &'de mut Arena,
     encoding: Encoding,
     json: &'de json,
 ) -> Result<T, serde_json::Error>
@@ -202,15 +221,14 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<ValueKind> {
     ) -> Result<Self, D::Error> {
         match ctx {
             // Relative: trust the index; independent: intern the tree
-            DecodeContext::ArenaRelative => u32::deserialize(deserializer).map(Self::from_index),
+            DecodeContext::ArenaRelative | DecodeContext::ArenaRelativeWithArena(_) => {
+                u32::deserialize(deserializer).map(Self::from_index)
+            }
             DecodeContext::ArenaIndependent(arena) => {
                 let kind = indep::ValueKind::deserialize(deserializer)?
                     .into_arena(arena)
                     .map_err(::serde::de::Error::custom)?;
-                arena
-                    .values
-                    .intern(kind, &())
-                    .map_err(::serde::de::Error::custom)
+                arena.intern_kind(kind).map_err(::serde::de::Error::custom)
             }
         }
     }
@@ -222,10 +240,12 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<TypKind> {
         deserializer: D,
     ) -> Result<Self, D::Error> {
         match ctx {
-            DecodeContext::ArenaRelative => u32::deserialize(deserializer).map(Self::from_index),
+            DecodeContext::ArenaRelative | DecodeContext::ArenaRelativeWithArena(_) => {
+                u32::deserialize(deserializer).map(Self::from_index)
+            }
             DecodeContext::ArenaIndependent(arena) => {
                 let typ = TypKind::deserialize(deserializer)?.into();
-                arena.types.intern(typ).map_err(::serde::de::Error::custom)
+                arena.intern_typ(typ).map_err(::serde::de::Error::custom)
             }
         }
     }
@@ -237,11 +257,63 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<Span> {
         deserializer: D,
     ) -> Result<Self, D::Error> {
         match ctx {
-            DecodeContext::ArenaRelative => u32::deserialize(deserializer).map(Self::from_index),
+            DecodeContext::ArenaRelative | DecodeContext::ArenaRelativeWithArena(_) => {
+                u32::deserialize(deserializer).map(Self::from_index)
+            }
             DecodeContext::ArenaIndependent(arena) => {
                 let span = Span::deserialize(deserializer)?;
-                arena.spans.intern(span).map_err(::serde::de::Error::custom)
+                arena.intern_span(span).map_err(::serde::de::Error::custom)
             }
         }
+    }
+}
+
+// = Case bodies
+
+// - Encode
+
+impl SerializeState<EncodeContext<'_>> for ValueCase {
+    fn serialize_state<S: Serializer>(
+        &self,
+        serializer: S,
+        ctx: &EncodeContext<'_>,
+    ) -> Result<S::Ok, S::Error> {
+        // The notation is expanded from shapes, so an arena is required
+        let arena = match ctx {
+            EncodeContext::ArenaRelative => {
+                return Err(::serde::ser::Error::custom(
+                    "a case body needs an arena to expand its notation",
+                ));
+            }
+            EncodeContext::ArenaRelativeWithArena(arena)
+            | EncodeContext::ArenaIndependent(arena) => arena,
+        };
+        // Write the filled notation, with arguments in the context's encoding
+        self.to_mixfix(arena.shapes())
+            .serialize_state(serializer, ctx)
+    }
+}
+
+// - Decode
+
+impl<'de> DeserializeState<'de, DecodeContext<'_>> for ValueCase {
+    fn deserialize_state<D: Deserializer<'de>>(
+        ctx: &mut DecodeContext<'_>,
+        deserializer: D,
+    ) -> Result<Self, D::Error> {
+        // The notation is interned into shapes, so an arena is required
+        if matches!(ctx, DecodeContext::ArenaRelative) {
+            return Err(::serde::de::Error::custom(
+                "a case body needs an arena to intern its notation",
+            ));
+        }
+        // Read the filled notation, with arguments in the context's encoding
+        let mixfix = Mixfix::deserialize_state(ctx, deserializer)?;
+        let arena = match ctx {
+            DecodeContext::ArenaRelative => unreachable!("rejected before reading"),
+            DecodeContext::ArenaRelativeWithArena(arena)
+            | DecodeContext::ArenaIndependent(arena) => arena,
+        };
+        ValueCase::from_mixfix(arena.shapes_mut(), mixfix).map_err(::serde::de::Error::custom)
     }
 }

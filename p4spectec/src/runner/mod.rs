@@ -19,7 +19,7 @@ use crate::{
     sim_plugin::dummy::Dummy,
 };
 
-use crate::lang::data::value::{Value, ValueArena};
+use crate::lang::data::value::{Arena, Value};
 
 use crate::lang::al;
 
@@ -135,7 +135,7 @@ where
     Iface: Interface,
     Ext: Extern,
 {
-    arena: ValueArena,
+    arena: Arena,
     spec: Interp::Spec,
     interp: Interp,
     interface: Iface,
@@ -150,7 +150,7 @@ where
 {
     /// Assembles the components around a fresh arena.
     pub fn new(spec: Interp::Spec, interp: Interp, interface: Iface, external: Ext) -> Self {
-        Self { arena: ValueArena::new(), spec, interp, interface, external }
+        Self { arena: Arena::new(), spec, interp, interface, external }
     }
 
     /// Borrows the assembled components for a stage-specific evaluation entry.
@@ -164,11 +164,11 @@ where
         )
     }
 
-    pub fn arena(&self) -> &ValueArena {
+    pub fn arena(&self) -> &Arena {
         &self.arena
     }
 
-    pub fn arena_mut(&mut self) -> &mut ValueArena {
+    pub fn arena_mut(&mut self) -> &mut Arena {
         &mut self.arena
     }
 
@@ -195,7 +195,7 @@ where
         self.interp.reset();
         self.external.clear();
         self.interface.clear();
-        self.arena = ValueArena::new();
+        self.arena = Arena::new();
     }
 }
 

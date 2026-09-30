@@ -137,7 +137,7 @@ impl Print for [TypCase] {
 
 /// Prints a value in full, resolving handles through the arena.
 pub fn print_value(
-    arena: &crate::lang::data::value::ValueArena,
+    arena: &crate::lang::data::value::Arena,
     value: &Value,
     printer: &mut Printer<'_>,
 ) -> fmt::Result {
@@ -146,7 +146,7 @@ pub fn print_value(
 
 /// Prints a value; `short` elides struct and list contents to a count.
 fn write_value_with(
-    arena: &crate::lang::data::value::ValueArena,
+    arena: &crate::lang::data::value::Arena,
     output: &mut Printer<'_>,
     value: &Value,
     short: bool,
@@ -177,7 +177,7 @@ fn write_value_with(
             output.write_char('}')
         }
         // Short form: the case skeleton without arguments
-        ValueKind::Case(case) if short => case.to_mixop().print(output),
+        ValueKind::Case(case) if short => case.to_mixop(arena.shapes()).print(output),
         ValueKind::Case(case) => write_notval_with(arena, output, case, level),
         ValueKind::Tuple(values) => {
             output.write_char('(')?;
@@ -223,12 +223,12 @@ fn write_value_with(
 
 /// Prints a variant value with its arguments filled into the skeleton.
 fn write_notval_with(
-    arena: &crate::lang::data::value::ValueArena,
+    arena: &crate::lang::data::value::Arena,
     output: &mut Printer<'_>,
     not_val: &ValueCase,
     level: usize,
 ) -> fmt::Result {
-    not_val.print_with(output, |value, output| {
+    not_val.print_with(arena.shapes(), output, |value, output| {
         write_value_with(arena, output, value, false, level + 1)
     })
 }

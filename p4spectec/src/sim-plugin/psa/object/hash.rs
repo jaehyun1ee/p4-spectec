@@ -10,7 +10,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, ValueArena, make},
+        value::{Arena, Value, make},
     },
 };
 
@@ -34,7 +34,7 @@ impl HashExtern {
     /// Hash(PSA_HashAlgorithm_t algo);
     /// ```
     pub fn init(
-        arena: &ValueArena,
+        arena: &Arena,
         _value_targs: Value,
         value_ids: Value,
         value_args: Value,

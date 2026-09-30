@@ -19,7 +19,10 @@ use crate::lang::{
     data::typ::TypKind,
 };
 
-use super::super::{Value as ArenaValue, ValueArena, ValueError, ValueKind as ArenaValueKind};
+use super::super::{
+    Arena, Value as ArenaValue, ValueCase as ArenaValueCase, ValueError,
+    ValueKind as ArenaValueKind,
+};
 
 // == Types
 
@@ -44,7 +47,7 @@ pub enum ValueKind {
 // == Arena conversion
 
 /// Copies an arena value into a tree, including its type and source span.
-pub fn from_arena(arena: &ValueArena, value: &ArenaValue) -> Value {
+pub fn from_arena(arena: &Arena, value: &ArenaValue) -> Value {
     Value {
         node: ValueKind::from_arena(arena, arena.kind(value)),
         note: arena.typ(value).as_ref().clone(),
@@ -53,14 +56,14 @@ pub fn from_arena(arena: &ValueArena, value: &ArenaValue) -> Value {
 }
 
 /// Interns the tree in the target arena, preserving its type and source span.
-pub fn into_arena(arena: &mut ValueArena, value: Value) -> Result<ArenaValue, ValueError> {
+pub fn into_arena(arena: &mut Arena, value: Value) -> Result<ArenaValue, ValueError> {
     let kind = value.node.into_arena(arena)?;
     arena.alloc(kind, value.note.into(), value.span)
 }
 
 impl ValueKind {
     /// Expands child handles into values and copies extern JSON unchanged.
-    pub(super) fn from_arena(arena: &ValueArena, kind: &ArenaValueKind) -> Self {
+    pub(super) fn from_arena(arena: &Arena, kind: &ArenaValueKind) -> Self {
         match kind {
             ArenaValueKind::Bool(value) => Self::Bool(*value),
             ArenaValueKind::Num(num) => Self::Num(num.clone()),
@@ -71,9 +74,11 @@ impl ValueKind {
                     .map(|(atom, value)| (atom.clone(), from_arena(arena, value)))
                     .collect(),
             ),
-            ArenaValueKind::Case(mixfix) => {
-                Self::Case(mixfix.map(|value| Box::new(from_arena(arena, value))))
-            }
+            ArenaValueKind::Case(value_case) => Self::Case(
+                value_case
+                    .to_mixfix(arena.shapes())
+                    .map(|value| Box::new(from_arena(arena, value))),
+            ),
             ArenaValueKind::Tuple(values) => Self::Tuple(
                 values
                     .iter()
@@ -97,7 +102,7 @@ impl ValueKind {
     }
 
     /// Converts child values to arena handles and keeps extern JSON unchanged.
-    pub(super) fn into_arena(self, arena: &mut ValueArena) -> Result<ArenaValueKind, ValueError> {
+    pub(super) fn into_arena(self, arena: &mut Arena) -> Result<ArenaValueKind, ValueError> {
         Ok(match self {
             Self::Bool(value) => ArenaValueKind::Bool(value),
             Self::Num(num) => ArenaValueKind::Num(num),
@@ -108,7 +113,11 @@ impl ValueKind {
                     .map(|(atom, value)| Ok((atom, into_arena(arena, value)?)))
                     .collect::<Result<_, ValueError>>()?,
             ),
-            Self::Case(mixfix) => ArenaValueKind::Case(Self::into_arena_case(arena, mixfix)?),
+            Self::Case(mixfix) => {
+                // Arguments first, then the notation's shape
+                let mixfix = Self::into_arena_case(arena, mixfix)?;
+                ArenaValueKind::Case(ArenaValueCase::from_mixfix(arena.shapes_mut(), mixfix)?)
+            }
             Self::Tuple(values) => ArenaValueKind::Tuple(
                 values
                     .into_iter()
@@ -131,7 +140,7 @@ impl ValueKind {
 
     /// Converts case arguments to arena values, preserving atoms and brackets.
     fn into_arena_case(
-        arena: &mut ValueArena,
+        arena: &mut Arena,
         mixfix: Mixfix<Box<Value>>,
     ) -> Result<Mixfix<ArenaValue>, ValueError> {
         Ok(match mixfix {

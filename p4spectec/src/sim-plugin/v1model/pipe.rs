@@ -23,7 +23,7 @@ use crate::lang::{
     data::{
         typ,
         value::{
-            Value, ValueArena, ValueError,
+            Arena, Value, ValueError,
             external::{DecodeContext, EncodeContext, Encoding, decode_with, encode_with},
             get, make,
         },
@@ -112,11 +112,7 @@ impl ObjectState {
     // - Encoding
 
     /// Encodes the object as the specification's `objectState` external value.
-    pub fn to_value(
-        &self,
-        arena: &mut ValueArena,
-        encoding: Encoding,
-    ) -> Result<Value, ExternError> {
+    pub fn to_value(&self, arena: &mut Arena, encoding: Encoding) -> Result<Value, ExternError> {
         let payload = encode_with(arena, encoding, self)?;
         let typ = typ::make::var(
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
@@ -129,7 +125,7 @@ impl ObjectState {
 
     /// Decodes an object from an `objectState` external value.
     pub fn from_value(
-        arena: &mut ValueArena,
+        arena: &mut Arena,
         encoding: Encoding,
         value: &Value,
     ) -> Result<Self, ExternError> {

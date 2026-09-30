@@ -12,7 +12,7 @@ use crate::lang::{
         prim::{bool, num},
         source::{Phrase, Span},
     },
-    data::value::{Value, ValueArena, ValueKind, get, make},
+    data::value::{Arena, Value, ValueKind, get, make},
     traits::eq::SyntaxEq,
 };
 
@@ -36,7 +36,7 @@ use super::super::context::ReadContext;
 
 /// Applies a boolean or numeric unary operator.
 pub(crate) fn unop(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     span: &Span,
     op: &ast::UnOp,
     value: Value,
@@ -61,7 +61,7 @@ pub(crate) fn unop(
 
 /// Applies a boolean or numeric binary operator.
 pub(crate) fn binop(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     span: &Span,
     op: &ast::BinOp,
     value_l: Value,
@@ -95,7 +95,7 @@ pub(crate) fn binop(
 
 /// Compares two values: syntactically for `=`/`!=`, numerically otherwise.
 pub(crate) fn cmpop(
-    arena: &ValueArena,
+    arena: &Arena,
     span: &Span,
     op: &ast::CmpOp,
     value_l: Value,
@@ -123,7 +123,7 @@ pub(crate) fn cmpop(
 
 /// Runs the precomputed subtype check against a value.
 pub(crate) fn sub(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &impl ReadContext,
     span: &Span,
     subcheck: &ast::Subcheck,
@@ -143,10 +143,12 @@ pub(crate) fn sub(
 // - Pattern matching
 
 /// Tests a value against a case, list, or option pattern.
-pub(crate) fn r#match(arena: &ValueArena, pattern: &ast::Pattern, value: Value) -> bool {
+pub(crate) fn r#match(arena: &Arena, pattern: &ast::Pattern, value: Value) -> bool {
     match (pattern, arena.kind(&value)) {
         // Case: same constructor shape
-        (ast::Pattern::Case(mixop), ValueKind::Case(value)) => value.eq_shape(mixop.as_ref()),
+        (ast::Pattern::Case(mixop), ValueKind::Case(value_case)) => {
+            value_case.eq_shape(arena.shapes(), mixop.as_ref())
+        }
         // List: non-empty, fixed length, or empty
         (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
             ast::ListPattern::Cons => !values.is_empty(),
@@ -165,7 +167,7 @@ pub(crate) fn r#match(arena: &ValueArena, pattern: &ast::Pattern, value: Value) 
 
 /// Tests list membership by syntactic equality.
 pub(crate) fn mem(
-    arena: &ValueArena,
+    arena: &Arena,
     _span: &Span,
     value_elem: Value,
     value_list: Value,
@@ -182,7 +184,7 @@ pub(crate) fn mem(
 
 /// Upcasts a value to `typ` through aliases, tuples, and iterations.
 pub(crate) fn cast_up(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: &impl ReadContext,
     typ: &ast::Typ,
     value: Value,
@@ -263,7 +265,7 @@ pub(crate) fn cast_up(
 
 /// Downcasts a value to `typ` through aliases, tuples, and iterations.
 pub(crate) fn cast_down(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: &impl ReadContext,
     typ: &ast::Typ,
     value: Value,
@@ -346,7 +348,7 @@ pub(crate) fn cast_down(
 
 /// Reads a struct field by atom.
 pub(crate) fn access_dot(
-    arena: &ValueArena,
+    arena: &Arena,
     value: &Value,
     atom: &ast::Atom,
     _span: &Span,
@@ -362,7 +364,7 @@ pub(crate) fn access_dot(
 }
 
 /// Reads a number as an integer.
-fn get_int(arena: &ValueArena, value: &Value, _span: &Span) -> Backtrack<BigInt> {
+fn get_int(arena: &Arena, value: &Value, _span: &Span) -> Backtrack<BigInt> {
     let num = get::num(arena, value).expect("operand must be a number");
     ok!(num::to_int(num).clone())
 }
@@ -371,7 +373,7 @@ fn get_int(arena: &ValueArena, value: &Value, _span: &Span) -> Backtrack<BigInt>
 
 /// Indexes a text or list; a text index yields the one-character text.
 pub(crate) fn access_index(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     value_base: &Value,
     value_idx: &Value,
     span_base: &Span,
@@ -409,7 +411,7 @@ pub(crate) fn access_index(
 #[expect(clippy::too_many_arguments, reason = "operand and bounds spans remain explicit")]
 /// Slices a text or list; a text slice must cut on UTF-8 boundaries.
 pub(crate) fn access_slice(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     value_base: &Value,
     value_idx: &Value,
     value_len: &Value,
@@ -469,7 +471,7 @@ pub(crate) fn access_slice(
 
 /// Replaces one element of a list or one character of a text.
 pub(crate) fn update_index(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     value_base: &Value,
     value_idx: &Value,
     value_upd: Value,
@@ -557,7 +559,7 @@ pub(crate) fn update_index(
 #[expect(clippy::too_many_arguments, reason = "operand spans remain explicit")]
 /// Replaces a range of a list or text with a value of the same length.
 pub(crate) fn update_slice(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     value_base: &Value,
     value_idx: &Value,
     value_len: &Value,
