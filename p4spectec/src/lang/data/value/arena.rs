@@ -13,7 +13,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         intern::{CanonId, CanonInterner, Interned, Interner, RcInterner},
-        shape::ShapeArena,
+        notation::ShapeArena,
         typ::TypKind,
     },
 };

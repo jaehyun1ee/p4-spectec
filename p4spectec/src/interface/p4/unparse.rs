@@ -11,11 +11,11 @@ use std::collections::HashMap;
 use crate::util::text::escape_text;
 
 use crate::lang::{
-    common::{
-        notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
-        prim::num::Number,
+    common::{notation::atom::Atom, prim::num::Number},
+    data::{
+        notation::{Mixfix, Mixop},
+        value::{Arena, Value, ValueCase, ValueKind},
     },
-    data::value::{Arena, Value, ValueCase, ValueKind},
     hints::alter::{self, AlterHint, Renderer},
     traits::print::Print,
 };

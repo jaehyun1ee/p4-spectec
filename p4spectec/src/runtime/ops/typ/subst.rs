@@ -4,9 +4,9 @@
 //! so a substituted type cannot capture a bound type parameter.
 //! Substituting a type variable that has arguments is rejected as higher-order.
 
-use crate::lang::common::{
-    ds::map::{ArityMismatch, IdMap},
-    notation::mixop::Mixop,
+use crate::lang::{
+    common::ds::map::{ArityMismatch, IdMap},
+    data::notation::Mixop,
 };
 
 use crate::lang::il::ast::{self, TypKind};

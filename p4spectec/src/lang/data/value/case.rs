@@ -10,8 +10,7 @@ use std::{cmp::Ordering, fmt, slice};
 
 use super::{Value, ValueError};
 use crate::lang::{
-    common::notation::{mixfix::Mixfix, mixop::Mixop},
-    data::shape::{Shape, ShapeArena, ShapeKind},
+    data::notation::{Mixfix, Mixop, Shape, ShapeArena, ShapeKind},
     traits::print::Printer,
 };
 

@@ -5,7 +5,7 @@
 //! `FuncSignature` extracts types from prepared PL function definitions.
 
 use crate::lang::data::{
-    shape::ShapeArena,
+    notation::ShapeArena,
     typ::{FuncTyp, make},
 };
 

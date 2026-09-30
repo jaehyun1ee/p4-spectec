@@ -10,7 +10,7 @@
 use std::rc::Rc;
 
 use crate::lang::data::{
-    shape::{MixopShape, ShapeArena},
+    notation::{MixopShape, ShapeArena},
     value::ValueError,
 };
 

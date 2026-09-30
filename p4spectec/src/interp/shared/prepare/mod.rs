@@ -11,9 +11,9 @@
 pub mod ast;
 
 use crate::lang::{
-    common::{Id, notation::mixfix::Mixfix, source::NotePhrase},
+    common::{Id, source::NotePhrase},
     data::{
-        shape::ShapeArena,
+        notation::{Mixfix, ShapeArena},
         var::{IdSlot, Var, VarSlot},
     },
 };

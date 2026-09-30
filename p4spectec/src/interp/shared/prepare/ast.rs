@@ -7,7 +7,7 @@
 //! so `eval::iter` can find its slot.
 
 use crate::lang::data::{
-    shape::MixopShape,
+    notation::MixopShape,
     var::{IdSlot, VarSlot},
 };
 

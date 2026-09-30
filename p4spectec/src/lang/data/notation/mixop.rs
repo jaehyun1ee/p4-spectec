@@ -3,7 +3,8 @@
 //! A `Mixop` is a `Mixfix<()>`:
 //! the atoms of a notation form and where its arguments go.
 //! `fill` puts arguments back in left-to-right order;
-//! `shape` parses a mixop from its text once and caches it.
+//! `shape` parses a mixop from its text once and caches it,
+//! through the frontend parser (the one use of `frontend` from `data`).
 
 use std::{cell::RefCell, collections::HashMap, error::Error, fmt, rc::Rc};
 

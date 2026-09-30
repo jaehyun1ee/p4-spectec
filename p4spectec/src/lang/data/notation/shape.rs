@@ -7,10 +7,9 @@
 
 use std::hash::{Hash, Hasher};
 
-use crate::lang::{
-    common::notation::mixfix::AtomPhrase,
-    data::intern::{CanonEq, CanonHash, CanonInterner, Interned},
-};
+use crate::lang::data::intern::{CanonEq, CanonHash, CanonInterner, Interned};
+
+use super::mixfix::AtomPhrase;
 
 // = Shapes
 

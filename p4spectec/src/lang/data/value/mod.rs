@@ -19,11 +19,13 @@ use crate::util::json::json;
 use crate::lang::{
     common::{
         Id, TId,
-        notation::mixfix::Mixfix,
         prim::num::{self, Number},
         source::Span,
     },
-    data::typ::{self, Typ, TypKind},
+    data::{
+        notation::Mixfix,
+        typ::{self, Typ, TypKind},
+    },
 };
 
 pub use arena::Arena;
@@ -128,8 +130,8 @@ pub mod make {
             span: $span:expr $(,)?
         ) => {{
             let (shape_text, args, typ_name, span) = ($shape, $args, $typ, $span);
-            let mixop = $crate::lang::common::notation::mixop::shape(shape_text);
-            let mixfix = $crate::lang::common::notation::mixop::Mixop::fill(mixop.as_ref(), args)
+            let mixop = $crate::lang::data::notation::mixop::shape(shape_text);
+            let mixfix = $crate::lang::data::notation::Mixop::fill(mixop.as_ref(), args)
                 .expect("mixop arity matches its value constructor");
             let id = $crate::phrase! {
                 node: typ_name.to_owned(),
@@ -271,7 +273,7 @@ pub mod get {
             match $value_case {
                 Some(value_case)
                     if [$shape, $($shape_alt),*].into_iter().any(|shape_text| {
-                        let expected = $crate::lang::common::notation::mixop::shape(shape_text);
+                        let expected = $crate::lang::data::notation::mixop::shape(shape_text);
                         value_case.eq_shape($arena.shapes(), expected.as_ref())
                     }) =>
                 {

@@ -23,7 +23,7 @@ use crate::{
 };
 
 use crate::lang::data::{
-    shape::ShapeArena,
+    notation::ShapeArena,
     value::{Arena, Value},
 };
 

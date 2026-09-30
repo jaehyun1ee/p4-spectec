@@ -5,15 +5,35 @@
 //! left to right, so argument positions keep their notation order;
 //! `fill` expands a shape back into a `Mixfix` with the given arguments.
 
-use crate::lang::{
-    common::notation::{mixfix::Mixfix, mixop::ArityMismatch},
-    data::{
-        intern::{CanonId, CanonInterner},
-        value::ValueError,
-    },
+use std::num::TryFromIntError;
+
+use thiserror::Error;
+
+use crate::lang::data::intern::{CanonId, CanonInterner};
+
+use super::{
+    mixfix::Mixfix,
+    mixop::ArityMismatch,
+    shape::{Shape, ShapeKind},
 };
 
-use super::kind::{Shape, ShapeKind};
+// = Errors
+
+/// A failure interning a shape.
+#[derive(Clone, Copy, Debug, Error, Eq, PartialEq)]
+pub enum ShapeError {
+    /// The arena ran out of 32-bit handles.
+    #[error("shape arena index overflow")]
+    IndexOverflow,
+}
+
+// - Index overflow
+
+impl From<TryFromIntError> for ShapeError {
+    fn from(_: TryFromIntError) -> Self {
+        Self::IndexOverflow
+    }
+}
 
 // = Arena storage
 
@@ -37,7 +57,7 @@ impl ShapeArena {
     /// Interns a notation's shape and counts its argument positions.
     ///
     /// Atoms are copied; the arguments themselves are not read.
-    pub fn intern_notation<T>(&mut self, mixfix: &Mixfix<T>) -> Result<(Shape, usize), ValueError> {
+    pub fn intern_notation<T>(&mut self, mixfix: &Mixfix<T>) -> Result<(Shape, usize), ShapeError> {
         let mut arity = 0;
         let shape = self.intern_borrowed(mixfix, &mut arity)?;
         Ok((shape, arity))
@@ -48,7 +68,7 @@ impl ShapeArena {
         &mut self,
         mixfix: &Mixfix<T>,
         arity: &mut usize,
-    ) -> Result<Shape, ValueError> {
+    ) -> Result<Shape, ShapeError> {
         // Children get their canonical identities before the parent is hashed
         let kind = match mixfix {
             Mixfix::Arg(_) => {
@@ -79,7 +99,7 @@ impl ShapeArena {
     pub(crate) fn split_notation<T>(
         &mut self,
         mixfix: Mixfix<T>,
-    ) -> Result<(Shape, Vec<T>), ValueError> {
+    ) -> Result<(Shape, Vec<T>), ShapeError> {
         let mut args = Vec::new();
         let shape = self.intern_owned(mixfix, &mut args)?;
         Ok((shape, args))
@@ -90,7 +110,7 @@ impl ShapeArena {
         &mut self,
         mixfix: Mixfix<T>,
         args: &mut Vec<T>,
-    ) -> Result<Shape, ValueError> {
+    ) -> Result<Shape, ShapeError> {
         // Children get their canonical identities before the parent is hashed
         let kind = match mixfix {
             Mixfix::Arg(arg) => {

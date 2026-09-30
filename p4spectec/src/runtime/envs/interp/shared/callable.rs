@@ -7,7 +7,7 @@
 use std::{fmt, rc::Rc};
 
 use crate::lang::{
-    data::shape::ShapeArena,
+    data::notation::ShapeArena,
     traits::{
         eq::SyntaxEq,
         print::{Print, Printer},

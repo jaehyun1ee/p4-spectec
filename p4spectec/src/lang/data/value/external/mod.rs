@@ -16,8 +16,8 @@ use serde_state::{DeserializeState, SerializeState};
 use crate::util::json::json;
 
 use crate::lang::{
-    common::{notation::mixfix::Mixfix, source::Span},
-    data::{intern::Interned, typ::TypKind},
+    common::source::Span,
+    data::{intern::Interned, notation::Mixfix, typ::TypKind},
 };
 
 use super::{Arena, ValueCase, ValueKind};

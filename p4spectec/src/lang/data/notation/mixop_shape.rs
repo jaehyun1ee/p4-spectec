@@ -8,14 +8,14 @@
 use std::{fmt, rc::Rc};
 
 use crate::lang::{
-    common::notation::mixop::Mixop,
+    il::ast::NotationRef,
     traits::{
         eq::SyntaxEq,
         print::{Print, Printer},
     },
 };
 
-use super::kind::Shape;
+use super::{mixop::Mixop, shape::Shape};
 
 /// A notation with its shape in the specification's `ShapeArena`.
 #[derive(Clone, Debug)]
@@ -41,5 +41,11 @@ impl SyntaxEq for MixopShape {
 impl Print for MixopShape {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.mixop.print(printer)
+    }
+}
+
+impl NotationRef for MixopShape {
+    fn mixop(&self) -> &Mixop {
+        &self.mixop
     }
 }

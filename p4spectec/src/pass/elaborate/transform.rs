@@ -17,10 +17,10 @@ use crate::lang::{
     common::{
         Id,
         ds::map::IdMap,
-        notation::mixfix::Mixfix,
         prim,
         source::{Phrase, Span},
     },
+    data::notation::Mixfix,
     hints::input,
     traits::{at::At, free::FreeIds, print::Print},
 };

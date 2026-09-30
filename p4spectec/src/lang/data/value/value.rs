@@ -27,7 +27,7 @@ use crate::lang::{
     },
     data::{
         intern::{CanonEq, CanonHash, CanonInterner, Interned},
-        shape::ShapeArena,
+        notation::{ShapeArena, ShapeError},
         typ::TypKind,
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
@@ -306,5 +306,14 @@ pub enum ValueError {
 impl From<TryFromIntError> for ValueError {
     fn from(_: TryFromIntError) -> Self {
         Self::IndexOverflow
+    }
+}
+
+// Shape overflow surfaces as the arena's overflow at the value boundary
+impl From<ShapeError> for ValueError {
+    fn from(error: ShapeError) -> Self {
+        match error {
+            ShapeError::IndexOverflow => Self::IndexOverflow,
+        }
     }
 }
