@@ -12,9 +12,9 @@ use thiserror::Error;
 use crate::lang::data::intern::{CanonId, CanonInterner};
 
 use super::{
-    mixfix::Mixfix,
     mixop::ArityMismatch,
     shape::{Shape, ShapeKind},
+    tree::Mixfix,
 };
 
 // = Errors

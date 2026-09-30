@@ -1,11 +1,12 @@
-//! Mixfix forms, literal atoms interleaved with typed argument holes
+//! Tree representation of notation: `Mixfix<T>` and `Mixop`
 //!
+//! `Tree` holds a node's children in place:
+//! a box per bracket or infix side, a vector per sequence.
 //! `Mixfix<T>` is the notation form with arguments of type `T`:
 //! types for a notation type, expressions for a notation expression,
-//! values for a case value, `()` for the bare shape.
-//! Comparison, hashing, and equality look at atoms and arguments,
-//! never at atom spans;
-//! `eq_shape` compares atoms only.
+//! values for a case value, `()` for the bare shape (`Mixop`).
+//! Comparison, hashing, and equality look at atom names and arguments,
+//! never at atom spans; `eq_shape` compares atoms only.
 
 use std::{
     cmp::Ordering,
@@ -17,11 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
 
 use crate::lang::{
-    common::{
-        ds::set::IdSet,
-        notation::atom::Atom,
-        source::{Phrase, Span},
-    },
+    common::{ds::set::IdSet, notation::atom::Atom, source::Span},
     traits::{
         at::At,
         cmp::SyntaxCmp,
@@ -31,26 +28,63 @@ use crate::lang::{
     },
 };
 
+use super::node::{AtomPhrase, Node, Repr};
+
 // == Types
 
-/// An atom paired with its source span.
-pub type AtomPhrase = Phrase<Atom>;
+/// Children held in place: a box per bracket or infix side, a vector per sequence.
+#[derive(Clone, Copy, Debug)]
+pub struct Tree;
+
+impl<A> Repr<A> for Tree {
+    type Child = Box<Node<A, Tree>>;
+    type Children = Vec<Node<A, Tree>>;
+}
 
 /// A mixfix expression: literal atoms interleaved with argument holes of `T`.
 ///
-/// For example `_ + _` is infix with two holes and `[ _ ]` brackets one.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum Mixfix<T> {
-    /// Argument position.
-    Arg(T),
-    /// Literal atom.
-    Atom(AtomPhrase),
-    /// Bracketed expression.
-    Brack(AtomPhrase, Box<Self>, AtomPhrase),
-    /// Infix expression.
-    Infix(Box<Self>, AtomPhrase, Box<Self>),
-    /// Sequence of expressions.
-    Seq(Vec<Self>),
+/// Equality, ordering, and hashing ignore atom spans.
+pub type Mixfix<T> = Node<T, Tree>;
+
+// - Cloning and debugging
+
+impl<T: Clone> Clone for Mixfix<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Arg(arg) => Self::Arg(arg.clone()),
+            Self::Atom(atom) => Self::Atom(atom.clone()),
+            Self::Brack(atom_l, mixfix, atom_r) => {
+                Self::Brack(atom_l.clone(), mixfix.clone(), atom_r.clone())
+            }
+            Self::Infix(mixfix_l, atom, mixfix_r) => {
+                Self::Infix(mixfix_l.clone(), atom.clone(), mixfix_r.clone())
+            }
+            Self::Seq(mixfixes) => Self::Seq(mixfixes.clone()),
+        }
+    }
+}
+
+// The same text a derive prints: variant names and fields, no type name
+impl<T: fmt::Debug> fmt::Debug for Mixfix<T> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Arg(arg) => fmt.debug_tuple("Arg").field(arg).finish(),
+            Self::Atom(atom) => fmt.debug_tuple("Atom").field(atom).finish(),
+            Self::Brack(atom_l, mixfix, atom_r) => fmt
+                .debug_tuple("Brack")
+                .field(atom_l)
+                .field(mixfix)
+                .field(atom_r)
+                .finish(),
+            Self::Infix(mixfix_l, atom, mixfix_r) => fmt
+                .debug_tuple("Infix")
+                .field(mixfix_l)
+                .field(atom)
+                .field(mixfix_r)
+                .finish(),
+            Self::Seq(mixfixes) => fmt.debug_tuple("Seq").field(mixfixes).finish(),
+        }
+    }
 }
 
 // == Source locations
@@ -90,19 +124,6 @@ impl<T: At> At for Mixfix<T> {
 // == Equality and comparison
 
 impl<T> Mixfix<T> {
-    // - Tagging for comparison
-
-    /// Orders the variants for comparison across shapes.
-    fn tag(&self) -> u8 {
-        match self {
-            Self::Arg(_) => 0,
-            Self::Atom(_) => 1,
-            Self::Brack(_, _, _) => 2,
-            Self::Infix(_, _, _) => 3,
-            Self::Seq(_) => 4,
-        }
-    }
-
     // - Comparison
 
     /// Compares structure and atoms lexicographically,
@@ -501,7 +522,96 @@ impl<T> Mixfix<T> {
     }
 }
 
+// == Mixops
+
+/// A mixfix shape with unfilled argument positions.
+pub type Mixop = Mixfix<()>;
+
+impl Print for Mixop {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        self.print_with(printer, |(), printer| printer.write("%"))
+    }
+}
+
+// - Syntax operations
+
+impl SyntaxEq for () {
+    fn syntax_eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl FreeIds for () {
+    fn free_ids(&self) -> IdSet {
+        IdSet::new()
+    }
+}
+
+// - Converting a mixfix to a mixop
+
+impl<T> Mixfix<T> {
+    /// Replaces every argument with an unfilled mixop position.
+    pub fn to_mixop(&self) -> Mixop {
+        self.map(|_| ())
+    }
+
+    /// Separates the mixop shape from its arguments.
+    pub fn split(&self) -> (Mixop, Vec<&T>) {
+        (self.to_mixop(), self.args())
+    }
+}
+
 // == Serialization
+
+// - Plain encode and decode
+
+// Written out rather than derived on the generic `Node`,
+// with the variant names and shapes the former `Mixfix` derive produced
+impl<T: Serialize> Serialize for Mixfix<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(Serialize)]
+        #[serde(rename = "Mixfix")]
+        enum MixfixRef<'a, T> {
+            Arg(&'a T),
+            Atom(&'a AtomPhrase),
+            Brack(&'a AtomPhrase, &'a Mixfix<T>, &'a AtomPhrase),
+            Infix(&'a Mixfix<T>, &'a AtomPhrase, &'a Mixfix<T>),
+            Seq(&'a [Mixfix<T>]),
+        }
+
+        let mixfix = match self {
+            Self::Arg(arg) => MixfixRef::Arg(arg),
+            Self::Atom(atom) => MixfixRef::Atom(atom),
+            Self::Brack(atom_l, mixfix, atom_r) => MixfixRef::Brack(atom_l, mixfix, atom_r),
+            Self::Infix(mixfix_l, atom, mixfix_r) => MixfixRef::Infix(mixfix_l, atom, mixfix_r),
+            Self::Seq(mixfixes) => MixfixRef::Seq(mixfixes),
+        };
+        mixfix.serialize(serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Mixfix<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // Recursive children use Mixfix so only this level needs conversion
+        #[derive(Deserialize)]
+        #[serde(rename = "Mixfix")]
+        enum MixfixOwned<T> {
+            Arg(T),
+            Atom(AtomPhrase),
+            Brack(AtomPhrase, Box<Mixfix<T>>, AtomPhrase),
+            Infix(Box<Mixfix<T>>, AtomPhrase, Box<Mixfix<T>>),
+            Seq(Vec<Mixfix<T>>),
+        }
+
+        Ok(match MixfixOwned::deserialize(deserializer)? {
+            MixfixOwned::Arg(arg) => Self::Arg(arg),
+            MixfixOwned::Atom(atom) => Self::Atom(atom),
+            MixfixOwned::Brack(atom_l, mixfix, atom_r) => Self::Brack(atom_l, mixfix, atom_r),
+            MixfixOwned::Infix(mixfix_l, atom, mixfix_r) => Self::Infix(mixfix_l, atom, mixfix_r),
+            MixfixOwned::Seq(mixfixes) => Self::Seq(mixfixes),
+        })
+    }
+}
 
 // - Encode
 

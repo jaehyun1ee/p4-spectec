@@ -15,7 +15,7 @@ use crate::lang::{
     },
 };
 
-use super::{mixop::Mixop, shape::Shape};
+use super::{shape::Shape, tree::Mixop};
 
 /// A notation with its shape in the specification's `ShapeArena`.
 #[derive(Clone, Debug)]

@@ -9,7 +9,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::lang::data::intern::{CanonEq, CanonHash, CanonInterner, Interned};
 
-use super::mixfix::AtomPhrase;
+use super::node::AtomPhrase;
 
 // = Shapes
 

@@ -8,41 +8,9 @@
 
 use std::{cell::RefCell, collections::HashMap, error::Error, fmt, rc::Rc};
 
-use crate::lang::{
-    common::ds::set::IdSet,
-    traits::{
-        eq::SyntaxEq,
-        free::FreeIds,
-        print::{Print, Printer},
-    },
-};
-
 use crate::frontend;
 
-use super::mixfix::Mixfix;
-
-/// A mixfix shape with unfilled argument positions.
-pub type Mixop = Mixfix<()>;
-
-impl Print for Mixop {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.print_with(printer, |(), printer| printer.write("%"))
-    }
-}
-
-// == Syntax operations
-
-impl SyntaxEq for () {
-    fn syntax_eq(&self, _other: &Self) -> bool {
-        true
-    }
-}
-
-impl FreeIds for () {
-    fn free_ids(&self) -> IdSet {
-        IdSet::new()
-    }
-}
+use super::tree::{Mixfix, Mixop};
 
 // = Shape parsing
 
@@ -68,20 +36,6 @@ pub(crate) fn shape(shape_text: &str) -> Rc<Mixop> {
             .insert(Rc::from(shape_text), Rc::clone(&mixop));
         mixop
     })
-}
-
-// == Converting a mixfix to a mixop
-
-impl<T> Mixfix<T> {
-    /// Replaces every argument with an unfilled mixop position.
-    pub fn to_mixop(&self) -> Mixop {
-        self.map(|_| ())
-    }
-
-    /// Separates the mixop shape from its arguments.
-    pub fn split(&self) -> (Mixop, Vec<&T>) {
-        (self.to_mixop(), self.args())
-    }
 }
 
 // == Filling a mixop with arguments
