@@ -1,45 +1,131 @@
-//! Notation nodes whose children are shape handles
+//! Handle representation of notation: `ShapeKind` and `Shape`
 //!
-//! `Brack(atom_l, shape, atom_r)` refers to its inner shape by handle,
-//! so equal subtrees are stored once and compared by identity.
-//! Exact equality and hashing include atom spans;
-//! `CanonEq` and `CanonHash` read atom names and children's canonical ids.
+//! `Handle` holds a node's children as handles into a `ShapeArena`,
+//! so `Brack(atom_l, shape, atom_r)` refers to its inner shape by handle
+//! and equal subtrees are stored once.
+//! Exact equality and hashing include atom spans and compare children
+//! by handle; `CanonEq` and `CanonHash` read atom names
+//! and children's canonical ids, so they ignore spans.
 
-use std::hash::{Hash, Hasher};
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+};
 
 use crate::lang::data::intern::{CanonEq, CanonHash, CanonInterner, Interned};
 
-use super::node::AtomPhrase;
+use super::{
+    arena::ShapeArena,
+    node::{Expand, Node, Repr},
+};
+
+// = Representation
+
+/// Children held as handles into a `ShapeArena`.
+#[derive(Clone, Copy, Debug)]
+pub struct Handle;
+
+impl Repr<()> for Handle {
+    type Child = Shape;
+    type Children = Vec<Shape>;
+}
+
+impl Expand<()> for Handle {
+    type Ctx = ShapeArena;
+
+    fn child<'a>(shapes: &'a ShapeArena, shape: &'a Shape) -> &'a ShapeKind
+    where
+        (): 'a,
+    {
+        shapes.kind(*shape)
+    }
+
+    fn children<'a>(
+        shapes: &'a ShapeArena,
+        shapes_seq: &'a Vec<Shape>,
+    ) -> impl ExactSizeIterator<Item = &'a ShapeKind> + 'a
+    where
+        (): 'a,
+    {
+        shapes_seq.iter().map(move |shape| shapes.kind(*shape))
+    }
+}
 
 // = Shapes
+
+/// A notation node whose children are handles; arguments are holes.
+pub type ShapeKind = Node<(), Handle>;
 
 /// A notation handle valid only in the `ShapeArena` that issued it.
 pub type Shape = Interned<ShapeKind>;
 
-/// A notation node: atoms and argument holes, with children as handles.
-#[derive(Debug, PartialEq, Eq, Hash)]
-pub enum ShapeKind {
-    /// Argument position.
-    Arg,
-    /// Literal atom.
-    Atom(AtomPhrase),
-    /// Bracketed shape.
-    Brack(AtomPhrase, Shape, AtomPhrase),
-    /// Infix shape.
-    Infix(Shape, AtomPhrase, Shape),
-    /// Sequence of shapes.
-    Seq(Vec<Shape>),
+// = Exact equality and hashing
+
+// Exact identity: atoms with their spans, children by handle number
+
+impl PartialEq for ShapeKind {
+    fn eq(&self, kind_other: &Self) -> bool {
+        match (self, kind_other) {
+            (Self::Arg(()), Self::Arg(())) => true,
+            (Self::Atom(atom_l), Self::Atom(atom_r)) => atom_l == atom_r,
+            (
+                Self::Brack(atom_l_l, shape_l, atom_l_r),
+                Self::Brack(atom_r_l, shape_r, atom_r_r),
+            ) => atom_l_l == atom_r_l && shape_l == shape_r && atom_l_r == atom_r_r,
+            (
+                Self::Infix(shape_l_l, atom_l, shape_l_r),
+                Self::Infix(shape_r_l, atom_r, shape_r_r),
+            ) => shape_l_l == shape_r_l && atom_l == atom_r && shape_l_r == shape_r_r,
+            (Self::Seq(shapes_l), Self::Seq(shapes_r)) => shapes_l == shapes_r,
+            _ => false,
+        }
+    }
 }
 
-impl ShapeKind {
-    /// Orders the variants as `Mixfix` comparison does.
-    pub(crate) fn tag(&self) -> u8 {
+impl Eq for ShapeKind {}
+
+impl Hash for ShapeKind {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.tag().hash(hasher);
         match self {
-            Self::Arg => 0,
-            Self::Atom(_) => 1,
-            Self::Brack(..) => 2,
-            Self::Infix(..) => 3,
-            Self::Seq(_) => 4,
+            Self::Arg(()) => {}
+            Self::Atom(atom) => atom.hash(hasher),
+            Self::Brack(atom_l, shape, atom_r) => {
+                atom_l.hash(hasher);
+                shape.hash(hasher);
+                atom_r.hash(hasher);
+            }
+            Self::Infix(shape_l, atom, shape_r) => {
+                shape_l.hash(hasher);
+                atom.hash(hasher);
+                shape_r.hash(hasher);
+            }
+            Self::Seq(shapes) => shapes.hash(hasher),
+        }
+    }
+}
+
+// - Debugging
+
+// The same text a derive prints: variant names and fields, no type name
+impl fmt::Debug for ShapeKind {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Arg(()) => fmt.debug_tuple("Arg").field(&()).finish(),
+            Self::Atom(atom) => fmt.debug_tuple("Atom").field(atom).finish(),
+            Self::Brack(atom_l, shape, atom_r) => fmt
+                .debug_tuple("Brack")
+                .field(atom_l)
+                .field(shape)
+                .field(atom_r)
+                .finish(),
+            Self::Infix(shape_l, atom, shape_r) => fmt
+                .debug_tuple("Infix")
+                .field(shape_l)
+                .field(atom)
+                .field(shape_r)
+                .finish(),
+            Self::Seq(shapes) => fmt.debug_tuple("Seq").field(shapes).finish(),
         }
     }
 }
@@ -53,7 +139,7 @@ impl CanonEq for ShapeKind {
             interner.canon_id(*shape_l) == interner.canon_id(*shape_r)
         };
         match (self, kind_r) {
-            (Self::Arg, Self::Arg) => true,
+            (Self::Arg(()), Self::Arg(())) => true,
             (Self::Atom(atom_l), Self::Atom(atom_r)) => atom_l.node == atom_r.node,
             (
                 Self::Brack(atom_l_l, shape_l, atom_l_r),
@@ -87,7 +173,7 @@ impl CanonHash for ShapeKind {
     fn canon_hash<H: Hasher>(&self, interner: &CanonInterner<Self>, _: &(), hasher: &mut H) {
         self.tag().hash(hasher);
         match self {
-            Self::Arg => {}
+            Self::Arg(()) => {}
             Self::Atom(atom) => atom.node.hash(hasher),
             Self::Brack(atom_l, shape, atom_r) => {
                 atom_l.node.hash(hasher);

@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
 
 use crate::lang::{
-    common::{ds::set::IdSet, notation::atom::Atom, source::Span},
+    common::{ds::set::IdSet, source::Span},
     traits::{
         at::At,
         cmp::SyntaxCmp,
@@ -28,7 +28,10 @@ use crate::lang::{
     },
 };
 
-use super::node::{AtomPhrase, Node, Repr};
+use super::{
+    node::{AtomPhrase, Expand, Node, Repr},
+    walk,
+};
 
 // == Types
 
@@ -39,6 +42,27 @@ pub struct Tree;
 impl<A> Repr<A> for Tree {
     type Child = Box<Node<A, Tree>>;
     type Children = Vec<Node<A, Tree>>;
+}
+
+impl<A> Expand<A> for Tree {
+    type Ctx = ();
+
+    fn child<'a>((): &'a (), child: &'a Self::Child) -> &'a Node<A, Self>
+    where
+        A: 'a,
+    {
+        child
+    }
+
+    fn children<'a>(
+        (): &'a (),
+        children: &'a Self::Children,
+    ) -> impl ExactSizeIterator<Item = &'a Node<A, Self>> + 'a
+    where
+        A: 'a,
+    {
+        children.iter()
+    }
 }
 
 /// A mixfix expression: literal atoms interleaved with argument holes of `T`.
@@ -127,97 +151,18 @@ impl<T> Mixfix<T> {
     // - Comparison
 
     /// Compares structure and atoms lexicographically,
-    /// using `compare_arg` for arguments.
+    /// using `compare_arg` for arguments (`walk::cmp_by`).
     pub fn cmp_by<U>(
         &self,
         mixfix_other: &Mixfix<U>,
-        mut compare_arg: impl FnMut(&T, &U) -> Ordering,
+        compare_arg: impl FnMut(&T, &U) -> Ordering,
     ) -> Ordering {
-        self.cmp_by_inner(mixfix_other, &mut compare_arg)
+        walk::cmp_by(&(), self, &(), mixfix_other, compare_arg)
     }
 
-    /// Structural comparison, threading the argument comparator.
-    fn cmp_by_inner<U>(
-        &self,
-        mixfix_other: &Mixfix<U>,
-        compare_arg: &mut impl FnMut(&T, &U) -> Ordering,
-    ) -> Ordering {
-        match (self, mixfix_other) {
-            (Self::Arg(arg_l), Mixfix::Arg(arg_r)) => compare_arg(arg_l, arg_r),
-            (Self::Atom(atom_l), Mixfix::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
-            (
-                Self::Brack(atom_l_l, mixfix_l, atom_l_r),
-                Mixfix::Brack(atom_r_l, mixfix_r, atom_r_r),
-            ) => atom_l_l
-                .node
-                .cmp(&atom_r_l.node)
-                .then_with(|| mixfix_l.cmp_by_inner(mixfix_r, compare_arg))
-                .then_with(|| atom_l_r.node.cmp(&atom_r_r.node)),
-            (
-                Self::Infix(mixfix_l_l, atom_l, mixfix_l_r),
-                Mixfix::Infix(mixfix_r_l, atom_r, mixfix_r_r),
-            ) => mixfix_l_l
-                .cmp_by_inner(mixfix_r_l, compare_arg)
-                .then_with(|| atom_l.node.cmp(&atom_r.node))
-                .then_with(|| mixfix_l_r.cmp_by_inner(mixfix_r_r, compare_arg)),
-            (Self::Seq(mixfixes_l), Mixfix::Seq(mixfixes_r)) => {
-                for (mixfix_l, mixfix_r) in mixfixes_l.iter().zip(mixfixes_r) {
-                    let ord = mixfix_l.cmp_by_inner(mixfix_r, compare_arg);
-                    if ord != Ordering::Equal {
-                        return ord;
-                    }
-                }
-                mixfixes_l.len().cmp(&mixfixes_r.len())
-            }
-            // Different shapes order by variant
-            _ => self.tag().cmp(&mixfix_other.tag()),
-        }
-    }
-
-    /// Compares structure and atoms, using `eq_arg` for arguments.
-    pub fn eq_by<U>(
-        &self,
-        mixfix_other: &Mixfix<U>,
-        mut eq_arg: impl FnMut(&T, &U) -> bool,
-    ) -> bool {
-        self.eq_by_inner(mixfix_other, &mut eq_arg)
-    }
-
-    /// Structural equality, threading the argument predicate.
-    fn eq_by_inner<U>(
-        &self,
-        mixfix_other: &Mixfix<U>,
-        eq_arg: &mut impl FnMut(&T, &U) -> bool,
-    ) -> bool {
-        match (self, mixfix_other) {
-            (Self::Arg(arg_l), Mixfix::Arg(arg_r)) => eq_arg(arg_l, arg_r),
-            (Self::Atom(atom_l), Mixfix::Atom(atom_r)) => atom_l.node == atom_r.node,
-            (
-                Self::Brack(atom_l_l, mixfix_l, atom_l_r),
-                Mixfix::Brack(atom_r_l, mixfix_r, atom_r_r),
-            ) => {
-                atom_l_l.node == atom_r_l.node
-                    && mixfix_l.eq_by_inner(mixfix_r, eq_arg)
-                    && atom_l_r.node == atom_r_r.node
-            }
-            (
-                Self::Infix(mixfix_l_l, atom_l, mixfix_l_r),
-                Mixfix::Infix(mixfix_r_l, atom_r, mixfix_r_r),
-            ) => {
-                mixfix_l_l.eq_by_inner(mixfix_r_l, eq_arg)
-                    && atom_l.node == atom_r.node
-                    && mixfix_l_r.eq_by_inner(mixfix_r_r, eq_arg)
-            }
-            (Self::Seq(mixfixes_l), Mixfix::Seq(mixfixes_r)) => {
-                mixfixes_l.len() == mixfixes_r.len()
-                    && mixfixes_l
-                        .iter()
-                        .zip(mixfixes_r)
-                        .all(|(mixfix_l, mixfix_r)| mixfix_l.eq_by_inner(mixfix_r, eq_arg))
-            }
-            // Different shapes
-            _ => false,
-        }
+    /// Compares structure and atoms, using `eq_arg` for arguments (`walk::eq_by`).
+    pub fn eq_by<U>(&self, mixfix_other: &Mixfix<U>, eq_arg: impl FnMut(&T, &U) -> bool) -> bool {
+        walk::eq_by(&(), self, &(), mixfix_other, eq_arg)
     }
 
     /// Tests whether two mixfixes have the same atoms and argument positions.
@@ -459,66 +404,14 @@ impl<T> Mixfix<T> {
 // == Printing
 
 impl<T> Mixfix<T> {
-    /// Writes atoms and arguments, separating non-empty pieces with spaces.
+    /// Writes atoms and arguments, separating non-empty pieces with spaces
+    /// (`walk::print_with`).
     pub fn print_with(
         &self,
         printer: &mut Printer<'_>,
-        mut print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
+        print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
     ) -> fmt::Result {
-        let mut is_first = true;
-        self.print_with_inner(printer, &mut print_arg, &mut is_first)
-    }
-
-    /// Prints this subtree, tracking whether a separator is due.
-    fn print_with_inner(
-        &self,
-        printer: &mut Printer<'_>,
-        print_arg: &mut impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
-        is_first: &mut bool,
-    ) -> fmt::Result {
-        // A space before every piece but the first
-        let print_sep = |printer: &mut Printer<'_>, is_first: &mut bool| {
-            if *is_first {
-                *is_first = false;
-                Ok(())
-            } else {
-                printer.write(" ")
-            }
-        };
-
-        // Empty keyword atoms print nothing, not even a space
-        let print_atom = |atom: &AtomPhrase, printer: &mut Printer<'_>, is_first: &mut bool| {
-            if matches!(&atom.node, Atom::Keyword(keyword) if keyword.is_empty()) {
-                Ok(())
-            } else {
-                print_sep(printer, is_first)?;
-                atom.print(printer)
-            }
-        };
-
-        match self {
-            Self::Arg(arg) => {
-                print_sep(printer, is_first)?;
-                print_arg(arg, printer)
-            }
-            Self::Atom(atom) => print_atom(atom, printer, is_first),
-            Self::Brack(atom_l, mixfix, atom_r) => {
-                print_atom(atom_l, printer, is_first)?;
-                mixfix.print_with_inner(printer, print_arg, is_first)?;
-                print_atom(atom_r, printer, is_first)
-            }
-            Self::Infix(mixfix_l, atom, mixfix_r) => {
-                mixfix_l.print_with_inner(printer, print_arg, is_first)?;
-                print_atom(atom, printer, is_first)?;
-                mixfix_r.print_with_inner(printer, print_arg, is_first)
-            }
-            Self::Seq(mixfixes) => {
-                for mixfix in mixfixes {
-                    mixfix.print_with_inner(printer, print_arg, is_first)?;
-                }
-                Ok(())
-            }
-        }
+        walk::print_with(&(), self, printer, print_arg)
     }
 }
 

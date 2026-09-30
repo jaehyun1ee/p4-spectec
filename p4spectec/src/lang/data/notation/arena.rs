@@ -3,7 +3,8 @@
 //! A shape handle is valid only in the arena that issued it.
 //! `intern_notation` and `split_notation` intern a `Mixfix` children first,
 //! left to right, so argument positions keep their notation order;
-//! `fill` expands a shape back into a `Mixfix` with the given arguments.
+//! `fill` expands a shape back into a `Mixfix` with the given arguments;
+//! comparison and expansion go through `walk`.
 
 use std::num::TryFromIntError;
 
@@ -15,6 +16,7 @@ use super::{
     mixop::ArityMismatch,
     shape::{Shape, ShapeKind},
     tree::Mixfix,
+    walk,
 };
 
 // = Errors
@@ -73,7 +75,7 @@ impl ShapeArena {
         let kind = match mixfix {
             Mixfix::Arg(_) => {
                 *arity += 1;
-                ShapeKind::Arg
+                ShapeKind::Arg(())
             }
             Mixfix::Atom(atom) => ShapeKind::Atom(atom.clone()),
             Mixfix::Brack(atom_l, mixfix_inner, atom_r) => {
@@ -115,7 +117,7 @@ impl ShapeArena {
         let kind = match mixfix {
             Mixfix::Arg(arg) => {
                 args.push(arg);
-                ShapeKind::Arg
+                ShapeKind::Arg(())
             }
             Mixfix::Atom(atom) => ShapeKind::Atom(atom),
             Mixfix::Brack(atom_l, mixfix_inner, atom_r) => {
@@ -160,84 +162,31 @@ impl ShapeArena {
     ///
     /// Atom spans and the notation's arguments are not compared.
     pub fn eq_notation<T>(&self, shape: Shape, mixfix: &Mixfix<T>) -> bool {
-        match (self.kind(shape), mixfix) {
-            // A position matches any argument
-            (ShapeKind::Arg, Mixfix::Arg(_)) => true,
-            // Atoms match by name
-            (ShapeKind::Atom(atom_l), Mixfix::Atom(atom_r)) => atom_l.node == atom_r.node,
-            // Brackets match both atoms and the inner shape
-            (
-                ShapeKind::Brack(atom_l_l, shape_inner, atom_l_r),
-                Mixfix::Brack(atom_r_l, mixfix_inner, atom_r_r),
-            ) => {
-                atom_l_l.node == atom_r_l.node
-                    && self.eq_notation(*shape_inner, mixfix_inner)
-                    && atom_l_r.node == atom_r_r.node
-            }
-            // Infix shapes match both sides and the operator
-            (
-                ShapeKind::Infix(shape_l, atom_l, shape_r),
-                Mixfix::Infix(mixfix_l, atom_r, mixfix_r),
-            ) => {
-                self.eq_notation(*shape_l, mixfix_l)
-                    && atom_l.node == atom_r.node
-                    && self.eq_notation(*shape_r, mixfix_r)
-            }
-            // Sequences match elementwise at equal length
-            (ShapeKind::Seq(shapes), Mixfix::Seq(mixfixes)) => {
-                shapes.len() == mixfixes.len()
-                    && shapes
-                        .iter()
-                        .zip(mixfixes)
-                        .all(|(shape, mixfix)| self.eq_notation(*shape, mixfix))
-            }
-            // Different node kinds differ
-            _ => false,
-        }
+        walk::eq_by(self, self.kind(shape), &(), mixfix, |(), _| true)
     }
 
     // - Expansion
 
     /// Expands a shape into a notation, filling positions left to right.
+    ///
+    /// Fails when `args` has fewer or more items than the shape's positions.
     pub fn fill<T>(
         &self,
         shape: Shape,
         args: impl IntoIterator<Item = T>,
     ) -> Result<Mixfix<T>, ArityMismatch> {
-        // Consume arguments in notation order; leftovers are too many
+        let kind = self.kind(shape);
+        let arity = walk::arity(self, kind);
+        // Take exactly one argument per position; leftovers are too many
         let mut args = args.into_iter();
-        let mixfix = self.fill_inner(shape, &mut args)?;
-        if args.next().is_some() { Err(ArityMismatch::ArgumentCountTooMany) } else { Ok(mixfix) }
-    }
-
-    /// Expands one node, taking arguments from the iterator.
-    fn fill_inner<T>(
-        &self,
-        shape: Shape,
-        args: &mut impl Iterator<Item = T>,
-    ) -> Result<Mixfix<T>, ArityMismatch> {
-        Ok(match self.kind(shape) {
-            // A hole takes the next argument
-            ShapeKind::Arg => Mixfix::Arg(args.next().ok_or(ArityMismatch::ArgumentCountTooFew)?),
-            // Atoms are copied with their spans
-            ShapeKind::Atom(atom) => Mixfix::Atom(atom.clone()),
-            // Compound shapes fill their parts left to right
-            ShapeKind::Brack(atom_l, shape_inner, atom_r) => Mixfix::Brack(
-                atom_l.clone(),
-                Box::new(self.fill_inner(*shape_inner, args)?),
-                atom_r.clone(),
-            ),
-            ShapeKind::Infix(shape_l, atom, shape_r) => Mixfix::Infix(
-                Box::new(self.fill_inner(*shape_l, args)?),
-                atom.clone(),
-                Box::new(self.fill_inner(*shape_r, args)?),
-            ),
-            ShapeKind::Seq(shapes) => Mixfix::Seq(
-                shapes
-                    .iter()
-                    .map(|shape| self.fill_inner(*shape, args))
-                    .collect::<Result<_, _>>()?,
-            ),
-        })
+        let args_taken: Vec<T> = args.by_ref().take(arity).collect();
+        if args_taken.len() < arity {
+            return Err(ArityMismatch::ArgumentCountTooFew);
+        }
+        if args.next().is_some() {
+            return Err(ArityMismatch::ArgumentCountTooMany);
+        }
+        let mut args_taken = args_taken.into_iter();
+        Ok(walk::to_tree(self, kind, |()| args_taken.next().expect("one argument per position")))
     }
 }

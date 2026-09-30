@@ -3,14 +3,15 @@
 //! `LEFT n` is stored as the shape of `LEFT _` and the argument list `[n]`.
 //! Constructors intern the notation into the arena's `ShapeArena`,
 //! or take a shape interned while preparing (`from_shape`);
-//! comparisons, printing, and serialization walk the shape
-//! and take arguments from the list as positions are reached.
+//! comparisons, printing, and serialization walk the shape (`walk`)
+//! and take arguments from the list as positions are reached,
+//! so a case always has one argument per position of its shape.
 
-use std::{cmp::Ordering, fmt, slice};
+use std::{cmp::Ordering, fmt};
 
 use super::{Value, ValueError};
 use crate::lang::{
-    data::notation::{Mixfix, Mixop, Shape, ShapeArena, ShapeKind},
+    data::notation::{Mixfix, Mixop, Shape, ShapeArena, walk},
     traits::print::Printer,
 };
 
@@ -93,16 +94,15 @@ impl ValueCase {
 
     /// Expands the case into its filled notation.
     pub fn to_mixfix(&self, shapes: &ShapeArena) -> Mixfix<Value> {
-        shapes
-            .fill(self.shape, self.args.iter().copied())
-            .expect("a case has one argument per shape position")
+        let mut args = self.args.iter();
+        walk::to_tree(shapes, shapes.kind(self.shape), |()| {
+            *args.next().expect("a case fills every position")
+        })
     }
 
     /// Expands the notation with unfilled argument positions.
     pub fn to_mixop(&self, shapes: &ShapeArena) -> Mixop {
-        shapes
-            .fill(self.shape, std::iter::repeat_n((), self.args.len()))
-            .expect("a case has one argument per shape position")
+        walk::to_tree(shapes, shapes.kind(self.shape), |()| ())
     }
 
     // - Printing
@@ -112,9 +112,12 @@ impl ValueCase {
         &self,
         shapes: &ShapeArena,
         printer: &mut Printer<'_>,
-        print_arg: impl FnMut(&Value, &mut Printer<'_>) -> fmt::Result,
+        mut print_arg: impl FnMut(&Value, &mut Printer<'_>) -> fmt::Result,
     ) -> fmt::Result {
-        self.to_mixfix(shapes).print_with(printer, print_arg)
+        let mut args = self.args.iter();
+        walk::print_with(shapes, shapes.kind(self.shape), printer, |(), printer| {
+            print_arg(args.next().expect("a case fills every position"), printer)
+        })
     }
 
     // - Syntax comparison
@@ -123,6 +126,7 @@ impl ValueCase {
     ///
     /// Each case reads its shape in its own `ShapeArena`;
     /// arguments compare with `compare_arg` at their positions.
+    /// Both walks visit equal prefixes, so they reach positions in step.
     pub(super) fn cmp_by(
         &self,
         shapes: &ShapeArena,
@@ -130,74 +134,18 @@ impl ValueCase {
         shapes_other: &ShapeArena,
         mut compare_arg: impl FnMut(&Value, &Value) -> Ordering,
     ) -> Ordering {
-        ShapeCmp {
-            shapes_l: shapes,
-            shapes_r: shapes_other,
-            args_l: self.args.iter(),
-            args_r: value_case_other.args.iter(),
-            compare_arg: &mut compare_arg,
-        }
-        .cmp_shape(self.shape, value_case_other.shape)
-    }
-}
-
-// = Shape comparison
-
-/// Walks two shapes in step, consuming arguments in notation order.
-struct ShapeCmp<'a, F> {
-    shapes_l: &'a ShapeArena,
-    shapes_r: &'a ShapeArena,
-    args_l: slice::Iter<'a, Value>,
-    args_r: slice::Iter<'a, Value>,
-    compare_arg: &'a mut F,
-}
-
-impl<F: FnMut(&Value, &Value) -> Ordering> ShapeCmp<'_, F> {
-    /// Compares one pair of nodes as `Mixfix::cmp_by` does.
-    ///
-    /// Both walks visit equal prefixes, so they reach positions in step.
-    fn cmp_shape(&mut self, shape_l: Shape, shape_r: Shape) -> Ordering {
-        let (shapes_l, shapes_r) = (self.shapes_l, self.shapes_r);
-        let kind_l = shapes_l.kind(shape_l);
-        let kind_r = shapes_r.kind(shape_r);
-        match (kind_l, kind_r) {
-            // Arguments compare at their position
-            (ShapeKind::Arg, ShapeKind::Arg) => {
-                let value_l = self.args_l.next().expect("a case fills every position");
-                let value_r = self.args_r.next().expect("a case fills every position");
-                (self.compare_arg)(value_l, value_r)
-            }
-            // Atoms compare by name, ignoring spans
-            (ShapeKind::Atom(atom_l), ShapeKind::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
-            // Opening atom, inner shape, then closing atom
-            (
-                ShapeKind::Brack(atom_l_l, shape_inner_l, atom_l_r),
-                ShapeKind::Brack(atom_r_l, shape_inner_r, atom_r_r),
-            ) => atom_l_l
-                .node
-                .cmp(&atom_r_l.node)
-                .then_with(|| self.cmp_shape(*shape_inner_l, *shape_inner_r))
-                .then_with(|| atom_l_r.node.cmp(&atom_r_r.node)),
-            // Left shape, operator, then right shape
-            (
-                ShapeKind::Infix(shape_l_l, atom_l, shape_l_r),
-                ShapeKind::Infix(shape_r_l, atom_r, shape_r_r),
-            ) => self
-                .cmp_shape(*shape_l_l, *shape_r_l)
-                .then_with(|| atom_l.node.cmp(&atom_r.node))
-                .then_with(|| self.cmp_shape(*shape_l_r, *shape_r_r)),
-            // Common prefix first, then length
-            (ShapeKind::Seq(shapes_seq_l), ShapeKind::Seq(shapes_seq_r)) => {
-                for (shape_l, shape_r) in shapes_seq_l.iter().zip(shapes_seq_r) {
-                    let order = self.cmp_shape(*shape_l, *shape_r);
-                    if order != Ordering::Equal {
-                        return order;
-                    }
-                }
-                shapes_seq_l.len().cmp(&shapes_seq_r.len())
-            }
-            // Different node kinds order by variant
-            _ => kind_l.tag().cmp(&kind_r.tag()),
-        }
+        let mut args_l = self.args.iter();
+        let mut args_r = value_case_other.args.iter();
+        walk::cmp_by(
+            shapes,
+            shapes.kind(self.shape),
+            shapes_other,
+            shapes_other.kind(value_case_other.shape),
+            |(), ()| {
+                let value_l = args_l.next().expect("a case fills every position");
+                let value_r = args_r.next().expect("a case fills every position");
+                compare_arg(value_l, value_r)
+            },
+        )
     }
 }
