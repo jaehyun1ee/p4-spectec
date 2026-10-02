@@ -135,7 +135,7 @@ pub mod make {
                 $crate::lang::common::notation::mixop::Mixop::fill(mixop.as_ref(), args)
                     .expect("mixop arity matches its value constructor");
             let id = $crate::phrase! {
-                node: typ_name.to_owned(),
+                node: typ_name.into(),
                 span: $crate::lang::common::source::Span::default(),
             };
             let typ = $crate::lang::data::typ::make::var(id, std::vec::Vec::new());

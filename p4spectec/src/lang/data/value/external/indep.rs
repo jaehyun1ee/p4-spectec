@@ -48,7 +48,7 @@ pub fn from_arena(arena: &ValueArena, value: &ArenaValue) -> Value {
     Value {
         node: ValueKind::from_arena(arena, arena.kind(value)),
         note: arena.typ(value).as_ref().clone(),
-        span: arena.span(value).clone(),
+        span: *arena.span(value),
     }
 }
 

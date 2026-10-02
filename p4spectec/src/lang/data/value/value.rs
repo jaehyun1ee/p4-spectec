@@ -75,7 +75,7 @@ pub enum ValueKind {
     /// A list.
     List(#[serde(state)] Vec<Value>),
     /// A function, by name.
-    Func(#[serde(state)] Id),
+    Func(Id),
     /// A host-owned value, opaque to the specification.
     Extern(Rc<json>),
 }

@@ -100,9 +100,7 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
             eval_iter_exp(runner_ctx, ctx, exp, exp_inner, exp_iter)
         }
     })();
-    result.with_frame(exp.span.clone(), || {
-        format!("while evaluating expression {}", Print::to_string(exp))
-    })
+    result.with_frame(exp.span, || format!("while evaluating expression {}", Print::to_string(exp)))
 }
 
 pub(crate) fn eval_exps<
