@@ -20,7 +20,7 @@ pub mod walk;
 pub use arena::ShapeArena;
 pub use error::{ArityMismatch, ShapeError};
 pub use handle::{Handle, Shape, ShapeKind};
-pub use mixfix::Mixfix;
+pub use mixfix::{Mixfix, MixfixRef, View};
 pub use mixop::Mixop;
 pub use node::{AtomPhrase, Node, Repr};
 pub use tree::Tree;

@@ -72,7 +72,7 @@ pub enum Subcheck {
     /// Statically a subtype: nothing to check.
     Skip,
     /// A variant value: its case must be one of these.
-    Mixop(Vec<Mixop>),
+    Mixop(Vec<Rc<Mixop>>),
     /// A tuple: check each component.
     Tuple(Vec<Subcheck>),
     /// An option or list: check each element.
@@ -86,7 +86,7 @@ pub enum Subcheck {
 /// A notation type with its span.
 pub type NotTyp = Phrase<NotTypKind>;
 /// A notation type: a mixfix skeleton with types as arguments.
-pub type NotTypKind = Mixfix<Typ>;
+pub type NotTypKind = Mixfix<Rc<Mixop>, Typ>;
 
 /// The body of a type definition.
 pub type DefTyp = Phrase<DefTypKind>;
@@ -219,7 +219,7 @@ pub enum ExpKind<I = Id, V = Var> {
 }
 
 /// A notation expression: a mixfix skeleton with expressions as arguments.
-pub type NotExp<I = Id, V = Var> = Mixfix<Exp<I, V>>;
+pub type NotExp<I = Id, V = Var> = Mixfix<Rc<Mixop>, Exp<I, V>>;
 
 /// One field of a struct expression.
 #[derive(Clone, Debug, PartialEq)]
@@ -243,7 +243,7 @@ pub struct ExpIter<V = Var> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Pattern {
     /// A variant case with this skeleton.
-    Case(Box<Mixop>),
+    Case(Rc<Mixop>),
     /// A list of some shape.
     List(ListPattern),
     /// An option, present or absent.

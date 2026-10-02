@@ -34,6 +34,13 @@ impl Repr for Tree {
     }
 }
 
+impl Node<Tree> {
+    /// The number of argument positions.
+    pub fn arity(&self) -> usize {
+        walk::arity(&(), self)
+    }
+}
+
 // = Cloning and debugging
 
 impl Clone for Node<Tree> {

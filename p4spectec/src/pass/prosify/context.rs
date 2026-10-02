@@ -200,7 +200,7 @@ impl Context {
             Self::load_alter_hints(&mut hints, hints_sl);
             Self::load_field_hints(&mut hints, hints_sl, Some(not_typ.node.args().len()))?;
             self.henv
-                .insert_case(&def_typ_sl.id, &not_typ.node.to_mixop(), hints);
+                .insert_case(&def_typ_sl.id, not_typ.node.mixop(), hints);
         }
         Ok(())
     }

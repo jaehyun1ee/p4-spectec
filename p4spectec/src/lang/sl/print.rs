@@ -5,9 +5,15 @@
 //! with relation inputs and outputs filled into the notation and `%` elsewhere.
 //! `short` prints a step's heading without its blocks.
 
-use std::fmt::{self, Write};
+use std::{
+    fmt::{self, Write},
+    rc::Rc,
+};
 
-use crate::lang::traits::print::{Print, Printer};
+use crate::lang::{
+    data::notation::Mixfix,
+    traits::print::{Print, Printer},
+};
 
 use crate::lang::sl::ast::*;
 
@@ -438,14 +444,12 @@ fn write_relinput<I: Print, V: Print>(
     let idxs_input = rel_signature.input_hint.indices();
     assert_eq!(idxs_input.len(), exps_input.len());
     // Each notation position takes its input, or `%`
-    let args = (0..not_typ.node.arity()).map(|index| {
+    let mixfix = Mixfix::fill_with(Rc::clone(not_typ.node.mixop()), |index| {
         idxs_input
             .iter()
             .position(|idx_input| idx_input.node == index)
             .map(|position| &exps_input[position])
     });
-    let mixfix =
-        Mixop::fill(&not_typ.node.to_mixop(), args).expect("relation input arity matches notation");
     mixfix.print_with(output, |exp, output| match exp {
         Some(exp) => exp.print(output),
         None => output.write("%"),
@@ -465,14 +469,12 @@ fn write_reloutput<I: Print, V: Print>(
         .filter(|index| !idxs_input.iter().any(|idx_input| idx_input.node == *index))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
-    let args = (0..not_typ.node.arity()).map(|index| {
+    let mixfix = Mixfix::fill_with(Rc::clone(not_typ.node.mixop()), |index| {
         outputs
             .iter()
             .position(|output| *output == index)
             .map(|position| &exps_output[position])
     });
-    let mixfix = Mixop::fill(&not_typ.node.to_mixop(), args)
-        .expect("relation output arity matches notation");
     mixfix.print_with(output, |exp, output| match exp {
         Some(exp) => exp.print(output),
         None => output.write("%"),

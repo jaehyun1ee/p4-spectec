@@ -87,20 +87,10 @@ impl<T: Prepare, N, S> Prepare for NotePhrase<T, N, S> {
 
 // - Notation
 
-impl<T: Prepare> Prepare for Mixfix<T> {
-    type Output = Mixfix<T::Output>;
+impl<M, T: Prepare> Prepare for Mixfix<M, T> {
+    type Output = Mixfix<M, T::Output>;
 
     fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        match self {
-            Mixfix::Arg(arg_inner) => Mixfix::Arg(arg_inner.prepare(layout)),
-            Mixfix::Atom(atom_inner) => Mixfix::Atom(atom_inner),
-            Mixfix::Brack(atom_l, mixfix_inner, atom_r) => {
-                Mixfix::Brack(atom_l, mixfix_inner.prepare(layout), atom_r)
-            }
-            Mixfix::Infix(mixfix_l, atom_inner, mixfix_r) => {
-                Mixfix::Infix(mixfix_l.prepare(layout), atom_inner, mixfix_r.prepare(layout))
-            }
-            Mixfix::Seq(mixfixes) => Mixfix::Seq(mixfixes.prepare(layout)),
-        }
+        self.map_into(|arg| arg.prepare(layout))
     }
 }

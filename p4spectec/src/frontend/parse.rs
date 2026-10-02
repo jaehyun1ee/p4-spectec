@@ -19,7 +19,7 @@ use lalrpop_util::ParseError;
 
 use crate::lang::{
     common::source::{Position, Span},
-    data::notation::{Mixfix, Mixop},
+    data::notation::Mixop,
 };
 
 use crate::lang::el::ast::{self, Spec};
@@ -222,28 +222,28 @@ pub fn parse_mixop(source: &str) -> Result<Mixop, FrontendError> {
     fn from_typ(typ: &ast::Typ) -> Mixop {
         match typ {
             // A plain type is an argument position
-            ast::Typ::Plain(_) => Mixfix::Arg(()),
+            ast::Typ::Plain(_) => Mixop::Arg,
             // Notation keeps its atoms and recurses into its parts
             ast::Typ::Notation(notation) => match &notation.node {
                 ast::NotTypKind::Atom(atom) => {
                     let atom = atom.clone();
-                    Mixfix::Atom(atom)
+                    Mixop::Atom(atom)
                 }
                 ast::NotTypKind::Seq(types) => {
-                    let mixfixes = types.iter().map(from_typ).collect();
-                    Mixfix::Seq(mixfixes)
+                    let mixops = types.iter().map(from_typ).collect();
+                    Mixop::Seq(mixops)
                 }
                 ast::NotTypKind::Infix(typ_l, atom, typ_r) => {
                     let typ_l = Box::new(from_typ(typ_l));
                     let atom = atom.clone();
                     let typ_r = Box::new(from_typ(typ_r));
-                    Mixfix::Infix(typ_l, atom, typ_r)
+                    Mixop::Infix(typ_l, atom, typ_r)
                 }
                 ast::NotTypKind::Brack(atom_l, typ_inner, atom_r) => {
                     let atom_l = atom_l.clone();
                     let typ_inner = Box::new(from_typ(typ_inner));
                     let atom_r = atom_r.clone();
-                    Mixfix::Brack(atom_l, typ_inner, atom_r)
+                    Mixop::Brack(atom_l, typ_inner, atom_r)
                 }
             },
         }

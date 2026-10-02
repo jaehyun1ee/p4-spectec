@@ -40,12 +40,14 @@
 //! - `VarE`, `TupleE`, `CaseE` of a singleton case, or `StrE`
 //! - `IterE` of the above cases
 
+use std::rc::Rc;
+
 use crate::lang::{
     common::{
         prim,
         source::{Phrase, Span},
     },
-    data::notation::Mixop,
+    data::notation::Mixfix,
     hints::input::{self, InputHint},
     traits::{
         at::At,
@@ -412,13 +414,8 @@ fn lower_rule_prem(
     span: &Span,
     rule_prem_il: &ast::RulePrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<AnalyzedPrem>), AlgoError> {
-    let mixop = rule_prem_il.not_exp.to_mixop();
-    let exps_il = rule_prem_il
-        .not_exp
-        .args()
-        .into_iter()
-        .cloned()
-        .collect::<Vec<_>>();
+    let mixop = Rc::clone(rule_prem_il.not_exp.mixop());
+    let exps_il = rule_prem_il.not_exp.args().to_vec();
     let (exps_input_il, exps_output_il) = input::split(&rule_prem_il.input_hint, exps_il)
         .map_err(|error| input_error(error, span.clone()))?;
     // Inputs are bound, outputs are binders
@@ -432,7 +429,7 @@ fn lower_rule_prem(
     let exps_al =
         input::combine(&rule_prem_il.input_hint, exps_input_il.clone(), exps_output_al.clone())
             .map_err(|error| input_error(error, span.clone()))?;
-    let not_exp_al = Mixop::fill(&mixop, exps_al)
+    let not_exp_al = Mixfix::new(mixop, exps_al)
         .expect("arguments obtained from the same mixfix must match its arity");
     let prem_al = phrase! {
         node: al::ast::PremKind::Rule(al::ast::RulePrem {
