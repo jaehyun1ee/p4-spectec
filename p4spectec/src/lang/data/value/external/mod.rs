@@ -4,24 +4,20 @@
 //! independent mode saves its contents.
 //! The caller supplies the matching arena, lifetime, and encoding
 //! for relative data.
-//! Independent payloads are trees (`indep`) that any arena can intern.
+//! Independent payloads are value trees (`tree`) that any arena can intern.
 //! A case body is written as its filled notation in both modes,
 //! so shape handles never appear in a payload.
 
-pub mod indep;
-
-use std::slice;
+use std::{rc::Rc, slice};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_derive_state::{
-    DeserializeState as DeriveDeserializeState, SerializeState as DeriveSerializeState,
-};
+use serde_derive_state::{DeserializeState, SerializeState};
 use serde_state::{DeserializeState, SerializeState};
 
 use crate::util::json::json;
 
 use crate::lang::{
-    common::source::Span,
+    common::{Id, prim::num::Number, source::Span},
     data::{
         intern::Interned,
         notation::{AtomPhrase, Mixop, Node, ShapeArena, ShapeKind},
@@ -29,7 +25,7 @@ use crate::lang::{
     },
 };
 
-use super::{Arena, Value, ValueCase, ValueKind};
+use super::{Arena, Value, ValueCase, ValueField, ValueKind, tree};
 
 // = Configuration
 
@@ -166,7 +162,7 @@ impl SerializeState<EncodeContext<'_>> for Interned<ValueKind> {
             // Relative: the index; independent: the body as a tree
             EncodeContext::ArenaRelative(_) => self.index().serialize(serializer),
             EncodeContext::ArenaIndependent(arena) => {
-                indep::ValueKind::from_arena(arena, arena.value.values.get(*self))
+                tree::ValueKind::from_arena(arena, arena.value.values.get(*self))
                     .serialize(serializer)
             }
         }
@@ -240,7 +236,7 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<ValueKind> {
             // Relative: trust the index; independent: intern the tree
             DecodeContext::ArenaRelative(_) => u32::deserialize(deserializer).map(Self::from_index),
             DecodeContext::ArenaIndependent(arena) => {
-                let kind = indep::ValueKind::deserialize(deserializer)?
+                let kind = tree::ValueKind::deserialize(deserializer)?
                     .into_arena(arena)
                     .map_err(::serde::de::Error::custom)?;
                 arena
@@ -291,13 +287,96 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<Span> {
     }
 }
 
+// = Value bodies
+
+// Written through local enums rather than derived on the generic body,
+// with the variant names and field shapes of the handle payload
+
+// - Encode
+
+impl SerializeState<EncodeContext<'_>> for ValueKind {
+    fn serialize_state<S: Serializer>(
+        &self,
+        serializer: S,
+        ctx: &EncodeContext<'_>,
+    ) -> Result<S::Ok, S::Error> {
+        #[derive(SerializeState)]
+        #[serde(rename = "ValueKind")]
+        #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
+        enum ValueKindRef<'a> {
+            Bool(&'a bool),
+            Num(&'a Number),
+            Text(&'a String),
+            Struct(#[serde(state)] &'a [ValueField]),
+            Case(#[serde(state)] &'a ValueCase),
+            Tuple(#[serde(state)] &'a [Value]),
+            Opt(#[serde(state)] &'a Option<Value>),
+            List(#[serde(state)] &'a [Value]),
+            Func(#[serde(state)] &'a Id),
+            Extern(&'a Rc<json>),
+        }
+
+        let kind = match self {
+            Self::Bool(value) => ValueKindRef::Bool(value),
+            Self::Num(num) => ValueKindRef::Num(num),
+            Self::Text(text) => ValueKindRef::Text(text),
+            Self::Struct(value_fields) => ValueKindRef::Struct(value_fields),
+            Self::Case(value_case) => ValueKindRef::Case(value_case),
+            Self::Tuple(values) => ValueKindRef::Tuple(values),
+            Self::Opt(value) => ValueKindRef::Opt(value),
+            Self::List(values) => ValueKindRef::List(values),
+            Self::Func(id) => ValueKindRef::Func(id),
+            Self::Extern(json) => ValueKindRef::Extern(json),
+        };
+        kind.serialize_state(serializer, ctx)
+    }
+}
+
+// - Decode
+
+impl<'de> DeserializeState<'de, DecodeContext<'de>> for ValueKind {
+    fn deserialize_state<D: Deserializer<'de>>(
+        ctx: &mut DecodeContext<'de>,
+        deserializer: D,
+    ) -> Result<Self, D::Error> {
+        #[derive(DeserializeState)]
+        #[serde(rename = "ValueKind")]
+        #[serde(deserialize_state = "DecodeContext<'de>")]
+        enum ValueKindOwned {
+            Bool(bool),
+            Num(Number),
+            Text(String),
+            Struct(#[serde(state)] Vec<ValueField>),
+            Case(#[serde(state)] ValueCase),
+            Tuple(#[serde(state)] Vec<Value>),
+            Opt(#[serde(state)] Option<Value>),
+            List(#[serde(state)] Vec<Value>),
+            Func(#[serde(state)] Id),
+            Extern(Rc<json>),
+        }
+
+        Ok(match ValueKindOwned::deserialize_state(ctx, deserializer)? {
+            ValueKindOwned::Bool(value) => Self::Bool(value),
+            ValueKindOwned::Num(num) => Self::Num(num),
+            ValueKindOwned::Text(text) => Self::Text(text),
+            ValueKindOwned::Struct(value_fields) => Self::Struct(value_fields),
+            ValueKindOwned::Case(value_case) => Self::Case(value_case),
+            ValueKindOwned::Tuple(values) => Self::Tuple(values),
+            ValueKindOwned::Opt(value) => Self::Opt(value),
+            ValueKindOwned::List(values) => Self::List(values),
+            ValueKindOwned::Func(id) => Self::Func(id),
+            ValueKindOwned::Extern(json) => Self::Extern(json),
+        })
+    }
+}
+
 // = Case bodies
 
 // Both encodings write a case as its filled notation tree,
 // with the variant names and shapes of the former `Mixfix`
 
 /// A case written as its filled notation tree.
-#[derive(DeriveSerializeState)]
+#[derive(SerializeState)]
 #[serde(rename = "Mixfix")]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 enum CaseTree<'a> {
@@ -317,7 +396,7 @@ enum CaseTree<'a> {
 }
 
 /// A case read as its filled notation tree.
-#[derive(DeriveDeserializeState)]
+#[derive(DeserializeState)]
 #[serde(rename = "Mixfix")]
 #[serde(deserialize_state = "DecodeContext<'arena>", de_parameters = "'arena")]
 enum CaseTreeOwned {
