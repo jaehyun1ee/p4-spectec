@@ -8,7 +8,7 @@
 use std::fmt::{self, Write};
 
 use crate::lang::{
-    common::notation::mixop::Mixop,
+    data::notation::Mixop,
     hints::input::InputHint,
     traits::print::{Print, Printer},
 };

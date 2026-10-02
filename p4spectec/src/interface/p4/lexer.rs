@@ -41,11 +41,12 @@ use num_bigint::BigInt;
 
 use crate::lang::{
     common::{
-        notation::{atom::Atom, mixfix::Mixfix},
+        notation::atom::Atom,
         prim::num::Natural,
         source::{Phrase, Position, Span},
     },
     data::{
+        notation::Mixfix,
         typ,
         value::{Value, make},
     },

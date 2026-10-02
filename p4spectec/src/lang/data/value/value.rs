@@ -20,12 +20,13 @@ use crate::util::json::json;
 use crate::lang::{
     common::{
         Id,
-        notation::{atom::Atom, mixfix::Mixfix},
+        notation::atom::Atom,
         prim::num::{self, Number},
         source::{NotePhrase, Phrase, Span},
     },
     data::{
         intern::{CanonEq, CanonHash, CanonInterner, Interned},
+        notation::Mixfix,
         typ::TypKind,
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},

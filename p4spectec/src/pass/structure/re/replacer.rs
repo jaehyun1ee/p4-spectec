@@ -8,9 +8,9 @@
 use crate::lang::{
     common::{
         ds::{map::IdMap, set::IdSet},
-        notation::mixop::Mixop,
         source::Span,
     },
+    data::notation::Mixop,
     hints::input,
     traits::free::FreeIds,
 };

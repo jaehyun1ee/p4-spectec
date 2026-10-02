@@ -8,8 +8,11 @@
 pub mod ast;
 
 use crate::lang::{
-    common::{Id, notation::mixfix::Mixfix, source::NotePhrase},
-    data::var::{IdSlot, Var, VarSlot},
+    common::{Id, source::NotePhrase},
+    data::{
+        notation::Mixfix,
+        var::{IdSlot, Var, VarSlot},
+    },
 };
 
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
