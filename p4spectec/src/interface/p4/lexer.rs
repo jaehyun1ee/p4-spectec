@@ -43,7 +43,7 @@ use crate::lang::{
     common::{
         notation::{atom::Atom, mixfix::Mixfix},
         prim::num::Natural,
-        source::{Phrase, Position, Span},
+        source::{FileId, Phrase, Position, Span},
     },
     data::{
         typ,
@@ -208,7 +208,7 @@ pub struct Lexer<'source, 'arena> {
     /// Byte offset of the next character.
     index: usize,
     /// Current file, as set by `#` line markers.
-    file: Rc<str>,
+    file: FileId,
     /// Current line, as set by `#` line markers.
     line: usize,
     /// Byte column on the current line.
@@ -231,7 +231,7 @@ pub struct Lexer<'source, 'arena> {
 
 impl<'source, 'arena> Lexer<'source, 'arena> {
     /// Tokenizes preprocessed `source` using context-sensitive name classes.
-    pub fn new(file: Rc<str>, source: &'source str, ctx: Rc<Context<'arena>>) -> Self {
+    pub fn new(file: FileId, source: &'source str, ctx: Rc<Context<'arena>>) -> Self {
         Self {
             source,
             index: 0,
@@ -251,7 +251,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
 
     /// The position of the next character.
     fn source_position(&self) -> Position {
-        Position::new(Rc::clone(&self.file), self.line, self.column)
+        Position::new(self.file, self.line, self.column)
     }
 
     /// The span from `pos_l` to the next character.
@@ -388,8 +388,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
             }
             // `>>`: the first `>` closes; the second closes or shifts, by depth
             Token::ShiftRight => {
-                let pos_middle =
-                    Position::new(Rc::clone(&span.left.file), span.left.line, span.left.column + 1);
+                let pos_middle = Position { column: span.left.column + 1, ..span.left };
                 let token_r = if self.template_depth > 1 {
                     self.template_depth -= 2;
                     Token::RightAngleShift
@@ -779,7 +778,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
         if let Some(quote_l) = text_directive.find('"') {
             let path = &text_directive[quote_l + 1..];
             if let Some(quote_r) = path.find('"') {
-                self.file = Rc::from(&path[..quote_r]);
+                self.file = FileId::intern(&path[..quote_r]);
             }
         }
         if self.index < self.source.len() {
