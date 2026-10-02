@@ -5,14 +5,14 @@
 //! Each matches the value's mixop text
 //! against the grammar productions it may come from.
 
-use crate::lang::data::value::{Value, ValueArena, get};
+use crate::lang::data::value::{Arena, Value, get};
 
 use super::{context::TypeId, error::ExtractError};
 
 // == Identifier extraction
 
 /// The text of a `name` value, including the keywords usable as names.
-pub(super) fn id_name(arena: &ValueArena, value: &Value) -> Result<String, ExtractError> {
+pub(super) fn id_name(arena: &Arena, value: &Value) -> Result<String, ExtractError> {
     let unexpected = || ExtractError::ValueUnexpected("id_name");
     get::matches! { arena,
         value,
@@ -38,10 +38,7 @@ pub(super) fn id_name(arena: &ValueArena, value: &Value) -> Result<String, Extra
 }
 
 /// The function name of a `functionPrototype` value.
-pub(super) fn id_function_prototype(
-    arena: &ValueArena,
-    value: &Value,
-) -> Result<String, ExtractError> {
+pub(super) fn id_function_prototype(arena: &Arena, value: &Value) -> Result<String, ExtractError> {
     get::matches! { arena,
         value,
         "typeOrVoid name typeParameterListOpt `( parameterList `)" => |values| {
@@ -52,7 +49,7 @@ pub(super) fn id_function_prototype(
 }
 
 /// The declared name of any declaration value.
-pub(super) fn id_declaration(arena: &ValueArena, value: &Value) -> Result<String, ExtractError> {
+pub(super) fn id_declaration(arena: &Arena, value: &Value) -> Result<String, ExtractError> {
     get::matches! { arena,
         value,
         // One arm per declaration production, picking out its `name`
@@ -109,7 +106,7 @@ pub(super) fn id_declaration(arena: &ValueArena, value: &Value) -> Result<String
 // == Type identifier extraction
 
 /// The named type a `typeRef` refers to; built-in types have no members.
-pub(super) fn type_id_type_ref(arena: &ValueArena, value: &Value) -> Result<TypeId, ExtractError> {
+pub(super) fn type_id_type_ref(arena: &Arena, value: &Value) -> Result<TypeId, ExtractError> {
     let unexpected = || ExtractError::ValueUnexpected("type_id_type_ref");
     get::matches! { arena,
         value,
@@ -149,10 +146,7 @@ pub(super) fn type_id_type_ref(arena: &ValueArena, value: &Value) -> Result<Type
 }
 
 /// The declared type of a variable or instance declaration.
-pub(super) fn type_id_declaration(
-    arena: &ValueArena,
-    value: &Value,
-) -> Result<TypeId, ExtractError> {
+pub(super) fn type_id_declaration(arena: &Arena, value: &Value) -> Result<TypeId, ExtractError> {
     get::matches! { arena,
         value,
         "annotationList CONST type name initializer ';'"
@@ -167,7 +161,7 @@ pub(super) fn type_id_declaration(
 // == Type parameter extraction
 
 /// Whether a `typeParameterListOpt` is non-empty.
-fn has_type_params(arena: &ValueArena, value: &Value) -> Result<bool, ExtractError> {
+fn has_type_params(arena: &Arena, value: &Value) -> Result<bool, ExtractError> {
     get::matches! { arena,
         value,
         "_EMPTY" => |_values| Ok(false),
@@ -178,7 +172,7 @@ fn has_type_params(arena: &ValueArena, value: &Value) -> Result<bool, ExtractErr
 
 /// Whether a `functionPrototype` has type parameters.
 pub(super) fn has_type_params_function_prototype(
-    arena: &ValueArena,
+    arena: &Arena,
     value: &Value,
 ) -> Result<bool, ExtractError> {
     get::matches! { arena,
@@ -194,7 +188,7 @@ pub(super) fn has_type_params_function_prototype(
 
 /// Whether a declaration introduces type parameters.
 pub(super) fn has_type_params_declaration(
-    arena: &ValueArena,
+    arena: &Arena,
     value: &Value,
 ) -> Result<bool, ExtractError> {
     get::matches! { arena,

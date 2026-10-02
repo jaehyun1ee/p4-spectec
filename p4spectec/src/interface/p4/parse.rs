@@ -15,7 +15,7 @@ use lalrpop_util::ParseError;
 
 use crate::lang::{
     common::source::{Phrase, Position, Span},
-    data::value::{Value, ValueArena},
+    data::value::{Arena, Value},
 };
 
 use super::{
@@ -74,7 +74,7 @@ fn translate_lalrpop_error(ctx: &Context, error: ParseError<Location, Token, P4E
 
 /// Parses an already preprocessed P4 source string into a value tree.
 pub fn parse_string(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     path: impl AsRef<Path>,
     source: &str,
 ) -> Result<Value, P4Error> {
@@ -93,7 +93,7 @@ pub fn parse_string(
 
 /// Preprocesses and parses a P4 source file.
 pub fn parse_file(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     includes: &[PathBuf],
     path: impl AsRef<Path>,
 ) -> Result<Value, P4Error> {

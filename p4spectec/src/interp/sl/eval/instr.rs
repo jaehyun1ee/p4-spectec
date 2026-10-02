@@ -208,7 +208,7 @@ fn eval_hold_instr<Iface: Interface, Ext: Extern>(
         ctx.as_ref(),
         &instr.iter_exps,
         &mut |runner_ctx, ctx| {
-            let values = unwrap!(eval_exps(runner_ctx, ctx, &instr.not_exp.args()));
+            let values = unwrap!(eval_exps(runner_ctx, ctx, instr.not_exp.args()));
             match SlInterp::invoke_rel(runner_ctx, ctx, &instr.id, &values) {
                 // A match means it holds
                 ok!(_) => ok!(true),
@@ -356,8 +356,9 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
     tail: bool,
 ) -> Backtrack<Flow> {
     // Split the notation arguments by the input hint
-    let (exps_input, exps_output) = input::split(&instr.input_hint, instr.not_exp.args())
-        .expect("input hint must fit relation");
+    let (exps_input, exps_output) =
+        input::split(&instr.input_hint, instr.not_exp.args().iter().collect())
+            .expect("input hint must fit relation");
     // A tail-position call whose block just returns its outputs is a tail call
     if tail
         && instr.iter_instrs.is_empty()

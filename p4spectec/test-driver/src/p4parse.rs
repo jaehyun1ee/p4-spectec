@@ -7,7 +7,7 @@ use std::{
 use expect_test::expect_file;
 use indicatif::{ProgressBar, ProgressStyle};
 
-use p4spectec::lang::data::value::ValueArena;
+use p4spectec::lang::data::value::Arena;
 
 use p4spectec::interface::p4::{
     error::P4Error,
@@ -22,7 +22,7 @@ use crate::{
 };
 
 fn roundtrip(unparser: &P4Unparser, includes: &[PathBuf], path: &Path) -> Result<Outcome> {
-    let mut arena = ValueArena::new();
+    let mut arena = Arena::new();
     fs::File::open(path)?;
     let program = match parse_file(&mut arena, includes, path) {
         Ok(program) => program,

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, ValueArena, make},
+    data::value::{Arena, Value, make},
 };
 
 use crate::lang::il::ast::Typ;
@@ -24,7 +24,7 @@ pub fn init() {
 
 /// `dec $fresh_typeId() : typeId`, the next `FRESH__n` name.
 pub fn fresh_type_id(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     targs: &[Typ],
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
