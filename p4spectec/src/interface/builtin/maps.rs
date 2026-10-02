@@ -67,7 +67,7 @@ fn make_pair(
     value_key: Value,
     value_value: Value,
 ) -> Result<Value, BuiltinError> {
-    let pair_id = crate::phrase!(node: "pair".to_owned(), span: Span::default());
+    let pair_id = crate::phrase!(node: "pair".into(), span: Span::default());
     let typ = typ::make::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
     let pair_mixop = pair_mixop();
     let value_case = Mixop::fill(&pair_mixop, [value_key, value_value])
@@ -136,11 +136,11 @@ fn value_of_map(
     map: ValueMap,
 ) -> Result<Value, BuiltinError> {
     // The pair list is typed `pair<K, V>*`, the case `map<K, V>`
-    let pair_id = crate::phrase!(node: "pair".to_owned(), span: Span::default());
+    let pair_id = crate::phrase!(node: "pair".into(), span: Span::default());
     let typ_pair = typ::make::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
     let typ_pairs = typ::make::list(typ_pair);
     let value_pairs = make::list(arena, typ_pairs.node.into(), map, Span::default())?;
-    let map_id = crate::phrase!(node: "map".to_owned(), span: Span::default());
+    let map_id = crate::phrase!(node: "map".into(), span: Span::default());
     let typ = typ::make::var(map_id, vec![typ_key.clone(), typ_value.clone()]);
     let map_mixop = map_mixop();
     let value_case =

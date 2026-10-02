@@ -42,7 +42,7 @@ fn bits_of_value(arena: &ValueArena, value: &Value) -> Result<Vec<bool>, Builtin
 
 /// A `bit` list value from booleans.
 fn value_of_bits(arena: &mut ValueArena, bits: Vec<bool>) -> Result<Value, BuiltinError> {
-    let bit_id = crate::phrase!(node: "bit".to_owned(), span: Span::default());
+    let bit_id = crate::phrase!(node: "bit".into(), span: Span::default());
     let typ = typ::make::var(bit_id, Vec::new());
     let mut bit_values = Vec::with_capacity(bits.len());
     for bit in bits {

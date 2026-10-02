@@ -119,7 +119,7 @@ impl ObjectState {
     ) -> Result<Value, ExternError> {
         let payload = encode_with(arena, encoding, self)?;
         let typ = typ::make::var(
-            crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
+            crate::phrase!(node: "objectState".into(), span: Span::default()),
             Vec::new(),
         );
         Ok(make::external(arena, typ.node.into(), payload.into(), Span::default())?)
@@ -241,7 +241,7 @@ where
     let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
     let values_name = vec![value_name];
     let typ_id = typ::make::list(typ::make::var(
-        crate::phrase!(node: "id".to_owned(), span: Span::default()),
+        crate::phrase!(node: "id".into(), span: Span::default()),
         vec![],
     ));
     let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
@@ -264,7 +264,7 @@ where
     let value_name = make::text(ctx.arena_mut(), "packet_out".to_owned(), Span::default())?;
     let values_name = vec![value_name];
     let typ_id = typ::make::list(typ::make::var(
-        crate::phrase!(node: "id".to_owned(), span: Span::default()),
+        crate::phrase!(node: "id".into(), span: Span::default()),
         vec![],
     ));
     let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
@@ -324,7 +324,7 @@ where
         None => {
             let payload = encode_with(ctx.arena(), encoding, &())?;
             let typ = typ::make::var(
-                crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
+                crate::phrase!(node: "objectState".into(), span: Span::default()),
                 Vec::new(),
             );
             make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())?
@@ -675,7 +675,7 @@ where
         let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
-            crate::phrase!(node: "id".to_owned(), span: Span::default()),
+            crate::phrase!(node: "id".into(), span: Span::default()),
             vec![],
         ));
         let value_id =
@@ -705,7 +705,7 @@ where
         let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
-            crate::phrase!(node: "id".to_owned(), span: Span::default()),
+            crate::phrase!(node: "id".into(), span: Span::default()),
             vec![],
         ));
         let value_id =
@@ -731,7 +731,7 @@ where
         let value_name = make::text(ctx.arena_mut(), "packet_out".to_owned(), Span::default())?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
-            crate::phrase!(node: "id".to_owned(), span: Span::default()),
+            crate::phrase!(node: "id".into(), span: Span::default()),
             vec![],
         ));
         let value_id =
@@ -1231,7 +1231,7 @@ where
         let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
-            crate::phrase!(node: "id".to_owned(), span: Span::default()),
+            crate::phrase!(node: "id".into(), span: Span::default()),
             vec![],
         ));
         let value_id =

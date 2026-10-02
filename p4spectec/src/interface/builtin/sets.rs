@@ -74,7 +74,7 @@ fn value_of_set(
     let values_elem = set.into_iter().collect();
     let typ_list = typ::make::list(typ_key.clone());
     let value_set = make::list(arena, typ_list.node.into(), values_elem, Span::default())?;
-    let set_id = crate::phrase!(node: "set".to_owned(), span: Span::default());
+    let set_id = crate::phrase!(node: "set".into(), span: Span::default());
     let typ = typ::make::var(set_id, vec![typ_key.clone()]);
     let set_mixop = set_mixop();
     let value_case =

@@ -725,7 +725,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                     Mixfix::Atom(atom),
                     Mixfix::Arg(value_int),
                 ]);
-                let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
+                let id_typ = phrase!(node: "integerLiteral".into(), span: Span::default());
                 let value = make::case(
                     &mut self.ctx.arena_mut(),
                     (typ::make::var(id_typ, vec![])).node.into(),
