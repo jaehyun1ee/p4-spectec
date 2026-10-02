@@ -17,9 +17,9 @@ use std::{
 
 use lalrpop_util::ParseError;
 
-use crate::lang::common::{
-    notation::{mixfix::Mixfix, mixop::Mixop},
-    source::{Position, Span},
+use crate::lang::{
+    common::source::{Position, Span},
+    data::notation::{Mixfix, Mixop},
 };
 
 use crate::lang::el::ast::{self, Spec};

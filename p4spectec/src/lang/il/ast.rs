@@ -10,11 +10,11 @@ use std::rc::Rc;
 use crate::lang::{
     common::{
         self,
-        notation::{atom, mixfix::Mixfix, mixop},
+        notation::atom,
         prim::num,
         source::{NotePhrase, Phrase},
     },
-    data,
+    data::{self, notation::Mixfix},
     hints::input::InputHint,
 };
 
@@ -43,7 +43,7 @@ pub type Atom = Phrase<atom::Atom>;
 // Mixfix operators
 
 /// The atom skeleton of a notation form, without its arguments.
-pub type Mixop = mixop::Mixop;
+pub type Mixop = data::notation::Mixop;
 
 // Iterators
 

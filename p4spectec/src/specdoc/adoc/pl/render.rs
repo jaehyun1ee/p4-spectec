@@ -17,13 +17,14 @@ use crate::util::text::escape_text;
 use crate::lang::{
     common::{
         Iter,
-        notation::{atom::Atom, mixfix::Mixfix},
+        notation::atom::Atom,
         prim::{
             bool::{BinOp as BoolBinOp, CmpOp as BoolCmpOp, UnOp as BoolUnOp},
             num::CmpOp as NumCmpOp,
         },
         source::Span,
     },
+    data::notation::Mixfix,
     hints::{alter, input},
     traits::{has_call::HasCall, print::Print},
 };

@@ -5,8 +5,8 @@
 //! and the relation or function being converted as the namespace.
 
 use crate::lang::{
-    common::{notation::mixop::Mixop, source::Span},
-    data::typ,
+    common::source::Span,
+    data::{notation::Mixop, typ},
     hints::{alter, fields},
 };
 

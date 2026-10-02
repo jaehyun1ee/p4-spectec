@@ -14,7 +14,8 @@
 //! block, so the prose reads as consecutive numbered steps.
 
 use crate::lang::{
-    common::{ds::set::IdSet, notation::mixfix::Mixfix, source::Span},
+    common::{ds::set::IdSet, source::Span},
+    data::notation::Mixfix,
     hints::{alter, fields, input},
     traits::at::At,
 };

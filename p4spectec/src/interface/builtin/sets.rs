@@ -7,11 +7,9 @@
 use std::rc::Rc;
 
 use crate::lang::{
-    common::{
-        notation::mixop::{Mixop, shape},
-        source::Span,
-    },
+    common::source::Span,
     data::{
+        notation::{Mixop, mixop::shape},
         typ,
         value::{Value, ValueArena, get, make},
     },

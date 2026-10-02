@@ -17,7 +17,11 @@ use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
 
 use crate::lang::{
-    common::ds::set::IdSet,
+    common::{
+        ds::set::IdSet,
+        notation::atom::Atom,
+        source::{Phrase, Span},
+    },
     traits::{
         at::At,
         cmp::SyntaxCmp,
@@ -26,10 +30,6 @@ use crate::lang::{
         print::{Print, Printer},
     },
 };
-
-use super::super::source::{Phrase, Span};
-
-use super::atom::Atom;
 
 // == Types
 

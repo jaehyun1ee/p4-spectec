@@ -10,7 +10,8 @@
 //! Fresh names from the failed attempt are discarded.
 
 use crate::lang::{
-    common::{ds::set::IdSet, notation::mixop::Mixop, prim, source::Span},
+    common::{ds::set::IdSet, prim, source::Span},
+    data::notation::Mixop,
     traits::{at::At, eq::SyntaxEq},
 };
 
