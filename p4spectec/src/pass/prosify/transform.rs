@@ -345,7 +345,7 @@ fn prosify_case_exp(
         node: exp_kind_pl,
         note: exp_sl.note.as_ref().clone(),
         span: exp_sl.span.clone(),
-        hints: hints,
+        hints: hints.into_shared(),
     })
 }
 
@@ -582,7 +582,7 @@ fn prosify_call_exp(
         node: exp_kind_pl,
         note: exp_sl.note.as_ref().clone(),
         span: exp_sl.span.clone(),
-        hints: hints,
+        hints: hints.into_shared(),
     })
 }
 
@@ -911,7 +911,7 @@ fn prosify_dispatch_hold_instr(
         node: instr_kind_pl,
         note: None,
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     };
     Ok(vec![instr_pl])
 }
@@ -1002,7 +1002,7 @@ fn prosify_dispatch_let_instr(
         node: instr_kind_pl,
         note: None,
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     };
     // The body follows the let in the same block
     let block_pl = prosify_dispatch_block(ctx, instr_sl.block)?;
@@ -1067,7 +1067,7 @@ fn prosify_dispatch_rulegroup_instr(
         node: instr_kind_pl,
         note: None,
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     };
     Ok(vec![instr_pl])
 }
@@ -1186,7 +1186,7 @@ fn prosify_group_hold_instr(
         node: instr_kind_pl,
         note: None,
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     };
     Ok(vec![instr_pl])
 }
@@ -1277,7 +1277,7 @@ fn prosify_group_let_instr(
         node: instr_kind_pl,
         note: None,
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     };
     // The body follows the let in the same block
     let block_pl = prosify_group_block(ctx, instr_sl.block)?;
@@ -1347,7 +1347,7 @@ fn prosify_group_rule_instr(
         node: instr_kind_pl,
         note: None,
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     };
     // The bound outputs are used by the instructions that follow
     let block_pl = prosify_group_block(ctx, instr_sl.block)?;
@@ -1385,7 +1385,7 @@ fn prosify_group_result_instr(
         node: instr_kind_pl,
         note: None,
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     };
     Ok(vec![instr_pl])
 }
@@ -1616,7 +1616,7 @@ fn prosify_extern_rel_def(
         node: pl::DefKind::Rel(def_rel_pl),
         note: (),
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     })
 }
 
@@ -1652,7 +1652,7 @@ fn prosify_defined_rel_def(
         node: pl::DefKind::Rel(def_rel_pl),
         note: (),
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     })
 }
 
@@ -1722,7 +1722,7 @@ fn prosify_extern_func_def(
         node: pl::DefKind::MetaFunc(def_func_pl),
         note: (),
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     })
 }
 
@@ -1747,7 +1747,7 @@ fn prosify_builtin_func_def(
         node: pl::DefKind::MetaFunc(def_func_pl),
         note: (),
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     })
 }
 
@@ -1779,7 +1779,7 @@ fn prosify_table_func_def(
         node: pl::DefKind::MetaFunc(def_func_pl),
         note: (),
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     })
 }
 
@@ -1816,7 +1816,7 @@ fn prosify_defined_func_def(
         node: pl::DefKind::MetaFunc(def_func_pl),
         note: (),
         span: span,
-        hints: hints,
+        hints: hints.into_shared(),
     })
 }
 
