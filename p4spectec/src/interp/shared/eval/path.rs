@@ -144,7 +144,7 @@ fn eval_update_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     exp_idx: &ast::Exp,
     value_upd: Value,
 ) -> Backtrack<Value> {
-    let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
+    let typ = crate::phrase!(node: path.note.clone(), span: path.span);
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
     // Replace the element, then write the prefix back
@@ -172,7 +172,7 @@ fn eval_update_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface
     exp_len: &ast::Exp,
     value_upd: Value,
 ) -> Backtrack<Value> {
-    let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
+    let typ = crate::phrase!(node: path.note.clone(), span: path.span);
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
     let value_len = unwrap!(eval_exp(runner_ctx, ctx, exp_len));
@@ -202,7 +202,7 @@ fn eval_update_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     atom: &ast::Atom,
     value_upd: Value,
 ) -> Backtrack<Value> {
-    let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
+    let typ = crate::phrase!(node: path.note.clone(), span: path.span);
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_fields =
         get::structure(runner_ctx.arena(), &value).expect("field update base must be a struct");

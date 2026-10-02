@@ -57,7 +57,7 @@ fn translate_lalrpop_error(ctx: &Context, error: ParseError<Location, Token, P4E
         // Point errors span one location
         ParseError::InvalidToken { location } | ParseError::UnrecognizedEof { location, .. } => {
             let position = ctx.location_get(location);
-            Span::new(position.clone(), position)
+            Span::new(position, position)
         }
         // Token errors span the token
         ParseError::UnrecognizedToken { token: (location_l, _, location_r), .. }

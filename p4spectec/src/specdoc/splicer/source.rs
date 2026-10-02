@@ -53,7 +53,7 @@ impl<'a> Source<'a> {
     /// Locates the cursor without consuming input.
     pub fn span(&self) -> Span {
         let pos = self.position();
-        Span::new(pos.clone(), pos)
+        Span::new(pos, pos)
     }
 
     /// Advances by a byte count ending on a UTF-8 boundary.

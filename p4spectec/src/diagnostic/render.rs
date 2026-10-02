@@ -183,7 +183,7 @@ impl Renderer {
     // - invalid_*: span errors
 
     fn invalid_span(span: &Span, reason: &'static str) -> RenderError {
-        RenderError::SpanInvalid { span: Box::new(span.clone()), reason }
+        RenderError::SpanInvalid { span: Box::new(*span), reason }
     }
 
     // - register_*: source storage
@@ -375,7 +375,7 @@ impl Renderer {
                             } else {
                                 LabelStyle::Primary
                             },
-                            span: span.clone(),
+                            span: *span,
                             message: String::new(),
                         },
                         &mut rendered,

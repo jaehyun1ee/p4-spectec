@@ -165,7 +165,7 @@ fn gen_prem_bound(
     iter_ctx: &ICtx,
 ) -> Result<AnalyzedPrem, AlgoError> {
     let exp_l = var::as_exp(true, destination);
-    let typ_from = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
+    let typ_from = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span);
     let (exp_kind, origin) = match &exp_from.node {
         ast::ExpKind::Case(not_exp)
             if not_exp.arity() == 0 && !is_singleton_case(ctx, &typ_from)? =>
@@ -175,20 +175,20 @@ fn gen_prem_bound(
                     Box::new(exp_l),
                     ast::Pattern::Case(Box::new(not_exp.to_mixop())),
                 ),
-                Origin::Match(exp_from.span.clone(), "variant case"),
+                Origin::Match(exp_from.span, "variant case"),
             )
         }
         ast::ExpKind::Opt(Some(_)) => (
             ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::Opt(ast::OptPattern::Some)),
-            Origin::Match(exp_from.span.clone(), "option pattern"),
+            Origin::Match(exp_from.span, "option pattern"),
         ),
         ast::ExpKind::Opt(None) => (
             ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::Opt(ast::OptPattern::None)),
-            Origin::Match(exp_from.span.clone(), "option pattern"),
+            Origin::Match(exp_from.span, "option pattern"),
         ),
         ast::ExpKind::List(exps) if exps.is_empty() => (
             ast::ExpKind::Match(Box::new(exp_l), ast::Pattern::List(ast::ListPattern::Nil)),
-            Origin::Match(exp_from.span.clone(), "list pattern"),
+            Origin::Match(exp_from.span, "list pattern"),
         ),
         _ => (
             ast::ExpKind::Cmp(
@@ -197,17 +197,17 @@ fn gen_prem_bound(
                 Box::new(exp_l),
                 Box::new(exp_from.clone()),
             ),
-            Origin::Equality(exp_from.span.clone()),
+            Origin::Equality(exp_from.span),
         ),
     };
     let exp_cond = note_phrase! {
         node: exp_kind,
         note: ast::TypKind::Bool,
-        span: exp_from.span.clone(),
+        span: exp_from.span,
     };
     let side_condition = phrase! {
         node: al::ast::PremKind::If(al::ast::IfPrem { exp: exp_cond }),
-        span: exp_from.span.clone(),
+        span: exp_from.span,
     };
     // Keep only the iteration sources used by the source expression
     // Iterate the check under the destination's dimension
@@ -237,13 +237,13 @@ fn gen_prem_bind_match(
     let exp_guard_match = note_phrase! {
         node: ast::ExpKind::Match(Box::new(exp_to.clone()), pattern.clone()),
         note: ast::TypKind::Bool,
-        span: exp_from.span.clone(),
+        span: exp_from.span,
     };
     let side_condition_guard_match = phrase! {
         node: al::ast::PremKind::If(al::ast::IfPrem {
             exp: exp_guard_match,
         }),
-        span: exp_from.span.clone(),
+        span: exp_from.span,
     };
     // The guard iterates over the destination only
     let mut iter_ctx_match = ICtx::from_iterations(
@@ -264,7 +264,7 @@ fn gen_prem_bind_match(
             exp_l: exp_from.clone(),
             exp_r: exp_to,
         }),
-        span: exp_from.span.clone(),
+        span: exp_from.span,
     };
     // The binding also binds the pattern's own variables
     let mut iter_ctx_bind = ICtx::from_iterations(
@@ -290,7 +290,7 @@ fn gen_prem_bind_match(
     vec![
         AnalyzedPrem::Condition {
             prem_al: prem_match,
-            origin: Origin::Match(exp_from.span.clone(), text_construct),
+            origin: Origin::Match(exp_from.span, text_construct),
         },
         AnalyzedPrem::Binding { prem_al: prem_bind },
     ]
@@ -307,7 +307,7 @@ fn gen_prem_bind_sub(
 ) -> Result<Vec<AnalyzedPrem>, AlgoError> {
     let exp_to = var::as_exp(true, destination);
     // Compute the subtype check once
-    let typ_source = phrase!(node: exp_to.note.as_ref().clone(), span: exp_to.span.clone());
+    let typ_source = phrase!(node: exp_to.note.as_ref().clone(), span: exp_to.span);
     let subcheck = optimize_sub_typ(&ctx.tdenv, &typ_source, typ_sub)
         .map_err(error::typ::type_operation_invalid)?;
     let exp_guard_sub = note_phrase! {
@@ -317,11 +317,11 @@ fn gen_prem_bind_sub(
             Box::new(subcheck),
         ),
         note: ast::TypKind::Bool,
-        span: exp_from.span.clone(),
+        span: exp_from.span,
     };
     let side_condition_guard_sub = phrase! {
         node: al::ast::PremKind::If(al::ast::IfPrem { exp: exp_guard_sub }),
-        span: exp_from.span.clone(),
+        span: exp_from.span,
     };
     // The guard iterates over the destination only
     let mut iter_ctx_sub = ICtx::from_iterations(
@@ -341,14 +341,14 @@ fn gen_prem_bind_sub(
     let exp_downcast = note_phrase! {
         node: ast::ExpKind::DownCast(Box::new(typ_sub.clone()), Box::new(exp_to)),
         note: typ_sub.node.clone(),
-        span: exp_from.span.clone(),
+        span: exp_from.span,
     };
     let prem_bind = phrase! {
         node: al::ast::PremKind::Let(al::ast::LetPrem {
             exp_l: exp_sub.clone(),
             exp_r: exp_downcast,
         }),
-        span: exp_from.span.clone(),
+        span: exp_from.span,
     };
     let mut iter_ctx_bind = ICtx::from_iterations(
         iter_ctx
@@ -366,10 +366,7 @@ fn gen_prem_bind_sub(
     let prem_sub = iter_ctx_sub.iterate_prem(side_condition_guard_sub);
     let prem_bind = iter_ctx_bind.iterate_prem(prem_bind);
     Ok(vec![
-        AnalyzedPrem::Condition {
-            prem_al: prem_sub,
-            origin: Origin::Subtype(exp_from.span.clone()),
-        },
+        AnalyzedPrem::Condition { prem_al: prem_sub, origin: Origin::Subtype(exp_from.span) },
         AnalyzedPrem::Binding { prem_al: prem_bind },
     ])
 }
@@ -422,8 +419,8 @@ fn rename_exp_bind_match(
     pattern: ast::Pattern,
     exp_from: ast::Exp,
 ) -> ast::Exp {
-    let typ = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
-    let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp_from.span.clone(), &typ);
+    let typ = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span);
+    let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp_from.span, &typ);
     ctx.add_free(destination.id.clone());
     let bounds = exp_from.free_ids();
     renv.prepend(Rename {
@@ -450,8 +447,8 @@ fn rename_exp_bind_sub(
     exp_sub: ast::Exp,
     exp_from: ast::Exp,
 ) -> ast::Exp {
-    let typ = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
-    let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp_from.span.clone(), &typ);
+    let typ = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span);
+    let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp_from.span, &typ);
     ctx.add_free(destination.id.clone());
     let bounds = exp_from.free_ids();
     renv.prepend(Rename {
@@ -493,8 +490,8 @@ fn rename_exp_bound(
     iter_ctx: &mut ICtx,
     exp: ast::Exp,
 ) -> ast::Exp {
-    let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone());
-    let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp.span.clone(), &typ);
+    let typ = phrase!(node: exp.note.as_ref().clone(), span: exp.span);
+    let destination = fresh::var_from_typ(&ctx.menv, &ctx.frees, exp.span, &typ);
     ctx.add_free(destination.id.clone());
     let bounds = exp.free_ids();
     renv.prepend(Rename {
@@ -529,7 +526,7 @@ fn rename_exp_bind(
             let exp_from = note_phrase! {
                 node: ast::ExpKind::UpCast(typ, Box::new(exp_sub.clone())),
                 note: note,
-                span: span.clone(),
+                span: span,
             };
             let typ_sub = phrase!(node: exp_sub.note.as_ref().clone(), span: span);
             let exp = rename_exp_bind_sub(ctx, renv, iter_ctx, typ_sub, exp_sub, exp_from);
@@ -549,9 +546,9 @@ fn rename_exp_bind(
             let exp_from = note_phrase! {
                 node: ast::ExpKind::Case(Box::new(not_exp)),
                 note: note.clone(),
-                span: span.clone(),
+                span: span,
             };
-            let typ = phrase!(node: note.as_ref().clone(), span: span.clone());
+            let typ = phrase!(node: note.as_ref().clone(), span: span);
             // A singleton case needs no match guard
             if is_singleton_case(ctx, &typ)? {
                 Ok(exp_from)
@@ -598,7 +595,7 @@ fn rename_exp_bind(
             let exp_from = note_phrase! {
                 node: ast::ExpKind::List(exps),
                 note: note,
-                span: span.clone(),
+                span: span,
             };
             // Lists match on their length
             let pattern = if exps_len == 0 {
