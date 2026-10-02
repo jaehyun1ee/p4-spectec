@@ -9,6 +9,8 @@
 //! Expression parameters `I` and `V` resolve identifiers and variables to slots.
 //! Instruction parameter `E` selects the expression representation.
 
+use std::rc::Rc;
+
 use crate::lang::common::{
     notation::mixfix::Mixfix,
     source::{NotePhrase, Phrase},
@@ -74,8 +76,8 @@ pub type Subcheck = sl::ast::Subcheck;
 
 // Expressions
 
-/// A typed expression before annotation.
-pub type ExpNode<I = Id, V = Var> = NotePhrase<ExpKind<I, V>, TypKind>;
+/// A typed expression before annotation, sharing its SL type.
+pub type ExpNode<I = Id, V = Var> = NotePhrase<ExpKind<I, V>, Rc<TypKind>>;
 /// A typed expression with prose hints.
 pub type Exp<I = Id, V = Var> = annot::Annotated<ExpNode<I, V>>;
 #[derive(Clone, Debug, PartialEq)]
@@ -118,8 +120,8 @@ pub type Pattern = sl::ast::Pattern;
 
 // Path
 
-/// A typed path into a value, for updates.
-pub type Path<I = Id, V = Var> = NotePhrase<PathKind<I, V>, TypKind>;
+/// A typed path into a value, for updates, sharing its SL type.
+pub type Path<I = Id, V = Var> = NotePhrase<PathKind<I, V>, Rc<TypKind>>;
 #[derive(Clone, Debug, PartialEq)]
 /// The steps of a path, from the root outward.
 pub enum PathKind<I = Id, V = Var> {
