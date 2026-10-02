@@ -1,6 +1,7 @@
-//! Append-only storage for value bodies, types, and spans
+//! Append-only storage for notation shapes, value bodies, types, and spans
 //!
 //! Handles belong to one arena; annotation changes preserve the stored body.
+//! A case body's notation is a shape in the arena's `ShapeArena`.
 //! Bodies are interned canonically, types by `Rc` identity, spans exactly;
 //! the default span is interned first so generated values share it.
 
@@ -10,6 +11,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         intern::{CanonId, CanonInterner, Interner, RcInterner},
+        notation::ShapeArena,
         typ::TypKind,
     },
 };
@@ -21,7 +23,9 @@ use super::value::{Value, ValueError, ValueKind, ValueRef};
 /// Storage for every value of one run.
 #[derive(Debug)]
 pub struct ValueArena {
-    /// Bodies, with canonical identities.
+    /// Notation shapes of case bodies.
+    pub(super) arena_shape: ShapeArena,
+    /// Bodies, with canonical identities; a case reads its shape's.
     pub(super) values: CanonInterner<ValueKind>,
     /// Types, shared by allocation.
     pub(super) types: RcInterner<TypKind>,
@@ -44,7 +48,12 @@ impl ValueArena {
         spans
             .intern_default()
             .expect("the first span fits in an interner index");
-        Self { values: CanonInterner::new(), types: RcInterner::new(), spans }
+        Self {
+            arena_shape: ShapeArena::new(),
+            values: CanonInterner::new(),
+            types: RcInterner::new(),
+            spans,
+        }
     }
 
     // - Interning
@@ -56,13 +65,23 @@ impl ValueArena {
         typ: Rc<TypKind>,
         span: Span,
     ) -> Result<Value, ValueError> {
-        let node = self.values.intern(kind, &())?;
+        let node = self.values.intern(kind, &self.arena_shape)?;
         let note = self.types.intern(typ)?;
         let span = self.spans.intern(span)?;
         Ok(Value { node, note, span })
     }
 
     // - Lookup
+
+    /// The notation shapes of case bodies.
+    pub fn arena_shape(&self) -> &ShapeArena {
+        &self.arena_shape
+    }
+
+    /// The notation shapes, for interning notations during a run.
+    pub fn arena_shape_mut(&mut self) -> &mut ShapeArena {
+        &mut self.arena_shape
+    }
 
     /// The body of a value.
     pub fn kind(&self, value: &Value) -> &ValueKind {

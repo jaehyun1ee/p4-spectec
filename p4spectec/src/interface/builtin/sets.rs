@@ -50,11 +50,10 @@ fn set_of_value(arena: &ValueArena, value: &Value) -> Result<ValueSet, BuiltinEr
         get::case(arena, value).map_err(|_| BuiltinError::argument_invalid("expected a set"))?;
     let set_mixop = set_mixop();
     // The value must be a set case wrapping one list
-    if !value_case.eq_shape(&set_mixop) {
+    if !value_case.eq_shape(arena.arena_shape(), &set_mixop) {
         return Err(BuiltinError::argument_invalid("expected a set"));
     }
-    let args = value_case.args();
-    let value_set = extract::one(&args)?;
+    let value_set = extract::one(value_case.args())?;
     let values = get::list(arena, value_set)
         .map_err(|_| BuiltinError::argument_invalid("expected a set"))?;
     let mut set = values.to_vec();

@@ -44,14 +44,13 @@ fn map_find_opt(arena: &ValueArena, key: &Value, map: &[Value]) -> Option<Value>
         let Ok(value_case) = get::case(arena, pair) else {
             continue;
         };
-        if !value_case.eq_shape(&pair_mixop) {
+        if !value_case.eq_shape(arena.arena_shape(), &pair_mixop) {
             continue;
         }
-        let args = value_case.args();
-        if let [value_key, value_value] = args.as_slice()
-            && arena.view(**value_key).syntax_eq(&arena.view(*key))
+        if let [value_key, value_value] = value_case.args()
+            && arena.view(*value_key).syntax_eq(&arena.view(*key))
         {
-            return Some(**value_value);
+            return Some(*value_value);
         }
     }
     None
@@ -87,11 +86,10 @@ fn map_update(
     let pair_mixop = pair_mixop();
     for pair in map {
         let matching = get::case(arena, pair).ok().is_some_and(|value_case| {
-            if !value_case.eq_shape(&pair_mixop) {
+            if !value_case.eq_shape(arena.arena_shape(), &pair_mixop) {
                 return false;
             }
-            let args = value_case.args();
-            matches!(args.as_slice(), [value_key, _] if arena.view(**value_key).syntax_eq(&arena.view(*key)))
+            matches!(value_case.args(), [value_key, _] if arena.view(*value_key).syntax_eq(&arena.view(*key)))
         });
         // Replace in place once; later duplicates are kept as they are
         if !found && matching {
@@ -116,11 +114,10 @@ fn map_of_value(arena: &ValueArena, value: &Value) -> Result<ValueMap, BuiltinEr
         get::case(arena, value).map_err(|_| BuiltinError::argument_invalid("expected a map"))?;
     let map_mixop = map_mixop();
     // The value must be a map case wrapping one list
-    if !value_case.eq_shape(&map_mixop) {
+    if !value_case.eq_shape(arena.arena_shape(), &map_mixop) {
         return Err(BuiltinError::argument_invalid("expected a map"));
     }
-    let args = value_case.args();
-    let value_pairs = extract::one(&args)?;
+    let value_pairs = extract::one(value_case.args())?;
     get::list(arena, value_pairs)
         .map(<[Value]>::to_vec)
         .map_err(|_| BuiltinError::argument_invalid("expected a map"))

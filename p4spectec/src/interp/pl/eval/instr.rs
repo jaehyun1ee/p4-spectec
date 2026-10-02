@@ -480,9 +480,7 @@ fn eval_destruct_instr<'global, Iface: Interface, Ext: Extern>(
     let values = get::case(runner_ctx.arena(), &value)
         .expect("destructuring value must be a case")
         .args()
-        .into_iter()
-        .copied()
-        .collect::<Vec<_>>();
+        .to_vec();
     let exps = instr
         .bindings
         .iter()

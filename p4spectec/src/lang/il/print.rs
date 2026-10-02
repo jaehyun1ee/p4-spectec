@@ -177,8 +177,10 @@ fn write_value_with(
             output.write_char('}')
         }
         // Short form: the case skeleton without arguments
-        ValueKind::Case(case) if short => case.to_mixop().print(output),
-        ValueKind::Case(case) => write_notval_with(arena, output, case, level),
+        ValueKind::Case(value_case) if short => {
+            value_case.to_mixop(arena.arena_shape()).print(output)
+        }
+        ValueKind::Case(value_case) => write_notval_with(arena, output, value_case, level),
         ValueKind::Tuple(values) => {
             output.write_char('(')?;
             for (index, value) in values.iter().enumerate() {
@@ -228,7 +230,7 @@ fn write_notval_with(
     not_val: &ValueCase,
     level: usize,
 ) -> fmt::Result {
-    not_val.print_with(output, |value, output| {
+    not_val.print_with(arena.arena_shape(), output, |value, output| {
         write_value_with(arena, output, value, false, level + 1)
     })
 }

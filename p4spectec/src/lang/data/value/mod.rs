@@ -3,6 +3,7 @@
 //! A `Value` is a handle into a `ValueArena`;
 //! `make` allocates values of each kind with their type,
 //! `get` projects a kind back out or fails with `ValueError`.
+//! A case value's notation lives in the arena's `ShapeArena` (`ValueCase`).
 //! Primitive types are allocated once per thread and shared.
 
 mod arena;
@@ -110,13 +111,14 @@ pub mod make {
 
     // - Cases
 
-    /// A variant case from a filled notation.
+    /// A variant case from a filled notation, interning its shape.
     pub fn case(
         arena: &mut ValueArena,
         typ: Rc<TypKind>,
-        value_case: Mixfix<Value>,
+        mixfix: Mixfix<Value>,
         span: Span,
     ) -> Result<Value, ValueError> {
+        let value_case = ValueCase::from_mixfix(arena.arena_shape_mut(), mixfix)?;
         new(arena, ValueKind::Case(value_case), typ, span)
     }
 
@@ -131,19 +133,14 @@ pub mod make {
         ) => {{
             let (shape_text, args, typ_name, span) = ($shape, $args, $typ, $span);
             let mixop = $crate::lang::data::notation::mixop::shape(shape_text);
-            let value_case = $crate::lang::data::notation::Mixop::fill(mixop.as_ref(), args)
+            let mixfix = $crate::lang::data::notation::Mixop::fill(mixop.as_ref(), args)
                 .expect("mixop arity matches its value constructor");
             let id = $crate::phrase! {
                 node: typ_name.to_owned(),
                 span: $crate::lang::common::source::Span::default(),
             };
             let typ = $crate::lang::data::typ::make::var(id, std::vec::Vec::new());
-            $crate::lang::data::value::make::case(
-                $arena,
-                std::rc::Rc::new(typ.node),
-                value_case,
-                span,
-            )
+            $crate::lang::data::value::make::case($arena, std::rc::Rc::new(typ.node), mixfix, span)
         }};
     }
 
@@ -263,7 +260,7 @@ pub mod get {
 
     // - Cases
 
-    /// The filled notation of a case value.
+    /// The shape and arguments of a case value.
     pub fn case<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a ValueCase, ValueError> {
         match arena.kind(value) {
             ValueKind::Case(value_case) => Ok(value_case),
@@ -274,7 +271,7 @@ pub mod get {
     /// Matches a case value against mixop texts, binding its arguments per arm.
     macro_rules! matches {
         (
-            @arms $value_case:ident;
+            @arms $arena:ident, $value_case:ident;
             $shape:literal $(| $shape_alt:literal)* => |$values:ident| $body:expr,
             $($rest:tt)+
         ) => {{
@@ -282,19 +279,19 @@ pub mod get {
                 Some(value_case)
                     if [$shape, $($shape_alt),*].into_iter().any(|shape_text| {
                         let expected = $crate::lang::data::notation::mixop::shape(shape_text);
-                        value_case.eq_shape(expected.as_ref())
+                        value_case.eq_shape($arena.arena_shape(), expected.as_ref())
                     }) =>
                 {
-                    let $values = value_case.args();
+                    let $values = value_case.args().iter().collect::<Vec<_>>();
                     $body
                 }
                 _ => $crate::lang::data::value::get::matches! {
-                    @arms $value_case;
+                    @arms $arena, $value_case;
                     $($rest)+
                 },
             }
         }};
-        (@arms $value_case:ident; _ => $fallback:expr $(,)?) => {
+        (@arms $arena:ident, $value_case:ident; _ => $fallback:expr $(,)?) => {
             $fallback
         };
         ($arena:expr, $value:expr, $($arms:tt)+) => {{
@@ -305,7 +302,7 @@ pub mod get {
                 _ => None,
             };
             $crate::lang::data::value::get::matches! {
-                @arms value_case;
+                @arms arena, value_case;
                 $($arms)+
             }
         }};

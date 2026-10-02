@@ -146,7 +146,9 @@ pub(crate) fn sub(
 pub(crate) fn r#match(arena: &ValueArena, pattern: &ast::Pattern, value: Value) -> bool {
     match (pattern, arena.kind(&value)) {
         // Case: same constructor shape
-        (ast::Pattern::Case(mixop), ValueKind::Case(value)) => value.eq_shape(mixop.as_ref()),
+        (ast::Pattern::Case(mixop), ValueKind::Case(value_case)) => {
+            value_case.eq_shape(arena.arena_shape(), mixop.as_ref())
+        }
         // List: non-empty, fixed length, or empty
         (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
             ast::ListPattern::Cons => !values.is_empty(),

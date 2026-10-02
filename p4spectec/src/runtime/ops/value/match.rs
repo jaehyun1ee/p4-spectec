@@ -131,7 +131,7 @@ where
                         (DefTypKind::Variant(typ_cases), ValueKind::Case(value_case)) => {
                             for TypCase { not_typ, .. } in typ_cases {
                                 // Skip cases of a different shape
-                                if !not_typ.node.eq_shape(value_case) {
+                                if !value_case.eq_shape(arena.arena_shape(), &not_typ.node) {
                                     continue;
                                 }
                                 let not_typ = subst_not_typ(&|id| theta.get(id), not_typ)?;
@@ -142,7 +142,7 @@ where
                                     find_typdef_opt,
                                     find_func,
                                     typs.into_iter(),
-                                    values.into_iter(),
+                                    values.iter(),
                                 )? {
                                     return Ok(true);
                                 }
@@ -256,9 +256,9 @@ where
         // Statically known to hold
         (Subcheck::Skip, _) => Ok(true),
         // Variant case: the tag must be one of the accepted
-        (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => {
-            Ok(mixops.iter().any(|mixop| mixop.eq_shape(value_case)))
-        }
+        (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => Ok(mixops
+            .iter()
+            .any(|mixop| value_case.eq_shape(arena.arena_shape(), mixop))),
         // Componentwise
         (Subcheck::Tuple(subchecks), ValueKind::Tuple(values)) => {
             if subchecks.len() != values.len() {

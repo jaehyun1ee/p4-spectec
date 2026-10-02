@@ -146,14 +146,15 @@ impl P4Unparser {
         typ: &TypKind,
         value_case: &ValueCase,
     ) -> Result<String, P4UnparseError> {
-        let (mixop, values) = value_case.split();
+        let mixfix = value_case.to_mixfix(arena.arena_shape());
+        let (mixop, values) = mixfix.split();
         if let TypKind::Var(type_id, _) = typ
             && let Some(hint) = self.hints.get(&(type_id.node.clone(), mixop))
         {
             return self.render_hint(arena, hint, &values);
         }
         let mut rendered = Vec::new();
-        self.render_mixfix(arena, value_case, &mut rendered)?;
+        self.render_mixfix(arena, &mixfix, &mut rendered)?;
         Ok(rendered.join(" "))
     }
 
@@ -207,7 +208,7 @@ impl P4Unparser {
     fn render_mixfix(
         &self,
         arena: &ValueArena,
-        mixfix: &ValueCase,
+        mixfix: &Mixfix<Value>,
         rendered: &mut Vec<String>,
     ) -> Result<(), P4UnparseError> {
         match mixfix {

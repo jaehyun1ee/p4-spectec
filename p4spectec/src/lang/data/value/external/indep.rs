@@ -19,7 +19,10 @@ use crate::lang::{
     data::{notation::Mixfix, typ::TypKind},
 };
 
-use super::super::{Value as ArenaValue, ValueArena, ValueError, ValueKind as ArenaValueKind};
+use super::super::{
+    Value as ArenaValue, ValueArena, ValueCase as ArenaValueCase, ValueError,
+    ValueKind as ArenaValueKind,
+};
 
 // == Types
 
@@ -71,9 +74,11 @@ impl ValueKind {
                     .map(|(atom, value)| (atom.clone(), from_arena(arena, value)))
                     .collect(),
             ),
-            ArenaValueKind::Case(mixfix) => {
-                Self::Case(mixfix.map(|value| Box::new(from_arena(arena, value))))
-            }
+            ArenaValueKind::Case(value_case) => Self::Case(
+                value_case
+                    .to_mixfix(arena.arena_shape())
+                    .map(|value| Box::new(from_arena(arena, value))),
+            ),
             ArenaValueKind::Tuple(values) => Self::Tuple(
                 values
                     .iter()
@@ -108,7 +113,11 @@ impl ValueKind {
                     .map(|(atom, value)| Ok((atom, into_arena(arena, value)?)))
                     .collect::<Result<_, ValueError>>()?,
             ),
-            Self::Case(mixfix) => ArenaValueKind::Case(Self::into_arena_case(arena, mixfix)?),
+            Self::Case(mixfix) => {
+                // Arguments first, then the notation's shape
+                let mixfix = Self::into_arena_case(arena, mixfix)?;
+                ArenaValueKind::Case(ArenaValueCase::from_mixfix(arena.arena_shape_mut(), mixfix)?)
+            }
             Self::Tuple(values) => ArenaValueKind::Tuple(
                 values
                     .into_iter()
