@@ -42,10 +42,10 @@
 
 use crate::lang::{
     common::{
-        notation::mixop::Mixop,
         prim,
         source::{Phrase, Span},
     },
+    data::notation::Mixop,
     hints::input::{self, InputHint},
     traits::{
         at::At,

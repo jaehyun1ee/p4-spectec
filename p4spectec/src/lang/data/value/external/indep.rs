@@ -12,11 +12,11 @@ use crate::util::json::json;
 use crate::lang::{
     common::{
         Id,
-        notation::{atom::Atom, mixfix::Mixfix},
+        notation::atom::Atom,
         prim::num::Number,
         source::{NotePhrase, Phrase},
     },
-    data::typ::TypKind,
+    data::{notation::Mixfix, typ::TypKind},
 };
 
 use super::super::{Value as ArenaValue, ValueArena, ValueError, ValueKind as ArenaValueKind};

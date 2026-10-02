@@ -4,7 +4,7 @@
 //! into the shared evaluator's AST, preserving slots, types, and spans.
 //! Recursive notation, path, and argument conversion leaves PL source intact.
 
-use crate::lang::common::notation::mixfix::Mixfix;
+use crate::lang::data::notation::Mixfix;
 
 use crate::runtime::envs::interp::pl::ast_prepared as ast;
 

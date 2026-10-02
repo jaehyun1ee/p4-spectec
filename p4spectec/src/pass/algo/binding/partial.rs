@@ -25,7 +25,8 @@
 //! Generated premises retain the iteration context of the source pattern.
 
 use crate::lang::{
-    common::{ds::set::IdSet, notation::mixop::Mixop, prim, source::Span},
+    common::{ds::set::IdSet, prim, source::Span},
+    data::notation::Mixop,
     traits::free::FreeIds,
 };
 

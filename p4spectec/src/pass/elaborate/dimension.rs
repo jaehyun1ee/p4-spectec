@@ -28,9 +28,9 @@ use crate::lang::{
     common::{
         Id,
         ds::map::IdMap,
-        notation::mixfix::Mixfix,
         source::{Phrase, Span},
     },
+    data::notation::Mixfix,
     traits::eq::SyntaxEq,
 };
 

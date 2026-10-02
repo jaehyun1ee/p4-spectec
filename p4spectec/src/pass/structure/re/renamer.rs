@@ -5,10 +5,8 @@
 //! The local binder is renamed so it does not capture the introduced `y`.
 
 use crate::lang::{
-    common::{
-        ds::{map::IdMap, set::IdSet},
-        notation::mixop::Mixop,
-    },
+    common::ds::{map::IdMap, set::IdSet},
+    data::notation::Mixop,
     hints::input,
     traits::free::FreeIds,
 };
