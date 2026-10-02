@@ -3,45 +3,17 @@
 //! A `Mixop` is a `Mixfix<()>`:
 //! the atoms of a notation form and where its arguments go.
 //! `fill` puts arguments back in left-to-right order;
-//! `shape` parses a mixop from its text once and caches it.
+//! `shape` parses a mixop from its text once and caches it,
+//! through the frontend parser (the one use of `frontend` from `data`).
 
-use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
-
-use crate::lang::{
-    common::ds::set::IdSet,
-    traits::{
-        eq::SyntaxEq,
-        free::FreeIds,
-        print::{Print, Printer},
-    },
-};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::frontend;
 
-use super::{error::ArityMismatch, tree::Mixfix};
-
-/// A mixfix shape with unfilled argument positions.
-pub type Mixop = Mixfix<()>;
-
-impl Print for Mixop {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.print_with(printer, |(), printer| printer.write("%"))
-    }
-}
-
-// == Syntax operations
-
-impl SyntaxEq for () {
-    fn syntax_eq(&self, _other: &Self) -> bool {
-        true
-    }
-}
-
-impl FreeIds for () {
-    fn free_ids(&self) -> IdSet {
-        IdSet::new()
-    }
-}
+use super::{
+    error::ArityMismatch,
+    tree::{Mixfix, Mixop},
+};
 
 // = Shape parsing
 
@@ -67,20 +39,6 @@ pub(crate) fn shape(shape_text: &str) -> Rc<Mixop> {
             .insert(Rc::from(shape_text), Rc::clone(&mixop));
         mixop
     })
-}
-
-// == Converting a mixfix to a mixop
-
-impl<T> Mixfix<T> {
-    /// Replaces every argument with an unfilled mixop position.
-    pub fn to_mixop(&self) -> Mixop {
-        self.map(|_| ())
-    }
-
-    /// Separates the mixop shape from its arguments.
-    pub fn split(&self) -> (Mixop, Vec<&T>) {
-        (self.to_mixop(), self.args())
-    }
 }
 
 // == Filling a mixop with arguments
