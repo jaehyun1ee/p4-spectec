@@ -32,22 +32,37 @@ impl From<NumericError> for InterpreterError {
 // = Error conversion
 
 /// Converts an error to Fatal, adding a source label if missing.
+#[inline]
 pub fn from_result<T>(result: Result<T, impl Into<Error>>, span: &Span) -> Backtrack<T> {
-    result.map_err(|error| InterpreterError::Fatal(error.into()).with_span(span))
+    match result {
+        Ok(value) => Ok(value),
+        Err(error) => Err(from_error(error, span)),
+    }
+}
+
+/// Converts only the failing path and attaches its source location.
+#[cold]
+#[inline(never)]
+fn from_error(error: impl Into<Error>, span: &Span) -> InterpreterError {
+    InterpreterError::Fatal(error.into()).with_span(span)
 }
 
 /// Returns Fatal at the given span if the condition is false.
+#[inline]
 pub fn check(
     condition: bool,
     span: Span,
     diagnostic: impl FnOnce() -> Diagnostic,
 ) -> Backtrack<()> {
-    if condition {
-        Ok(())
-    } else {
-        let diagnostic = diagnostic().with_label(Label::primary(&span, ""));
-        Err(InterpreterError::Fatal(Box::new(Report::from(diagnostic))))
-    }
+    if condition { Ok(()) } else { Err(check_error(span, diagnostic)) }
+}
+
+/// Constructs the diagnostic for a failed runtime check.
+#[cold]
+#[inline(never)]
+fn check_error(span: Span, diagnostic: impl FnOnce() -> Diagnostic) -> InterpreterError {
+    let diagnostic = diagnostic().with_label(Label::primary(&span, ""));
+    InterpreterError::Fatal(Box::new(Report::from(diagnostic)))
 }
 
 /// Adds frames lazily to evaluation results.
@@ -57,9 +72,24 @@ pub trait WithFrame<T> {
 }
 
 impl<T> WithFrame<T> for Backtrack<T> {
+    #[inline]
     fn with_frame(self, span: Span, message: impl FnOnce() -> String) -> Self {
-        self.map_err(|failure| failure.with_frame(span, message()))
+        match self {
+            Ok(value) => Ok(value),
+            Err(failure) => Err(with_error_frame(failure, span, message)),
+        }
     }
+}
+
+/// Formats a trace message only while wrapping a failure.
+#[cold]
+#[inline(never)]
+fn with_error_frame(
+    failure: InterpreterError,
+    span: Span,
+    message: impl FnOnce() -> String,
+) -> InterpreterError {
+    failure.with_frame(span, message())
 }
 
 // = Control syntax

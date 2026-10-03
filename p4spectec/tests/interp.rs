@@ -21,3 +21,6 @@ mod args;
 
 #[path = "interp/cache.rs"]
 mod cache;
+
+#[path = "interp/backtrack.rs"]
+mod backtrack;
