@@ -89,6 +89,8 @@ pub trait WriteContext: ReadContext + Clone {
 
     /// Binds a value to a slot.
     fn add_value_at_slot(&mut self, slot: SlotIdx, value: Value);
+    /// Removes one value binding, preserving every other slot.
+    fn remove_value_at_slot(&mut self, slot: SlotIdx);
     /// Drops every value binding.
     fn clear_value_bindings(&mut self);
 
@@ -435,6 +437,10 @@ impl<R, F: FuncSignature> WriteContext for Context<'_, R, F> {
 
     fn add_value_at_slot(&mut self, slot: SlotIdx, value: Value) {
         self.local.frame.set(slot, value);
+    }
+
+    fn remove_value_at_slot(&mut self, slot: SlotIdx) {
+        self.local.frame.unset(slot);
     }
 
     // - Functions

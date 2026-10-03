@@ -4,7 +4,7 @@
 //! and binds its variables:
 //! `(x, y) <- (1, 2)` binds `x` and `y`;
 //! `x* <- [1, 2]` binds `x*` as a whole,
-//! while `(x, y)* <- [...]` assigns each row in a fresh sub-context
+//! while `(x, y)* <- [...]` assigns each row in an isolated sub-context
 //! and gathers the rows into `x*` and `y*`.
 
 use std::{borrow::Borrow, rc::Rc};
@@ -269,27 +269,36 @@ fn assign_iter_exp<Ctx: WriteContext>(
             }
             ok!(ctx)
         }
-        // List: one fresh sub-context per element
+        // List: reuse one sub-context, collecting only the iterated slots
         ast::Iter::List => {
             let values = get::list(arena, &value)
                 .expect("iteration assignment value must be a list")
                 .to_vec();
             let mut ctx_sub = ctx.clone();
             ctx_sub.clear_value_bindings();
-            let mut ctxs = Vec::with_capacity(values.len());
+            let mut values_by_var: Vec<Vec<Option<Value>>> = exp_iter
+                .vars
+                .iter()
+                .map(|_| Vec::with_capacity(values.len()))
+                .collect();
             for value in values {
-                ctxs.push(unwrap!(assign_exp(arena, ctx_sub.clone(), exp_inner, value)));
+                // A missing binding must not reuse a preceding row's value
+                for var in &exp_iter.vars {
+                    ctx_sub.remove_value_at_slot(var.slot);
+                }
+                ctx_sub = unwrap!(assign_exp(arena, ctx_sub, exp_inner, value));
+                for (var, values) in exp_iter.vars.iter().zip(&mut values_by_var) {
+                    values.push(ctx_sub.find_value_at_slot(var.slot).copied());
+                }
             }
             // Each variable collects its per-row values into a list
-            for (var, var_outer) in exp_iter.vars.iter().zip(&vars_outer) {
+            for (var_outer, values) in vars_outer.iter().zip(values_by_var) {
                 let typ = typ::make::iterate(var_outer.var.typ.clone(), &var_outer.var.iters);
-                let mut values = Vec::with_capacity(ctxs.len());
-                for ctx_sub in &ctxs {
-                    let value = ctx_sub
-                        .find_value_at_slot(var.slot)
-                        .expect("value must be bound");
-                    values.push(*value);
-                }
+                // Check missing bindings in variable order, then row order
+                let values = values
+                    .into_iter()
+                    .map(|value| value.expect("value must be bound"))
+                    .collect();
                 let value_sub = unwrap_from_result!(
                     make::list(arena, typ.node.into(), values, Span::default()),
                     span

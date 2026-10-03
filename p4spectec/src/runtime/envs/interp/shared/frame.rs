@@ -162,4 +162,9 @@ impl Frame {
     pub fn set(&mut self, slot: SlotIdx, value: Value) {
         Rc::make_mut(&mut self.values)[slot.0] = Some(value);
     }
+
+    /// Removes a slot's binding without changing a cloned frame.
+    pub fn unset(&mut self, slot: SlotIdx) {
+        Rc::make_mut(&mut self.values)[slot.0] = None;
+    }
 }
