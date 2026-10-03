@@ -6,6 +6,7 @@
 //! containers, phrases, and notation recurse structurally.
 
 pub mod ast;
+pub mod construct;
 
 use crate::lang::{
     common::{Id, source::NotePhrase},

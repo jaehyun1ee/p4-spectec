@@ -29,7 +29,7 @@ use crate::interp::shared::{
     util::find_slot_of_exp,
 };
 
-use super::super::context::ReadContext;
+use super::super::context::{IterContext, ReadContext};
 
 use super::{Invoker, arg::eval_args, iter, ops, path::eval_update_path};
 
@@ -568,6 +568,11 @@ fn eval_iter_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
     // `x*` as an expression is just the bound value
     if let Some(slot) = find_slot_of_exp(ctx, exp) {
         return ok!(*ctx.find_value_at_slot(slot).expect("value must be bound"));
+    }
+    if exp_iter.iter == ast::Iter::List
+        && let Some(plan) = ctx.find_construct_plan(exp)
+    {
+        return super::construct::map(runner_ctx.arena_mut(), ctx, exp, plan);
     }
     // Otherwise map the body over the iterated variables
     iter::map(runner_ctx, ctx, span, typ, exp_iter, |runner_ctx, ctx_sub| {

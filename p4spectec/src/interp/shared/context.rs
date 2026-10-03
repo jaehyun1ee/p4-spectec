@@ -32,7 +32,10 @@ use crate::runtime::{
 use crate::interp::shared::{
     backtrack::{Backtrack, ok, unwrap_from_result},
     error::{self, EntityKind, Error},
-    prepare::ast,
+    prepare::{
+        ast,
+        construct::{ConstructPlan, ConstructPlans},
+    },
     util::VarIter,
 };
 
@@ -120,6 +123,15 @@ pub trait IterContext: WriteContext {
         vars: &[VarIter<'_>],
     ) -> Result<Option<Vec<Value>>, Error>;
 
+    /// Returns a constructor plan only for immutable syntax retained by its owner.
+    ///
+    /// Opting in permits row reads directly from input columns. Clone, read,
+    /// and write operations must have no effects beyond frame storage, and
+    /// reads and writes must check the same stable slot bounds.
+    fn find_construct_plan(&self, _exp: &ast::Exp) -> Option<&ConstructPlan> {
+        None
+    }
+
     // == Output bindings
 
     /// Appends the values bound to `vars` to their columns.
@@ -160,11 +172,23 @@ pub enum Scope {
 // = Global definitions
 
 /// Stores type definitions and prepared relation and function callables.
-#[derive(Debug)]
 pub struct Global<R, F> {
     tdenv: HashMap<Rc<str>, TypeDef, RandomState>,
     renv: HashMap<Rc<str>, Callable<R>, RandomState>,
     fenv: HashMap<Rc<str>, Rc<Callable<F>>, RandomState>,
+    /// Syntax-only plans installed after all stored definitions stop moving.
+    construct_plans: ConstructPlans,
+}
+
+impl<R: std::fmt::Debug, F: std::fmt::Debug> std::fmt::Debug for Global<R, F> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Execution metadata does not change the displayed definitions
+        fmt.debug_struct("Global")
+            .field("tdenv", &self.tdenv)
+            .field("renv", &self.renv)
+            .field("fenv", &self.fenv)
+            .finish()
+    }
 }
 
 impl<R, F> Global<R, F> {
@@ -172,7 +196,28 @@ impl<R, F> Global<R, F> {
 
     /// Creates empty environments for a stage-specific loader.
     pub(crate) fn new() -> Self {
-        Self { tdenv: HashMap::default(), renv: HashMap::default(), fenv: HashMap::default() }
+        Self {
+            tdenv: HashMap::default(),
+            renv: HashMap::default(),
+            fenv: HashMap::default(),
+            construct_plans: ConstructPlans::default(),
+        }
+    }
+
+    /// Registers actual stored syntax after all definition insertions finish.
+    pub(crate) fn prepare_construct_plans(
+        &mut self,
+        collect_rel: impl Fn(&R, &mut ConstructPlans),
+        collect_func: impl Fn(&F, &mut ConstructPlans),
+    ) {
+        let mut plans = ConstructPlans::default();
+        for rel in self.renv.values() {
+            collect_rel(&rel.def, &mut plans);
+        }
+        for func in self.fenv.values() {
+            collect_func(&func.def, &mut plans);
+        }
+        self.construct_plans = plans;
     }
 
     // == Inserters
@@ -187,6 +232,7 @@ impl<R, F> Global<R, F> {
             "global type definitions must be unique: {}",
             id.node
         );
+        self.construct_plans.clear();
         self.tdenv.insert(id.node, typdef);
     }
 
@@ -200,6 +246,7 @@ impl<R, F> Global<R, F> {
             "global relation definitions must be unique: {}",
             id.node
         );
+        self.construct_plans.clear();
         self.renv.insert(id.node, rel);
     }
 
@@ -213,6 +260,7 @@ impl<R, F> Global<R, F> {
             "global function definitions must be unique: {}",
             id.node
         );
+        self.construct_plans.clear();
         self.fenv.insert(id.node, Rc::new(func));
     }
 }
@@ -537,6 +585,10 @@ impl<R, F: FuncSignature> WriteContext for Context<'_, R, F> {
 // = Iteration access
 
 impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
+    fn find_construct_plan(&self, exp: &ast::Exp) -> Option<&ConstructPlan> {
+        self.global.construct_plans.get(exp)
+    }
+
     // == Finders
 
     // - Values

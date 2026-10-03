@@ -74,6 +74,7 @@ impl Global {
                 }
             }
         }
+        loaded.prepare_construct_plans(super::constructs::rel, super::constructs::func);
         Ok(loaded)
     }
 }

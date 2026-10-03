@@ -88,16 +88,17 @@ impl Arena {
     }
 
     /// Interns composite arguments before materializing a stored body.
-    pub(super) fn alloc_parts(
+    pub(super) fn alloc_parts<Values: AsRef<[Value]>>(
         &mut self,
-        parts: ValueParts,
+        parts: ValueParts<Values>,
         typ: Rc<TypKind>,
         span: Span,
+        into_values: impl FnOnce(Values) -> Vec<Value>,
     ) -> Result<Value, ValueError> {
         let node = self
             .value
             .values
-            .intern_with(parts, &self.shape, |parts| parts.into_kind(&self.shape))?;
+            .intern_with(parts, &self.shape, |parts| parts.into_kind(&self.shape, into_values))?;
         let note = self.value.types.intern(typ)?;
         let span = self.value.spans.intern(span)?;
         Ok(Value { node, note, span })

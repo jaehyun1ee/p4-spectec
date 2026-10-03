@@ -27,3 +27,6 @@ mod backtrack;
 
 #[path = "interp/primitive.rs"]
 mod primitive;
+
+#[path = "interp/construct.rs"]
+mod construct;

@@ -202,7 +202,7 @@ pub fn tuple_from_args(
     values: ValueArgs,
     span: Span,
 ) -> Result<Value, ValueError> {
-    arena.alloc_parts(ValueParts::Tuple(values), typ, span)
+    arena.alloc_parts(ValueParts::Tuple(values), typ, span, ValueArgs::into_vec)
 }
 
 /// Interns list arguments, allocating their stored array only on an exact miss.
@@ -212,7 +212,7 @@ pub fn list_from_args(
     values: ValueArgs,
     span: Span,
 ) -> Result<Value, ValueError> {
-    arena.alloc_parts(ValueParts::List(values), typ, span)
+    arena.alloc_parts(ValueParts::List(values), typ, span, ValueArgs::into_vec)
 }
 
 /// Interns a case's arguments after resolving and checking its notation shape.
@@ -226,7 +226,40 @@ pub fn case_from_args(
     let shape = arena.shape.intern_shared(mixop)?;
     // Validate before exact lookup, including when a body is already present
     assert_eq!(values.len(), arena.shape.arity(shape), "a mixfix fills every position");
-    arena.alloc_parts(ValueParts::Case(shape, values), typ, span)
+    arena.alloc_parts(ValueParts::Case(shape, values), typ, span, ValueArgs::into_vec)
+}
+
+/// Interns borrowed tuple arguments, copying only for a new exact body.
+pub fn tuple_from_slice(
+    arena: &mut Arena,
+    typ: Rc<TypKind>,
+    values: &[Value],
+    span: Span,
+) -> Result<Value, ValueError> {
+    arena.alloc_parts(ValueParts::Tuple(values), typ, span, <[Value]>::to_vec)
+}
+
+/// Interns borrowed list arguments, copying only for a new exact body.
+pub fn list_from_slice(
+    arena: &mut Arena,
+    typ: Rc<TypKind>,
+    values: &[Value],
+    span: Span,
+) -> Result<Value, ValueError> {
+    arena.alloc_parts(ValueParts::List(values), typ, span, <[Value]>::to_vec)
+}
+
+/// Interns a borrowed case after the ordinary notation and arity checks.
+pub fn case_from_slice(
+    arena: &mut Arena,
+    typ: Rc<TypKind>,
+    mixop: &Rc<Mixop>,
+    values: &[Value],
+    span: Span,
+) -> Result<Value, ValueError> {
+    let shape = arena.shape.intern_shared(mixop)?;
+    assert_eq!(values.len(), arena.shape.arity(shape), "a mixfix fills every position");
+    arena.alloc_parts(ValueParts::Case(shape, values), typ, span, <[Value]>::to_vec)
 }
 
 // - Functions
