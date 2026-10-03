@@ -12,7 +12,6 @@ use std::{borrow::Borrow, rc::Rc};
 use crate::lang::{
     common::source::Span,
     data::{
-        typ,
         value::{Arena, Value, ValueKind, get, make},
         var::IdSlot,
     },
@@ -259,7 +258,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
                 None => None,
             };
             for (var, var_outer) in exp_iter.vars.iter().zip(&vars_outer) {
-                let typ = typ::make::iterate(var_outer.var.typ.clone(), &var_outer.var.iters);
+                let typ = var_outer.typ();
                 let value_opt = ctx_sub.as_ref().map(|ctx_sub| {
                     *ctx_sub
                         .find_value_at_slot(var.slot)
@@ -299,7 +298,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
             }
             // Each variable collects its per-row values into a list
             for (var_outer, values) in vars_outer.iter().zip(values_by_var) {
-                let typ = typ::make::iterate(var_outer.var.typ.clone(), &var_outer.var.iters);
+                let typ = var_outer.typ();
                 // Check missing bindings in variable order, then row order
                 let values = values
                     .into_iter()
