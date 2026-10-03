@@ -5,10 +5,13 @@
 //! and then its paths, with inputs and outputs filled into the notation
 //! and `%` standing for the positions a side does not mention.
 
-use std::fmt::{self, Write};
+use std::{
+    fmt::{self, Write},
+    rc::Rc,
+};
 
 use crate::lang::{
-    common::notation::mixop::Mixop,
+    data::notation::Mixfix,
     hints::input::InputHint,
     traits::print::{Print, Printer},
 };
@@ -207,9 +210,8 @@ fn write_ruleinput<I: Print, V: Print>(
 ) -> fmt::Result {
     let idxs_input = input_hint.indices();
     assert_eq!(idxs_input.len(), exps_input.len());
-    let (_, typs) = not_typ.node.split();
     // Each notation position takes its input, or nothing
-    let exps = (0..typs.len())
+    let exps = (0..not_typ.node.arity())
         .map(|index| {
             idxs_input
                 .iter()
@@ -228,9 +230,8 @@ fn write_ruleoutput<I: Print, V: Print>(
     exps_output: &[Exp<I, V>],
 ) -> fmt::Result {
     let idxs_input = input_hint.indices();
-    let (_, typs) = not_typ.node.split();
     // Outputs are the positions the hint leaves
-    let outputs = (0..typs.len())
+    let outputs = (0..not_typ.node.arity())
         .filter(|index| !idxs_input.iter().any(|idx_input| idx_input.node == *index))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
@@ -238,7 +239,7 @@ fn write_ruleoutput<I: Print, V: Print>(
     if exps_output.is_empty() {
         output.write_str("-- the relation holds")
     } else {
-        let exps = (0..typs.len())
+        let exps = (0..not_typ.node.arity())
             .map(|index| {
                 outputs
                     .iter()
@@ -459,10 +460,8 @@ fn write_notation<I: Print, V: Print>(
     not_typ: &NotTyp,
     exps: Vec<Option<&Exp<I, V>>>,
 ) -> fmt::Result {
-    let (mixop, typs) = not_typ.node.split();
-    assert_eq!(typs.len(), exps.len());
-    Mixop::fill(&mixop, exps)
-        .expect("notation arguments came from the same split notation")
+    Mixfix::new(Rc::clone(not_typ.node.mixop()), exps)
+        .expect("one argument slot per notation position")
         .print_with(output, |exp, output| match exp {
             Some(exp) => exp.print(output),
             None => output.write("%"),

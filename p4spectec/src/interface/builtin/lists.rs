@@ -14,7 +14,7 @@ use crate::lang::{
     common::{prim::num, source::Span},
     data::{
         typ,
-        value::{Value, ValueArena, ValueKind, get, make},
+        value::{Arena, Value, ValueKind, get, make},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
@@ -26,22 +26,18 @@ use super::{BuiltinError, extract};
 // == Conversion between runtime values and Rust collections
 
 /// The elements of a list value.
-fn list_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a [Value], BuiltinError> {
+fn list_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], BuiltinError> {
     get::list(arena, value).map_err(BuiltinError::from)
 }
 
 /// The integer in a number value.
-fn bigint_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
+fn bigint_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
     let num = get::num(arena, value).map_err(BuiltinError::from)?;
     Ok(num::to_int(num))
 }
 
 /// `dec $rev_<X>(X*) : X*`, the list reversed.
-pub fn rev_(
-    arena: &mut ValueArena,
-    targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+pub fn rev_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
     let typ = extract::one(targs)?;
     let typ_list = typ::make::list(typ.clone());
     let value_list = extract::one(values)?;
@@ -52,11 +48,7 @@ pub fn rev_(
 }
 
 /// `dec $concat_<X>((X*)*) : X*`, the lists joined in order.
-pub fn concat_(
-    arena: &mut ValueArena,
-    targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+pub fn concat_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
     let typ = extract::one(targs)?;
     let typ_list = typ::make::list(typ.clone());
     let mut concatenated = Vec::new();
@@ -74,7 +66,7 @@ pub fn concat_(
 /// `dec $distinct_<K>(K*) : bool`,
 /// whether no two elements are syntactically equal.
 pub fn distinct_(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     targs: &[Typ],
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
@@ -94,7 +86,7 @@ pub fn distinct_(
 /// `dec $partition_<X>(X*, nat) : (X*, X*)`,
 /// the first `nat` elements and the rest.
 pub fn partition_(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     targs: &[Typ],
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
@@ -130,11 +122,7 @@ pub fn partition_(
 
 /// `dec $assoc_<X, Y>(X, (X, Y)*) : Y?`,
 /// the value of the first pair whose key matches, if any.
-pub fn assoc_(
-    arena: &mut ValueArena,
-    targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+pub fn assoc_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
     let (_typ_key, typ_value) = extract::two(targs)?;
     let (value, value_list) = extract::two(values)?;
     let mut found = None;
@@ -158,11 +146,7 @@ pub fn assoc_(
 
 /// `dec $sort_<X>((nat, X)*) : (nat, X)*`,
 /// the pairs sorted by their natural key, stably.
-pub fn sort_(
-    arena: &mut ValueArena,
-    targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+pub fn sort_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
     let typ_value = extract::one(targs)?;
     let typ_pair = typ::make::tuple(vec![typ::make::nat(), typ_value.clone()]);
     let typ_list = typ::make::list(typ_pair);
@@ -189,7 +173,7 @@ pub fn sort_(
 
 /// `builtin dec $transpose_<X>(X**) : X**`, rows turned into columns.
 pub fn transpose_(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     targs: &[Typ],
     values: &[Value],
 ) -> Result<Value, BuiltinError> {

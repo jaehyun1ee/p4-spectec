@@ -24,8 +24,11 @@
 //!
 //! Generated premises retain the iteration context of the source pattern.
 
+use std::rc::Rc;
+
 use crate::lang::{
-    common::{ds::set::IdSet, notation::mixop::Mixop, prim, source::Span},
+    common::{ds::set::IdSet, prim, source::Span},
+    data::notation::Mixfix,
     traits::free::FreeIds,
 };
 
@@ -173,7 +176,7 @@ fn gen_prem_bound(
             (
                 ast::ExpKind::Match(
                     Box::new(exp_l),
-                    ast::Pattern::Case(Box::new(not_exp.to_mixop())),
+                    ast::Pattern::Case(Rc::clone(not_exp.mixop())),
                 ),
                 Origin::Match(exp_from.span, "variant case"),
             )
@@ -538,10 +541,9 @@ fn rename_exp_bind(
             Ok(exp)
         }
         ast::ExpKind::Case(not_exp) => {
-            let mixop = not_exp.to_mixop();
-            let args = not_exp.into_args();
+            let (mixop, args) = not_exp.into_parts();
             let args = rename_exps(ctx, binds, renv, iter_ctx, args)?;
-            let not_exp = Mixop::fill(&mixop, args)
+            let not_exp = Mixfix::new(Rc::clone(&mixop), args)
                 .expect("arguments obtained from the same mixfix must match its arity");
             let exp_from = note_phrase! {
                 node: ast::ExpKind::Case(Box::new(not_exp)),
@@ -553,7 +555,7 @@ fn rename_exp_bind(
             if is_singleton_case(ctx, &typ)? {
                 Ok(exp_from)
             } else {
-                let pattern = ast::Pattern::Case(Box::new(mixop));
+                let pattern = ast::Pattern::Case(mixop);
                 let exp = rename_exp_bind_match(ctx, renv, iter_ctx, pattern, exp_from);
                 Ok(exp)
             }

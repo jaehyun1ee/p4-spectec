@@ -16,7 +16,7 @@ use crate::lang::{
     common::source::{Phrase, Span},
     data::{
         typ,
-        value::{Value, ValueArena, make},
+        value::{Arena, Value, make},
     },
     traits::print::Print,
 };
@@ -285,7 +285,7 @@ fn run_stf_expect_stmt(
 // - Match-action table updates
 
 /// Encodes STF match keys as the specification's `tableKeyInterface` list.
-fn encode_table_keys(arena: &mut ValueArena, matches: &[TableMatch]) -> Result<Value, SimError> {
+fn encode_table_keys(arena: &mut Arena, matches: &[TableMatch]) -> Result<Value, SimError> {
     let typ_key = typ::make::var(
         crate::phrase!(node: "tableKeyInterface".into(), span: Span::default()),
         vec![],
@@ -385,7 +385,7 @@ where
 }
 
 /// Encodes an STF action as the specification's `tableActionInterface`.
-fn encode_table_action(arena: &mut ValueArena, action: &Action) -> Result<Value, SimError> {
+fn encode_table_action(arena: &mut Arena, action: &Action) -> Result<Value, SimError> {
     let value_name = make::text(arena, action.name.as_str().to_owned(), Span::default())?;
     let typ_arg = typ::make::var(
         crate::phrase!(node: "tableActionArgumentInterface".into(), span: Span::default()),

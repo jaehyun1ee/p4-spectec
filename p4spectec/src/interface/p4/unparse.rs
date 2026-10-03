@@ -11,11 +11,14 @@ use std::collections::HashMap;
 use crate::util::text::escape_text;
 
 use crate::lang::{
-    common::{
-        notation::{atom::Atom, mixfix::Mixfix, mixop::Mixop},
-        prim::num::Number,
+    common::{notation::atom::Atom, prim::num::Number},
+    data::{
+        notation::{
+            Mixop,
+            walk::{self, Piece},
+        },
+        value::{Arena, Value, ValueCase, ValueKind},
     },
-    data::value::{Value, ValueArena, ValueCase, ValueKind},
     hints::alter::{self, AlterHint, Renderer},
     traits::print::Print,
 };
@@ -56,7 +59,7 @@ fn insert_case_hints(
             continue;
         };
         let hint = alter::init(exp);
-        hints.insert((type_id.to_owned(), not_typ.node.to_mixop()), hint);
+        hints.insert((type_id.to_owned(), not_typ.node.mixop().as_ref().clone()), hint);
     }
 }
 
@@ -113,7 +116,7 @@ impl P4Unparser {
     // - Rendering
 
     /// Renders a value as P4 text.
-    pub fn render(&self, arena: &ValueArena, value: &Value) -> Result<String, P4UnparseError> {
+    pub fn render(&self, arena: &Arena, value: &Value) -> Result<String, P4UnparseError> {
         match arena.kind(value) {
             // Primitives print as themselves
             ValueKind::Bool(value) => Ok(value.to_string()),
@@ -143,14 +146,15 @@ impl P4Unparser {
     /// Renders a case by its print hint when the type has one, else by shape.
     fn render_case(
         &self,
-        arena: &ValueArena,
+        arena: &Arena,
         typ: &TypKind,
         value_case: &ValueCase,
     ) -> Result<String, P4UnparseError> {
-        let (mixop, values) = value_case.split();
+        let mixop = arena.arena_shape().to_mixop(*value_case.mixop());
         if let TypKind::Var(type_id, _) = typ
             && let Some(hint) = self.hints.get(&(type_id.node.to_string(), mixop))
         {
+            let values = value_case.args().iter().collect::<Vec<_>>();
             return self.render_hint(arena, hint, &values);
         }
         let mut rendered = Vec::new();
@@ -161,7 +165,7 @@ impl P4Unparser {
     /// Renders the case arguments through a print-hint template.
     fn render_hint(
         &self,
-        arena: &ValueArena,
+        arena: &Arena,
         hint: &AlterHint,
         values: &[&Value],
     ) -> Result<String, P4UnparseError> {
@@ -175,7 +179,7 @@ impl P4Unparser {
     /// Renders values joined by a separator.
     fn render_values(
         &self,
-        arena: &ValueArena,
+        arena: &Arena,
         values: &[Value],
         separator: &str,
     ) -> Result<String, P4UnparseError> {
@@ -207,48 +211,26 @@ impl P4Unparser {
     /// Renders a case by its shape, skipping atoms that print as nothing.
     fn render_mixfix(
         &self,
-        arena: &ValueArena,
-        mixfix: &ValueCase,
+        arena: &Arena,
+        value_case: &ValueCase,
         rendered: &mut Vec<String>,
     ) -> Result<(), P4UnparseError> {
-        match mixfix {
-            // Arguments render recursively
-            Mixfix::Arg(value) => {
-                let value = self.render(arena, value)?;
-                rendered.push(value);
-            }
-            // Silent atoms are dropped rather than left as empty pieces
-            Mixfix::Atom(atom) => {
-                let rendered_atom = Self::render_atom(&atom.node);
-                if !rendered_atom.is_empty() {
-                    rendered.push(rendered_atom);
-                }
-            }
-            // Brackets around the inner form
-            Mixfix::Brack(atom_l, mixfix, atom_r) => {
-                let rendered_atom_l = Self::render_atom(&atom_l.node);
-                if !rendered_atom_l.is_empty() {
-                    rendered.push(rendered_atom_l);
-                }
-                self.render_mixfix(arena, mixfix, rendered)?;
-                let rendered_atom_r = Self::render_atom(&atom_r.node);
-                if !rendered_atom_r.is_empty() {
-                    rendered.push(rendered_atom_r);
-                }
-            }
-            // Left, operator, right
-            Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
-                self.render_mixfix(arena, mixfix_l, rendered)?;
-                let rendered_atom = Self::render_atom(&atom.node);
-                if !rendered_atom.is_empty() {
-                    rendered.push(rendered_atom);
-                }
-                self.render_mixfix(arena, mixfix_r, rendered)?;
-            }
-            // Pieces in order
-            Mixfix::Seq(mixfixes) => {
-                for mixfix in mixfixes {
-                    self.render_mixfix(arena, mixfix, rendered)?;
+        // Pieces in reading order: atoms, and arguments by position
+        let arena_shape = arena.arena_shape();
+        let mut pieces = Vec::new();
+        walk::visit(arena_shape, arena_shape.kind(*value_case.mixop()), |piece| {
+            pieces.push(piece);
+        });
+        for piece in pieces {
+            match piece {
+                // Arguments render recursively
+                Piece::Arg(pos) => rendered.push(self.render(arena, &value_case.args()[pos])?),
+                // Silent atoms are dropped rather than left as empty pieces
+                Piece::Atom(atom) => {
+                    let rendered_atom = Self::render_atom(&atom.node);
+                    if !rendered_atom.is_empty() {
+                        rendered.push(rendered_atom);
+                    }
                 }
             }
         }
@@ -259,7 +241,7 @@ impl P4Unparser {
 // == Print-hint rendering
 
 /// The print-hint renderer producing P4 text.
-struct ValueRenderer<'a>(&'a P4Unparser, &'a ValueArena);
+struct ValueRenderer<'a>(&'a P4Unparser, &'a Arena);
 
 impl Renderer<&Value> for ValueRenderer<'_> {
     type Output = Result<String, P4UnparseError>;

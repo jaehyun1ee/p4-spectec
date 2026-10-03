@@ -9,7 +9,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, ValueArena, ValueError, get, make},
+        value::{Arena, Value, ValueError, get, make},
     },
 };
 
@@ -22,10 +22,7 @@ use super::spec::func;
 // == Table names
 
 /// Splits a dotted name into its last segment and, if dotted, its full path.
-fn table_name(
-    arena: &mut ValueArena,
-    value_name: Value,
-) -> Result<(Value, Option<Value>), ExternError> {
+fn table_name(arena: &mut Arena, value_name: Value) -> Result<(Value, Option<Value>), ExternError> {
     // The last segment is the bare name
     let name = get::text(arena, &value_name)?.to_owned();
     let names: Vec<_> = name.split('.').collect();

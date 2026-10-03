@@ -12,7 +12,7 @@ use crate::lang::{
     common::{ds::map::IdMap, source::Span},
     data::{
         typ,
-        value::{Value, ValueArena, get, make},
+        value::{Arena, Value, get, make},
         var::{SlotIdx, VarSlot},
     },
 };
@@ -105,14 +105,14 @@ pub trait IterContext: WriteContext {
     /// Finds the list values bound to `vars`, requiring equal lengths.
     fn find_list_values_by_var<'arena>(
         &self,
-        arena: &'arena ValueArena,
+        arena: &'arena Arena,
         vars: &[ast::Var],
     ) -> Result<Vec<&'arena [Value]>, Error>;
 
     /// Finds the option values bound to `vars`, all present or all absent.
     fn find_opt_values_by_var(
         &self,
-        arena: &ValueArena,
+        arena: &Arena,
         vars: &[ast::Var],
     ) -> Result<Option<Vec<Value>>, Error>;
 
@@ -128,7 +128,7 @@ pub trait IterContext: WriteContext {
     /// Binds each variable to the list of its column.
     fn bind_list_values_by_var(
         &mut self,
-        arena: &mut ValueArena,
+        arena: &mut Arena,
         vars: &[ast::Var],
         values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()>;
@@ -136,7 +136,7 @@ pub trait IterContext: WriteContext {
     /// Binds each variable to the option built from its column.
     fn bind_opt_values_by_var(
         &mut self,
-        arena: &mut ValueArena,
+        arena: &mut Arena,
         vars: &[ast::Var],
         values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()>;
@@ -467,7 +467,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
 
     fn find_list_values_by_var<'a>(
         &self,
-        arena: &'a ValueArena,
+        arena: &'a Arena,
         vars: &[ast::Var],
     ) -> Result<Vec<&'a [Value]>, Error> {
         let mut values_by_var = Vec::with_capacity(vars.len());
@@ -498,7 +498,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
 
     fn find_opt_values_by_var(
         &self,
-        arena: &ValueArena,
+        arena: &Arena,
         vars: &[ast::Var],
     ) -> Result<Option<Vec<Value>>, Error> {
         let mut values = Vec::with_capacity(vars.len());
@@ -547,7 +547,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
 
     fn bind_list_values_by_var(
         &mut self,
-        arena: &mut ValueArena,
+        arena: &mut Arena,
         vars: &[ast::Var],
         values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()> {
@@ -563,7 +563,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
 
     fn bind_opt_values_by_var(
         &mut self,
-        arena: &mut ValueArena,
+        arena: &mut Arena,
         vars: &[ast::Var],
         values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()> {

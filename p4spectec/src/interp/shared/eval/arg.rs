@@ -5,7 +5,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, ValueArena, make},
+    data::value::{Arena, Value, make},
     traits::print::Print,
 };
 
@@ -50,7 +50,7 @@ pub(crate) fn eval_args<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
 
 /// Builds the function value for a function argument from the function's type.
 fn eval_def_arg(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: &impl ReadContext,
     id: &ast::Id,
     span: &Span,

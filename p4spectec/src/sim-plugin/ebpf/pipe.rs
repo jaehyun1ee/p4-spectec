@@ -19,7 +19,7 @@ use crate::lang::{
     data::{
         typ,
         value::{
-            Value, ValueArena,
+            Arena, Value,
             external::{DecodeContext, EncodeContext, Encoding, decode_with, encode_with},
             get, make,
         },
@@ -74,11 +74,7 @@ impl ExternObject {
     // - Encoding
 
     /// Encodes the object as the specification's `objectState` external value.
-    pub fn to_value(
-        &self,
-        arena: &mut ValueArena,
-        encoding: Encoding,
-    ) -> Result<Value, ExternError> {
+    pub fn to_value(&self, arena: &mut Arena, encoding: Encoding) -> Result<Value, ExternError> {
         let payload = encode_with(arena, encoding, self)?;
         let typ = typ::make::var(
             crate::phrase!(node: "objectState".into(), span: Span::default()),
@@ -91,7 +87,7 @@ impl ExternObject {
 
     /// Decodes an object from an `objectState` external value.
     pub fn from_value(
-        arena: &mut ValueArena,
+        arena: &mut Arena,
         encoding: Encoding,
         value: &Value,
     ) -> Result<Self, ExternError> {
@@ -208,7 +204,7 @@ where
 
 /// Builds the error naming an unsupported method call.
 fn unsupported_method(
-    arena: &ValueArena,
+    arena: &Arena,
     value_id: Value,
     name: &str,
     names: &[String],

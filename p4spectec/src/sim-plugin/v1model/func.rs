@@ -13,7 +13,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, ValueArena, make},
+        value::{Arena, Value, make},
     },
 };
 
@@ -700,7 +700,7 @@ where
 }
 
 /// Expands `{}` holes in `fmt` with `args`; `{{` and `}}` are literal braces.
-pub fn format_braces(arena: &ValueArena, fmt: &str, args: &[Value]) -> Result<String, ExternError> {
+pub fn format_braces(arena: &Arena, fmt: &str, args: &[Value]) -> Result<String, ExternError> {
     let mut chars = fmt.chars().peekable();
     let mut args = args.iter();
     let mut text = String::with_capacity(fmt.len());

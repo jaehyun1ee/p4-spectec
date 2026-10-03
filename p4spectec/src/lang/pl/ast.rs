@@ -11,9 +11,9 @@
 
 use std::rc::Rc;
 
-use crate::lang::common::{
-    notation::mixfix::Mixfix,
-    source::{NotePhrase, Phrase},
+use crate::lang::{
+    common::source::{NotePhrase, Phrase},
+    data::notation::Mixfix,
 };
 
 use crate::lang::sl;
@@ -111,7 +111,7 @@ pub enum ExpKind<I = Id, V = Var> {
     Iter(Box<Exp<I, V>>, ExpIter<V>),
 }
 /// A notation expression: a mixfix skeleton with expressions as arguments.
-pub type NotExp<I = Id, V = Var> = Mixfix<Exp<I, V>>;
+pub type NotExp<I = Id, V = Var> = Mixfix<Rc<Mixop>, Exp<I, V>>;
 pub type ExpIter<V = Var> = sl::ast::ExpIter<V>;
 
 // Patterns
@@ -264,7 +264,7 @@ pub struct IfInstr<Tier, E = Exp, V = Var> {
 /// Run a branch by whether the relation applies under its iterations.
 pub struct HoldInstr<Tier, E = Exp, V = Var> {
     pub id: Id,
-    pub not_exp: Mixfix<E>,
+    pub not_exp: Mixfix<Rc<Mixop>, E>,
     pub iter_exps: Vec<ExpIter<V>>,
     pub hold_case: HoldCase<Tier, E, V>,
 }
@@ -361,7 +361,7 @@ pub struct ReturnInstr<E = Exp> {
 /// A relation call under its iterations; the hint marks the input arguments.
 pub struct RuleInstr<E = Exp, V = Var> {
     pub id: Id,
-    pub not_exp: Mixfix<E>,
+    pub not_exp: Mixfix<Rc<Mixop>, E>,
     pub input_hint: crate::lang::hints::input::InputHint,
     pub iter_instrs: Vec<InstrIter<V>>,
 }

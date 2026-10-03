@@ -9,7 +9,7 @@
 use std::rc::Rc;
 
 use crate::lang::{
-    data::value::{Value, ValueArena, ValueKind},
+    data::value::{Arena, Value, ValueKind},
     hints::input,
 };
 
@@ -45,7 +45,7 @@ use super::{
 
 /// Checks the input count and, with `guard`, the input types.
 pub(crate) fn check_rel_inputs(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
@@ -86,7 +86,7 @@ pub(crate) fn check_rel_inputs(
 
 /// Checks argument counts and, with `guard`, the argument types.
 pub(crate) fn check_func_inputs(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
@@ -114,7 +114,7 @@ pub(crate) fn check_func_inputs(
 
 /// Checks each value against its type, failing with the supplied guard error.
 fn check_values(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     typs: &[ast::Typ],
@@ -137,7 +137,7 @@ fn check_values(
 
 /// Type-checks a function result with its type arguments substituted.
 fn check_func_output(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     tparams: &[ast::TParam],
@@ -257,14 +257,7 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
     }));
     // Guard the outputs against their declared types
     if runner_ctx.interp().config.guard {
-        let typs = rel
-            .rel_signature
-            .not_typ
-            .node
-            .args()
-            .into_iter()
-            .cloned()
-            .collect::<Vec<_>>();
+        let typs = rel.rel_signature.not_typ.node.args().to_vec();
         // Output types occupy the positions the input hint leaves
         let (_, typs) = input::split(&rel.rel_signature.input_hint, typs)
             .expect("input hint must fit relation");
