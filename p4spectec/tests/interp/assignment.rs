@@ -12,6 +12,60 @@ use p4spectec::lang::{
 use super::support::sl_runner;
 
 #[test]
+fn composite_assignment_keeps_children_when_recursive_assignment_grows_the_arena() {
+    use p4spectec::{
+        interp::{
+            shared::{context::ReadContext, eval::assign::assign_exp, prepare::ast},
+            sl::context::{Context, Global},
+        },
+        lang::data::value::Arena,
+        note_phrase, phrase,
+        runtime::envs::interp::shared::frame::FrameLayout,
+    };
+
+    let mut layout = FrameLayout::default();
+    let ids = ["head", "tail", "last"]
+        .map(|name| layout.resolve_id(phrase!(node: Rc::from(name), span: Span::default())));
+    let exps = ids.clone().map(|id| {
+        note_phrase!(node: ast::ExpKind::Id(id), note: typ::make::nat().node, span: Span::default())
+    });
+    let exp_cons = note_phrase!(
+        node: ast::ExpKind::Cons(Box::new(exps[0].clone()), Box::new(exps[1].clone())),
+        note: typ::make::list(typ::make::nat()).node, span: Span::default()
+    );
+    let exp = note_phrase!(
+        node: ast::ExpKind::Tuple(vec![exp_cons, exps[2].clone()]),
+        note: typ::make::nat().node, span: Span::default()
+    );
+    let global = Global::load(vec![]).unwrap();
+    let ctx = Context::new(&global).localize_with_layout(&Rc::new(layout));
+    let mut arena = Arena::new();
+    let values =
+        [11_u64, 22, 33].map(|num| make::nat(&mut arena, num.into(), Span::default()).unwrap());
+    let value_list = make::list(
+        &mut arena,
+        typ::make::list(typ::make::nat()).node.into(),
+        values[..2].to_vec(),
+        Span::default(),
+    )
+    .unwrap();
+    let value_tuple = make::tuple(
+        &mut arena,
+        typ::make::nat().node.into(),
+        vec![value_list, values[2]],
+        Span::default(),
+    )
+    .unwrap();
+
+    let ctx = assign_exp(&mut arena, ctx, &exp, value_tuple).unwrap();
+    assert_eq!(ctx.find_value_at_slot(ids[0].slot), Some(&values[0]));
+    assert_eq!(ctx.find_value_at_slot(ids[2].slot), Some(&values[2]));
+    let value_tail = ctx.find_value_at_slot(ids[1].slot).unwrap();
+    assert_eq!(get::list(&arena, value_tail).unwrap(), &values[1..2]);
+    assert_eq!(get::tuple(&arena, &value_tuple).unwrap(), &[value_list, values[2]]);
+}
+
+#[test]
 fn list_patterns_keep_optional_rows_and_column_order() {
     let source = r#"
 var x : nat

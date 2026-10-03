@@ -67,21 +67,34 @@ pub fn assign_exp<Ctx: WriteContext>(
         (ast::ExpKind::Id(id), _) => assign_id_exp(arena, ctx, id, value),
         // Tuple: componentwise
         (ast::ExpKind::Tuple(exps), ValueKind::Tuple(values)) => {
-            let values = values.to_vec();
-            assign_tuple_exp(arena, ctx, exps, &values)
+            let values_len = values.len();
+            assign_children(arena, ctx, exps.iter(), value, values_len, |arena, value, idx| {
+                get::tuple(arena, &value).expect("tuple assignment value")[idx]
+            })
         }
         // Case: the arguments
         (ast::ExpKind::Case(not_exp), ValueKind::Case(value_case)) => {
-            let values = value_case.args().to_vec();
-            assign_case_exp(arena, ctx, not_exp, &values)
+            let values_len = value_case.args().len();
+            assign_children(
+                arena,
+                ctx,
+                not_exp.args().iter(),
+                value,
+                values_len,
+                |arena, value, idx| {
+                    get::case(arena, &value)
+                        .expect("case assignment value")
+                        .args()[idx]
+                },
+            )
         }
         // Struct: the fields in order
         (ast::ExpKind::Str(exp_fields), ValueKind::Struct(value_fields)) => {
-            let values = value_fields
-                .iter()
-                .map(|(_, value)| *value)
-                .collect::<Vec<_>>();
-            assign_str_exp(arena, ctx, exp_fields, &values)
+            let values_len = value_fields.len();
+            let exps = exp_fields.iter().map(|exp_field| &exp_field.exp);
+            assign_children(arena, ctx, exps, value, values_len, |arena, value, idx| {
+                get::structure(arena, &value).expect("struct assignment value")[idx].1
+            })
         }
         // Option: both present or both absent
         (ast::ExpKind::Opt(exp_opt), ValueKind::Opt(value_opt)) => {
@@ -90,13 +103,14 @@ pub fn assign_exp<Ctx: WriteContext>(
         }
         // List literal: elementwise
         (ast::ExpKind::List(exps), ValueKind::List(values)) => {
-            let values = values.to_vec();
-            assign_list_exp(arena, ctx, exps, &values)
+            let values_len = values.len();
+            assign_children(arena, ctx, exps.iter(), value, values_len, |arena, value, idx| {
+                get::list(arena, &value).expect("list assignment value")[idx]
+            })
         }
         // Cons: the first element, then the rest
-        (ast::ExpKind::Cons(exp_head, exp_tail), ValueKind::List(values)) => {
-            let values = values.to_vec();
-            assign_cons_exp(arena, ctx, exp, exp_head, exp_tail, &value, &values)
+        (ast::ExpKind::Cons(exp_head, exp_tail), ValueKind::List(_)) => {
+            assign_cons_exp(arena, ctx, exp, exp_head, exp_tail, &value)
         }
         // Iteration: as a whole or row by row
         (ast::ExpKind::Iter(exp_inner, exp_iter), _) => {
@@ -134,41 +148,25 @@ fn assign_id_exp<Ctx: WriteContext>(
     ok!(ctx)
 }
 
-// - Tuple expression
+// - Composite expressions
 
-fn assign_tuple_exp<Ctx: WriteContext>(
+/// Reads each child again after recursion, which may grow the arena's storage.
+fn assign_children<'a, Ctx: WriteContext>(
     arena: &mut Arena,
-    ctx: Ctx,
-    exps: &[ast::Exp],
-    values: &[Value],
+    mut ctx: Ctx,
+    exps: impl ExactSizeIterator<Item = &'a ast::Exp>,
+    value: Value,
+    values_len: usize,
+    get_value: impl Fn(&Arena, Value, usize) -> Value,
 ) -> Backtrack<Ctx> {
-    assign_exps(arena, ctx, exps, values)
-}
-
-// - Case expression
-
-fn assign_case_exp<Ctx: WriteContext>(
-    arena: &mut Arena,
-    ctx: Ctx,
-    not_exp: &ast::NotExp,
-    values: &[Value],
-) -> Backtrack<Ctx> {
-    assign_exps(arena, ctx, not_exp.args(), values)
-}
-
-// - Struct expression
-
-fn assign_str_exp<Ctx: WriteContext>(
-    arena: &mut Arena,
-    ctx: Ctx,
-    exp_fields: &[ast::ExpField],
-    values: &[Value],
-) -> Backtrack<Ctx> {
-    let exps = exp_fields
-        .iter()
-        .map(|ast::ExpField { exp, .. }| exp)
-        .collect::<Vec<_>>();
-    assign_exps(arena, ctx, &exps, values)
+    // Check all counts before binding the first child
+    assert_eq!(exps.len(), values_len, "assignment arity mismatch");
+    // Parent bodies are immutable, but their storage may move during assignment
+    for (idx, exp) in exps.enumerate() {
+        let value = get_value(arena, value, idx);
+        ctx = unwrap!(assign_exp(arena, ctx, exp, value));
+    }
+    ok!(ctx)
 }
 
 // - Optional expression
@@ -190,17 +188,6 @@ fn assign_opt_exp<Ctx: WriteContext>(
     }
 }
 
-// - List expression
-
-fn assign_list_exp<Ctx: WriteContext>(
-    arena: &mut Arena,
-    ctx: Ctx,
-    exps: &[ast::Exp],
-    values: &[Value],
-) -> Backtrack<Ctx> {
-    assign_exps(arena, ctx, exps, values)
-}
-
 // - Cons expression
 
 /// Splits a non-empty list into head and tail and assigns each.
@@ -211,18 +198,20 @@ fn assign_cons_exp<Ctx: WriteContext>(
     exp_head: &ast::Exp,
     exp_tail: &ast::Exp,
     value: &Value,
-    values: &[Value],
 ) -> Backtrack<Ctx> {
+    let values = get::list(arena, value).expect("cons assignment value must be a list");
     let (value_head, values_tail) = values
         .split_first()
         .expect("cons pattern must match a non-empty list");
+    let value_head = *value_head;
+    let values_tail = values_tail.to_vec();
     // Rebuild the tail as a list value of the same type
     let typ = phrase!(node: arena.typ(value).clone(), span: exp.span);
     let value_tail = unwrap_from_result!(
-        make::list(arena, typ.node.clone(), values_tail.to_vec(), Span::default()),
+        make::list(arena, typ.node.clone(), values_tail, Span::default()),
         &Span::default()
     );
-    let ctx = unwrap!(assign_exp(arena, ctx, exp_head, *value_head));
+    let ctx = unwrap!(assign_exp(arena, ctx, exp_head, value_head));
     assign_exp(arena, ctx, exp_tail, value_tail)
 }
 
@@ -271,17 +260,19 @@ fn assign_iter_exp<Ctx: WriteContext>(
         }
         // List: reuse one sub-context, collecting only the iterated slots
         ast::Iter::List => {
-            let values = get::list(arena, &value)
+            let values_len = get::list(arena, &value)
                 .expect("iteration assignment value must be a list")
-                .to_vec();
+                .len();
             let mut ctx_sub = ctx.clone();
             ctx_sub.clear_value_bindings();
             let mut values_by_var: Vec<Vec<Option<Value>>> = exp_iter
                 .vars
                 .iter()
-                .map(|_| Vec::with_capacity(values.len()))
+                .map(|_| Vec::with_capacity(values_len))
                 .collect();
-            for value in values {
+            for idx in 0..values_len {
+                let value = get::list(arena, &value)
+                    .expect("iteration assignment value must be a list")[idx];
                 // A missing binding must not reuse a preceding row's value
                 for var in &exp_iter.vars {
                     ctx_sub.remove_value_at_slot(var.slot);
