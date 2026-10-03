@@ -236,7 +236,7 @@ fn eval_if_instr<'global, Tier, Iface: Interface, Ext: Extern>(
         ok!((
             ctx,
             Flow::cont(
-                instr.exp.node.span.clone(),
+                instr.exp.node.span,
                 error::prem::condition_unmet(Print::to_string(&instr.exp))
             )
         ))
@@ -284,7 +284,7 @@ fn eval_hold_instr<'global, Tier, Iface: Interface, Ext: Extern>(
         ast::HoldCase::NotHold(block, _) if !cond => evaluate_block(runner_ctx, ctx, block),
         // A failed hold condition retains its relation failure
         ast::HoldCase::Hold(..) => {
-            let diagnostic = error::prem::hold_condition_unmet(instr.id.node.clone());
+            let diagnostic = error::prem::hold_condition_unmet(instr.id.node.to_string());
             let report = Report::from(diagnostic)
                 .with_span(&instr.id.span)
                 .with_children(errors);
@@ -294,8 +294,8 @@ fn eval_hold_instr<'global, Tier, Iface: Interface, Ext: Extern>(
         ast::HoldCase::NotHold(..) => ok!((
             ctx,
             Flow::cont(
-                instr.id.span.clone(),
-                error::prem::not_hold_condition_unmet(instr.id.node.clone()),
+                instr.id.span,
+                error::prem::not_hold_condition_unmet(instr.id.node.to_string()),
             )
         )),
     }
@@ -327,10 +327,7 @@ fn eval_case_instr<'global, Tier, Iface: Interface, Ext: Extern>(
     // No guard accepted: fall through
     ok!((
         ctx,
-        Flow::cont(
-            instr.exp.node.span.clone(),
-            error::prem::condition_unmet(Print::to_string(&instr.exp))
-        )
+        Flow::cont(instr.exp.node.span, error::prem::condition_unmet(Print::to_string(&instr.exp)))
     ))
 }
 
@@ -437,7 +434,7 @@ fn eval_result_instr<'global, Iface: Interface, Ext: Extern>(
     instr: &ast::ResultInstr,
 ) -> Backtrack<(Context<'global>, Flow)> {
     let values = unwrap!(eval_exps(runner_ctx, &ctx, &instr.exps_output));
-    ok!((ctx, Flow::Result(phrase!(node: values, span: span.clone()))))
+    ok!((ctx, Flow::Result(phrase!(node: values, span: *span))))
 }
 
 // - Return instruction
@@ -450,7 +447,7 @@ fn eval_return_instr<'global, Iface: Interface, Ext: Extern>(
     instr: &ast::ReturnInstr,
 ) -> Backtrack<(Context<'global>, Flow)> {
     let value = unwrap!(eval_exp(runner_ctx, &ctx, &instr.exp));
-    ok!((ctx, Flow::Return(phrase!(node: value, span: span.clone()))))
+    ok!((ctx, Flow::Return(phrase!(node: value, span: *span))))
 }
 
 // - Debug instruction
@@ -522,7 +519,7 @@ fn eval_check_let_sub_instr<'global, Tier, Iface: Interface, Ext: Extern>(
         ok!((
             ctx,
             Flow::cont(
-                instr.exp_r.node.span.clone(),
+                instr.exp_r.node.span,
                 error::prem::condition_unmet(format!(
                     "{} is not a subtype of {}",
                     Print::to_string(&instr.exp_r),
@@ -558,7 +555,7 @@ fn eval_check_let_match_instr<'global, Tier, Iface: Interface, Ext: Extern>(
         ok!((
             ctx,
             Flow::cont(
-                instr.exp_r.node.span.clone(),
+                instr.exp_r.node.span,
                 error::prem::condition_unmet(format!(
                     "{} does not match the expected pattern",
                     Print::to_string(&instr.exp_r)
@@ -595,7 +592,7 @@ fn eval_option_get_instr<'global, Tier, Iface: Interface, Ext: Extern>(
         ok!((
             ctx,
             Flow::cont(
-                instr.exp_r.node.span.clone(),
+                instr.exp_r.node.span,
                 error::prem::condition_unmet(format!(
                     "{} evaluated to an empty option",
                     Print::to_string(&instr.exp_r)

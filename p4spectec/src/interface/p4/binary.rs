@@ -115,7 +115,7 @@ fn reduce(
         span: op.span,
     }?;
     // The expression spans both operands
-    let span = Span::new(arena.span(&value_l).left.clone(), arena.span(&value_r).right.clone());
+    let span = Span::new(arena.span(&value_l).left, arena.span(&value_r).right);
     values.push(make::case_shaped! { arena: arena,
         shape: "expression binop expression",
         args: vec![value_l, value_operator, value_r],
