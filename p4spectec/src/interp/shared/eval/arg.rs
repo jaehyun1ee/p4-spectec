@@ -5,7 +5,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Arena, Value, make},
+    data::value::{Arena, Value, ValueArgs, make},
     traits::print::Print,
 };
 
@@ -38,8 +38,8 @@ pub(crate) fn eval_args<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
     args: &[ast::Arg],
-) -> Backtrack<Vec<Value>> {
-    let mut values = Vec::with_capacity(args.len());
+) -> Backtrack<ValueArgs> {
+    let mut values = ValueArgs::with_capacity(args.len());
     for arg in args {
         values.push(unwrap!(eval_arg(runner_ctx, ctx, arg)));
     }

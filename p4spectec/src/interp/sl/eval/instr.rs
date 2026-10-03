@@ -428,7 +428,7 @@ fn eval_return_instr<Iface: Interface, Ext: Extern>(
             ok!(Flow::Return(phrase!(node: value, span: *span)))
         // Global calls become tail calls for the invoker loop
         } else {
-            ok!(Flow::TailFunc(phrase!(node: (id.clone(), targs, values), span: *span)))
+            ok!(Flow::TailFunc(phrase!(node: (id.clone(), targs, values.into_vec()), span: *span)))
         }
     // Any other expression is evaluated and returned
     } else {
