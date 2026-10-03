@@ -6,7 +6,9 @@
 //! `ReadContext`, `WriteContext`, and `IterContext` serve shared evaluation;
 //! `FuncSignature` reads function types from each stage's prepared syntax.
 
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
+
+use foldhash::fast::RandomState;
 
 use crate::lang::{
     common::{ds::map::IdMap, source::Span},
@@ -160,9 +162,9 @@ pub enum Scope {
 /// Stores type definitions and prepared relation and function callables.
 #[derive(Debug)]
 pub struct Global<R, F> {
-    tdenv: TDEnv,
-    renv: IdMap<Callable<R>>,
-    fenv: IdMap<Rc<Callable<F>>>,
+    tdenv: HashMap<Rc<str>, TypeDef, RandomState>,
+    renv: HashMap<Rc<str>, Callable<R>, RandomState>,
+    fenv: HashMap<Rc<str>, Rc<Callable<F>>, RandomState>,
 }
 
 impl<R, F> Global<R, F> {
@@ -170,7 +172,7 @@ impl<R, F> Global<R, F> {
 
     /// Creates empty environments for a stage-specific loader.
     pub(crate) fn new() -> Self {
-        Self { tdenv: TDEnv::new(), renv: IdMap::new(), fenv: IdMap::new() }
+        Self { tdenv: HashMap::default(), renv: HashMap::default(), fenv: HashMap::default() }
     }
 
     // == Inserters
@@ -181,27 +183,24 @@ impl<R, F> Global<R, F> {
     pub(crate) fn insert_typdef(&mut self, id: ast::Id, typdef: TypeDef) {
         // Elaboration already rejects duplicate type names
         assert!(
-            !self.tdenv.contains_key(&id),
+            !self.tdenv.contains_key(id.node.as_ref()),
             "global type definitions must be unique: {}",
             id.node
         );
-        self.tdenv.insert(id, typdef);
+        self.tdenv.insert(id.node, typdef);
     }
 
     // - Relations
 
     /// Inserts a prepared relation, panicking if its name is already defined.
-    pub(crate) fn insert_rel(&mut self, id: ast::Id, rel: Callable<R>)
-    where
-        R: Clone,
-    {
+    pub(crate) fn insert_rel(&mut self, id: ast::Id, rel: Callable<R>) {
         // Elaboration already rejects duplicate relation names
         assert!(
-            !self.renv.contains_key(&id),
+            !self.renv.contains_key(id.node.as_ref()),
             "global relation definitions must be unique: {}",
             id.node
         );
-        self.renv.insert(id, rel);
+        self.renv.insert(id.node, rel);
     }
 
     // - Functions
@@ -210,11 +209,11 @@ impl<R, F> Global<R, F> {
     pub(crate) fn insert_func(&mut self, id: ast::Id, func: Callable<F>) {
         // Elaboration already rejects duplicate function names
         assert!(
-            !self.fenv.contains_key(&id),
+            !self.fenv.contains_key(id.node.as_ref()),
             "global function definitions must be unique: {}",
             id.node
         );
-        self.fenv.insert(id, Rc::new(func));
+        self.fenv.insert(id.node, Rc::new(func));
     }
 }
 
@@ -301,7 +300,7 @@ impl<'global, R, F: FuncSignature> Context<'global, R, F> {
 
     /// Finds a relation in the global definitions.
     pub fn find_rel_opt(&self, id: &ast::Id) -> Option<&'global Callable<R>> {
-        self.global.renv.get(id)
+        self.global.renv.get(id.node.as_ref())
     }
 
     /// Finds a global relation or reports the lookup location.
@@ -321,7 +320,10 @@ impl<'global, R, F: FuncSignature> Context<'global, R, F> {
         if let Some(func) = self.local.fenv.get(id) {
             Some((Scope::Local, func))
         } else {
-            self.global.fenv.get(id).map(|func| (Scope::Global, func))
+            self.global
+                .fenv
+                .get(id.node.as_ref())
+                .map(|func| (Scope::Global, func))
         }
     }
 
@@ -385,7 +387,7 @@ impl<R, F: FuncSignature> ReadContext for Context<'_, R, F> {
     fn find_typdef_opt<'a>(&'a self, id: &ast::Id) -> Option<&'a TypeDef> {
         // Local type parameters shadow global types
         self.find_typdef_local_opt(id)
-            .or_else(|| self.global.tdenv.get(id))
+            .or_else(|| self.global.tdenv.get(id.node.as_ref()))
     }
 
     fn find_defined_typdef<'a>(
