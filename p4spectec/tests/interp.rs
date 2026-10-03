@@ -18,3 +18,6 @@ mod effects;
 
 #[path = "interp/args.rs"]
 mod args;
+
+#[path = "interp/cache.rs"]
+mod cache;

@@ -158,36 +158,6 @@ fn check_func_output(
     })
 }
 
-// = Cache eligibility
-
-/// Whether a relation call may be memoized: caching on, relation defined.
-pub(in crate::interp::sl) fn cache_rel<Iface: Interface, Ext: Extern>(
-    runner_ctx: &RunnerContext<'_, SlInterp, Iface, Ext>,
-    ctx: &Context<'_>,
-    id: &ast::Id,
-) -> bool {
-    runner_ctx.interp().config.cache
-        && matches!(ctx.find_rel(id), Ok(rel) if matches!(&rel.def, ast::RelDef::Defined(_)))
-}
-
-/// Whether a function call may be memoized.
-///
-/// Requires caching on, a global non-extern function,
-/// and no function-valued argument.
-pub(in crate::interp::sl) fn cache_func<Iface: Interface, Ext: Extern>(
-    runner_ctx: &RunnerContext<'_, SlInterp, Iface, Ext>,
-    ctx: &Context<'_>,
-    id: &ast::Id,
-    values: &[Value],
-) -> bool {
-    runner_ctx.interp().config.cache
-        && matches!(ctx.find_func_with_scope(id), Ok((Scope::Global, func))
-            if !matches!(&func.def, ast::MetaFuncDef::Extern(_)))
-        && !values
-            .iter()
-            .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
-}
-
 // = Relation invocation
 
 /// Invokes a relation, looping through tail calls and memoizing pure results.
@@ -202,7 +172,9 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
     let mut ids_pending: Vec<ast::Id> = Vec::new();
     loop {
         // Serve from the cache when eligible
-        let cache = cache_rel(runner_ctx, ctx, &id);
+        let rel = ctx.find_rel(&id);
+        let cache = runner_ctx.interp().config.cache
+            && matches!(&rel, Ok(rel) if matches!(&rel.def, ast::RelDef::Defined(_)));
         if cache
             && let Some(values) =
                 runner_ctx
@@ -212,11 +184,10 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
         {
             return ok!(values.clone());
         }
-        let key = cache.then(|| CallKey::new(runner_ctx.arena(), &id.node, &values));
         // Track effects for memoization; grow the stack for deep recursion
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            let rel = unwrap_from_result!(ctx.find_rel(&id), &id.span);
+            let rel = unwrap_from_result!(rel, &id.span);
             let layout = &rel.layout;
             match &rel.def {
                 ast::RelDef::Extern(rel) => {
@@ -240,15 +211,16 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
         let result = unwrap!(result);
         match result {
             // Memoize a pure result
-            RelResult::Result(values) => {
-                if pure && let Some(key) = key {
+            RelResult::Result(values_output) => {
+                if pure && cache {
+                    let key = CallKey::new(runner_ctx.arena(), &id.node, &values);
                     runner_ctx
                         .interp_mut()
                         .cache
                         .rels
-                        .insert(key, values.clone());
+                        .insert(key, values_output.clone());
                 }
-                return ok!(values);
+                return ok!(values_output);
             }
             // Tail call: remember this callee for the trace and loop
             RelResult::TailCall(id_tail, values_tail) => {
@@ -351,7 +323,12 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
     let mut calls_pending: Vec<(ast::Id, Vec<ast::Typ>)> = Vec::new();
     loop {
         // Serve from the cache when eligible
-        let cache = cache_func(runner_ctx, ctx, &id, &values);
+        let func = ctx.find_func_with_scope(&id);
+        let cache = runner_ctx.interp().config.cache
+            && matches!(&func, Ok((Scope::Global, func)) if !matches!(&func.def, ast::MetaFuncDef::Extern(_)))
+            && !values
+                .iter()
+                .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)));
         if cache
             && let Some(value) =
                 runner_ctx
@@ -361,11 +338,10 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         {
             return ok!(*value);
         }
-        let key = cache.then(|| CallKey::new(runner_ctx.arena(), &id.node, &values));
         // Track effects for memoization; grow the stack for deep recursion
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            let func = unwrap_from_result!(ctx.find_func(&id), &id.span);
+            let (_, func) = unwrap_from_result!(func, &id.span);
             let layout = &func.layout;
             match &func.def {
                 ast::MetaFuncDef::Extern(func) => ok!(FuncResult::Return(unwrap!(
@@ -397,7 +373,8 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         match result {
             // Memoize a pure result
             FuncResult::Return(value) => {
-                if pure && let Some(key) = key {
+                if pure && cache {
+                    let key = CallKey::new(runner_ctx.arena(), &id.node, &values);
                     runner_ctx.interp_mut().cache.funcs.insert(key, value);
                 }
                 return ok!(value);
