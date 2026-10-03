@@ -14,7 +14,7 @@ use std::{
 };
 
 use foldhash::fast::RandomState;
-use hashbrown::HashTable;
+use hashbrown::{Equivalent, HashTable};
 
 use super::{idx::Interned, simple::Interner};
 
@@ -151,8 +151,24 @@ impl<T: Eq + Hash> CanonInterner<T> {
     where
         T: CanonEq<Ctx> + CanonHash<Ctx>,
     {
+        self.intern_with(item, ctx, |item| item)
+    }
+
+    /// Interns an exact query, constructing the item only for a new exact entry.
+    ///
+    /// Query and constructed item must be equivalent and hash identically.
+    /// Referenced canonical identities must remain stable throughout the call.
+    pub fn intern_with<Ctx: ?Sized, Q: Hash + Equivalent<T>>(
+        &mut self,
+        query: Q,
+        ctx: &Ctx,
+        make: impl FnOnce(Q) -> T,
+    ) -> Result<Interned<T>, TryFromIntError>
+    where
+        T: CanonEq<Ctx> + CanonHash<Ctx>,
+    {
         // An exact duplicate already has its canonical id
-        let id = self.storage.intern(item)?;
+        let id = self.storage.intern_with(query, make)?;
         if (id.index as usize) < self.canon.len() {
             return Ok(id);
         }

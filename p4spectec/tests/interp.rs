@@ -12,3 +12,9 @@ mod iteration;
 
 #[path = "interp/value.rs"]
 mod value;
+
+#[path = "interp/effects.rs"]
+mod effects;
+
+#[path = "interp/args.rs"]
+mod args;

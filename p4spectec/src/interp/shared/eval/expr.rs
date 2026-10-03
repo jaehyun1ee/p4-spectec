@@ -10,7 +10,7 @@ use std::{borrow::Borrow, rc::Rc};
 use crate::lang::{
     common::source::Span,
     data::{
-        value::{Value, ValueKind, get, make},
+        value::{Value, ValueArgs, ValueKind, get, make},
         var::IdSlot,
     },
     traits::print::Print,
@@ -24,7 +24,7 @@ use crate::runtime::{
 use crate::runner::{Extern, Interface, RunnerContext};
 
 use crate::interp::shared::{
-    backtrack::{Backtrack, WithFrame, fatal, ok, unmatch, unwrap, unwrap_from_result},
+    backtrack::{Backtrack, WithFrame, ok, unwrap, unwrap_from_result},
     prepare::ast,
     util::find_slot_of_exp,
 };
@@ -117,6 +117,19 @@ pub(crate) fn eval_exps<
     let mut values = Vec::with_capacity(exps.len());
     for exp in exps {
         values.push(unwrap!(eval_exp(runner_ctx, ctx, exp.borrow())));
+    }
+    ok!(values)
+}
+
+/// Evaluates composite children in order into temporary inline arguments.
+fn eval_exp_args<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
+    ctx: &Interp::Context<'global>,
+    exps: &[ast::Exp],
+) -> Backtrack<ValueArgs> {
+    let mut values = ValueArgs::with_capacity(exps.len());
+    for exp in exps {
+        values.push(unwrap!(eval_exp(runner_ctx, ctx, exp)));
     }
     ok!(values)
 }
@@ -243,9 +256,9 @@ fn eval_tuple_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: E
     typ: &Rc<ast::TypKind>,
     exps: &[ast::Exp],
 ) -> Backtrack<Value> {
-    let values = unwrap!(eval_exps(runner_ctx, ctx, exps));
+    let values = unwrap!(eval_exp_args(runner_ctx, ctx, exps));
     let value = unwrap_from_result!(
-        make::tuple(runner_ctx.arena_mut(), typ.clone(), values, Span::default()),
+        make::tuple_from_args(runner_ctx.arena_mut(), typ.clone(), values, Span::default()),
         span
     );
     ok!(value)
@@ -261,18 +274,16 @@ fn eval_case_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
     typ: &Rc<ast::TypKind>,
     not_exp: &ast::NotExp,
 ) -> Backtrack<Value> {
-    // Evaluate and rebuild in one traversal, preserving early failure and order
-    let eval_exp_arg = |exp: &ast::Exp| match eval_exp(runner_ctx, ctx, exp) {
-        ok!(value) => Ok(value),
-        fatal!(errors) => Err(fatal!(errors)),
-        unmatch!(errors) => Err(unmatch!(errors)),
-    };
-    let case = match not_exp.try_map(eval_exp_arg) {
-        Ok(case) => case,
-        Err(result) => return result,
-    };
+    // Finish all child evaluation before interning the notation or body
+    let values = unwrap!(eval_exp_args(runner_ctx, ctx, not_exp.args()));
     let value = unwrap_from_result!(
-        make::case(runner_ctx.arena_mut(), typ.clone(), case, Span::default()),
+        make::case_from_args(
+            runner_ctx.arena_mut(),
+            typ.clone(),
+            not_exp.mixop(),
+            values,
+            Span::default()
+        ),
         span
     );
     ok!(value)
@@ -327,9 +338,9 @@ fn eval_list_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
     typ: &Rc<ast::TypKind>,
     exps: &[ast::Exp],
 ) -> Backtrack<Value> {
-    let values = unwrap!(eval_exps(runner_ctx, ctx, exps));
+    let values = unwrap!(eval_exp_args(runner_ctx, ctx, exps));
     let value = unwrap_from_result!(
-        make::list(runner_ctx.arena_mut(), typ.clone(), values, Span::default()),
+        make::list_from_args(runner_ctx.arena_mut(), typ.clone(), values, Span::default()),
         span
     );
     ok!(value)

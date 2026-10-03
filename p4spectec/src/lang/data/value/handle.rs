@@ -24,7 +24,7 @@ use crate::lang::{
     },
 };
 
-use super::node::{ValueNode, ValueRepr};
+use super::node::{ValueNode, ValueRepr, ValueTag};
 
 // = Representation
 
@@ -80,6 +80,20 @@ impl Eq for ValueKind {}
 
 impl Hash for ValueKind {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
+        // Composite queries and stored bodies share the same exact hash
+        match self {
+            Self::Case(value_case) => {
+                return hash_parts(
+                    ValueTag::Case,
+                    Some(*value_case.mixop()),
+                    value_case.args(),
+                    hasher,
+                );
+            }
+            Self::Tuple(values) => return hash_parts(ValueTag::Tuple, None, values, hasher),
+            Self::List(values) => return hash_parts(ValueTag::List, None, values, hasher),
+            _ => {}
+        }
         std::mem::discriminant(self).hash(hasher);
         match self {
             Self::Bool(value) => value.hash(hasher),
@@ -93,6 +107,20 @@ impl Hash for ValueKind {
             Self::Extern(json) => json.hash(hasher),
         }
     }
+}
+
+/// Hashes an exact case or sequence query with all child annotations.
+pub(super) fn hash_parts<H: Hasher>(
+    tag: ValueTag,
+    shape: Option<Shape>,
+    values: &[Value],
+    hasher: &mut H,
+) {
+    tag.hash(hasher);
+    if let Some(shape) = shape {
+        shape.hash(hasher);
+    }
+    values.hash(hasher);
 }
 
 // - Debugging

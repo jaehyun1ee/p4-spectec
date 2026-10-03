@@ -16,7 +16,9 @@ use crate::lang::{
     },
 };
 
-use super::{Arena, Value, ValueCase, ValueError, ValueField, ValueKind};
+use super::{
+    Arena, Value, ValueArgs, ValueCase, ValueError, ValueField, ValueKind, args::ValueParts,
+};
 
 // - General
 
@@ -170,6 +172,42 @@ pub fn list(
     span: Span,
 ) -> Result<Value, ValueError> {
     new(arena, ValueKind::List(values), typ, span)
+}
+
+// - Temporary composite arguments
+
+/// Interns tuple arguments, allocating their stored array only on an exact miss.
+pub fn tuple_from_args(
+    arena: &mut Arena,
+    typ: Rc<TypKind>,
+    values: ValueArgs,
+    span: Span,
+) -> Result<Value, ValueError> {
+    arena.alloc_parts(ValueParts::Tuple(values), typ, span)
+}
+
+/// Interns list arguments, allocating their stored array only on an exact miss.
+pub fn list_from_args(
+    arena: &mut Arena,
+    typ: Rc<TypKind>,
+    values: ValueArgs,
+    span: Span,
+) -> Result<Value, ValueError> {
+    arena.alloc_parts(ValueParts::List(values), typ, span)
+}
+
+/// Interns a case's arguments after resolving and checking its notation shape.
+pub fn case_from_args(
+    arena: &mut Arena,
+    typ: Rc<TypKind>,
+    mixop: &Rc<Mixop>,
+    values: ValueArgs,
+    span: Span,
+) -> Result<Value, ValueError> {
+    let shape = arena.shape.intern_shared(mixop)?;
+    // Validate before exact lookup, including when a body is already present
+    assert_eq!(values.len(), arena.shape.arity(shape), "a mixfix fills every position");
+    arena.alloc_parts(ValueParts::Case(shape, values), typ, span)
 }
 
 // - Functions

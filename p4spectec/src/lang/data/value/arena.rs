@@ -18,6 +18,7 @@ use crate::lang::{
 };
 
 use super::{
+    args::ValueParts,
     error::ValueError,
     handle::{Value, ValueKind},
     view::ValueRef,
@@ -80,6 +81,22 @@ impl Arena {
         span: Span,
     ) -> Result<Value, ValueError> {
         let node = self.value.values.intern(kind, &self.shape)?;
+        let note = self.value.types.intern(typ)?;
+        let span = self.value.spans.intern(span)?;
+        Ok(Value { node, note, span })
+    }
+
+    /// Interns composite arguments before materializing a stored body.
+    pub(super) fn alloc_parts(
+        &mut self,
+        parts: ValueParts,
+        typ: Rc<TypKind>,
+        span: Span,
+    ) -> Result<Value, ValueError> {
+        let node = self
+            .value
+            .values
+            .intern_with(parts, &self.shape, |parts| parts.into_kind(&self.shape))?;
         let note = self.value.types.intern(typ)?;
         let span = self.value.spans.intern(span)?;
         Ok(Value { node, note, span })
