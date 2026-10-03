@@ -9,6 +9,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use foldhash::fast::RandomState;
+use smallvec::SmallVec;
 
 use crate::lang::{
     common::{ds::map::IdMap, source::Span},
@@ -22,7 +23,6 @@ use crate::diagnostic::{Label, Report};
 
 use crate::runtime::{
     envs::interp::shared::{
-        TDEnv,
         callable::Callable,
         frame::{Frame, FrameLayout},
     },
@@ -219,20 +219,88 @@ impl<R, F> Global<R, F> {
 
 // = Local bindings
 
+/// Keeps up to two bindings inline in their shared allocation.
+type LocalEntries<V> = SmallVec<[(ast::Id, V); 2]>;
+
+/// Shares call-local bindings and copies only the entries on a write.
+struct LocalBindings<V> {
+    entries: Option<Rc<LocalEntries<V>>>,
+}
+
+impl<V: std::fmt::Debug> std::fmt::Debug for LocalBindings<V> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Preserve the public context's ordered map debug representation
+        let entries: IdMap<&V> = self
+            .entries
+            .iter()
+            .flat_map(|entries| entries.iter())
+            .map(|(id, value)| (id.clone(), value))
+            .collect();
+        std::fmt::Debug::fmt(&entries, fmt)
+    }
+}
+
+impl<V> Default for LocalBindings<V> {
+    fn default() -> Self {
+        Self { entries: None }
+    }
+}
+
+impl<V> Clone for LocalBindings<V> {
+    fn clone(&self) -> Self {
+        Self { entries: self.entries.clone() }
+    }
+}
+
+impl<V: Clone> LocalBindings<V> {
+    /// Finds a binding by name, independently of the lookup span.
+    fn get(&self, id: &ast::Id) -> Option<&V> {
+        self.entries
+            .as_ref()?
+            .iter()
+            .find(|(id_bound, _)| id_bound.node == id.node)
+            .map(|(_, value)| value)
+    }
+
+    fn contains_key(&self, id: &ast::Id) -> bool {
+        self.get(id).is_some()
+    }
+
+    /// Replaces a bound name or appends a new binding to the local scope.
+    fn insert(&mut self, id: ast::Id, value: V) {
+        // Clones keep their entries when this context adds a binding
+        let entries = Rc::make_mut(self.entries.get_or_insert_with(Default::default));
+        // Match names using the same span-independent identity as global lookup
+        if let Some((id_bound, value_bound)) = entries
+            .iter_mut()
+            .find(|(id_bound, _)| id_bound.node == id.node)
+        {
+            *id_bound = id;
+            *value_bound = value;
+        } else {
+            entries.push((id, value));
+        }
+    }
+}
+
 /// Holds type parameters, function arguments, and values of one call.
 #[derive(Debug)]
 struct Local<F> {
     /// Type parameters bound to their type arguments.
-    tdenv: TDEnv,
+    tdenv: LocalBindings<TypeDef>,
     /// Function arguments bound to their prepared definitions.
-    fenv: IdMap<Rc<Callable<F>>>,
+    fenv: LocalBindings<Rc<Callable<F>>>,
     /// Value slots of the current callable.
     frame: Frame,
 }
 
 impl<F> Default for Local<F> {
     fn default() -> Self {
-        Self { tdenv: TDEnv::new(), fenv: IdMap::new(), frame: Frame::default() }
+        Self {
+            tdenv: LocalBindings::default(),
+            fenv: LocalBindings::default(),
+            frame: Frame::default(),
+        }
     }
 }
 
@@ -275,8 +343,8 @@ impl<'global, R, F: FuncSignature> Context<'global, R, F> {
         Self {
             global: self.global,
             local: Local {
-                tdenv: TDEnv::new(),
-                fenv: IdMap::new(),
+                tdenv: LocalBindings::default(),
+                fenv: LocalBindings::default(),
                 frame: Frame::new(Rc::clone(layout)),
             },
         }
