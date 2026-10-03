@@ -58,10 +58,21 @@ pub fn assign_tparams<Ctx: WriteContext>(
 /// Matches `value` against the pattern `exp`, binding its variables.
 pub fn assign_exp<Ctx: WriteContext>(
     arena: &mut Arena,
-    ctx: Ctx,
+    mut ctx: Ctx,
     exp: &ast::Exp,
     value: Value,
 ) -> Backtrack<Ctx> {
+    unwrap!(assign_exp_in(arena, &mut ctx, exp, value));
+    ok!(ctx)
+}
+
+/// Binds recursively through one context borrowed by the owning entry point.
+fn assign_exp_in<Ctx: WriteContext>(
+    arena: &mut Arena,
+    ctx: &mut Ctx,
+    exp: &ast::Exp,
+    value: Value,
+) -> Backtrack<()> {
     match (&exp.node, arena.kind(&value)) {
         // A variable binds directly
         (ast::ExpKind::Id(id), _) => assign_id_exp(arena, ctx, id, value),
@@ -131,7 +142,7 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp> + At>(
     // Counts must match
     assert_eq!(exps.len(), values.len(), "assignment arity mismatch");
     for (exp, value) in exps.iter().zip(values) {
-        ctx = unwrap!(assign_exp(arena, ctx, exp.borrow(), *value));
+        unwrap!(assign_exp_in(arena, &mut ctx, exp.borrow(), *value));
     }
     ok!(ctx)
 }
@@ -140,12 +151,12 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp> + At>(
 
 fn assign_id_exp<Ctx: WriteContext>(
     _arena: &mut Arena,
-    mut ctx: Ctx,
+    ctx: &mut Ctx,
     id: &IdSlot,
     value: Value,
-) -> Backtrack<Ctx> {
+) -> Backtrack<()> {
     ctx.add_value_at_slot(id.slot, value);
-    ok!(ctx)
+    ok!(())
 }
 
 // - Composite expressions
@@ -153,20 +164,20 @@ fn assign_id_exp<Ctx: WriteContext>(
 /// Reads each child again after recursion, which may grow the arena's storage.
 fn assign_children<'a, Ctx: WriteContext>(
     arena: &mut Arena,
-    mut ctx: Ctx,
+    ctx: &mut Ctx,
     exps: impl ExactSizeIterator<Item = &'a ast::Exp>,
     value: Value,
     values_len: usize,
     get_value: impl Fn(&Arena, Value, usize) -> Value,
-) -> Backtrack<Ctx> {
+) -> Backtrack<()> {
     // Check all counts before binding the first child
     assert_eq!(exps.len(), values_len, "assignment arity mismatch");
     // Parent bodies are immutable, but their storage may move during assignment
     for (idx, exp) in exps.enumerate() {
         let value = get_value(arena, value, idx);
-        ctx = unwrap!(assign_exp(arena, ctx, exp, value));
+        unwrap!(assign_exp_in(arena, ctx, exp, value));
     }
-    ok!(ctx)
+    ok!(())
 }
 
 // - Optional expression
@@ -174,15 +185,15 @@ fn assign_children<'a, Ctx: WriteContext>(
 /// Assigns an option: a payload to a payload, absence to absence.
 fn assign_opt_exp<Ctx: WriteContext>(
     arena: &mut Arena,
-    ctx: Ctx,
+    ctx: &mut Ctx,
     exp_opt: &Option<Box<ast::Exp>>,
     value_opt: &Option<Value>,
-) -> Backtrack<Ctx> {
+) -> Backtrack<()> {
     match (exp_opt, value_opt) {
         // Both present: assign the payload
-        (Some(exp), Some(value)) => assign_exp(arena, ctx, exp, *value),
+        (Some(exp), Some(value)) => assign_exp_in(arena, ctx, exp, *value),
         // Both absent: nothing to bind
-        (None, None) => ok!(ctx),
+        (None, None) => ok!(()),
         // Lowering checks optionality before destructuring
         _ => unreachable!("option pattern must match the value"),
     }
@@ -193,12 +204,12 @@ fn assign_opt_exp<Ctx: WriteContext>(
 /// Splits a non-empty list into head and tail and assigns each.
 fn assign_cons_exp<Ctx: WriteContext>(
     arena: &mut Arena,
-    ctx: Ctx,
+    ctx: &mut Ctx,
     exp: &ast::Exp,
     exp_head: &ast::Exp,
     exp_tail: &ast::Exp,
     value: &Value,
-) -> Backtrack<Ctx> {
+) -> Backtrack<()> {
     let values = get::list(arena, value).expect("cons assignment value must be a list");
     let (value_head, values_tail) = values
         .split_first()
@@ -211,8 +222,8 @@ fn assign_cons_exp<Ctx: WriteContext>(
         make::list(arena, typ.node.clone(), values_tail, Span::default()),
         &Span::default()
     );
-    let ctx = unwrap!(assign_exp(arena, ctx, exp_head, value_head));
-    assign_exp(arena, ctx, exp_tail, value_tail)
+    unwrap!(assign_exp_in(arena, ctx, exp_head, value_head));
+    assign_exp_in(arena, ctx, exp_tail, value_tail)
 }
 
 // - Iteration expression
@@ -220,27 +231,31 @@ fn assign_cons_exp<Ctx: WriteContext>(
 /// Assigns an iterated pattern, binding its variables one iteration outward.
 fn assign_iter_exp<Ctx: WriteContext>(
     arena: &mut Arena,
-    mut ctx: Ctx,
+    ctx: &mut Ctx,
     exp: &ast::Exp,
     exp_inner: &ast::Exp,
     exp_iter: &ast::ExpIter,
     value: Value,
-) -> Backtrack<Ctx> {
+) -> Backtrack<()> {
     // A bare iterated variable binds as a whole
-    if let Some(slot) = find_slot_of_exp(&ctx, exp) {
+    if let Some(slot) = find_slot_of_exp(ctx, exp) {
         ctx.add_value_at_slot(slot, value);
-        return ok!(ctx);
+        return ok!(());
     }
     // Otherwise assign each element in a sub-context and gather per variable
     let span = &exp.span;
-    let vars_outer = iterate_vars(&ctx, &exp_iter.vars, exp_iter.iter);
+    let vars_outer = iterate_vars(ctx, &exp_iter.vars, exp_iter.iter);
     match exp_iter.iter {
         // Option: assign the payload once, or bind every variable to none
         ast::Iter::Opt => {
             let value_opt =
                 get::opt(arena, &value).expect("iteration assignment value must be an option");
             let ctx_sub = match value_opt {
-                Some(value) => Some(unwrap!(assign_exp(arena, ctx.clone(), exp_inner, value))),
+                Some(value) => {
+                    let mut ctx_sub = ctx.clone();
+                    unwrap!(assign_exp_in(arena, &mut ctx_sub, exp_inner, value));
+                    Some(ctx_sub)
+                }
                 None => None,
             };
             for (var, var_outer) in exp_iter.vars.iter().zip(&vars_outer) {
@@ -256,7 +271,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
                 );
                 ctx.add_value_at_slot(var_outer.slot, value);
             }
-            ok!(ctx)
+            ok!(())
         }
         // List: reuse one sub-context, collecting only the iterated slots
         ast::Iter::List => {
@@ -277,7 +292,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
                 for var in &exp_iter.vars {
                     ctx_sub.remove_value_at_slot(var.slot);
                 }
-                ctx_sub = unwrap!(assign_exp(arena, ctx_sub, exp_inner, value));
+                unwrap!(assign_exp_in(arena, &mut ctx_sub, exp_inner, value));
                 for (var, values) in exp_iter.vars.iter().zip(&mut values_by_var) {
                     values.push(ctx_sub.find_value_at_slot(var.slot).copied());
                 }
@@ -296,7 +311,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
                 );
                 ctx.add_value_at_slot(var_outer.slot, value_sub);
             }
-            ok!(ctx)
+            ok!(())
         }
     }
 }

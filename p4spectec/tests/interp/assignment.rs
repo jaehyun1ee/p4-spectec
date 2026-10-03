@@ -12,6 +12,40 @@ use p4spectec::lang::{
 use super::support::sl_runner;
 
 #[test]
+fn recursive_assignment_keeps_the_callers_frame_and_last_binding() {
+    use p4spectec::{
+        interp::{
+            shared::{context::ReadContext, eval::assign::assign_exp, prepare::ast},
+            sl::context::{Context, Global},
+        },
+        lang::data::value::Arena,
+        note_phrase, phrase,
+        runtime::envs::interp::shared::frame::FrameLayout,
+    };
+
+    let mut layout = FrameLayout::default();
+    let id = layout.resolve_id(phrase!(node: Rc::from("x"), span: Span::default()));
+    let exp_id = note_phrase!(node: ast::ExpKind::Id(id.clone()), note: typ::make::nat().node, span: Span::default());
+    let exp = note_phrase!(node: ast::ExpKind::List(vec![exp_id.clone(), exp_id]), note: typ::make::list(typ::make::nat()).node, span: Span::default());
+    let global = Global::load(vec![]).unwrap();
+    let ctx = Context::new(&global).localize_with_layout(&Rc::new(layout));
+    let mut arena = Arena::new();
+    let values =
+        [11_u64, 22].map(|num| make::nat(&mut arena, num.into(), Span::default()).unwrap());
+    let value = make::list(
+        &mut arena,
+        typ::make::list(typ::make::nat()).node.into(),
+        values.to_vec(),
+        Span::default(),
+    )
+    .unwrap();
+
+    let ctx_result = assign_exp(&mut arena, ctx.clone(), &exp, value).unwrap();
+    assert_eq!(ctx.find_value_at_slot(id.slot), None);
+    assert_eq!(ctx_result.find_value_at_slot(id.slot), Some(&values[1]));
+}
+
+#[test]
 fn composite_assignment_keeps_children_when_recursive_assignment_grows_the_arena() {
     use p4spectec::{
         interp::{
