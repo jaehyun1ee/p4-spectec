@@ -21,6 +21,7 @@ use super::{
     args::ValueParts,
     error::ValueError,
     handle::{Value, ValueKind},
+    primitive::Primitive,
     view::ValueRef,
 };
 
@@ -97,6 +98,23 @@ impl Arena {
             .value
             .values
             .intern_with(parts, &self.shape, |parts| parts.into_kind(&self.shape))?;
+        let note = self.value.types.intern(typ)?;
+        let span = self.value.spans.intern(span)?;
+        Ok(Value { node, note, span })
+    }
+
+    /// Interns a borrowed primitive before cloning a new payload.
+    pub(super) fn alloc_primitive(
+        &mut self,
+        primitive: Primitive<'_>,
+        typ: Rc<TypKind>,
+        span: Span,
+    ) -> Result<Value, ValueError> {
+        // Exact body hits still pass through ordinary type and span interning
+        let node = self
+            .value
+            .values
+            .intern_with(primitive, &self.shape, Primitive::into_kind)?;
         let note = self.value.types.intern(typ)?;
         let span = self.value.spans.intern(span)?;
         Ok(Value { node, note, span })

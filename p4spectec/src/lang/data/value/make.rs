@@ -18,6 +18,7 @@ use crate::lang::{
 
 use super::{
     Arena, Value, ValueArgs, ValueCase, ValueError, ValueField, ValueKind, args::ValueParts,
+    primitive::Primitive,
 };
 
 // - General
@@ -55,15 +56,25 @@ pub fn bool(arena: &mut Arena, value: bool, span: Span) -> Result<Value, ValueEr
 
 /// A number, typed by its kind.
 pub fn num(arena: &mut Arena, value: Number, span: Span) -> Result<Value, ValueError> {
+    let typ = num_typ(&value);
+    new(arena, ValueKind::Num(value), typ, span)
+}
+
+/// Shares the numeric type allocation across owned and borrowed constructors.
+fn num_typ(value: &Number) -> Rc<TypKind> {
     thread_local! {
         static TYP_NAT: Rc<TypKind> = Rc::new(TypKind::Num(num::Typ::Nat));
         static TYP_INT: Rc<TypKind> = Rc::new(TypKind::Num(num::Typ::Int));
     }
-    let typ = match num::to_typ(&value) {
+    match num::to_typ(value) {
         num::Typ::Nat => TYP_NAT.with(Rc::clone),
         num::Typ::Int => TYP_INT.with(Rc::clone),
-    };
-    new(arena, ValueKind::Num(value), typ, span)
+    }
+}
+
+/// Interns a borrowed number, cloning its payload only on an exact miss.
+pub fn num_ref(arena: &mut Arena, value: &Number, span: Span) -> Result<Value, ValueError> {
+    arena.alloc_primitive(Primitive::Num(value), num_typ(value), span)
 }
 
 /// A natural number.
@@ -78,10 +89,18 @@ pub fn int(arena: &mut Arena, value: num_bigint::BigInt, span: Span) -> Result<V
 
 /// A text.
 pub fn text(arena: &mut Arena, value: String, span: Span) -> Result<Value, ValueError> {
-    thread_local! {
-        static TYP: Rc<TypKind> = Rc::new(TypKind::Text);
-    }
-    TYP.with(|typ| new(arena, ValueKind::Text(value), typ.clone(), span))
+    new(arena, ValueKind::Text(value), text_typ(), span)
+}
+
+/// Shares the text type allocation across owned and borrowed constructors.
+fn text_typ() -> Rc<TypKind> {
+    thread_local! { static TYP: Rc<TypKind> = Rc::new(TypKind::Text); }
+    TYP.with(Rc::clone)
+}
+
+/// Interns borrowed text, cloning its payload only on an exact miss.
+pub fn text_ref(arena: &mut Arena, value: &str, span: Span) -> Result<Value, ValueError> {
+    arena.alloc_primitive(Primitive::Text(value), text_typ(), span)
 }
 
 // - Structures

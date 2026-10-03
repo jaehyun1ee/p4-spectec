@@ -49,11 +49,11 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
             span
         )),
         ast::ExpKind::Num(value) => ok!(unwrap_from_result!(
-            make::num(runner_ctx.arena_mut(), value.clone(), Span::default()),
+            make::num_ref(runner_ctx.arena_mut(), value, Span::default()),
             span
         )),
         ast::ExpKind::Text(value) => ok!(unwrap_from_result!(
-            make::text(runner_ctx.arena_mut(), value.clone(), Span::default()),
+            make::text_ref(runner_ctx.arena_mut(), value, Span::default()),
             span
         )),
         ast::ExpKind::Id(id) => eval_id_exp(ctx, id),

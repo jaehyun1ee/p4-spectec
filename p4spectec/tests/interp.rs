@@ -24,3 +24,6 @@ mod cache;
 
 #[path = "interp/backtrack.rs"]
 mod backtrack;
+
+#[path = "interp/primitive.rs"]
+mod primitive;

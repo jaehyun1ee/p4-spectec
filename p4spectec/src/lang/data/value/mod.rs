@@ -16,6 +16,7 @@ pub mod get;
 mod handle;
 pub mod make;
 mod node;
+mod primitive;
 pub mod tree;
 mod view;
 
