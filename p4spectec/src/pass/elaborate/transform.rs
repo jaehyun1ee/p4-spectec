@@ -78,42 +78,48 @@ fn find_repeated_tparam(tparams: &[el::TParam]) -> Option<(&Id, &Span)> {
 
 // - Type destructuring
 
-/// Requires the expanded type to be `text`.
-fn as_text_typ_unavailable(ctx: &Context, typ_il: &il::Typ) -> Backtrack<()> {
-    let typ_il = unwrap_from_result!(
-        expand_typ(&ctx.tdenv, typ_il)
-            .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
-    );
-    match &typ_il.node {
-        il::TypKind::Text => success!(()),
-        _ => unavailable!(error: error::typ::type_shape_mismatch("text", &typ_il.span)),
-    }
-}
-
 /// Requires text type, using the caller's diagnostic on mismatch.
 fn as_text_typ_mismatch(
     ctx: &Context,
     typ_il: &il::Typ,
     on_mismatch: impl FnOnce() -> ElabError,
 ) -> Backtrack<()> {
-    match as_text_typ_unavailable(ctx, typ_il) {
-        unavailable!(_) => mismatch!(error: on_mismatch()),
-        result => result,
+    let typ_il = unwrap_from_result!(
+        expand_typ(&ctx.tdenv, typ_il)
+            .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
+    );
+    match &typ_il.node {
+        il::TypKind::Text => success!(()),
+        _ => mismatch!(error: on_mismatch()),
     }
 }
 
 /// Destructs the expanded type into its element type and iteration.
-fn as_iter_typ_unavailable(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(il::Typ, il::Iter)> {
+///
+/// Another shape yields `on_shape` applied to the expanded type's span.
+fn as_iter_typ_with(
+    ctx: &Context,
+    typ_il: &il::Typ,
+    on_shape: impl FnOnce(&Span) -> Backtrack<(il::Typ, il::Iter)>,
+) -> Backtrack<(il::Typ, il::Iter)> {
     let typ_il = unwrap_from_result!(
         expand_typ(&ctx.tdenv, typ_il)
             .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
-    )
-    .into_owned();
-    let span = typ_il.span;
-    let il::TypKind::Iter(typ_inner_il, iter_il) = typ_il.node else {
-        return unavailable!(error: error::typ::type_shape_mismatch("an iteration", &span));
+    );
+    // Clone only the element type
+    let il::TypKind::Iter(typ_inner_il, iter_il) = &typ_il.node else {
+        return on_shape(&typ_il.span);
     };
-    success!((*typ_inner_il, iter_il))
+    success!((typ_inner_il.as_ref().clone(), *iter_il))
+}
+
+/// Destructs the expanded type into its element type and iteration.
+fn as_iter_typ_unavailable(ctx: &Context, typ_il: &il::Typ) -> Backtrack<(il::Typ, il::Iter)> {
+    as_iter_typ_with(
+        ctx,
+        typ_il,
+        |span| unavailable!(error: error::typ::type_shape_mismatch("an iteration", span)),
+    )
 }
 
 /// Requires an iteration type, using the caller's diagnostic on mismatch.
@@ -122,24 +128,7 @@ fn as_iter_typ_mismatch(
     typ_il: &il::Typ,
     on_mismatch: impl FnOnce() -> ElabError,
 ) -> Backtrack<(il::Typ, il::Iter)> {
-    match as_iter_typ_unavailable(ctx, typ_il) {
-        unavailable!(_) => mismatch!(error: on_mismatch()),
-        result => result,
-    }
-}
-
-/// Destructs the expanded type into its tuple component types.
-fn as_tuple_typ_unavailable(ctx: &Context, typ_il: &il::Typ) -> Backtrack<Vec<il::Typ>> {
-    let typ_il = unwrap_from_result!(
-        expand_typ(&ctx.tdenv, typ_il)
-            .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
-    )
-    .into_owned();
-    let span = typ_il.span;
-    let il::TypKind::Tuple(typs_il) = typ_il.node else {
-        return unavailable!(error: error::typ::type_shape_mismatch("a tuple", &span));
-    };
-    success!(typs_il)
+    as_iter_typ_with(ctx, typ_il, |_| mismatch!(error: on_mismatch()))
 }
 
 /// Requires a tuple type, using the caller's diagnostic on mismatch.
@@ -148,24 +137,15 @@ fn as_tuple_typ_mismatch(
     typ_il: &il::Typ,
     on_mismatch: impl FnOnce() -> ElabError,
 ) -> Backtrack<Vec<il::Typ>> {
-    match as_tuple_typ_unavailable(ctx, typ_il) {
-        unavailable!(_) => mismatch!(error: on_mismatch()),
-        result => result,
-    }
-}
-
-/// Destructs the expanded type into the element type of a list.
-fn as_list_typ_unavailable(ctx: &Context, typ_il: &il::Typ) -> Backtrack<il::Typ> {
     let typ_il = unwrap_from_result!(
         expand_typ(&ctx.tdenv, typ_il)
             .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
-    )
-    .into_owned();
-    let span = typ_il.span;
-    let il::TypKind::Iter(typ_inner_il, il::Iter::List) = typ_il.node else {
-        return unavailable!(error: error::typ::type_shape_mismatch("a list", &span));
+    );
+    // Clone only the component types
+    let il::TypKind::Tuple(typs_il) = &typ_il.node else {
+        return mismatch!(error: on_mismatch());
     };
-    success!(*typ_inner_il)
+    success!(typs_il.clone())
 }
 
 /// Requires a list type, using the caller's diagnostic on mismatch.
@@ -174,34 +154,15 @@ fn as_list_typ_mismatch(
     typ_il: &il::Typ,
     on_mismatch: impl FnOnce() -> ElabError,
 ) -> Backtrack<il::Typ> {
-    match as_list_typ_unavailable(ctx, typ_il) {
-        unavailable!(_) => mismatch!(error: on_mismatch()),
-        result => result,
-    }
-}
-
-/// Destructs the expanded type into the fields of the struct type it names.
-fn as_struct_typ_unavailable(
-    ctx: &Context,
-    typ_il: &il::Typ,
-) -> Backtrack<(Span, Vec<il::TypField>)> {
     let typ_il = unwrap_from_result!(
         expand_typ(&ctx.tdenv, typ_il)
             .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
     );
-    // Struct types are always named types with a definition
-    let il::TypKind::Var(id, _) = &typ_il.node else {
-        return unavailable!(error: error::typ::type_shape_mismatch("a struct", &typ_il.span));
+    // Clone only the element type
+    let il::TypKind::Iter(typ_inner_il, il::Iter::List) = &typ_il.node else {
+        return mismatch!(error: on_mismatch());
     };
-    let Some(TypeDef::Defined(_, def_typ_il)) = ctx.find_typdef_opt(id) else {
-        return unavailable!(error: error::typ::type_shape_mismatch("a struct", &typ_il.span));
-    };
-    match &def_typ_il.node {
-        il::DefTypKind::Struct(typ_fields_il) => {
-            success!((def_typ_il.span.clone(), typ_fields_il.clone()))
-        }
-        _ => unavailable!(error: error::typ::type_shape_mismatch("a struct", &typ_il.span)),
-    }
+    success!(typ_inner_il.as_ref().clone())
 }
 
 /// Requires a struct type, using the caller's diagnostic on mismatch.
@@ -210,9 +171,22 @@ fn as_struct_typ_mismatch(
     typ_il: &il::Typ,
     on_mismatch: impl FnOnce() -> ElabError,
 ) -> Backtrack<(Span, Vec<il::TypField>)> {
-    match as_struct_typ_unavailable(ctx, typ_il) {
-        unavailable!(_) => mismatch!(error: on_mismatch()),
-        result => result,
+    let typ_il = unwrap_from_result!(
+        expand_typ(&ctx.tdenv, typ_il)
+            .map_err(|error| { error::typ::type_operation_invalid("cannot expand type", error) })
+    );
+    // Struct types are always named types with a definition
+    let il::TypKind::Var(id, _) = &typ_il.node else {
+        return mismatch!(error: on_mismatch());
+    };
+    let Some(TypeDef::Defined(_, def_typ_il)) = ctx.find_typdef_opt(id) else {
+        return mismatch!(error: on_mismatch());
+    };
+    match &def_typ_il.node {
+        il::DefTypKind::Struct(typ_fields_il) => {
+            success!((def_typ_il.span.clone(), typ_fields_il.clone()))
+        }
+        _ => mismatch!(error: on_mismatch()),
     }
 }
 
