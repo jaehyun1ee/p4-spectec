@@ -9,3 +9,6 @@ mod context;
 
 #[path = "interp/iteration.rs"]
 mod iteration;
+
+#[path = "interp/value.rs"]
+mod value;

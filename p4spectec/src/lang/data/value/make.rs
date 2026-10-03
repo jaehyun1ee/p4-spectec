@@ -37,7 +37,18 @@ pub fn bool(arena: &mut Arena, value: bool, span: Span) -> Result<Value, ValueEr
     thread_local! {
         static TYP: Rc<TypKind> = Rc::new(TypKind::Bool);
     }
-    TYP.with(|typ| new(arena, ValueKind::Bool(value), typ.clone(), span))
+    let idx = usize::from(value);
+    let span_default = span == Span::default();
+    // Repeats use the same TLS type allocation and already-interned parts
+    if span_default && let Some(value) = arena.value.values_bool[idx] {
+        return Ok(value);
+    }
+    let value = TYP.with(|typ| new(arena, ValueKind::Bool(value), typ.clone(), span))?;
+    // Publish only after all three handles have been allocated normally
+    if span_default {
+        arena.value.values_bool[idx] = Some(value);
+    }
+    Ok(value)
 }
 
 /// A number, typed by its kind.

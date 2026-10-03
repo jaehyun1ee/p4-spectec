@@ -43,6 +43,8 @@ pub(super) struct ValueArena {
     pub(super) types: RcInterner<TypKind>,
     /// Spans, shared by equality.
     pub(super) spans: Interner<Span>,
+    /// Generated booleans after their first ordinary allocation.
+    pub(super) values_bool: [Option<Value>; 2],
 }
 
 impl Default for ValueArena {
@@ -51,7 +53,12 @@ impl Default for ValueArena {
         spans
             .intern_default()
             .expect("the first span fits in an interner index");
-        Self { values: CanonInterner::new(), types: RcInterner::new(), spans }
+        Self {
+            values: CanonInterner::new(),
+            types: RcInterner::new(),
+            spans,
+            values_bool: [None; 2],
+        }
     }
 }
 
