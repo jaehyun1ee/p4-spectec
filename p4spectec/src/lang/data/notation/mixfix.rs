@@ -17,11 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
 
 use crate::lang::{
-    common::{
-        ds::set::IdSet,
-        notation::atom::Atom,
-        source::{Phrase, Span},
-    },
+    common::{ds::set::IdSet, notation::atom::Atom, source::Span},
     traits::{
         at::At,
         cmp::SyntaxCmp,
@@ -31,10 +27,9 @@ use crate::lang::{
     },
 };
 
-// == Types
+use super::node::AtomPhrase;
 
-/// An atom paired with its source span.
-pub type AtomPhrase = Phrase<Atom>;
+// == Types
 
 /// A mixfix expression: literal atoms interleaved with argument holes of `T`.
 ///
