@@ -28,7 +28,7 @@ use p4spectec::{
 };
 
 /// Loads a checked list map with additional constructor shapes for comparison.
-fn fixture(deep: bool, missing: bool, empty_vars: bool) -> Global {
+fn fixture(deep: bool, missing: bool, empty_vars: bool, direct: bool) -> Global {
     let mut spec = super::support::sl_spec(
         "var x : nat\nvar y : nat\ndec $fixture(nat*, nat*) : (nat, nat)*\ndef $fixture(x*, y*) = (x, y)*\n",
     );
@@ -63,11 +63,12 @@ fn fixture(deep: bool, missing: bool, empty_vars: bool) -> Global {
             Mixop::Arg,
         ]));
         let exp_case = note_phrase!(node: source::ExpKind::Case(Box::new(Mixfix::new(mixop, vec![exp_deep, exp_struct]).unwrap())), note: typ::make::nat().node, span: Span::default());
+        let exp_y_direct = exp_y.clone();
         let exp_list = note_phrase!(node: source::ExpKind::List(vec![exp_x.clone(), exp_y, exp_x.clone()]), note: typ::make::list(typ::make::nat()).node, span: Span::default());
         let mut exps = vec![exp_case, exp_none, exp_list];
         if deep {
             // More simultaneously live operands than the inline stack can hold
-            exps.extend(std::iter::repeat_n(exp_x, 20));
+            exps.extend(std::iter::repeat_n(exp_x.clone(), 20));
         }
         exps.push(note_phrase!(node: source::ExpKind::Bool(true), note: typ::make::bool().node, span: Span::default()));
         exps.push(note_phrase!(node: source::ExpKind::Num(source::Num::Nat(7_u64.into())), note: typ::make::nat().node, span: Span::default()));
@@ -76,7 +77,27 @@ fn fixture(deep: bool, missing: bool, empty_vars: bool) -> Global {
         if missing {
             exps.push(note_phrase!(node: source::ExpKind::Id(phrase!(node: Rc::from("unbound"), span: Span::default())), note: typ::make::nat().node, span: Span::default()));
         }
-        exp_inner.node = source::ExpKind::Tuple(exps);
+        if direct {
+            let mut exps_direct = vec![exp_x.clone(), exp_y_direct];
+            if deep {
+                exps_direct.extend(std::iter::repeat_n(exp_x, 20));
+            }
+            // Keep caller reads and the optional failing read in their order
+            exps_direct.extend(
+                exps.into_iter()
+                    .rev()
+                    .take(1 + usize::from(missing))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev(),
+            );
+            let mixop =
+                Rc::new(Mixop::Seq(std::iter::repeat_n(Mixop::Arg, exps_direct.len()).collect()));
+            exp_inner.node =
+                source::ExpKind::Case(Box::new(Mixfix::new(mixop, exps_direct).unwrap()));
+        } else {
+            exp_inner.node = source::ExpKind::Tuple(exps);
+        }
         // Duplicate binders must select their final input column
         exp_iter.vars.push(exp_iter.vars[0].clone());
         if empty_vars {
@@ -152,9 +173,9 @@ fn inputs(arena: &mut Arena, lens: [usize; 2]) -> [Value; 2] {
 
 #[test]
 fn prepared_constructor_rows_keep_all_handles_after_moves_and_resets() {
-    for deep in [false, true] {
+    for (deep, direct) in [(false, false), (true, false), (false, true), (true, true)] {
         for empty_vars in [false, true] {
-            let global = fixture(deep, false, empty_vars);
+            let global = fixture(deep, false, empty_vars, direct);
             let ctx_root = Context::new(&global);
             let id = phrase!(node: Rc::from("fixture"), span: Span::default());
             let func = ctx_root.find_func(&id).unwrap();
@@ -246,8 +267,8 @@ fn prepared_constructor_rows_keep_all_handles_after_moves_and_resets() {
 
 #[test]
 fn prepared_constructor_rows_preserve_input_errors_and_unbound_reads() {
-    for missing in [false, true] {
-        let global = fixture(false, missing, false);
+    for (missing, direct) in [(false, false), (true, false), (false, true), (true, true)] {
+        let global = fixture(false, missing, false, direct);
         let ctx_root = Context::new(&global);
         let id = phrase!(node: Rc::from("fixture"), span: Span::default());
         let func = ctx_root.find_func(&id).unwrap();
@@ -298,6 +319,83 @@ fn prepared_constructor_rows_preserve_input_errors_and_unbound_reads() {
             }
             assert_eq!(results[0], results[1], "missing {missing}, lengths {lens:?}");
             assert_eq!(sentinels[0], sentinels[1]);
+        }
+    }
+}
+
+/// Compares direct roots that have no reads or one optional payload read.
+#[test]
+fn direct_constructor_rows_keep_empty_and_primitive_handles() {
+    for form in ["tuple", "list", "case", "none", "some", "bool", "num", "text"] {
+        let mut spec = super::support::sl_spec(
+            "var x : nat\nvar y : nat\ndec $fixture(nat*, nat*) : (nat, nat)*\ndef $fixture(x*, y*) = (x, y)*\n",
+        );
+        for def in &mut spec {
+            let sl_source::DefKind::MetaFunc(sl_source::MetaFuncDef::Defined(func)) = &mut def.node
+            else {
+                continue;
+            };
+            let sl_source::InstrKind::If(instr_if) = &mut func.block[0].node else {
+                unreachable!()
+            };
+            let sl_source::InstrKind::Return(instr) = &mut instr_if.block[0].node else {
+                unreachable!()
+            };
+            let source::ExpKind::Iter(exp_inner, _) = &mut instr.exp.node else { unreachable!() };
+            let source::ExpKind::Tuple(exps) = &exp_inner.node else { unreachable!() };
+            let exp_x = exps[0].clone();
+            exp_inner.node = match form {
+                "tuple" => source::ExpKind::Tuple(vec![]),
+                "list" => source::ExpKind::List(vec![]),
+                "case" => source::ExpKind::Case(Box::new(
+                    Mixfix::new(Rc::new(Mixop::Seq(vec![])), vec![]).unwrap(),
+                )),
+                "none" => source::ExpKind::Opt(None),
+                "some" => source::ExpKind::Opt(Some(Box::new(exp_x))),
+                "bool" => source::ExpKind::Bool(true),
+                "num" => source::ExpKind::Num(source::Num::Nat(7_u64.into())),
+                "text" => source::ExpKind::Text("constant".into()),
+                _ => unreachable!(),
+            };
+        }
+        let global = Global::load(spec).unwrap();
+        let ctx_root = Context::new(&global);
+        let id = phrase!(node: Rc::from("fixture"), span: Span::default());
+        let func = ctx_root.find_func(&id).unwrap();
+        let ast::MetaFuncDef::Defined(func_def) = &func.def else { unreachable!() };
+        let ast::InstrKind::If(instr_if) = &func_def.block[0].node else { unreachable!() };
+        let instr = &instr_if.block[0];
+        let ast::InstrKind::Return(instr_return) = &instr.node else { unreachable!() };
+        let ast::ExpKind::Iter(_, exp_iter) = &instr_return.exp.node else { unreachable!() };
+        assert!(ctx_root.find_construct_plan(&instr_return.exp).is_some());
+        for len in [0, 3] {
+            let mut outputs = Vec::new();
+            for prepared in [false, true] {
+                let mut runner =
+                    runner::build_sl(vec![], Config::new(false, false, false), NullExtern).unwrap();
+                let values = inputs(runner.arena_mut(), [len, len]);
+                let mut ctx = ctx_root.localize_with_layout(&func.layout);
+                for (var, value) in exp_iter.vars.iter().zip(values) {
+                    ctx.add_value_at_slot(ctx.find_slot_iterated(var, Iter::List), value);
+                }
+                let instr_cloned = instr.clone();
+                let instr = if prepared { instr } else { &instr_cloned };
+                let Flow::Return(value) =
+                    eval_instr(&mut runner.context(), Cow::Owned(ctx), instr, false).unwrap()
+                else {
+                    unreachable!()
+                };
+                let values = handles(runner.arena(), value.node);
+                let value_sentinel = make::tuple(
+                    runner.arena_mut(),
+                    typ::make::tuple(vec![]).node.into(),
+                    vec![],
+                    Span::default(),
+                )
+                .unwrap();
+                outputs.push((values, value_sentinel));
+            }
+            assert_eq!(outputs[0], outputs[1], "root {form}, rows {len}");
         }
     }
 }

@@ -27,6 +27,13 @@ pub(crate) enum ConstructOp {
     List(usize),
 }
 
+/// An operand of a constructor whose children only read existing values.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ConstructRead {
+    Slot(SlotIdx),
+    Column(usize),
+}
+
 /// One operation and its source position within the original expression.
 #[derive(Debug)]
 pub(crate) struct ConstructInstr {
@@ -41,6 +48,8 @@ pub(crate) struct ConstructInstr {
 #[derive(Debug)]
 pub struct ConstructPlan {
     pub(crate) instrs: Vec<ConstructInstr>,
+    /// One constructor whose children read only columns or caller slots.
+    pub(crate) reads: Option<SmallVec<[ConstructRead; 4]>>,
 }
 
 impl ConstructPlan {
@@ -120,7 +129,16 @@ impl ConstructPlan {
         }
         let mut instrs = Vec::new();
         collect(exp, vars, &mut instrs, 0)?;
-        Some(Self { instrs })
+        // Fuse leaf reads only when the entire body has one constructor
+        let reads = instrs[..instrs.len() - 1]
+            .iter()
+            .map(|instr| match instr.op {
+                ConstructOp::Slot(slot) => Some(ConstructRead::Slot(slot)),
+                ConstructOp::Column(idx) => Some(ConstructRead::Column(idx)),
+                _ => None,
+            })
+            .collect();
+        Some(Self { instrs, reads })
     }
 }
 

@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Arena, Value, make},
+    data::value::{Arena, Value, ValueError, make},
     traits::print::Print,
 };
 
@@ -18,7 +18,7 @@ use crate::interp::shared::{
     context::{IterContext, ReadContext},
     prepare::{
         ast,
-        construct::{ConstructOp, ConstructPlan},
+        construct::{ConstructInstr, ConstructOp, ConstructPlan, ConstructRead},
     },
     util::iterate_vars,
 };
@@ -42,20 +42,46 @@ pub(crate) fn map(
     let len = values_by_var.first().map_or(0, Vec::len);
     let mut values = Vec::with_capacity(len);
     let mut stack = SmallVec::<[Value; 16]>::new();
-    for idx in 0..len {
-        // Every ordinary input write checks its slot before evaluating the body
-        for var in vars {
-            let _ = ctx.find_value_at_slot(var.slot);
+    // Select the direct constructor once for the entire map
+    if let Some(reads) = &plan.reads {
+        let instr = plan.instrs.last().expect("a constructor plan is nonempty");
+        let values_rows = values_by_var.first().map_or(&[][..], Vec::as_slice);
+        for (idx, _) in values_rows.iter().enumerate() {
+            // Check every input slot before reading the constructor operands
+            for var in vars {
+                let _ = ctx.find_value_at_slot(var.slot);
+            }
+            stack.clear();
+            // Preserve left-to-right reads, including unbound caller slots
+            for read in reads {
+                let value = match read {
+                    ConstructRead::Slot(slot) => {
+                        *ctx.find_value_at_slot(*slot).expect("value must be bound")
+                    }
+                    ConstructRead::Column(col) => values_by_var[*col][idx],
+                };
+                stack.push(value);
+            }
+            let value = from_result(eval_constructor(arena, instr, &stack), &instr.span)
+                .map_err(|error| with_frames(error, exp_inner, plan, plan.instrs.len() - 1))?;
+            values.push(value);
         }
-        values.push(unwrap!(eval_row(
-            arena,
-            ctx,
-            exp_inner,
-            plan,
-            &values_by_var,
-            idx,
-            &mut stack
-        )));
+    } else {
+        for idx in 0..len {
+            // Every ordinary input write checks its slot before evaluating the body
+            for var in vars {
+                let _ = ctx.find_value_at_slot(var.slot);
+            }
+            values.push(unwrap!(eval_row(
+                arena,
+                ctx,
+                exp_inner,
+                plan,
+                &values_by_var,
+                idx,
+                &mut stack
+            )));
+        }
     }
     ok!(unwrap_from_result!(
         make::list(arena, exp.note.clone(), values, Span::default()),
@@ -88,25 +114,7 @@ fn eval_row(
                 Ok(*ctx.find_value_at_slot(*slot).expect("value must be bound"))
             }
             ConstructOp::Column(idx) => Ok(values_by_var[*idx][idx_row]),
-            ConstructOp::Bool(value) => make::bool(arena, *value, Span::default()),
-            ConstructOp::Num(num) => make::num_ref(arena, num, Span::default()),
-            ConstructOp::Text(text) => make::text_ref(arena, text, Span::default()),
-            ConstructOp::Tuple(_) => {
-                make::tuple_from_slice(arena, instr.typ.clone(), values, Span::default())
-            }
-            ConstructOp::Case(mixop, _) => {
-                make::case_from_slice(arena, instr.typ.clone(), mixop, values, Span::default())
-            }
-            ConstructOp::Struct(atoms) => {
-                let value_fields = atoms.iter().cloned().zip(values.iter().copied()).collect();
-                make::structure(arena, instr.typ.clone(), value_fields, Span::default())
-            }
-            ConstructOp::Opt(_) => {
-                make::opt(arena, instr.typ.clone(), values.first().copied(), Span::default())
-            }
-            ConstructOp::List(_) => {
-                make::list_from_slice(arena, instr.typ.clone(), values, Span::default())
-            }
+            _ => eval_constructor(arena, instr, values),
         };
         let value = match from_result(value, &instr.span) {
             Ok(value) => value,
@@ -118,6 +126,38 @@ fn eval_row(
     ok!(*stack
         .last()
         .expect("a constructor program produces one value"))
+}
+
+/// Executes a constructor through the same ordered arena operations.
+fn eval_constructor(
+    arena: &mut Arena,
+    instr: &ConstructInstr,
+    values: &[Value],
+) -> Result<Value, ValueError> {
+    match &instr.op {
+        ConstructOp::Bool(value) => make::bool(arena, *value, Span::default()),
+        ConstructOp::Num(num) => make::num_ref(arena, num, Span::default()),
+        ConstructOp::Text(text) => make::text_ref(arena, text, Span::default()),
+        ConstructOp::Tuple(_) => {
+            make::tuple_from_slice(arena, instr.typ.clone(), values, Span::default())
+        }
+        ConstructOp::Case(mixop, _) => {
+            make::case_from_slice(arena, instr.typ.clone(), mixop, values, Span::default())
+        }
+        ConstructOp::Struct(atoms) => {
+            let value_fields = atoms.iter().cloned().zip(values.iter().copied()).collect();
+            make::structure(arena, instr.typ.clone(), value_fields, Span::default())
+        }
+        ConstructOp::Opt(_) => {
+            make::opt(arena, instr.typ.clone(), values.first().copied(), Span::default())
+        }
+        ConstructOp::List(_) => {
+            make::list_from_slice(arena, instr.typ.clone(), values, Span::default())
+        }
+        ConstructOp::Slot(_) | ConstructOp::Column(_) => {
+            unreachable!("read instructions do not construct values")
+        }
+    }
 }
 
 /// Reconstructs the original leaf-to-root expression trace only on failure.
