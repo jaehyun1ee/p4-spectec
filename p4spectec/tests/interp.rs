@@ -39,3 +39,6 @@ mod rows;
 
 #[path = "interp/fresh_types.rs"]
 mod fresh_types;
+
+#[path = "interp/chains.rs"]
+mod chains;

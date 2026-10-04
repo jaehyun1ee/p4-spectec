@@ -173,36 +173,53 @@ fn eval_block_sequential_pending<'instr, Iface: Interface, Ext: Extern>(
 /// Evaluates one instruction.
 fn eval_instr_pending<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
-    ctx: Cow<'_, Context<'_>>,
-    instr: &ast::Instr,
+    mut ctx: Cow<'_, Context<'_>>,
+    mut instr: &ast::Instr,
     tail: bool,
 ) -> Backtrack<PendingFlow> {
-    let span = &instr.span;
-    // Grow the stack for deep blocks
-    stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-        match &instr.node {
-            ast::InstrKind::If(instr) => eval_if_instr(runner_ctx, ctx, instr, tail),
-            ast::InstrKind::Hold(instr) => eval_hold_instr(runner_ctx, ctx, instr, tail),
-            ast::InstrKind::Case(instr) => eval_case_instr(runner_ctx, ctx, instr, tail),
-            ast::InstrKind::Group(instr) => eval_group_instr(runner_ctx, ctx, instr, tail),
-            // Binding and terminal instructions fall through on a mismatch
-            ast::InstrKind::Let(instr) => {
-                PendingFlow::cont_from_unmatch(eval_let_instr(runner_ctx, ctx, instr, tail))
+    let mut catch_unmatch = false;
+    // Grow the stack only when entering a recursive instruction chain
+    let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
+        loop {
+            let span = &instr.span;
+            // A sole continuation keeps the current context and tail position
+            if !runner_ctx.interp().config.det
+                && let ast::InstrKind::Let(instr_let) = &instr.node
+                && let [instr_next] = instr_let.block.as_slice()
+            {
+                // The binding catches mismatches from its whole descendant block
+                catch_unmatch = true;
+                ctx = Cow::Owned(unwrap!(eval_let_bind(runner_ctx, ctx, instr_let)));
+                instr = instr_next;
+                continue;
             }
-            ast::InstrKind::Rule(instr) => {
-                PendingFlow::cont_from_unmatch(eval_rule_instr(runner_ctx, ctx, span, instr, tail))
-            }
-            ast::InstrKind::Result(instr) => {
-                PendingFlow::cont_from_unmatch(eval_result_instr(runner_ctx, ctx, span, instr))
-            }
-            ast::InstrKind::Return(instr) => PendingFlow::cont_from_unmatch(eval_return_instr(
-                runner_ctx, ctx, span, instr, tail,
-            )),
-            ast::InstrKind::Debug(instr) => {
-                PendingFlow::cont_from_unmatch(eval_debug_instr(runner_ctx, ctx, instr, tail))
-            }
+            // Recursive blocks apply only their own instruction mismatch boundaries
+            return match &instr.node {
+                ast::InstrKind::If(instr) => eval_if_instr(runner_ctx, ctx, instr, tail),
+                ast::InstrKind::Hold(instr) => eval_hold_instr(runner_ctx, ctx, instr, tail),
+                ast::InstrKind::Case(instr) => eval_case_instr(runner_ctx, ctx, instr, tail),
+                ast::InstrKind::Group(instr) => eval_group_instr(runner_ctx, ctx, instr, tail),
+                // Binding and terminal instructions fall through on a mismatch
+                ast::InstrKind::Let(instr) => {
+                    PendingFlow::cont_from_unmatch(eval_let_instr(runner_ctx, ctx, instr, tail))
+                }
+                ast::InstrKind::Rule(instr) => PendingFlow::cont_from_unmatch(eval_rule_instr(
+                    runner_ctx, ctx, span, instr, tail,
+                )),
+                ast::InstrKind::Result(instr) => {
+                    PendingFlow::cont_from_unmatch(eval_result_instr(runner_ctx, ctx, span, instr))
+                }
+                ast::InstrKind::Return(instr) => PendingFlow::cont_from_unmatch(eval_return_instr(
+                    runner_ctx, ctx, span, instr, tail,
+                )),
+                ast::InstrKind::Debug(instr) => {
+                    PendingFlow::cont_from_unmatch(eval_debug_instr(runner_ctx, ctx, instr, tail))
+                }
+            };
         }
-    })
+    });
+    // Convert after the entire chain, including a recursive fallback, finishes
+    if catch_unmatch { PendingFlow::cont_from_unmatch(result) } else { result }
 }
 
 /// Borrows stable condition text or prints syntax supplied outside its Global.
@@ -385,6 +402,19 @@ fn eval_group_instr<Iface: Interface, Ext: Extern>(
 
 // - Let instruction
 
+/// Evaluates a let binding in its original iteration and assignment order.
+fn eval_let_bind<'global, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
+    ctx: Cow<'_, Context<'global>>,
+    instr: &ast::LetInstr,
+) -> Backtrack<Context<'global>> {
+    // Evaluate the right side and bind the left pattern, per element
+    eval_instr_iter(runner_ctx, ctx.into_owned(), &instr.iter_instrs, &mut |runner_ctx, ctx| {
+        let value = unwrap!(eval_exp(runner_ctx, ctx, &instr.exp_r));
+        assign::assign_exp_in(runner_ctx.arena_mut(), ctx, &instr.exp_l, value)
+    })
+}
+
 /// Assigns under the binding iterators, then runs the block.
 fn eval_let_instr<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
@@ -392,16 +422,7 @@ fn eval_let_instr<Iface: Interface, Ext: Extern>(
     instr: &ast::LetInstr,
     tail: bool,
 ) -> Backtrack<PendingFlow> {
-    // Evaluate the right side and bind the left pattern, per element
-    let ctx = unwrap!(eval_instr_iter(
-        runner_ctx,
-        ctx.into_owned(),
-        &instr.iter_instrs,
-        &mut |runner_ctx, ctx| {
-            let value = unwrap!(eval_exp(runner_ctx, ctx, &instr.exp_r));
-            assign::assign_exp_in(runner_ctx.arena_mut(), ctx, &instr.exp_l, value)
-        }
-    ));
+    let ctx = unwrap!(eval_let_bind(runner_ctx, ctx, instr));
     // The block sees the new bindings
     eval_block_pending(runner_ctx, Cow::Owned(ctx), &instr.block, tail)
 }

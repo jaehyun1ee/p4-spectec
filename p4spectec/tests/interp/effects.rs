@@ -307,3 +307,70 @@ def $rule_nested(n**) = n_out**
         }
     }
 }
+
+/// Keeps effects in order when binding continuations form one instruction chain.
+#[test]
+fn chained_bindings_keep_effects_and_stop_at_the_first_failure() {
+    use p4spectec::{
+        lang::{common::source::Span, data::typ, il::ast as source, sl::ast as sl_source},
+        note_phrase, phrase,
+    };
+    let mut spec = sl_spec(
+        "var n : nat\nextern dec $step(nat) : nat\n\
+         dec $fixture() : nat\ndef $fixture() = $step(3)\n",
+    );
+    for def in &mut spec {
+        let sl_source::DefKind::MetaFunc(sl_source::MetaFuncDef::Defined(func)) = &mut def.node
+        else {
+            continue;
+        };
+        let sl_source::InstrKind::Return(instr_return) = &func.block[0].node else {
+            unreachable!()
+        };
+        let exp_call = instr_return.exp.clone();
+        for num in [2_u64, 1] {
+            let mut exp_r = exp_call.clone();
+            let source::ExpKind::Call(_, _, args) = &mut exp_r.node else { unreachable!() };
+            let source::ArgKind::Exp(exp) = &mut args[0].node else { unreachable!() };
+            exp.node = source::ExpKind::Num(source::Num::Nat(num.into()));
+            let exp_l = note_phrase!(
+                node: source::ExpKind::Id(phrase!(node: Rc::from("n"), span: Span::default())),
+                note: typ::make::nat().node,
+                span: Span::default()
+            );
+            let block = std::mem::take(&mut func.block);
+            func.block.push(phrase!(
+                node: sl_source::InstrKind::Let(sl_source::LetInstr {
+                    exp_l, exp_r, iter_instrs: vec![], block,
+                }),
+                span: Span::default()
+            ));
+        }
+    }
+    for det in [false, true] {
+        for fail in [false, true] {
+            let calls = Rc::new(RefCell::new(Vec::new()));
+            let mut runner = runner::build_sl(
+                spec.clone(),
+                Config::new(true, det, true),
+                Recording { calls: Rc::clone(&calls), fail },
+            )
+            .unwrap();
+            for repeat in 0..3 {
+                if repeat == 2 {
+                    runner.reset();
+                }
+                calls.borrow_mut().clear();
+                let result = runner.context().call_func("fixture", &[], &[]);
+                if fail {
+                    assert!(result.is_err());
+                    assert_eq!(*calls.borrow(), ["1", "2"]);
+                } else {
+                    let value = result.unwrap();
+                    assert_eq!(get::num(runner.arena(), &value).unwrap().to_string(), "3");
+                    assert_eq!(*calls.borrow(), ["1", "2", "3"]);
+                }
+            }
+        }
+    }
+}
