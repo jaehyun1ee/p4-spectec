@@ -66,7 +66,7 @@ pub fn assign_exp<Ctx: WriteContext>(
 }
 
 /// Binds recursively through one context borrowed by the owning entry point.
-fn assign_exp_in<Ctx: WriteContext>(
+pub(crate) fn assign_exp_in<Ctx: WriteContext>(
     arena: &mut Arena,
     ctx: &mut Ctx,
     exp: &ast::Exp,
@@ -138,12 +138,24 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp> + At>(
     exps: &[T],
     values: &[Value],
 ) -> Backtrack<Ctx> {
-    // Counts must match
-    assert_eq!(exps.len(), values.len(), "assignment arity mismatch");
-    for (exp, value) in exps.iter().zip(values) {
-        unwrap!(assign_exp_in(arena, &mut ctx, exp.borrow(), *value));
-    }
+    unwrap!(assign_exps_in(arena, &mut ctx, exps, values));
     ok!(ctx)
+}
+
+/// Assigns pairwise through a context borrowed by the owning entry point.
+pub(crate) fn assign_exps_in<Ctx: WriteContext, T: Borrow<ast::Exp> + At>(
+    arena: &mut Arena,
+    ctx: &mut Ctx,
+    exps: &[T],
+    values: &[Value],
+) -> Backtrack<()> {
+    // Counts must match before binding any expression
+    assert_eq!(exps.len(), values.len(), "assignment arity mismatch");
+    // Propagate a failure before assigning later patterns
+    for (exp, value) in exps.iter().zip(values) {
+        unwrap!(assign_exp_in(arena, ctx, exp.borrow(), *value));
+    }
+    ok!(())
 }
 
 // - Identifier expression
@@ -374,6 +386,18 @@ pub fn assign_def<Ctx: WriteContext>(
     id: &ast::Id,
     value: Value,
 ) -> Backtrack<Ctx> {
+    unwrap!(assign_def_in(arena, ctx_caller, &mut ctx_callee, id, value));
+    ok!(ctx_callee)
+}
+
+/// Binds a function through a callee context borrowed by its owning entry point.
+pub(crate) fn assign_def_in<Ctx: WriteContext>(
+    arena: &Arena,
+    ctx_caller: &impl ReadContext<Func = Ctx::Func>,
+    ctx_callee: &mut Ctx,
+    id: &ast::Id,
+    value: Value,
+) -> Backtrack<()> {
     // The value must be a function reference
     let ValueKind::Func(id_func) = arena.kind(&value) else {
         unreachable!("function parameter must receive a function reference");
@@ -381,5 +405,5 @@ pub fn assign_def<Ctx: WriteContext>(
     // Look the definition up in the caller, bind it in the callee
     let func = unwrap_from_result!(ctx_caller.find_func(id_func), &id_func.span);
     unwrap_from_result!(ctx_callee.add_func(id.clone(), Rc::clone(func)), &id.span);
-    ok!(ctx_callee)
+    ok!(())
 }

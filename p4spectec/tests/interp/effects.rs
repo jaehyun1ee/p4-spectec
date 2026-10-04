@@ -24,15 +24,21 @@ struct Recording {
 impl Extern for Recording {
     fn eval_rel<Interp, Iface>(
         &self,
-        _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        _name: &str,
-        _values: &[Value],
+        ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
+        name: &str,
+        values: &[Value],
     ) -> Result<(Vec<Value>, bool), ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
     {
-        Err(ExternError::diagnostic_unconfigured())
+        assert_eq!(name, "Step");
+        let num = get::num(ctx.arena(), &values[0])?.to_string();
+        self.calls.borrow_mut().push(num.clone());
+        if self.fail && num == "2" {
+            return Err(ExternError::diagnostic_message("step two failed"));
+        }
+        Ok((vec![values[0]], true))
     }
     fn eval_func<Interp, Iface>(
         &self,
@@ -175,6 +181,129 @@ fn call_arguments_keep_order_and_early_failure_before_and_after_spilling() {
             )
             .unwrap();
             check_call_args(runner, calls, fail, len);
+        }
+    }
+}
+
+#[test]
+fn binding_iterations_keep_effects_empty_rows_and_early_failures() {
+    use p4spectec::lang::{
+        common::source::Span,
+        data::{typ, value::make},
+    };
+
+    let spec = sl_spec(
+        r#"
+var n : nat
+extern dec $step(nat) : nat
+extern relation Step: nat ~> nat
+  hint(input %0)
+dec $let_one(nat) : nat
+def $let_one(n) = n_out
+  -- if n_out = $step(n)
+dec $rule_one(nat) : nat
+def $rule_one(n) = n_out
+  -- Step: n ~> n_out
+dec $let_rows(nat*) : nat*
+def $let_rows(n*) = n_out*
+  -- (if n_out = $step(n))*
+dec $rule_rows(nat*) : nat*
+def $rule_rows(n*) = n_out*
+  -- (Step: n ~> n_out)*
+dec $let_nested(nat**) : nat**
+def $let_nested(n**) = n_out**
+  -- ((if n_out = $step(n))*)*
+dec $rule_nested(nat**) : nat**
+def $rule_nested(n**) = n_out**
+  -- ((Step: n ~> n_out)*)*
+"#,
+    );
+    for det in [false, true] {
+        for fail in [false, true] {
+            for (depth, empty) in [(0, false), (1, false), (1, true), (2, false), (2, true)] {
+                let mut outcomes = Vec::new();
+                for name in ["let", "rule"] {
+                    let calls = Rc::new(RefCell::new(Vec::new()));
+                    let mut runner = runner::build_sl(
+                        spec.clone(),
+                        Config::new(true, det, false),
+                        Recording { calls: calls.clone(), fail },
+                    )
+                    .unwrap();
+                    let arena = runner.arena_mut();
+                    let values = [1_u64, 2, 3]
+                        .map(|num| make::nat(arena, num.into(), Span::default()).unwrap());
+                    let typ_list: Rc<_> = typ::make::list(typ::make::nat()).node.into();
+                    let value = match depth {
+                        0 => values[0],
+                        1 => make::list(
+                            arena,
+                            typ_list.clone(),
+                            if empty { vec![] } else { values.to_vec() },
+                            Span::default(),
+                        )
+                        .unwrap(),
+                        2 => {
+                            let values = if empty {
+                                vec![]
+                            } else {
+                                vec![
+                                    make::list(arena, typ_list.clone(), vec![], Span::default())
+                                        .unwrap(),
+                                    make::list(
+                                        arena,
+                                        typ_list.clone(),
+                                        values[..1].to_vec(),
+                                        Span::default(),
+                                    )
+                                    .unwrap(),
+                                    make::list(
+                                        arena,
+                                        typ_list.clone(),
+                                        values[1..].to_vec(),
+                                        Span::default(),
+                                    )
+                                    .unwrap(),
+                                ]
+                            };
+                            make::list(
+                                arena,
+                                typ::make::list(typ::make::list(typ::make::nat()))
+                                    .node
+                                    .into(),
+                                values,
+                                Span::default(),
+                            )
+                            .unwrap()
+                        }
+                        _ => unreachable!(),
+                    };
+                    let suffix = ["one", "rows", "nested"][depth];
+                    let entry = format!("{name}_{suffix}");
+                    let text_input = runner.arena().to_string(&value);
+                    let result = runner.context().call_func(&entry, &[], &[value]);
+                    let failed = fail && !empty && depth > 0;
+                    assert_eq!(result.is_err(), failed, "{entry} empty={empty}");
+                    if let Ok(value_output) = result {
+                        assert_eq!(runner.arena().to_string(&value_output), text_input);
+                        if depth == 0 {
+                            assert_eq!(value_output, value);
+                        }
+                    }
+                    let expected: Vec<_> = if empty {
+                        vec![]
+                    } else if depth == 0 {
+                        vec!["1"]
+                    } else if failed {
+                        vec!["1", "2"]
+                    } else {
+                        vec!["1", "2", "3"]
+                    };
+                    assert_eq!(*calls.borrow(), expected, "{entry}");
+                    outcomes.push(calls.borrow().clone());
+                }
+                assert_eq!(outcomes[0], outcomes[1]);
+            }
         }
     }
 }

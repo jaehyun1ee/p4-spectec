@@ -349,8 +349,8 @@ fn eval_let_instr<Iface: Interface, Ext: Extern>(
         ctx.into_owned(),
         &instr.iter_instrs,
         &mut |runner_ctx, ctx| {
-            let value = unwrap!(eval_exp(runner_ctx, &ctx, &instr.exp_r));
-            assign::assign_exp(runner_ctx.arena_mut(), ctx, &instr.exp_l, value)
+            let value = unwrap!(eval_exp(runner_ctx, ctx, &instr.exp_r));
+            assign::assign_exp_in(runner_ctx.arena_mut(), ctx, &instr.exp_l, value)
         }
     ));
     // The block sees the new bindings
@@ -394,9 +394,9 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
         ctx.into_owned(),
         &instr.iter_instrs,
         &mut |runner_ctx, ctx| {
-            let values = unwrap!(eval_exps(runner_ctx, &ctx, &exps_input));
-            let values = unwrap!(SlInterp::invoke_rel(runner_ctx, &ctx, &instr.id, &values));
-            assign::assign_exps(runner_ctx.arena_mut(), ctx, &exps_output, &values)
+            let values = unwrap!(eval_exps(runner_ctx, ctx, &exps_input));
+            let values = unwrap!(SlInterp::invoke_rel(runner_ctx, ctx, &instr.id, &values));
+            assign::assign_exps_in(runner_ctx.arena_mut(), ctx, &exps_output, &values)
         }
     ));
     // The block sees the bound outputs
@@ -537,16 +537,17 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
 /// Runs a binding action under nested iterations, gathering its bindings.
 fn eval_instr_iter<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
-    ctx: Context<'global>,
+    mut ctx: Context<'global>,
     iters: &[ast::InstrIter],
     eval: &mut impl FnMut(
         &mut RunnerContext<'_, SlInterp, Iface, Ext>,
-        Context<'global>,
-    ) -> Backtrack<Context<'global>>,
+        &mut Context<'global>,
+    ) -> Backtrack<()>,
 ) -> Backtrack<Context<'global>> {
     // Outermost iteration first, yielding through the rest
     let Some((iter, iters_tail)) = iters.split_last() else {
-        return eval(runner_ctx, ctx);
+        unwrap!(eval(runner_ctx, &mut ctx));
+        return ok!(ctx);
     };
     iter::r#yield(runner_ctx, ctx, &Span::default(), iter, |runner_ctx, ctx_sub| {
         eval_instr_iter(runner_ctx, ctx_sub, iters_tail, eval)
