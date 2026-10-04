@@ -30,3 +30,6 @@ mod primitive;
 
 #[path = "interp/construct.rs"]
 mod construct;
+
+#[path = "interp/condition.rs"]
+mod condition;

@@ -2,6 +2,8 @@
 //!
 //! Builds diagnostics; callers choose whether to stop or try another candidate.
 
+use std::fmt::Display;
+
 use crate::diagnostic::Diagnostic;
 
 use super::diagnostic;
@@ -10,6 +12,11 @@ const CONDITION_UNMET: &str = "runtime/condition-unmet";
 
 /// Reports condition not met.
 pub fn condition_unmet(exp: String) -> Diagnostic {
+    condition_unmet_display(exp)
+}
+
+/// Formats owned or borrowed condition text into the ordinary diagnostic.
+pub(crate) fn condition_unmet_display(exp: impl Display) -> Diagnostic {
     diagnostic(CONDITION_UNMET, format!("condition {exp} was not met"), Vec::new())
 }
 

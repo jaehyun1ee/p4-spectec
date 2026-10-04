@@ -7,9 +7,9 @@
 //! Tail calls loop inside `call` instead of recursing.
 //! `Config` toggles memoization, determinism checks, and call-boundary guards.
 
-mod constructs;
 pub mod context;
 pub mod flow;
+mod plans;
 
 pub mod eval;
 

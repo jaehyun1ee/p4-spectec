@@ -74,7 +74,7 @@ impl Global {
                 }
             }
         }
-        loaded.prepare_construct_plans(super::constructs::rel, super::constructs::func);
+        loaded.prepare_eval_plans(super::plans::rel, super::plans::func);
         Ok(loaded)
     }
 }

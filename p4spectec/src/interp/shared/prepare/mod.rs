@@ -7,6 +7,7 @@
 
 pub mod ast;
 pub mod construct;
+pub(crate) mod plans;
 
 use crate::lang::{
     common::{Id, source::NotePhrase},

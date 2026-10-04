@@ -162,6 +162,12 @@ pub fn eval_instr<Iface: Interface, Ext: Extern>(
     })
 }
 
+/// Borrows stable condition text or prints syntax supplied outside its Global.
+fn condition_text<'a>(ctx: &'a Context<'_>, exp: &ast::Exp) -> Cow<'a, str> {
+    ctx.find_condition_text(exp)
+        .map_or_else(|| Cow::Owned(Print::to_string(exp)), Cow::Borrowed)
+}
+
 // - If instruction
 
 /// Runs the block when the condition holds under its iterations.
@@ -185,7 +191,10 @@ fn eval_if_instr<Iface: Interface, Ext: Extern>(
     if cond {
         eval_block(runner_ctx, ctx, &instr.block, tail)
     } else {
-        ok!(Flow::cont(instr.exp.span, error::prem::condition_unmet(Print::to_string(&instr.exp)),))
+        ok!(Flow::cont(
+            instr.exp.span,
+            error::prem::condition_unmet_display(condition_text(ctx.as_ref(), &instr.exp)),
+        ))
     }
 }
 
@@ -264,7 +273,10 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
     // No guard accepted: fall through
     ok!(Flow::cont(
         instr.exp.span,
-        error::prem::condition_unmet(format!("case {}", Print::to_string(&instr.exp))),
+        error::prem::condition_unmet_display(format_args!(
+            "case {}",
+            condition_text(ctx.as_ref(), &instr.exp)
+        )),
     ))
 }
 
