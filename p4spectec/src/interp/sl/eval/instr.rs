@@ -54,6 +54,9 @@ pub fn eval_block<Iface: Interface, Ext: Extern>(
 ) -> Backtrack<Flow> {
     if runner_ctx.interp().config.det {
         eval_block_deterministic(runner_ctx, ctx.as_ref(), block, tail)
+    } else if let [instr] = block {
+        // A singleton already supplies the block's final flow and tail position
+        eval_instr(runner_ctx, ctx, instr, tail)
     } else {
         eval_block_sequential(runner_ctx, ctx, block.iter(), tail)
     }

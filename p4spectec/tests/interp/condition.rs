@@ -150,3 +150,197 @@ fn repeated_condition_failures_preserve_complete_diagnostics_after_moves_and_res
         check(global, case);
     }
 }
+
+/// Includes every ordered report descendant and the terminal flow payload.
+fn flow_record(flow: &Flow) -> String {
+    fn report_tree(report: &Report) -> String {
+        format!(
+            "{:?} {:?}",
+            report.kind,
+            report.children.iter().map(report_tree).collect::<Vec<_>>()
+        )
+    }
+    match flow {
+        Flow::Cont(reports) => {
+            format!("Cont {:?}", reports.iter().map(report_tree).collect::<Vec<_>>())
+        }
+        flow => format!("{flow:?}"),
+    }
+}
+
+#[test]
+fn singleton_blocks_preserve_conditions_owned_contexts_and_failure_order() {
+    use p4spectec::interp::sl::eval::instr::eval_block;
+    for case in [false, true] {
+        let global = fixture(case);
+        let ctx_root = Context::new(&global);
+        let id = phrase!(node: Rc::from("fixture"), span: Span::default());
+        let func = ctx_root.find_func(&id).unwrap();
+        let ast::MetaFuncDef::Defined(func_def) = &func.def else { unreachable!() };
+        let instr = &func_def.block[0];
+        let mut layout = (*func.layout).clone();
+        let id = layout.resolve_id(phrase!(node: Rc::from("n"), span: Span::default()));
+        assert_eq!(layout.len(), func.layout.len());
+        for det in [false, true] {
+            for borrowed in [false, true] {
+                for tail in [false, true] {
+                    for num in [0_u64, 2] {
+                        let mut records = Vec::new();
+                        for block in [false, true] {
+                            let mut runner = runner::build_sl(
+                                vec![],
+                                Config::new(false, det, false),
+                                NullExtern,
+                            )
+                            .unwrap();
+                            let value =
+                                make::nat(runner.arena_mut(), num.into(), Span::default()).unwrap();
+                            let mut ctx = ctx_root.localize_with_layout(&func.layout);
+                            ctx.add_value_at_slot(id.slot, value);
+                            let ctx_borrow = ctx.clone();
+                            let ctx =
+                                if borrowed { Cow::Borrowed(&ctx_borrow) } else { Cow::Owned(ctx) };
+                            let flow = if block {
+                                eval_block(
+                                    &mut runner.context(),
+                                    ctx,
+                                    std::slice::from_ref(instr),
+                                    tail,
+                                )
+                            } else {
+                                eval_instr(&mut runner.context(), ctx, instr, tail)
+                            }
+                            .unwrap();
+                            let value_sentinel = make::new(
+                                runner.arena_mut(),
+                                ValueKind::Bool(false),
+                                Rc::new(typ::make::bool().node),
+                                Span::default(),
+                            )
+                            .unwrap();
+                            records.push((flow_record(&flow), value_sentinel));
+                        }
+                        assert_eq!(
+                            records[0], records[1],
+                            "case {case}, det {det}, borrowed {borrowed}, tail {tail}, input {num}"
+                        );
+                    }
+                }
+            }
+            let mut runner =
+                runner::build_sl(vec![], Config::new(false, det, false), NullExtern).unwrap();
+            let value = make::nat(runner.arena_mut(), 0_u64.into(), Span::default()).unwrap();
+            let mut ctx = ctx_root.localize_with_layout(&func.layout);
+            ctx.add_value_at_slot(id.slot, value);
+            let Flow::Cont(reports) =
+                eval_block(&mut runner.context(), Cow::Borrowed(&ctx), &[], true).unwrap()
+            else {
+                unreachable!()
+            };
+            assert!(reports.is_empty());
+            let block = [instr.clone(), instr.clone()];
+            let Flow::Cont(reports) =
+                eval_block(&mut runner.context(), Cow::Borrowed(&ctx), &block, true).unwrap()
+            else {
+                unreachable!()
+            };
+            assert_eq!(reports.len(), if det { 2 } else { 1 });
+        }
+    }
+}
+
+#[test]
+fn singleton_blocks_preserve_call_tail_position() {
+    use p4spectec::interp::sl::eval::instr::eval_block;
+    let global = Global::load(super::support::sl_spec("var n : nat\ndec $identity(nat) : nat\ndef $identity(n) = n\ndec $fixture(nat) : nat\ndef $fixture(n) = $identity(n)\n")).unwrap();
+    let ctx_root = Context::new(&global);
+    let id = phrase!(node: Rc::from("fixture"), span: Span::default());
+    let func = ctx_root.find_func(&id).unwrap();
+    let ast::MetaFuncDef::Defined(func_def) = &func.def else { unreachable!() };
+    let instr = &func_def.block[0];
+    assert!(matches!(instr.node, ast::InstrKind::Return(_)));
+    let mut layout = (*func.layout).clone();
+    let id = layout.resolve_id(phrase!(node: Rc::from("n"), span: Span::default()));
+    assert_eq!(layout.len(), func.layout.len());
+    for tail in [false, true] {
+        let mut records = Vec::new();
+        for block in [false, true] {
+            let mut runner =
+                runner::build_sl(vec![], Config::new(false, false, false), NullExtern).unwrap();
+            let value = make::nat(runner.arena_mut(), 7_u64.into(), Span::default()).unwrap();
+            let mut ctx = ctx_root.localize_with_layout(&func.layout);
+            ctx.add_value_at_slot(id.slot, value);
+            let flow = if block {
+                eval_block(
+                    &mut runner.context(),
+                    Cow::Owned(ctx),
+                    std::slice::from_ref(instr),
+                    tail,
+                )
+            } else {
+                eval_instr(&mut runner.context(), Cow::Owned(ctx), instr, tail)
+            }
+            .unwrap();
+            assert_eq!(matches!(flow, Flow::TailFunc(_)), tail);
+            let value_sentinel = make::new(
+                runner.arena_mut(),
+                ValueKind::Bool(false),
+                Rc::new(typ::make::bool().node),
+                Span::default(),
+            )
+            .unwrap();
+            records.push((flow_record(&flow), value_sentinel));
+        }
+        assert_eq!(records[0], records[1]);
+    }
+}
+
+#[test]
+fn singleton_mismatch_keeps_sequential_and_deterministic_distinction() {
+    use p4spectec::interp::sl::eval::instr::eval_block;
+    use p4spectec::runner::InterpreterError;
+    let mut spec = super::support::sl_spec(
+        "dec $failure() : bool\ndef $failure() = false\ndec $fixture() : bool\ndef $fixture() = $failure()\n",
+    );
+    for def in &mut spec {
+        let sl_source::DefKind::MetaFunc(sl_source::MetaFuncDef::Defined(func)) = &mut def.node
+        else {
+            continue;
+        };
+        if func.id.node.as_ref() == "failure" {
+            // An exhausted function supplies a recoverable mismatch to its caller
+            func.block.clear();
+            func.block_else = None;
+        } else if func.id.node.as_ref() == "fixture" {
+            let sl_source::InstrKind::Return(instr_return) = &func.block[0].node else {
+                unreachable!()
+            };
+            let exp = instr_return.exp.clone();
+            func.block = vec![
+                phrase!(node: sl_source::InstrKind::If(sl_source::IfInstr { exp, iter_exps:vec![],block:vec![],dangle:false }), span: Span::default()),
+            ];
+        }
+    }
+    let global = Global::load(spec).unwrap();
+    let ctx_root = Context::new(&global);
+    let id = phrase!(node: Rc::from("fixture"), span: Span::default());
+    let func = ctx_root.find_func(&id).unwrap();
+    let ast::MetaFuncDef::Defined(func_def) = &func.def else { unreachable!() };
+    let instr = &func_def.block[0];
+    for det in [false, true] {
+        let mut runner =
+            runner::build_sl(vec![], Config::new(false, det, false), NullExtern).unwrap();
+        let ctx = ctx_root.localize_with_layout(&func.layout);
+        assert!(matches!(
+            eval_instr(&mut runner.context(), Cow::Borrowed(&ctx), instr, false),
+            Err(InterpreterError::Mismatch(_))
+        ));
+        let result =
+            eval_block(&mut runner.context(), Cow::Owned(ctx), std::slice::from_ref(instr), false);
+        if det {
+            assert!(matches!(result,Ok(Flow::Cont(reports)) if reports.is_empty()));
+        } else {
+            assert!(matches!(result, Err(InterpreterError::Mismatch(_))));
+        }
+    }
+}
