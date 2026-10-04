@@ -33,3 +33,6 @@ mod construct;
 
 #[path = "interp/condition.rs"]
 mod condition;
+
+#[path = "interp/rows.rs"]
+mod rows;

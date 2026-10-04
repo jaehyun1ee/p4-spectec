@@ -82,6 +82,17 @@ pub trait ReadContext {
 
 /// Write access to type, value, and function bindings.
 pub trait WriteContext: ReadContext + Clone {
+    /// Allows flat row patterns to collect private bindings directly.
+    ///
+    /// Slots must act as replaceable `Option<Value>` cells: clearing leaves
+    /// them unbound, and every write replaces the prior value. Cloning,
+    /// clearing, removing, reading, and writing may affect only frame storage.
+    /// These operations must preserve one stable slot domain and have no
+    /// failures beyond the same bounds checks for reads, writes, and removals.
+    fn can_collect_pattern_rows(&self) -> bool {
+        false
+    }
+
     // == Types
 
     /// Binds a type definition, rejecting duplicates only in the local scope.
@@ -537,6 +548,10 @@ impl<R, F: FuncSignature> ReadContext for Context<'_, R, F> {
 // = Write access
 
 impl<R, F: FuncSignature> WriteContext for Context<'_, R, F> {
+    fn can_collect_pattern_rows(&self) -> bool {
+        true
+    }
+
     // == Adders
 
     // - Types

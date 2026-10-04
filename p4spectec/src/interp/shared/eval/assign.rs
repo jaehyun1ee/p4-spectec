@@ -277,6 +277,11 @@ fn assign_iter_exp<Ctx: WriteContext>(
             let values_len = get::list(arena, &value)
                 .expect("iteration assignment value must be a list")
                 .len();
+            if let Some(result) =
+                super::rows::assign(arena, ctx, span, exp_inner, &exp_iter.vars, &vars_outer, value)
+            {
+                return result;
+            }
             let mut ctx_sub = ctx.clone();
             ctx_sub.clear_value_bindings();
             let mut values_by_var: Vec<Vec<Option<Value>>> = exp_iter
