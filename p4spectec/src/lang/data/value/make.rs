@@ -17,8 +17,8 @@ use crate::lang::{
 };
 
 use super::{
-    Arena, Value, ValueArgs, ValueCase, ValueError, ValueField, ValueKind, args::ValueParts,
-    primitive::Primitive,
+    Arena, TypeNote, Value, ValueArgs, ValueCase, ValueError, ValueField, ValueKind,
+    args::ValueParts, primitive::Primitive,
 };
 
 // - General
@@ -183,6 +183,16 @@ pub fn opt(
     new(arena, ValueKind::Opt(value), typ, span)
 }
 
+/// Interns an option before resolving its output annotation recipe.
+pub(crate) fn opt_with_note(
+    arena: &mut Arena,
+    note: TypeNote,
+    value: Option<Value>,
+    span: Span,
+) -> Result<Value, ValueError> {
+    arena.alloc_note(ValueKind::Opt(value), note, span)
+}
+
 /// A list.
 pub fn list(
     arena: &mut Arena,
@@ -191,6 +201,16 @@ pub fn list(
     span: Span,
 ) -> Result<Value, ValueError> {
     new(arena, ValueKind::List(values), typ, span)
+}
+
+/// Interns a list before resolving its output annotation recipe.
+pub(crate) fn list_with_note(
+    arena: &mut Arena,
+    note: TypeNote,
+    values: Vec<Value>,
+    span: Span,
+) -> Result<Value, ValueError> {
+    arena.alloc_note(ValueKind::List(values), note, span)
 }
 
 // - Temporary composite arguments

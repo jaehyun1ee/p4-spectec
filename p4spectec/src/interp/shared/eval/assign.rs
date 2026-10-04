@@ -270,14 +270,14 @@ fn assign_iter_exp<Ctx: WriteContext>(
                 None => None,
             };
             for (var, var_outer) in exp_iter.vars.iter().zip(&vars_outer) {
-                let typ = var_outer.typ();
+                let note = var_outer.note(ctx);
                 let value_opt = ctx_sub.as_ref().map(|ctx_sub| {
                     *ctx_sub
                         .find_value_at_slot(var.slot)
                         .expect("value must be bound")
                 });
                 let value = unwrap_from_result!(
-                    make::opt(arena, typ.node.into(), value_opt, Span::default()),
+                    make::opt_with_note(arena, note, value_opt, Span::default()),
                     span
                 );
                 ctx.add_value_at_slot(var_outer.slot, value);
@@ -315,14 +315,14 @@ fn assign_iter_exp<Ctx: WriteContext>(
             }
             // Each variable collects its per-row values into a list
             for (var_outer, values) in vars_outer.iter().zip(values_by_var) {
-                let typ = var_outer.typ();
+                let note = var_outer.note(ctx);
                 // Check missing bindings in variable order, then row order
                 let values = values
                     .into_iter()
                     .map(|value| value.expect("value must be bound"))
                     .collect();
                 let value_sub = unwrap_from_result!(
-                    make::list(arena, typ.node.into(), values, Span::default()),
+                    make::list_with_note(arena, note, values, Span::default()),
                     span
                 );
                 ctx.add_value_at_slot(var_outer.slot, value_sub);

@@ -22,6 +22,7 @@ pub mod tree;
 mod view;
 
 pub use arena::Arena;
+pub(crate) use arena::TypeNote;
 pub use args::ValueArgs;
 pub use error::ValueError;
 pub use handle::{Handle, Value, ValueCase, ValueField, ValueKind};

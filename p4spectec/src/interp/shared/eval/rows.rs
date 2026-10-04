@@ -144,7 +144,7 @@ fn assign_plan(
     }
     // Each column retains its fresh type and its original allocation position
     for (var_outer, col) in vars_outer.iter().zip(&plan.columns) {
-        let typ = var_outer.typ();
+        let note = var_outer.note(ctx);
         // Missing columns fail only after all rows and all earlier output lists
         let col = if len == 0 { None } else { Some(col.expect("value must be bound")) };
         let values = if let Some(col) = col {
@@ -158,7 +158,7 @@ fn assign_plan(
             Vec::new()
         };
         let value =
-            unwrap_from_result!(make::list(arena, typ.node.into(), values, Span::default()), span);
+            unwrap_from_result!(make::list_with_note(arena, note, values, Span::default()), span);
         ctx.add_value_at_slot(var_outer.slot, value);
     }
     ok!(())

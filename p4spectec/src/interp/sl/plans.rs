@@ -41,12 +41,20 @@ fn block(instrs: &[ast::Instr], plans: &mut EvalPlans) {
             }
             ast::InstrKind::Group(instr) => block(&instr.block, plans),
             ast::InstrKind::Let(instr) => {
+                plans.types.register_pattern(&instr.exp_l);
+                for iter in &instr.iter_instrs {
+                    plans.types.register_vars(&iter.vars_bind, iter.iter);
+                }
                 plans.constructs.register(&instr.exp_r);
                 block(&instr.block, plans);
             }
             ast::InstrKind::Rule(instr) => {
                 for exp in instr.not_exp.args() {
+                    plans.types.register_pattern(exp);
                     plans.constructs.register(exp);
+                }
+                for iter in &instr.iter_instrs {
+                    plans.types.register_vars(&iter.vars_bind, iter.iter);
                 }
                 block(&instr.block, plans);
             }
@@ -67,6 +75,9 @@ fn block(instrs: &[ast::Instr], plans: &mut EvalPlans) {
 /// Registers evaluated expressions and conditions in a stored relation body.
 pub(super) fn rel(rel: &ast::RelDef, plans: &mut EvalPlans) {
     if let ast::RelDef::Defined(rel) = rel {
+        for exp in &rel.exps_input {
+            plans.types.register_pattern(exp);
+        }
         block(&rel.block, plans);
         if let Some(block_else) = &rel.block_else {
             block(block_else, plans);
@@ -78,16 +89,27 @@ pub(super) fn rel(rel: &ast::RelDef, plans: &mut EvalPlans) {
 pub(super) fn func(func: &ast::MetaFuncDef, plans: &mut EvalPlans) {
     match func {
         ast::MetaFuncDef::Table(func) => {
+            params(&func.params, plans);
             for row in &func.table_rows {
                 block(&row.block, plans);
             }
         }
         ast::MetaFuncDef::Defined(func) => {
+            params(&func.params, plans);
             block(&func.block, plans);
             if let Some(block_else) = &func.block_else {
                 block(block_else, plans);
             }
         }
         ast::MetaFuncDef::Extern(_) | ast::MetaFuncDef::Builtin(_) => {}
+    }
+}
+
+/// Registers only parameter patterns that bind runtime value arguments.
+fn params(params_func: &[ast::Param], plans: &mut EvalPlans) {
+    for param in params_func {
+        if let ast::ParamKind::Exp(_, exp) = &param.node {
+            plans.types.register_pattern(exp);
+        }
     }
 }

@@ -5,6 +5,7 @@
 
 use crate::lang::data::{
     typ,
+    value::TypeNote,
     var::{SlotIdx, Var, VarSlot},
 };
 
@@ -22,6 +23,14 @@ pub struct VarIter<'a> {
 }
 
 impl VarIter<'_> {
+    /// Chooses an annotation recipe without reserving an arena identity yet.
+    pub(crate) fn note(&self, ctx: &impl ReadContext) -> TypeNote {
+        match ctx.find_iterated_type_template(self.var, self.iter) {
+            Some(typ_template) => TypeNote::FreshClone(typ_template.clone()),
+            None => TypeNote::Shared(self.typ().node.into()),
+        }
+    }
+
     /// Builds the outer type only when an output value needs it.
     pub fn typ(&self) -> ast::Typ {
         let typ = typ::make::iterate(self.var.var.typ.clone(), &self.var.var.iters);

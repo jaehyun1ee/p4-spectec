@@ -29,9 +29,20 @@ use super::{
 };
 
 /// Resolves a new annotation or reuses one retained by an exclusive session.
-pub(super) enum TypeNote {
+pub(crate) enum TypeNote {
     Shared(Rc<TypKind>),
     Known(Interned<TypKind>),
+    FreshClone(Rc<TypKind>),
+}
+
+impl TypeNote {
+    fn intern(self, types: &mut RcInterner<TypKind>) -> Result<Interned<TypKind>, ValueError> {
+        Ok(match self {
+            Self::Shared(typ) => types.intern(typ)?,
+            Self::Known(note) => note,
+            Self::FreshClone(typ_template) => types.intern_fresh_clone(typ_template)?,
+        })
+    }
 }
 
 // = Arena storage
@@ -101,8 +112,18 @@ impl Arena {
         typ: Rc<TypKind>,
         span: Span,
     ) -> Result<Value, ValueError> {
+        self.alloc_note(kind, TypeNote::Shared(typ), span)
+    }
+
+    /// Resolves the annotation recipe only after successful body interning.
+    pub(super) fn alloc_note(
+        &mut self,
+        kind: ValueKind,
+        note: TypeNote,
+        span: Span,
+    ) -> Result<Value, ValueError> {
         let node = self.value.values.intern(kind, &self.shape)?;
-        let note = self.value.types.intern(typ)?;
+        let note = note.intern(&mut self.value.types)?;
         let span = self.value.spans.intern(span)?;
         Ok(Value { node, note, span })
     }
@@ -144,10 +165,7 @@ impl Arena {
             .intern_with_hint(parts, &self.shape, hint, |parts| {
                 parts.into_kind(&self.shape, into_values)
             })?;
-        let note = match note {
-            TypeNote::Shared(typ) => self.value.types.intern(typ)?,
-            TypeNote::Known(note) => note,
-        };
+        let note = note.intern(&mut self.value.types)?;
         let span = self.value.spans.intern(span)?;
         Ok(Value { node, note, span })
     }

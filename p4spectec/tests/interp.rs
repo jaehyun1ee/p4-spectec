@@ -36,3 +36,6 @@ mod condition;
 
 #[path = "interp/rows.rs"]
 mod rows;
+
+#[path = "interp/fresh_types.rs"]
+mod fresh_types;

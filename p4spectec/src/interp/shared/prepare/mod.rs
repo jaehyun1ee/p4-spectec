@@ -8,6 +8,7 @@
 pub mod ast;
 pub mod construct;
 pub(crate) mod plans;
+mod type_templates;
 
 use crate::lang::{
     common::{Id, source::NotePhrase},

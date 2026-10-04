@@ -62,6 +62,19 @@ pub trait ReadContext {
 
     // == Types
 
+    /// Optionally borrows an immutable type template for an output iteration.
+    ///
+    /// The template must equal the variable's type under its existing iterations
+    /// followed by `iter`, including all nested spans. Each output still gets
+    /// a distinct type allocation. Lookup must have no effects or new failures.
+    fn find_iterated_type_template(
+        &self,
+        _var: &ast::Var,
+        _iter: ast::Iter,
+    ) -> Option<&Rc<ast::TypKind>> {
+        None
+    }
+
     /// Finds a type definition by id, if any.
     fn find_typdef_opt(&self, id: &ast::Id) -> Option<&TypeDef>;
     /// Finds a type bound by the current call, excluding global definitions.
@@ -498,6 +511,14 @@ impl<'global, R, F: FuncSignature> Context<'global, R, F> {
 // = Read access
 
 impl<R, F: FuncSignature> ReadContext for Context<'_, R, F> {
+    fn find_iterated_type_template(
+        &self,
+        var: &ast::Var,
+        iter: ast::Iter,
+    ) -> Option<&Rc<ast::TypKind>> {
+        self.global.eval_plans.types.get(var, iter)
+    }
+
     type Func = Callable<F>;
 
     // == Finders
@@ -712,9 +733,9 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
         values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(values_by_var) {
-            let typ = var.typ();
+            let note = var.note(self);
             // Each variable becomes a list one iteration outward
-            let value = make::list(arena, typ.node.into(), values, Span::default());
+            let value = make::list_with_note(arena, note, values, Span::default());
             let value = unwrap_from_result!(value, &Span::default());
             self.add_value_at_slot(var.slot, value);
         }
@@ -728,10 +749,10 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
         values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(values_by_var) {
-            let typ = var.typ();
+            let note = var.note(self);
             // Each variable becomes an option one iteration outward
             let value =
-                make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default());
+                make::opt_with_note(arena, note, values.into_iter().next(), Span::default());
             let value = unwrap_from_result!(value, &Span::default());
             self.add_value_at_slot(var.slot, value);
         }

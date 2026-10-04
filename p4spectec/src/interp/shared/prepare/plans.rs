@@ -10,12 +10,13 @@ use foldhash::fast::RandomState;
 
 use crate::lang::traits::print::Print;
 
-use super::{ast, construct::ConstructPlans};
+use super::{ast, construct::ConstructPlans, type_templates::TypeTemplates};
 
 /// Groups syntax metadata whose addresses share the owning Global's lifetime.
 #[derive(Default)]
 pub(crate) struct EvalPlans {
     pub(crate) constructs: ConstructPlans,
+    pub(crate) types: TypeTemplates,
     texts: HashMap<*const ast::Exp, OnceLock<String>, RandomState>,
 }
 
@@ -23,6 +24,7 @@ impl EvalPlans {
     /// Discards registrations before the owning syntax can move.
     pub(crate) fn clear(&mut self) {
         self.constructs.clear();
+        self.types.clear();
         self.texts.clear();
     }
 
