@@ -433,6 +433,11 @@ impl<'global, R, F: FuncSignature> Context<'global, R, F> {
         self.global.eval_plans.condition_text(exp)
     }
 
+    /// Shares printed condition text without changing its registration lifetime.
+    pub(crate) fn find_condition_text_shared(&self, exp: &ast::Exp) -> Option<&Rc<str>> {
+        self.global.eval_plans.condition_text_shared(exp)
+    }
+
     // == Finders
 
     // - Types

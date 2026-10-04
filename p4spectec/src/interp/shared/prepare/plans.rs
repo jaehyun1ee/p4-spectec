@@ -4,7 +4,7 @@
 //! Condition text is printed once on its first failed evaluation;
 //! only actual stored SL expressions are registered.
 
-use std::{collections::HashMap, sync::OnceLock};
+use std::{collections::HashMap, rc::Rc, sync::OnceLock};
 
 use foldhash::fast::RandomState;
 
@@ -17,7 +17,7 @@ use super::{ast, construct::ConstructPlans, type_templates::TypeTemplates};
 pub(crate) struct EvalPlans {
     pub(crate) constructs: ConstructPlans,
     pub(crate) types: TypeTemplates,
-    texts: HashMap<*const ast::Exp, OnceLock<String>, RandomState>,
+    texts: HashMap<*const ast::Exp, OnceLock<Rc<str>>, RandomState>,
 }
 
 impl EvalPlans {
@@ -35,8 +35,13 @@ impl EvalPlans {
 
     /// Prints a registered condition on first use and borrows its stable text.
     pub(crate) fn condition_text(&self, exp: &ast::Exp) -> Option<&str> {
+        self.condition_text_shared(exp).map(Rc::as_ref)
+    }
+
+    /// Prints at the first failed condition and shares its immutable text.
+    pub(crate) fn condition_text_shared(&self, exp: &ast::Exp) -> Option<&Rc<str>> {
         self.texts
             .get(&std::ptr::from_ref(exp))
-            .map(|text| text.get_or_init(|| Print::to_string(exp)).as_str())
+            .map(|text| text.get_or_init(|| Rc::from(Print::to_string(exp))))
     }
 }

@@ -7,7 +7,7 @@
 //! The `tail` flag marks the last instruction of a callee body,
 //! so a return or rule call there can become a tail call.
 
-use std::borrow::Cow;
+use std::{borrow::Cow, rc::Rc};
 
 use crate::lang::{
     common::source::Span,
@@ -35,7 +35,7 @@ use crate::phrase;
 use super::super::{
     SlInterp,
     context::{Context, Scope},
-    flow::{self, Flow},
+    flow::{self, Flow, PendingFlow},
 };
 
 use super::{
@@ -45,38 +45,78 @@ use super::{
 
 // = Block evaluation
 
-/// Runs a block sequentially or, under `det`, deterministically.
+/// Runs a block and exposes complete reports only for its final continuation.
 pub fn eval_block<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     block: &[ast::Instr],
     tail: bool,
 ) -> Backtrack<Flow> {
-    if runner_ctx.interp().config.det {
-        eval_block_deterministic(runner_ctx, ctx.as_ref(), block, tail)
-    } else if let [instr] = block {
-        // A singleton already supplies the block's final flow and tail position
-        eval_instr(runner_ctx, ctx, instr, tail)
-    } else {
-        eval_block_sequential(runner_ctx, ctx, block.iter(), tail)
-    }
+    eval_block_pending(runner_ctx, ctx, block, tail).map(PendingFlow::into_flow)
 }
 
-/// Runs the block; if it falls through, runs the otherwise block instead.
+/// Runs a callable body and otherwise block before exposing its reports.
 pub(crate) fn eval_block_with_else<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Context<'_>,
     block: &[ast::Instr],
     block_else: Option<&[ast::Instr]>,
 ) -> Backtrack<Flow> {
+    eval_block_with_else_pending(runner_ctx, ctx, block, block_else).map(PendingFlow::into_flow)
+}
+
+/// Runs table row blocks as one sequence before exposing their reports.
+pub(crate) fn eval_block_sequential<'instr, Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
+    ctx: Cow<'_, Context<'_>>,
+    instrs: impl DoubleEndedIterator<Item = &'instr ast::Instr>,
+    tail: bool,
+) -> Backtrack<Flow> {
+    eval_block_sequential_pending(runner_ctx, ctx, instrs, tail).map(PendingFlow::into_flow)
+}
+
+/// Evaluates one instruction and returns its complete public flow.
+pub fn eval_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
+    ctx: Cow<'_, Context<'_>>,
+    instr: &ast::Instr,
+    tail: bool,
+) -> Backtrack<Flow> {
+    eval_instr_pending(runner_ctx, ctx, instr, tail).map(PendingFlow::into_flow)
+}
+
+/// Runs a block sequentially or, under `det`, deterministically.
+fn eval_block_pending<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
+    ctx: Cow<'_, Context<'_>>,
+    block: &[ast::Instr],
+    tail: bool,
+) -> Backtrack<PendingFlow> {
+    if runner_ctx.interp().config.det {
+        eval_block_deterministic(runner_ctx, ctx.as_ref(), block, tail)
+    } else if let [instr] = block {
+        // A singleton already supplies the block's final flow and tail position
+        eval_instr_pending(runner_ctx, ctx, instr, tail)
+    } else {
+        eval_block_sequential_pending(runner_ctx, ctx, block.iter(), tail)
+    }
+}
+
+/// Runs the block; if it falls through, runs the otherwise block instead.
+fn eval_block_with_else_pending<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
+    ctx: Context<'_>,
+    block: &[ast::Instr],
+    block_else: Option<&[ast::Instr]>,
+) -> Backtrack<PendingFlow> {
     // Without an otherwise block the body itself is in tail position
     let Some(block_else) = block_else else {
-        return eval_block(runner_ctx, Cow::Owned(ctx), block, true);
+        return eval_block_pending(runner_ctx, Cow::Owned(ctx), block, true);
     };
     // The otherwise block catches a body that fell through
-    let flow = unwrap!(eval_block(runner_ctx, Cow::Borrowed(&ctx), block, false));
-    if matches!(flow, Flow::Cont(_)) {
-        eval_block(runner_ctx, Cow::Owned(ctx), block_else, true)
+    let flow = unwrap!(eval_block_pending(runner_ctx, Cow::Borrowed(&ctx), block, false));
+    if flow.is_cont() {
+        eval_block_pending(runner_ctx, Cow::Owned(ctx), block_else, true)
     } else {
         ok!(flow)
     }
@@ -88,25 +128,25 @@ fn eval_block_deterministic<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     block: &[ast::Instr],
     tail: bool,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     flow::choose_deterministic(block, |instr| {
-        eval_instr(runner_ctx, Cow::Borrowed(ctx), instr, tail)
+        eval_instr_pending(runner_ctx, Cow::Borrowed(ctx), instr, tail)
     })
 }
 
 /// Runs instructions in order; the last one gets the context and the tail flag.
-pub(crate) fn eval_block_sequential<'instr, Iface: Interface, Ext: Extern>(
+fn eval_block_sequential_pending<'instr, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instrs: impl DoubleEndedIterator<Item = &'instr ast::Instr>,
     tail: bool,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     // Hand the context over exactly once
     let mut ctx = Some(ctx);
     flow::choose_sequential(instrs, |instr, is_last| {
         // The last instruction owns the context
         if is_last {
-            eval_instr(
+            eval_instr_pending(
                 runner_ctx,
                 ctx.take().expect("last instruction evaluated once"),
                 instr,
@@ -114,7 +154,7 @@ pub(crate) fn eval_block_sequential<'instr, Iface: Interface, Ext: Extern>(
             )
         // Earlier ones borrow it and never run in tail position
         } else {
-            eval_instr(
+            eval_instr_pending(
                 runner_ctx,
                 Cow::Borrowed(
                     ctx.as_ref()
@@ -131,12 +171,12 @@ pub(crate) fn eval_block_sequential<'instr, Iface: Interface, Ext: Extern>(
 // = Instruction evaluation
 
 /// Evaluates one instruction.
-pub fn eval_instr<Iface: Interface, Ext: Extern>(
+fn eval_instr_pending<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::Instr,
     tail: bool,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     let span = &instr.span;
     // Grow the stack for deep blocks
     stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
@@ -147,19 +187,19 @@ pub fn eval_instr<Iface: Interface, Ext: Extern>(
             ast::InstrKind::Group(instr) => eval_group_instr(runner_ctx, ctx, instr, tail),
             // Binding and terminal instructions fall through on a mismatch
             ast::InstrKind::Let(instr) => {
-                Flow::cont_from_unmatch(eval_let_instr(runner_ctx, ctx, instr, tail))
+                PendingFlow::cont_from_unmatch(eval_let_instr(runner_ctx, ctx, instr, tail))
             }
             ast::InstrKind::Rule(instr) => {
-                Flow::cont_from_unmatch(eval_rule_instr(runner_ctx, ctx, span, instr, tail))
+                PendingFlow::cont_from_unmatch(eval_rule_instr(runner_ctx, ctx, span, instr, tail))
             }
             ast::InstrKind::Result(instr) => {
-                Flow::cont_from_unmatch(eval_result_instr(runner_ctx, ctx, span, instr))
+                PendingFlow::cont_from_unmatch(eval_result_instr(runner_ctx, ctx, span, instr))
             }
-            ast::InstrKind::Return(instr) => {
-                Flow::cont_from_unmatch(eval_return_instr(runner_ctx, ctx, span, instr, tail))
-            }
+            ast::InstrKind::Return(instr) => PendingFlow::cont_from_unmatch(eval_return_instr(
+                runner_ctx, ctx, span, instr, tail,
+            )),
             ast::InstrKind::Debug(instr) => {
-                Flow::cont_from_unmatch(eval_debug_instr(runner_ctx, ctx, instr, tail))
+                PendingFlow::cont_from_unmatch(eval_debug_instr(runner_ctx, ctx, instr, tail))
             }
         }
     })
@@ -171,6 +211,22 @@ fn condition_text<'a>(ctx: &'a Context<'_>, exp: &ast::Exp) -> Cow<'a, str> {
         .map_or_else(|| Cow::Owned(Print::to_string(exp)), Cow::Borrowed)
 }
 
+/// Defers registered leaves and builds eager reports for external syntax.
+fn condition_unmet(ctx: &Context<'_>, exp: &ast::Exp, case: bool) -> PendingFlow {
+    // Print registered text at the original failed-condition point
+    if let Some(text) = ctx.find_condition_text_shared(exp) {
+        return PendingFlow::Condition { span: exp.span, text: Rc::clone(text), case };
+    }
+    // Cloned and temporary syntax retains ordinary report construction
+    let text = condition_text(ctx, exp);
+    let diagnostic = if case {
+        error::prem::condition_unmet_display(format_args!("case {text}"))
+    } else {
+        error::prem::condition_unmet_display(text)
+    };
+    PendingFlow::Eager(Flow::cont(exp.span, diagnostic))
+}
+
 // - If instruction
 
 /// Runs the block when the condition holds under its iterations.
@@ -179,7 +235,7 @@ fn eval_if_instr<Iface: Interface, Ext: Extern>(
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::IfInstr,
     tail: bool,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     // The condition must hold for every iteration element
     let cond = unwrap!(eval_cond_iter(
         runner_ctx,
@@ -192,12 +248,9 @@ fn eval_if_instr<Iface: Interface, Ext: Extern>(
     ));
     // Run the block, or fall through recording the failed condition
     if cond {
-        eval_block(runner_ctx, ctx, &instr.block, tail)
+        eval_block_pending(runner_ctx, ctx, &instr.block, tail)
     } else {
-        ok!(Flow::cont(
-            instr.exp.span,
-            error::prem::condition_unmet_display(condition_text(ctx.as_ref(), &instr.exp)),
-        ))
+        ok!(condition_unmet(ctx.as_ref(), &instr.exp, false))
     }
 }
 
@@ -209,7 +262,7 @@ fn eval_hold_instr<Iface: Interface, Ext: Extern>(
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::HoldInstr,
     tail: bool,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     // Whether the relation applies to the arguments, for every element
     let mut errors = Vec::new();
     let cond = unwrap!(eval_cond_iter(
@@ -234,25 +287,27 @@ fn eval_hold_instr<Iface: Interface, Ext: Extern>(
     match &instr.hold_case {
         // Both branches present: pick by the outcome
         ast::HoldCase::Both(block_hold, block_not) => {
-            eval_block(runner_ctx, ctx, if cond { block_hold } else { block_not }, tail)
+            eval_block_pending(runner_ctx, ctx, if cond { block_hold } else { block_not }, tail)
         }
         // Only the matching branch present: run it
-        ast::HoldCase::Hold(block, _) if cond => eval_block(runner_ctx, ctx, block, tail),
+        ast::HoldCase::Hold(block, _) if cond => eval_block_pending(runner_ctx, ctx, block, tail),
         // Likewise for the not-hold branch
-        ast::HoldCase::NotHold(block, _) if !cond => eval_block(runner_ctx, ctx, block, tail),
+        ast::HoldCase::NotHold(block, _) if !cond => {
+            eval_block_pending(runner_ctx, ctx, block, tail)
+        }
         // Only the other branch present: fall through
         ast::HoldCase::Hold(..) => {
             let diagnostic = error::prem::hold_condition_unmet(instr.id.node.to_string());
             let report = Report::from(diagnostic)
                 .with_span(&instr.id.span)
                 .with_children(errors);
-            ok!(Flow::Cont(vec![report]))
+            ok!(PendingFlow::Eager(Flow::Cont(vec![report])))
         }
         // Likewise, recording the failed not-hold condition
-        ast::HoldCase::NotHold(..) => ok!(Flow::cont(
+        ast::HoldCase::NotHold(..) => ok!(PendingFlow::Eager(Flow::cont(
             instr.id.span,
             error::prem::not_hold_condition_unmet(instr.id.node.to_string()),
-        )),
+        ))),
     }
 }
 
@@ -264,23 +319,17 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::CaseInstr,
     tail: bool,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     // Evaluate the scrutinee once
     let value = unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
     // The first accepting guard runs its block
     for case in &instr.cases {
         if unwrap!(eval_guard(runner_ctx, ctx.as_ref(), &instr.exp.span, value, &case.guard)) {
-            return eval_block(runner_ctx, ctx, &case.block, tail);
+            return eval_block_pending(runner_ctx, ctx, &case.block, tail);
         }
     }
     // No guard accepted: fall through
-    ok!(Flow::cont(
-        instr.exp.span,
-        error::prem::condition_unmet_display(format_args!(
-            "case {}",
-            condition_text(ctx.as_ref(), &instr.exp)
-        )),
-    ))
+    ok!(condition_unmet(ctx.as_ref(), &instr.exp, true))
 }
 
 /// Tests a guard against the scrutinee value.
@@ -330,8 +379,8 @@ fn eval_group_instr<Iface: Interface, Ext: Extern>(
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::GroupInstr,
     tail: bool,
-) -> Backtrack<Flow> {
-    eval_block(runner_ctx, ctx, &instr.block, tail)
+) -> Backtrack<PendingFlow> {
+    eval_block_pending(runner_ctx, ctx, &instr.block, tail)
 }
 
 // - Let instruction
@@ -342,7 +391,7 @@ fn eval_let_instr<Iface: Interface, Ext: Extern>(
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::LetInstr,
     tail: bool,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     // Evaluate the right side and bind the left pattern, per element
     let ctx = unwrap!(eval_instr_iter(
         runner_ctx,
@@ -354,7 +403,7 @@ fn eval_let_instr<Iface: Interface, Ext: Extern>(
         }
     ));
     // The block sees the new bindings
-    eval_block(runner_ctx, Cow::Owned(ctx), &instr.block, tail)
+    eval_block_pending(runner_ctx, Cow::Owned(ctx), &instr.block, tail)
 }
 
 // - Rule instruction
@@ -366,7 +415,7 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
     span: &Span,
     instr: &ast::RuleInstr,
     tail: bool,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     // Split the notation arguments by the input hint
     let (exps_input, exps_output) =
         input::split(&instr.input_hint, instr.not_exp.args().iter().collect())
@@ -383,10 +432,10 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
             .all(|(exp_l, exp_r)| exp_l.syntax_eq(exp_r))
     {
         let values = unwrap!(eval_exps(runner_ctx, ctx.as_ref(), &exps_input));
-        return ok!(Flow::TailRel(phrase!(
+        return ok!(PendingFlow::Eager(Flow::TailRel(phrase!(
             node: (instr.id.clone(), values),
             span: *span,
-        )));
+        ))));
     }
     // Otherwise call, bind the outputs under the iterators, and run the block
     let ctx = unwrap!(eval_instr_iter(
@@ -400,7 +449,7 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
         }
     ));
     // The block sees the bound outputs
-    eval_block(runner_ctx, Cow::Owned(ctx), &instr.block, tail)
+    eval_block_pending(runner_ctx, Cow::Owned(ctx), &instr.block, tail)
 }
 
 // - Result instruction
@@ -411,9 +460,9 @@ fn eval_result_instr<Iface: Interface, Ext: Extern>(
     ctx: Cow<'_, Context<'_>>,
     span: &Span,
     instr: &ast::ResultInstr,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     let values = unwrap!(eval_exps(runner_ctx, ctx.as_ref(), &instr.exps));
-    ok!(Flow::Result(phrase!(node: values, span: *span)))
+    ok!(PendingFlow::Eager(Flow::Result(phrase!(node: values, span: *span))))
 }
 
 // - Return instruction
@@ -425,7 +474,7 @@ fn eval_return_instr<Iface: Interface, Ext: Extern>(
     span: &Span,
     instr: &ast::ReturnInstr,
     tail: bool,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     // Only a call in tail position can become a tail call
     if tail && let ast::ExpKind::Call(id, targs, args) = &instr.exp.node {
         // Resolve type arguments and evaluate arguments before deciding
@@ -440,15 +489,17 @@ fn eval_return_instr<Iface: Interface, Ext: Extern>(
         {
             let value =
                 unwrap!(SlInterp::invoke_func(runner_ctx, ctx.as_ref(), id, &targs, &values));
-            ok!(Flow::Return(phrase!(node: value, span: *span)))
+            ok!(PendingFlow::Eager(Flow::Return(phrase!(node: value, span: *span))))
         // Global calls become tail calls for the invoker loop
         } else {
-            ok!(Flow::TailFunc(phrase!(node: (id.clone(), targs, values.into_vec()), span: *span)))
+            ok!(PendingFlow::Eager(Flow::TailFunc(
+                phrase!(node: (id.clone(), targs, values.into_vec()), span: *span)
+            )))
         }
     // Any other expression is evaluated and returned
     } else {
         let value = unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
-        ok!(Flow::Return(phrase!(node: value, span: *span)))
+        ok!(PendingFlow::Eager(Flow::Return(phrase!(node: value, span: *span))))
     }
 }
 
@@ -460,7 +511,7 @@ fn eval_debug_instr<Iface: Interface, Ext: Extern>(
     ctx: Cow<'_, Context<'_>>,
     instr: &ast::DebugInstr,
     tail: bool,
-) -> Backtrack<Flow> {
+) -> Backtrack<PendingFlow> {
     let value = unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
     println!("{}: {}", instr.exp.span, Print::to_string(&instr.exp));
     // Print the value's source span when it has one
@@ -470,7 +521,7 @@ fn eval_debug_instr<Iface: Interface, Ext: Extern>(
     } else {
         println!("{span}: {}", runner_ctx.arena().to_string(&value));
     }
-    eval_instr(runner_ctx, ctx, &instr.instr, tail)
+    eval_instr_pending(runner_ctx, ctx, &instr.instr, tail)
 }
 
 // = Iteration
