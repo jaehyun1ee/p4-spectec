@@ -118,13 +118,13 @@ fn equiv_not_typ_with<'env>(
     not_typ_r: &ast::NotTyp,
 ) -> Result<bool, TypeError> {
     // Shapes must agree before arguments are compared
-    if !not_typ_l.node.eq_shape(&not_typ_r.node) {
+    if !not_typ_l.node.eq_mixop(&not_typ_r.node) {
         return Ok(false);
     }
     // Then the arguments pairwise
     let typs_l = not_typ_l.node.args();
     let typs_r = not_typ_r.node.args();
-    for (typ_l, typ_r) in typs_l.into_iter().zip(typs_r) {
+    for (typ_l, typ_r) in typs_l.iter().zip(typs_r) {
         if !equiv_typ_with(find_typdef_opt, typ_l, typ_r)? {
             return Ok(false);
         }

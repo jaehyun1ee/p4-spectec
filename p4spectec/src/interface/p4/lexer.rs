@@ -46,9 +46,9 @@ use crate::lang::{
         source::{Phrase, Position, Span},
     },
     data::{
-        notation::Mixfix,
+        notation::Mixop,
         typ,
-        value::{Value, make},
+        value::{Value, ValueCase, ValueError, ValueKind, make},
     },
 };
 
@@ -724,16 +724,19 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                     node: Atom::Keyword(sign.to_ascii_uppercase().to_string()),
                     span: span.clone()
                 );
-                let value_case = Mixfix::Seq(vec![
-                    Mixfix::Arg(value_width),
-                    Mixfix::Atom(atom),
-                    Mixfix::Arg(value_int),
-                ]);
+                // Each literal's atom has its own span, so its shape is not shared
+                let mixop = Mixop::Seq(vec![Mixop::Arg, Mixop::Atom(atom), Mixop::Arg]);
+                let mut arena = self.ctx.arena_mut();
+                let arena_shape = arena.arena_shape_mut();
+                let shape = arena_shape.intern(&mixop).map_err(ValueError::from)?;
+                let value_case =
+                    ValueCase::new_in(arena_shape, shape, vec![value_width, value_int])
+                        .expect("the literal shape has two positions");
                 let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
-                let value = make::case(
-                    &mut self.ctx.arena_mut(),
+                let value = make::new(
+                    &mut arena,
+                    ValueKind::Case(value_case),
                     (typ::make::var(id_typ, vec![])).node.into(),
-                    value_case,
                     span,
                 )?;
                 (value, digits.to_owned())

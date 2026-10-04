@@ -260,7 +260,7 @@ fn eval_hold_instr<'global, Tier, Iface: Interface, Ext: Extern>(
     let mut errors = Vec::new();
     let cond =
         unwrap!(eval_cond_iter(runner_ctx, &ctx, &instr.iter_exps, &mut |runner_ctx, ctx| {
-            let values = unwrap!(eval_exps(runner_ctx, ctx, &instr.not_exp.args()));
+            let values = unwrap!(eval_exps(runner_ctx, ctx, instr.not_exp.args()));
             match PlInterp::invoke_rel(runner_ctx, ctx, &instr.id, &values) {
                 // A match means it holds
                 ok!(_) => ok!(true),
@@ -414,8 +414,9 @@ fn eval_rule_instr<'global, Iface: Interface, Ext: Extern>(
     instr: &ast::RuleInstr,
 ) -> Backtrack<(Context<'global>, Flow)> {
     // The input hint separates arguments from output patterns
-    let (exps_input, exps_output) = input::split(&instr.input_hint, instr.not_exp.args())
-        .expect("input hint must fit relation");
+    let (exps_input, exps_output) =
+        input::split(&instr.input_hint, instr.not_exp.args().iter().collect())
+            .expect("input hint must fit relation");
     // Invoke the relation at each enclosing iteration
     let ctx =
         unwrap!(eval_instr_iter(runner_ctx, ctx, &instr.iter_instrs, &mut |runner_ctx, ctx| {
@@ -480,9 +481,7 @@ fn eval_destruct_instr<'global, Iface: Interface, Ext: Extern>(
     let values = get::case(runner_ctx.arena(), &value)
         .expect("destructuring value must be a case")
         .args()
-        .into_iter()
-        .copied()
-        .collect::<Vec<_>>();
+        .to_vec();
     let exps = instr
         .bindings
         .iter()
