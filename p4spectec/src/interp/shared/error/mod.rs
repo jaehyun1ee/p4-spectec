@@ -7,11 +7,8 @@
 use std::fmt;
 
 use crate::lang::{
-    common::{
-        ds::map::ArityMismatch, notation::mixop::ArityMismatch as MixopArityMismatch,
-        prim::num::NumericError, source::Span,
-    },
-    data::value::ValueError,
+    common::{ds::map::ArityMismatch, prim::num::NumericError, source::Span},
+    data::{notation::ArityMismatch as MixopArityMismatch, value::ValueError},
 };
 
 use crate::diagnostic::{Diagnostic, Label, Report, Severity};
@@ -118,8 +115,8 @@ impl From<MatchError> for Error {
             MatchError::TypeUndefined { span, .. }
             | MatchError::TypeVariableUnexpected { span }
             | MatchError::TypeArgumentCountMismatch { span, .. }
-            | MatchError::FunctionUndefined { span, .. } => span.clone(),
-            MatchError::Type(error) => error.span.clone(),
+            | MatchError::FunctionUndefined { span, .. } => *span,
+            MatchError::Type(error) => error.span,
         };
         let mut diagnostic_error =
             diagnostic(MATCH_FAILED, MatchDisplay(&error).to_string(), Vec::new());

@@ -118,13 +118,13 @@ fn equiv_not_typ_with<'env>(
     not_typ_r: &ast::NotTyp,
 ) -> Result<bool, TypeError> {
     // Shapes must agree before arguments are compared
-    if !not_typ_l.node.eq_shape(&not_typ_r.node) {
+    if !not_typ_l.node.eq_mixop(&not_typ_r.node) {
         return Ok(false);
     }
     // Then the arguments pairwise
     let typs_l = not_typ_l.node.args();
     let typs_r = not_typ_r.node.args();
-    for (typ_l, typ_r) in typs_l.into_iter().zip(typs_r) {
+    for (typ_l, typ_r) in typs_l.iter().zip(typs_r) {
         if !equiv_typ_with(find_typdef_opt, typ_l, typ_r)? {
             return Ok(false);
         }
@@ -148,7 +148,7 @@ pub fn equiv_func_typ<'env>(
         let mismatch = ArityMismatch::new(tparams_l.len(), tparams_r.len());
         let mismatch = TypeArityMismatch::TypeParameter(mismatch);
         let kind = TypeErrorKind::ArityMismatch(mismatch);
-        let error = TypeError::new(kind, span.clone());
+        let error = TypeError::new(kind, *span);
         return Err(error);
     }
     let typs_params_l = &func_typ_l.typs_params;
@@ -158,7 +158,7 @@ pub fn equiv_func_typ<'env>(
         let mismatch = ArityMismatch::new(typs_params_l.len(), typs_params_r.len());
         let mismatch = TypeArityMismatch::Parameter(mismatch);
         let kind = TypeErrorKind::ArityMismatch(mismatch);
-        let error = TypeError::new(kind, span.clone());
+        let error = TypeError::new(kind, *span);
         return Err(error);
     }
 

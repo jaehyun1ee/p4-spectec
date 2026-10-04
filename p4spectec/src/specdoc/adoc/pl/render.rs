@@ -12,18 +12,21 @@
 //! -> xref:Oracle[Oracle: ``nat`` ``+~>+`` ``%``]
 //! ```
 
+use std::rc::Rc;
+
 use crate::util::text::escape_text;
 
 use crate::lang::{
     common::{
         Iter,
-        notation::{atom::Atom, mixfix::Mixfix},
+        notation::atom::Atom,
         prim::{
             bool::{BinOp as BoolBinOp, CmpOp as BoolCmpOp, UnOp as BoolUnOp},
             num::CmpOp as NumCmpOp,
         },
         source::Span,
     },
+    data::notation::{Mixfix, MixfixRef, View},
     hints::{alter, input},
     traits::{has_call::HasCall, print::Print},
 };
@@ -179,14 +182,14 @@ fn alternate<Item>(
 
 impl Code {
     /// Renders a mixfix tree with caller-rendered arguments.
-    fn of_mixfix<T>(mixfix: &Mixfix<T>, render_arg: &dyn Fn(&T) -> Code) -> Code {
-        match mixfix {
-            Mixfix::Arg(arg) => render_arg(arg),
-            Mixfix::Atom(atom) => {
+    fn of_mixfix<T>(mixfix: MixfixRef<'_, T>, render_arg: &dyn Fn(&T) -> Code) -> Code {
+        match mixfix.view() {
+            View::Arg(arg) => render_arg(arg),
+            View::Atom(atom) => {
                 let text_atom = string_of_atom(atom);
                 Code::token(text_atom)
             }
-            Mixfix::Brack(atom_l, mixfix_inner, atom_r) => {
+            View::Brack(atom_l, mixfix_inner, atom_r) => {
                 let text_l = string_of_atom(atom_l);
                 let code_inner = Code::of_mixfix(mixfix_inner, render_arg);
                 let text_r = string_of_atom(atom_r);
@@ -198,7 +201,7 @@ impl Code {
                     Code::token(text_r),
                 ])
             }
-            Mixfix::Infix(mixfix_l, atom, mixfix_r) => {
+            View::Infix(mixfix_l, atom, mixfix_r) => {
                 let code_l = Code::of_mixfix(mixfix_l, render_arg);
                 let text_atom = string_of_atom(atom);
                 let code_r = Code::of_mixfix(mixfix_r, render_arg);
@@ -210,9 +213,9 @@ impl Code {
                     code_r,
                 ])
             }
-            Mixfix::Seq(mixfixes) => {
+            View::Seq(mixfixes) => {
                 let codes = mixfixes
-                    .iter()
+                    .into_iter()
                     .map(|mixfix| Code::of_mixfix(mixfix, render_arg));
                 Code::join(" ", codes)
             }
@@ -560,7 +563,7 @@ impl Code {
     //   INT n   -> ``+INT+`` ``n``
 
     fn of_case_exp(not_exp: &pl::NotExp) -> Code {
-        Code::of_mixfix(not_exp, &Code::of_exp)
+        Code::of_mixfix(not_exp.as_ref(), &Code::of_exp)
     }
 
     // - Struct expressions
@@ -711,7 +714,7 @@ impl Code {
         let code_args = Code::of_args(args);
         let code_call = Code::seq([Code::token(text_id), Code::token(text_targs), code_args]);
         let link = Link::Subject(Subject::Function(
-            crate::phrase! { node: id.node.clone(), span: span_hint.clone() },
+            crate::phrase! { node: id.node.clone(), span: *span_hint },
         ));
         Code::link(link, code_call)
     }
@@ -868,7 +871,7 @@ impl Prose {
                     false,
                 );
                 let link = Link::Subject(Subject::Function(
-                    crate::phrase! { node: id.node.clone(), span: hint.span.clone() },
+                    crate::phrase! { node: id.node.clone(), span: hint.span },
                 ));
                 Some(Prose::link(link, prose_call))
             }
@@ -1002,8 +1005,10 @@ impl Prose {
 
     fn of_case_exp(exp: &pl::Exp, not_exp: &pl::NotExp) -> Prose {
         // Hinted variant values link their prose to the type definition
-        if let (Some(hint), pl::TypKind::Var(id_typ, _)) = (&exp.hints.node.prose, &exp.node.note) {
-            let exps = not_exp.args();
+        if let (Some(hint), pl::TypKind::Var(id_typ, _)) =
+            (&exp.hints.node.prose, exp.node.note.as_ref())
+        {
+            let exps = not_exp.args().iter().collect::<Vec<_>>();
             let prose_case = alternate(
                 hint,
                 &|text_body| reindent_lines(0, text_body),
@@ -1012,7 +1017,7 @@ impl Prose {
                 false,
             );
             let link = Link::Subject(Subject::Type(
-                crate::phrase! { node: id_typ.node.clone(), span: hint.span.clone() },
+                crate::phrase! { node: id_typ.node.clone(), span: hint.span },
             ));
             return Prose::link(link, prose_case);
         }
@@ -1151,7 +1156,7 @@ impl Prose {
         let prose_call =
             alternate(hint, &|text_body| reindent_lines(0, text_body), &Prose::of_arg, args, false);
         let link = Link::Subject(Subject::Function(
-            crate::phrase! { node: id.node.clone(), span: hint.span.clone() },
+            crate::phrase! { node: id.node.clone(), span: hint.span },
         ));
         Prose::link(link, prose_call)
     }
@@ -1182,7 +1187,10 @@ impl Code {
     /// Renders a pattern in its prose-backend notation.
     fn of_pattern(pattern: &pl::Pattern) -> Code {
         match pattern {
-            Pattern::Case(mixop) => Code::of_mixfix(mixop, &|()| Code::token("%")),
+            Pattern::Case(mixop) => {
+                let mixfix = Mixfix::fill_with(Rc::clone(mixop), |_| ());
+                Code::of_mixfix(mixfix.as_ref(), &|()| Code::token("%"))
+            }
             Pattern::List(ListPattern::Cons) => Code::token("_ :: _"),
             Pattern::List(ListPattern::Fixed(num_elems)) => {
                 Code::token(format!("[ _/{num_elems} ]"))
@@ -1845,12 +1853,12 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
             .as_ref()
             .map_or(&instr.hints.span, |hint| &hint.span);
         let link = Link::Subject(Subject::Relation(
-            crate::phrase! { node: hold_instr.id.node.clone(), span: span.clone() },
+            crate::phrase! { node: hold_instr.id.node.clone(), span: *span },
         ));
         let prose_cond = match hint_opt {
             // Hinted relations describe the branch condition in prose
             Some(hint) => {
-                let exps = hold_instr.not_exp.args();
+                let exps = hold_instr.not_exp.args().iter().collect::<Vec<_>>();
                 let prose_hint = alternate(
                     hint,
                     &|text_body| reindent_lines(0, text_body),
@@ -1862,7 +1870,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
             }
             // Unhinted relations show their notation followed by the verdict
             None => {
-                let code_not = Code::of_mixfix(&hold_instr.not_exp, &Code::of_exp);
+                let code_not = Code::of_mixfix(hold_instr.not_exp.as_ref(), &Code::of_exp);
                 let prose_rel = Prose::link(link, Prose::code(code_not));
                 let text_verdict = if hold { " holds" } else { " does not hold" };
                 Prose::seq([prose_rel, Prose::text(text_verdict)])
@@ -1979,8 +1987,8 @@ impl Prose {
     fn of_group_dispatch(span: &Span, id_rel: &pl::Id, id_group: &pl::Id) -> Prose {
         let anchor_group = fallthrough::anchor_of_group(&id_rel.node, &id_group.node);
         let prose_group = Prose::link(
-            Link::Direct(crate::phrase! { node: anchor_group, span: span.clone() }),
-            Prose::text(id_group.node.clone()),
+            Link::Direct(crate::phrase! { node: anchor_group.into(), span: *span }),
+            Prose::text(id_group.node.to_string()),
         );
         Prose::seq([Prose::text("goto "), prose_group])
     }
@@ -2071,7 +2079,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         rule_instr: &pl::RuleInstr,
     ) -> Block {
         // Split the notation into input and output expressions
-        let exps = rule_instr.not_exp.args();
+        let exps = rule_instr.not_exp.args().iter().collect();
         let (exps_input, exps_output) =
             input::split(&rule_instr.input_hint, exps).expect("validated rule input hint");
         let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
@@ -2087,7 +2095,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
             _ => &instr.hints.span,
         };
         let link = Link::Subject(Subject::Relation(
-            crate::phrase! { node: rule_instr.id.node.clone(), span: span.clone() },
+            crate::phrase! { node: rule_instr.id.node.clone(), span: *span },
         ));
         let prose_rule = if let (Some(hint_input), Some(hint_output)) =
             (&instr.hints.node.prose_in, &instr.hints.node.prose_out)
@@ -2114,7 +2122,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
                 Prose::link(link, prose_input),
             ])
         } else {
-            let code_not = Code::of_mixfix(&rule_instr.not_exp, &Code::of_exp);
+            let code_not = Code::of_mixfix(rule_instr.not_exp.as_ref(), &Code::of_exp);
             Prose::seq([Prose::text("Let "), Prose::link(link, Prose::code(code_not))])
         };
         // Wrap bindings that produce iterated outputs in open blocks
@@ -2141,7 +2149,7 @@ impl Prose {
     /// Describes a relation result according to its output shape and hints.
     fn of_result(hints: &Hints, signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
         let typs = signature.not_typ.node.args();
-        let is_conditional = input::is_conditional(&signature.input_hint, &typs)
+        let is_conditional = input::is_conditional(&signature.input_hint, typs)
             .expect("validated relation input hint");
         if is_conditional {
             Prose::text("then, the relation holds.")
@@ -2373,9 +2381,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     ) -> Block {
         // Build the forced binding heading with its failure continuation
         let code_l = Code::of_exp(&option_instr.exp_l);
-        let link_get = Link::Direct(
-            crate::phrase! { node: "option_get".to_owned(), span: instr.node.span.clone() },
-        );
+        let link_get =
+            Link::Direct(crate::phrase! { node: "option_get".into(), span: instr.node.span });
         let prose_get = Prose::link(link_get, Prose::text("*!*"));
         let prose_r = Prose::of_exp(&option_instr.exp_r);
         let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
@@ -2429,8 +2436,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         };
         crate::annotated_note_phrase! {
             node: exp_kind,
-            note: exp_sl.note.as_ref().clone(),
-            span: exp_sl.span.clone(),
+            note: exp_sl.note.clone(),
+            span: exp_sl.span,
         }
     }
 }
@@ -2442,15 +2449,14 @@ impl Prose {
 
     /// Fills relation inputs and leaves output positions as percent holes.
     fn of_rel_title_math(signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
-        let mixop = signature.not_typ.node.to_mixop();
-        let num_outputs = mixop.arity() - exps.len();
+        let num_outputs = signature.not_typ.node.arity() - exps.len();
         let codes_input: Vec<Code> = exps.iter().map(Code::of_exp).collect();
         let codes_output: Vec<Code> = (0..num_outputs).map(|_| Code::token("%")).collect();
         let codes_args = input::combine(&signature.input_hint, codes_input, codes_output)
             .expect("validated relation input hint");
-        let not_exp =
-            pl::Mixop::fill(&mixop, codes_args).expect("relation title fills its notation");
-        let code_not = Code::of_mixfix(&not_exp, &Clone::clone);
+        let not_exp = Mixfix::new(Rc::clone(signature.not_typ.node.mixop()), codes_args)
+            .expect("relation title fills its notation");
+        let code_not = Code::of_mixfix(not_exp.as_ref(), &Clone::clone);
         Prose::code(code_not)
     }
 }
@@ -2482,9 +2488,9 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         let exps_input = exps_synthesized.as_deref().unwrap_or(exps);
         // Build the shared linked heading before selecting the title form
         let link = Link::Subject(Subject::Relation(
-            crate::phrase! { node: id_rel.node.clone(), span: hints.span.clone() },
+            crate::phrase! { node: id_rel.node.clone(), span: hints.span },
         ));
-        let prose_name = Prose::link(link.clone(), Prose::text(id_rel.node.clone()));
+        let prose_name = Prose::link(link.clone(), Prose::text(id_rel.node.to_string()));
         let prose_header = Prose::seq([prose_name, Prose::text(":")]);
         let block_header = Block::concat([Block::inline(prose_header), Block::raw("\n\n")]);
         // Select paired, input-only, truth, or notation prose
@@ -2792,7 +2798,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         };
         let span = hint_opt.map_or(&instr.hints.span, |hint| &hint.span);
         let link = Link::Subject(Subject::Relation(
-            crate::phrase! { node: group_instr.id_rel.node.clone(), span: span.clone() },
+            crate::phrase! { node: group_instr.id_rel.node.clone(), span: *span },
         ));
         let prose_title = Prose::link(link, prose_body);
         // Render the group body below its linked title
@@ -2843,7 +2849,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         };
         let span = hint_opt.map_or(&hints.span, |hint| &hint.span);
         let link = Link::Subject(Subject::Relation(
-            crate::phrase! { node: id_rel.node.clone(), span: span.clone() },
+            crate::phrase! { node: id_rel.node.clone(), span: *span },
         ));
         let prose_title = Prose::link(link, prose_body);
         // Render local arms while keeping relation fragment targets fixed
@@ -3000,7 +3006,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         };
         let span = hint_opt.map_or(&hints.span, |hint| &hint.span);
         let link = Link::Subject(Subject::Function(
-            crate::phrase! { node: id_func.node.clone(), span: span.clone() },
+            crate::phrase! { node: id_func.node.clone(), span: *span },
         ));
         Block::inline(Prose::link(link, prose_body))
     }

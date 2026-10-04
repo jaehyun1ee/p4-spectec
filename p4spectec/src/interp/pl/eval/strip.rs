@@ -4,8 +4,6 @@
 //! into the shared evaluator's AST, preserving slots, types, and spans.
 //! Recursive notation, path, and argument conversion leaves PL source intact.
 
-use crate::lang::common::notation::mixfix::Mixfix;
-
 use crate::runtime::envs::interp::pl::ast_prepared as ast;
 
 use crate::interp::shared::prepare::ast as shared_ast;
@@ -78,27 +76,15 @@ pub(super) fn strip_exp(exp: &ast::Exp) -> shared_ast::Exp {
         crate::note_phrase! {
             node: node,
             note: exp.node.note.clone(),
-            span: exp.node.span.clone(),
+            span: exp.node.span,
         }
     })
 }
 
 // = Notation
 
-fn strip_not_exp(mixfix: &ast::NotExp) -> shared_ast::NotExp {
-    match mixfix {
-        Mixfix::Arg(exp) => Mixfix::Arg(strip_exp(exp)),
-        Mixfix::Atom(atom) => Mixfix::Atom(atom.clone()),
-        Mixfix::Brack(atom_l, inner, atom_r) => {
-            Mixfix::Brack(atom_l.clone(), Box::new(strip_not_exp(inner)), atom_r.clone())
-        }
-        Mixfix::Infix(exp_l, atom, exp_r) => Mixfix::Infix(
-            Box::new(strip_not_exp(exp_l)),
-            atom.clone(),
-            Box::new(strip_not_exp(exp_r)),
-        ),
-        Mixfix::Seq(items) => Mixfix::Seq(items.iter().map(strip_not_exp).collect()),
-    }
+fn strip_not_exp(not_exp: &ast::NotExp) -> shared_ast::NotExp {
+    not_exp.map(strip_exp)
 }
 
 // = Paths
@@ -118,7 +104,7 @@ fn strip_path(path: &ast::Path) -> shared_ast::Path {
             shared_ast::PathKind::Dot(Box::new(strip_path(path)), atom.clone())
         }
     };
-    crate::note_phrase!(node: node, note: path.note.clone(), span: path.span.clone())
+    crate::note_phrase!(node: node, note: path.note.clone(), span: path.span)
 }
 
 // = Arguments
@@ -128,5 +114,5 @@ fn strip_arg(arg: &ast::Arg) -> shared_ast::Arg {
         ast::ArgKind::Exp(exp) => shared_ast::ArgKind::Exp(Box::new(strip_exp(exp))),
         ast::ArgKind::Def(id) => shared_ast::ArgKind::Def(id.clone()),
     };
-    crate::phrase!(node: node, span: arg.span.clone())
+    crate::phrase!(node: node, span: arg.span)
 }

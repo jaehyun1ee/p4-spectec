@@ -11,7 +11,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, ValueArena, make},
+        value::{Arena, Value, make},
     },
 };
 
@@ -51,7 +51,7 @@ impl Counter {
     ///
     /// `counter(bit<32> size, CounterType type);`
     pub fn init(
-        arena: &ValueArena,
+        arena: &Arena,
         _value_targs: Value,
         value_ids: Value,
         value_args: Value,
@@ -122,7 +122,7 @@ impl Counter {
         }
         // Return without a value
         let typ = typ::make::opt(typ::make::var(
-            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            crate::phrase!(node: "value".into(), span: Span::default()),
             Vec::new(),
         ));
         let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())?;

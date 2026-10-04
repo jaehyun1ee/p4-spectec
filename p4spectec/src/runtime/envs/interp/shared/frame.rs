@@ -92,13 +92,13 @@ impl FrameLayout {
 
     /// Resolves a plain identifier to its slot.
     pub fn resolve_id(&mut self, id: Id) -> IdSlot {
-        let slot = self.reserve((id.node.clone(), vec![]));
+        let slot = self.reserve((id.node.to_string(), vec![]));
         IdSlot { id, slot }
     }
 
     /// Resolves a variable under its iteration path to its slot.
     pub fn resolve_var(&mut self, var: Var) -> VarSlot {
-        let slot = self.reserve((var.id.node.clone(), var.iters.clone()));
+        let slot = self.reserve((var.id.node.to_string(), var.iters.clone()));
         VarSlot { slot, var }
     }
 
@@ -161,5 +161,10 @@ impl Frame {
     /// Writes a slot, copying the values first if they are shared.
     pub fn set(&mut self, slot: SlotIdx, value: Value) {
         Rc::make_mut(&mut self.values)[slot.0] = Some(value);
+    }
+
+    /// Removes a slot's binding without changing a cloned frame.
+    pub fn unset(&mut self, slot: SlotIdx) {
+        Rc::make_mut(&mut self.values)[slot.0] = None;
     }
 }

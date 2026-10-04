@@ -16,7 +16,7 @@ use crate::sim_plugin::error;
 
 /// The `LOCAL` cursor, selecting the current call's scope.
 pub(crate) fn local_cursor(
-    arena: &mut crate::lang::data::value::ValueArena,
+    arena: &mut crate::lang::data::value::Arena,
 ) -> Result<Value, ExternError> {
     Ok(make::case_shaped! {
         arena: arena,
@@ -29,7 +29,7 @@ pub(crate) fn local_cursor(
 
 /// An unqualified `prefixedNameIR`.
 pub(crate) fn bare_name(
-    arena: &mut crate::lang::data::value::ValueArena,
+    arena: &mut crate::lang::data::value::Arena,
     name: &str,
 ) -> Result<Value, ExternError> {
     let value_name = make::text(arena, name.to_owned(), Span::default())?;
@@ -249,7 +249,7 @@ where
         .collect::<Result<Vec<_>, _>>()
         .map_err(ExternError::from)?;
     let typ_bits = crate::lang::data::typ::make::list(crate::lang::data::typ::make::var(
-        crate::phrase!(node: "bit".to_owned(), span: Span::default()),
+        crate::phrase!(node: "bit".into(), span: Span::default()),
         Vec::new(),
     ));
     let value_bits =

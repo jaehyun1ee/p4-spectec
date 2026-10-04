@@ -4,10 +4,7 @@
 //! so a substituted type cannot capture a bound type parameter.
 //! Substituting a type variable that has arguments is rejected as higher-order.
 
-use crate::lang::common::{
-    ds::map::{ArityMismatch, IdMap},
-    notation::mixop::Mixop,
-};
+use crate::lang::common::ds::map::{ArityMismatch, IdMap};
 
 use crate::lang::il::ast::{self, TypKind};
 
@@ -77,7 +74,7 @@ pub(crate) fn subst_typ_inner<'env>(
             Some(_) if !targs.is_empty() => {
                 return Err(TypeError::new(
                     TypeErrorKind::HigherOrderSubstitutionUnsupported,
-                    typ.span.clone(),
+                    typ.span,
                 ));
             }
             // Replace the whole variable
@@ -104,7 +101,7 @@ pub(crate) fn subst_typ_inner<'env>(
             TypKind::Func(ast::FuncTyp { tparams, typs_params, typ_ret: Box::new(typ_ret) })
         }
     };
-    Ok(phrase!(node: typ_kind, span: typ.span.clone()))
+    Ok(phrase!(node: typ_kind, span: typ.span))
 }
 
 /// Substitutes type variables in a type list.
@@ -138,24 +135,16 @@ pub fn subst_not_typ<'env>(
     subst_not_typ_inner(&mut fresh, find_subst, not_typ)
 }
 
-/// Substitutes the arguments and refills the mixfix shape.
+/// Substitutes the arguments, keeping the shared mixop.
 pub(crate) fn subst_not_typ_inner<'env>(
     fresh: &mut Fresh,
     find_subst: &dyn Fn(&ast::Id) -> Option<&'env ast::Typ>,
     not_typ: &ast::NotTyp,
 ) -> Result<ast::NotTyp, TypeError> {
-    // Substitute the arguments
-    let typs = not_typ
+    let not_typ_kind = not_typ
         .node
-        .args()
-        .into_iter()
-        .map(|typ| subst_typ_inner(fresh, find_subst, typ))
-        .collect::<Result<Vec<_>, _>>()?;
-    // Refill the mixfix shape with them
-    let mixop = not_typ.node.to_mixop();
-    let not_typ_kind = Mixop::fill(&mixop, typs)
-        .expect("arguments obtained from the same mixfix must match its arity");
-    Ok(phrase!(node: not_typ_kind, span: not_typ.span.clone()))
+        .try_map(|typ| subst_typ_inner(fresh, find_subst, typ))?;
+    Ok(phrase!(node: not_typ_kind, span: not_typ.span))
 }
 
 // == Parameters
@@ -182,7 +171,7 @@ fn subst_param_inner<'env>(
     };
     Ok(crate::phrase! {
         node: kind,
-        span: param.span.clone(),
+        span: param.span,
     })
 }
 

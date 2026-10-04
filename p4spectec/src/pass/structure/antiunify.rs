@@ -5,8 +5,11 @@
 //!
 //! Inputs -> shared template -> binding premises prepended to each path
 
+use std::rc::Rc;
+
 use crate::lang::{
     common::ds::{map::IdMap, set::IdSet},
+    data::notation::Mixfix,
     traits::{
         at::At,
         eq::SyntaxEq,
@@ -80,11 +83,9 @@ fn populate_exp_template(uenv: &UEnv, exp_template: &Exp, exp: &Exp) -> Vec<Prem
             populate_exps_templates(uenv, exps_template.iter(), exps.iter())
         }
         (ExpKind::Case(not_exp_template), ExpKind::Case(not_exp))
-            if not_exp_template.eq_shape(not_exp) =>
+            if not_exp_template.eq_mixop(not_exp) =>
         {
-            let exps_template = not_exp_template.args();
-            let exps = not_exp.args();
-            populate_exps_templates(uenv, exps_template.into_iter(), exps.into_iter())
+            populate_exps_templates(uenv, not_exp_template.args().iter(), not_exp.args().iter())
         }
         (ExpKind::Str(exp_fields_template), ExpKind::Str(exp_fields)) => {
             let exps_template = exp_fields_template.iter().map(|ExpField { exp, .. }| exp);
@@ -145,7 +146,7 @@ fn populate_iter_exp_template(
     let ExpIter { iter, vars: vars_template } = exp_iter_template;
     let ExpIter { vars, .. } = exp_iter;
     let prem = populate_id_exp_template(exp_template, exp);
-    let span = prem.span.clone();
+    let span = prem.span;
     let prem_iter =
         PremIter { iter: *iter, vars_bound: vars_template.clone(), vars_bind: vars.clone() };
     let prem = Box::new(prem);
@@ -173,7 +174,7 @@ fn antiunify_exp(frees: &mut IdSet, uenv: &mut UEnv, exp_template: &Exp, exp: &E
             ExpKind::Tuple(exps_template)
         }
         (ExpKind::Case(not_exp_template), ExpKind::Case(not_exp))
-            if not_exp_template.eq_shape(not_exp) =>
+            if not_exp_template.eq_mixop(not_exp) =>
         {
             antiunify_case_exp(frees, uenv, not_exp_template, not_exp)
         }
@@ -200,7 +201,7 @@ fn antiunify_exp(frees: &mut IdSet, uenv: &mut UEnv, exp_template: &Exp, exp: &E
     crate::note_phrase! {
         node: exp_kind_template,
         note: exp_template.note.clone(),
-        span: exp_template.span.clone()
+        span: exp_template.span
     }
 }
 
@@ -248,14 +249,12 @@ fn antiunify_case_exp(
     not_exp_template: &NotExp,
     not_exp: &NotExp,
 ) -> ExpKind {
-    let (mixop, exps_template) = not_exp_template.split();
-    let exps = not_exp.args();
     let mut exps_unified = vec![];
-    for (exp_template, exp) in exps_template.iter().zip(exps) {
+    for (exp_template, exp) in not_exp_template.args().iter().zip(not_exp.args()) {
         let exp_unified = antiunify_exp(frees, uenv, exp_template, exp);
         exps_unified.push(exp_unified);
     }
-    let not_exp_template = Mixop::fill(&mixop, exps_unified)
+    let not_exp_template = Mixfix::new(Rc::clone(not_exp_template.mixop()), exps_unified)
         .expect("matching mixfix shapes have equal argument counts");
     let not_exp_template = Box::new(not_exp_template);
     ExpKind::Case(not_exp_template)
@@ -396,7 +395,7 @@ fn antiunify_arg(frees: &mut IdSet, uenv: &mut UEnv, arg_template: &Arg, arg: &A
             let exp_template = antiunify_exp(frees, uenv, exp_template, exp);
             let exp_template = Box::new(exp_template);
             let arg_kind_template = ArgKind::Exp(exp_template);
-            crate::phrase! {node: arg_kind_template, span: arg_template.span.clone()}
+            crate::phrase! {node: arg_kind_template, span: arg_template.span}
         }
         // Function arguments must name the same function
         (ArgKind::Def(id_template), ArgKind::Def(id)) if id_template.syntax_eq(id) => {

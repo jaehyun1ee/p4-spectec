@@ -139,9 +139,7 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpKind<I, V> {
             }
             (ExpKind::Tuple(exps_l), ExpKind::Tuple(exps_r))
             | (ExpKind::List(exps_l), ExpKind::List(exps_r)) => exps_l.syntax_eq(exps_r),
-            (ExpKind::Case(not_exp_l), ExpKind::Case(not_exp_r)) => {
-                not_exp_l.eq_by(not_exp_r, SyntaxEq::syntax_eq)
-            }
+            (ExpKind::Case(not_exp_l), ExpKind::Case(not_exp_r)) => not_exp_l.syntax_eq(not_exp_r),
             (ExpKind::Str(fields_l), ExpKind::Str(fields_r)) => fields_l.syntax_eq(fields_r),
             (ExpKind::Opt(Some(exp_l)), ExpKind::Opt(Some(exp_r))) => exp_l.syntax_eq(exp_r),
             (ExpKind::Opt(None), ExpKind::Opt(None)) => true,

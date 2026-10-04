@@ -7,7 +7,7 @@ use num_bigint::BigInt;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, ValueArena, make},
+    data::value::{Arena, Value, make},
 };
 
 use crate::runner::ExternError;
@@ -15,7 +15,7 @@ use crate::runner::ExternError;
 // == P4 values
 
 /// `D int`, an arbitrary-precision integer.
-pub fn p4_arbitrary_int(arena: &mut ValueArena, int: BigInt) -> Result<Value, ExternError> {
+pub fn p4_arbitrary_int(arena: &mut Arena, int: BigInt) -> Result<Value, ExternError> {
     let value_int = make::int(arena, int, Span::default())?;
     Ok(make::case_shaped! {
         arena: arena,
@@ -27,11 +27,7 @@ pub fn p4_arbitrary_int(arena: &mut ValueArena, int: BigInt) -> Result<Value, Ex
 }
 
 /// `nat W int`, a fixed-width unsigned bit string; the width must be a natural.
-pub fn p4_fixed_bit(
-    arena: &mut ValueArena,
-    width: BigInt,
-    int: BigInt,
-) -> Result<Value, ExternError> {
+pub fn p4_fixed_bit(arena: &mut Arena, width: BigInt, int: BigInt) -> Result<Value, ExternError> {
     // The width must be a natural number
     let nat = width
         .try_into()
@@ -48,7 +44,7 @@ pub fn p4_fixed_bit(
 }
 
 /// `tid . id`, an enum member.
-pub fn p4_enum(arena: &mut ValueArena, id_enum: &str, id: &str) -> Result<Value, ExternError> {
+pub fn p4_enum(arena: &mut Arena, id_enum: &str, id: &str) -> Result<Value, ExternError> {
     let value_enum = make::text(arena, id_enum.to_owned(), Span::default())?;
     let value_id = make::text(arena, id.to_owned(), Span::default())?;
     Ok(make::case_shaped! {

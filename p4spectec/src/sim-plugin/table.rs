@@ -9,7 +9,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, ValueArena, ValueError, get, make},
+        value::{Arena, Value, ValueError, get, make},
     },
 };
 
@@ -22,10 +22,7 @@ use super::spec::func;
 // == Table names
 
 /// Splits a dotted name into its last segment and, if dotted, its full path.
-fn table_name(
-    arena: &mut ValueArena,
-    value_name: Value,
-) -> Result<(Value, Option<Value>), ExternError> {
+fn table_name(arena: &mut Arena, value_name: Value) -> Result<(Value, Option<Value>), ExternError> {
     // The last segment is the bare name
     let name = get::text(arena, &value_name)?.to_owned();
     let names: Vec<_> = name.split('.').collect();
@@ -46,7 +43,7 @@ fn table_name(
             .map(|name| make::text(arena, name.to_owned(), Span::default()))
             .collect::<Result<Vec<_>, _>>()?;
         let typ_id = typ::make::list(typ::make::var(
-            crate::phrase!(node: "nameIR".to_owned(), span: Span::default()),
+            crate::phrase!(node: "nameIR".into(), span: Span::default()),
             Vec::new(),
         ));
         Some(make::list(arena, typ_id.node.into(), values_name, Span::default())?)
@@ -155,7 +152,7 @@ where
                 }));
             }
             let typ_key = typ::make::var(
-                crate::phrase!(node: "tableKeyInterface".to_owned(), span: Span::default()),
+                crate::phrase!(node: "tableKeyInterface".into(), span: Span::default()),
                 Vec::new(),
             );
             let values_key = values_name

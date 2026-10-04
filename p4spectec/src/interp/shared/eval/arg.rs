@@ -5,7 +5,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, ValueArena, make},
+    data::value::{Arena, Value, ValueArgs, make},
     traits::print::Print,
 };
 
@@ -30,9 +30,7 @@ fn eval_arg<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>
         ast::ArgKind::Exp(exp) => eval_exp(runner_ctx, ctx, exp),
         ast::ArgKind::Def(id) => eval_def_arg(runner_ctx.arena_mut(), ctx, id, &arg.span),
     };
-    result.with_frame(arg.span.clone(), || {
-        format!("while evaluating argument {}", Print::to_string(arg))
-    })
+    result.with_frame(arg.span, || format!("while evaluating argument {}", Print::to_string(arg)))
 }
 
 /// Evaluates arguments left to right.
@@ -40,8 +38,8 @@ pub(crate) fn eval_args<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
     args: &[ast::Arg],
-) -> Backtrack<Vec<Value>> {
-    let mut values = Vec::with_capacity(args.len());
+) -> Backtrack<ValueArgs> {
+    let mut values = ValueArgs::with_capacity(args.len());
     for arg in args {
         values.push(unwrap!(eval_arg(runner_ctx, ctx, arg)));
     }
@@ -52,7 +50,7 @@ pub(crate) fn eval_args<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
 
 /// Builds the function value for a function argument from the function's type.
 fn eval_def_arg(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     ctx: &impl ReadContext,
     id: &ast::Id,
     span: &Span,

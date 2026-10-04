@@ -8,7 +8,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, ValueArena, make},
+        value::{Arena, Value, make},
     },
 };
 
@@ -47,7 +47,7 @@ impl Meter {
     /// Meter(bit<32> n_meters, PSA_MeterType_t type);
     /// ```
     pub fn init(
-        arena: &ValueArena,
+        arena: &Arena,
         _value_targs: Value,
         value_ids: Value,
         value_args: Value,
@@ -88,7 +88,7 @@ impl Meter {
         // Metering is not modeled: always GREEN
         let value_color = pack::p4_enum(ctx.arena_mut(), "PSA_MeterColor_t", "GREEN")?;
         let typ = typ::make::opt(typ::make::var(
-            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            crate::phrase!(node: "value".into(), span: Span::default()),
             Vec::new(),
         ));
         let value_opt =

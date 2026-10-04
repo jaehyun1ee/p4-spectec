@@ -6,10 +6,12 @@
 
 pub(crate) mod arg;
 pub mod assign;
+pub(crate) mod construct;
 pub(crate) mod expr;
 pub mod iter;
 pub(crate) mod ops;
 pub(crate) mod path;
+pub(crate) mod rows;
 
 use crate::lang::data::value::Value;
 

@@ -19,7 +19,7 @@ use crate::lang::{
     data::{
         typ,
         value::{
-            Value, ValueArena,
+            Arena, Value,
             external::{DecodeContext, EncodeContext, Encoding, decode_with, encode_with},
             get, make,
         },
@@ -74,14 +74,10 @@ impl ExternObject {
     // - Encoding
 
     /// Encodes the object as the specification's `objectState` external value.
-    pub fn to_value(
-        &self,
-        arena: &mut ValueArena,
-        encoding: Encoding,
-    ) -> Result<Value, ExternError> {
+    pub fn to_value(&self, arena: &mut Arena, encoding: Encoding) -> Result<Value, ExternError> {
         let payload = encode_with(arena, encoding, self)?;
         let typ = typ::make::var(
-            crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
+            crate::phrase!(node: "objectState".into(), span: Span::default()),
             Vec::new(),
         );
         Ok(make::external(arena, typ.node.into(), payload.into(), Span::default())?)
@@ -91,7 +87,7 @@ impl ExternObject {
 
     /// Decodes an object from an `objectState` external value.
     pub fn from_value(
-        arena: &mut ValueArena,
+        arena: &mut Arena,
         encoding: Encoding,
         value: &Value,
     ) -> Result<Self, ExternError> {
@@ -139,10 +135,8 @@ where
 {
     let encoding = ctx.external().encoding;
     let payload = encode_with(ctx.arena(), encoding, &())?;
-    let typ = typ::make::var(
-        crate::phrase!(node: "archState".to_owned(), span: Span::default()),
-        Vec::new(),
-    );
+    let typ =
+        typ::make::var(crate::phrase!(node: "archState".into(), span: Span::default()), Vec::new());
     Ok(make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())?)
 }
 
@@ -169,7 +163,7 @@ where
     } else {
         let payload = encode_with(ctx.arena(), encoding, &())?;
         let typ = typ::make::var(
-            crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
+            crate::phrase!(node: "objectState".into(), span: Span::default()),
             Vec::new(),
         );
         make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())?
@@ -210,7 +204,7 @@ where
 
 /// Builds the error naming an unsupported method call.
 fn unsupported_method(
-    arena: &ValueArena,
+    arena: &Arena,
     value_id: Value,
     name: &str,
     names: &[String],

@@ -10,7 +10,7 @@
 use std::{borrow::Cow, rc::Rc};
 
 use crate::lang::{
-    data::value::{Value, ValueArena, ValueKind},
+    data::value::{Arena, Value, ValueKind},
     hints::input,
 };
 
@@ -57,7 +57,7 @@ enum RelResult {
 
 /// Checks the input count and, with `guard`, the input types.
 pub(in crate::interp::sl) fn check_rel_inputs(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     values: &[Value],
@@ -70,7 +70,7 @@ pub(in crate::interp::sl) fn check_rel_inputs(
         ast::RelDef::Defined(rel) => (&rel.rel_signature.not_typ, &rel.rel_signature.input_hint),
     };
     // Always check the input count, even without type guards
-    unwrap!(backtrack::check(inputs.indices().len() == values.len(), id.span.clone(), || {
+    unwrap!(backtrack::check(inputs.indices().len() == values.len(), id.span, || {
         error::guard::relation_input_arity_mismatch(inputs.indices().len(), values.len())
     }));
     if !guard {
@@ -84,13 +84,13 @@ pub(in crate::interp::sl) fn check_rel_inputs(
         .map(|idx| typs[idx.node].clone())
         .collect::<Vec<_>>();
     check_values(arena, ctx, id, &typs, values, || {
-        error::guard::relation_input_type_mismatch(id.node.clone())
+        error::guard::relation_input_type_mismatch(id.node.to_string())
     })
 }
 
 /// Checks argument counts and, with `guard`, the argument types.
 pub(in crate::interp::sl) fn check_func_inputs(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
@@ -99,10 +99,10 @@ pub(in crate::interp::sl) fn check_func_inputs(
 ) -> Backtrack<()> {
     let typ = unwrap_from_result!(ctx.find_func_typ(id), &id.span);
     // Check type and value argument counts before binding them
-    unwrap!(backtrack::check(typ.tparams.len() == targs.len(), id.span.clone(), || {
+    unwrap!(backtrack::check(typ.tparams.len() == targs.len(), id.span, || {
         error::call::type_argument_arity_mismatch(typ.tparams.len(), targs.len())
     }));
-    unwrap!(backtrack::check(typ.typs_params.len() == values.len(), id.span.clone(), || {
+    unwrap!(backtrack::check(typ.typs_params.len() == values.len(), id.span, || {
         error::guard::function_input_arity_mismatch(typ.typs_params.len(), values.len())
     }));
     if !guard {
@@ -112,13 +112,13 @@ pub(in crate::interp::sl) fn check_func_inputs(
     let ctx_local = unwrap!(assign_tparams(ctx.localize(), &typ.tparams, targs, &id.span));
     // Parameter types resolve against the bound type parameters
     check_values(arena, &ctx_local, id, &typ.typs_params, values, || {
-        error::guard::function_input_type_mismatch(id.node.clone())
+        error::guard::function_input_type_mismatch(id.node.to_string())
     })
 }
 
 /// Checks each value against its type, failing with `error`.
 fn check_values(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     typs: &[ast::Typ],
@@ -128,7 +128,7 @@ fn check_values(
     // Subtyping resolves type names and function types through the context
     let find_typdef_opt = |id: &ast::Id| ctx.find_typdef_opt(id);
     let find_func = |name: &str| {
-        let id = crate::phrase!(node: name.to_owned(), span: id.span.clone());
+        let id = crate::phrase!(node: name.into(), span: id.span);
         ctx.find_func_typ(&id).ok()
     };
     // Check all values against their types at once
@@ -136,12 +136,12 @@ fn check_values(
         value::subs(arena, &find_typdef_opt, &find_func, typs, values),
         &id.span
     );
-    backtrack::check(matches, id.span.clone(), diagnostic)
+    backtrack::check(matches, id.span, diagnostic)
 }
 
 /// Type-checks a function result with the type parameters substituted.
 fn check_func_output(
-    arena: &ValueArena,
+    arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
     tparams: &[ast::TParam],
@@ -154,38 +154,8 @@ fn check_func_output(
     let typ = unwrap_from_result!(typ::subst_typ(&|id| theta.get(id), typ), &id.span);
     // Check the single result
     check_values(arena, ctx, id, &[typ], std::slice::from_ref(value), || {
-        error::guard::function_output_type_mismatch(id.node.clone())
+        error::guard::function_output_type_mismatch(id.node.to_string())
     })
-}
-
-// = Cache eligibility
-
-/// Whether a relation call may be memoized: caching on, relation defined.
-pub(in crate::interp::sl) fn cache_rel<Iface: Interface, Ext: Extern>(
-    runner_ctx: &RunnerContext<'_, SlInterp, Iface, Ext>,
-    ctx: &Context<'_>,
-    id: &ast::Id,
-) -> bool {
-    runner_ctx.interp().config.cache
-        && matches!(ctx.find_rel(id), Ok(rel) if matches!(&rel.def, ast::RelDef::Defined(_)))
-}
-
-/// Whether a function call may be memoized.
-///
-/// Requires caching on, a global non-extern function,
-/// and no function-valued argument.
-pub(in crate::interp::sl) fn cache_func<Iface: Interface, Ext: Extern>(
-    runner_ctx: &RunnerContext<'_, SlInterp, Iface, Ext>,
-    ctx: &Context<'_>,
-    id: &ast::Id,
-    values: &[Value],
-) -> bool {
-    runner_ctx.interp().config.cache
-        && matches!(ctx.find_func_with_scope(id), Ok((Scope::Global, func))
-            if !matches!(&func.def, ast::MetaFuncDef::Extern(_)))
-        && !values
-            .iter()
-            .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
 }
 
 // = Relation invocation
@@ -202,7 +172,9 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
     let mut ids_pending: Vec<ast::Id> = Vec::new();
     loop {
         // Serve from the cache when eligible
-        let cache = cache_rel(runner_ctx, ctx, &id);
+        let rel = ctx.find_rel(&id);
+        let cache = runner_ctx.interp().config.cache
+            && matches!(&rel, Ok(rel) if matches!(&rel.def, ast::RelDef::Defined(_)));
         if cache
             && let Some(values) =
                 runner_ctx
@@ -212,11 +184,10 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
         {
             return ok!(values.clone());
         }
-        let key = cache.then(|| CallKey::new(runner_ctx.arena(), &id.node, &values));
         // Track effects for memoization; grow the stack for deep recursion
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            let rel = unwrap_from_result!(ctx.find_rel(&id), &id.span);
+            let rel = unwrap_from_result!(rel, &id.span);
             let layout = &rel.layout;
             match &rel.def {
                 ast::RelDef::Extern(rel) => {
@@ -230,27 +201,26 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
         });
         // Nest failures under this call and then under the tail-calling callers
         let pure = runner_ctx.interp_mut().cache.end();
-        let mut result =
-            result.with_frame(id.span.clone(), || error::trace::message_rel_invocation(&id));
+        let mut result = result.with_frame(id.span, || error::trace::message_rel_invocation(&id));
         if result.is_err() {
             for id in ids_pending.iter().rev() {
-                result =
-                    result.with_frame(id.span.clone(), || error::trace::message_rel_invocation(id));
+                result = result.with_frame(id.span, || error::trace::message_rel_invocation(id));
             }
         }
         // Fatal errors and mismatches leave the loop here
         let result = unwrap!(result);
         match result {
             // Memoize a pure result
-            RelResult::Result(values) => {
-                if pure && let Some(key) = key {
+            RelResult::Result(values_output) => {
+                if pure && cache {
+                    let key = CallKey::new(runner_ctx.arena(), &id.node, &values);
                     runner_ctx
                         .interp_mut()
                         .cache
                         .rels
-                        .insert(key, values.clone());
+                        .insert(key, values_output.clone());
                 }
-                return ok!(values);
+                return ok!(values_output);
             }
             // Tail call: remember this callee for the trace and loop
             RelResult::TailCall(id_tail, values_tail) => {
@@ -283,23 +253,16 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
     // Check the number of extern outputs before assigning them
     let len =
         rel.rel_signature.not_typ.node.args().len() - rel.rel_signature.input_hint.indices().len();
-    unwrap!(backtrack::check(len == values.len(), id.span.clone(), || {
+    unwrap!(backtrack::check(len == values.len(), id.span, || {
         error::guard::relation_output_arity_mismatch(len, values.len())
     }));
     if runner_ctx.interp().config.guard {
         // Output types are the notation arguments the hint leaves
-        let typs = rel
-            .rel_signature
-            .not_typ
-            .node
-            .args()
-            .into_iter()
-            .cloned()
-            .collect();
+        let typs = rel.rel_signature.not_typ.node.args().to_vec();
         let (_, typs) = input::split(&rel.rel_signature.input_hint, typs)
             .expect("input hint must fit relation");
         unwrap!(check_values(runner_ctx.arena(), ctx, id, &typs, &values, || {
-            error::guard::relation_output_type_mismatch(id.node.clone())
+            error::guard::relation_output_type_mismatch(id.node.to_string())
         }));
     }
     ok!(values)
@@ -360,7 +323,12 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
     let mut calls_pending: Vec<(ast::Id, Vec<ast::Typ>)> = Vec::new();
     loop {
         // Serve from the cache when eligible
-        let cache = cache_func(runner_ctx, ctx, &id, &values);
+        let func = ctx.find_func_with_scope(&id);
+        let cache = runner_ctx.interp().config.cache
+            && matches!(&func, Ok((Scope::Global, func)) if !matches!(&func.def, ast::MetaFuncDef::Extern(_)))
+            && !values
+                .iter()
+                .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)));
         if cache
             && let Some(value) =
                 runner_ctx
@@ -370,11 +338,10 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         {
             return ok!(*value);
         }
-        let key = cache.then(|| CallKey::new(runner_ctx.arena(), &id.node, &values));
         // Track effects for memoization; grow the stack for deep recursion
         runner_ctx.interp_mut().cache.begin();
         let result = stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
-            let func = unwrap_from_result!(ctx.find_func(&id), &id.span);
+            let (_, func) = unwrap_from_result!(func, &id.span);
             let layout = &func.layout;
             match &func.def {
                 ast::MetaFuncDef::Extern(func) => ok!(FuncResult::Return(unwrap!(
@@ -393,13 +360,12 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         });
         // Nest failures under this call and then under the tail-calling callers
         let pure = runner_ctx.interp_mut().cache.end();
-        let mut result = result
-            .with_frame(id.span.clone(), || error::trace::message_func_invocation(&id, &targs));
+        let mut result =
+            result.with_frame(id.span, || error::trace::message_func_invocation(&id, &targs));
         if result.is_err() {
             for (id, targs) in calls_pending.iter().rev() {
-                result = result.with_frame(id.span.clone(), || {
-                    error::trace::message_func_invocation(id, targs)
-                });
+                result =
+                    result.with_frame(id.span, || error::trace::message_func_invocation(id, targs));
             }
         }
         // Fatal errors and mismatches leave the loop here
@@ -407,7 +373,8 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
         match result {
             // Memoize a pure result
             FuncResult::Return(value) => {
-                if pure && let Some(key) = key {
+                if pure && cache {
+                    let key = CallKey::new(runner_ctx.arena(), &id.node, &values);
                     runner_ctx.interp_mut().cache.funcs.insert(key, value);
                 }
                 return ok!(value);

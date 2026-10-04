@@ -8,7 +8,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, ValueArena, make},
+        value::{Arena, Value, make},
     },
 };
 
@@ -40,11 +40,7 @@ impl CounterArray {
     /// ```p4
     /// CounterArray(bit<32> max_index, bool sparse);
     /// ```
-    pub fn init(
-        arena: &ValueArena,
-        value_ids: Value,
-        value_args: Value,
-    ) -> Result<Self, ExternError> {
+    pub fn init(arena: &Arena, value_ids: Value, value_args: Value) -> Result<Self, ExternError> {
         let args = args::assoc(arena, value_ids, value_args)?;
         let value_max = args::find(&args, "max_index")?;
         let value_sparse = args::find(&args, "sparse")?;
@@ -128,7 +124,7 @@ impl CounterArray {
         // Create call result
         // Return without a value
         let typ = typ::make::opt(typ::make::var(
-            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            crate::phrase!(node: "value".into(), span: Span::default()),
             Vec::new(),
         ));
         let value_opt = make::opt(ctx.arena_mut(), typ.node.into(), None, Span::default())?;

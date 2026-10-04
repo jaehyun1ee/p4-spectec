@@ -12,7 +12,7 @@ use crate::lang::{
     data::{
         typ,
         value::{
-            Value, ValueArena,
+            Arena, Value,
             external::{DecodeContext, EncodeContext, Encoding, decode_with, encode_with},
             get, make,
         },
@@ -39,14 +39,10 @@ pub struct Arch {
 
 impl Arch {
     /// Encodes the state as the specification's `archState` external value.
-    pub fn to_value(
-        &self,
-        arena: &mut ValueArena,
-        encoding: Encoding,
-    ) -> Result<Value, ExternError> {
+    pub fn to_value(&self, arena: &mut Arena, encoding: Encoding) -> Result<Value, ExternError> {
         let payload = encode_with(arena, encoding, self).map_err(ExternError::from)?;
         let typ = typ::make::var(
-            crate::phrase!(node: "archState".to_owned(), span: Span::default()),
+            crate::phrase!(node: "archState".into(), span: Span::default()),
             Vec::new(),
         );
         Ok(make::external(arena, typ.node.into(), payload.into(), Span::default())?)
@@ -54,7 +50,7 @@ impl Arch {
 
     /// Decodes the state from an `archState` external value.
     pub fn from_value(
-        arena: &mut ValueArena,
+        arena: &mut Arena,
         encoding: Encoding,
         value: &Value,
     ) -> Result<Self, ExternError> {

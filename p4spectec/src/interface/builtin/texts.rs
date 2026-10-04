@@ -10,7 +10,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, ValueArena, get, make},
+        value::{Arena, Value, get, make},
     },
     traits::print::Print,
 };
@@ -22,12 +22,12 @@ use super::{BuiltinError, extract};
 // == Conversion between runtime values and text
 
 /// The text in a text value.
-fn text_of_value<'a>(arena: &'a ValueArena, value: &Value) -> Result<&'a str, BuiltinError> {
+fn text_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a str, BuiltinError> {
     get::text(arena, value).map_err(BuiltinError::from)
 }
 
 /// A number value printed as text.
-fn numeric_text(arena: &ValueArena, value: &Value) -> Result<String, BuiltinError> {
+fn numeric_text(arena: &Arena, value: &Value) -> Result<String, BuiltinError> {
     let num = get::num(arena, value).map_err(BuiltinError::from)?;
     Ok(Print::to_string(num))
 }
@@ -37,7 +37,7 @@ fn numeric_text(arena: &ValueArena, value: &Value) -> Result<String, BuiltinErro
 /// `dec $text_to_int(text) : int`,
 /// an optionally signed integer in decimal, `0x`, `0o`, or `0b`.
 pub fn text_to_int(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     targs: &[Typ],
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
@@ -77,7 +77,7 @@ pub fn text_to_int(
 
 /// `dec $int_to_text(int) : text`, the number printed.
 pub fn int_to_text(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     targs: &[Typ],
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
@@ -91,7 +91,7 @@ pub fn int_to_text(
 /// `dec $split_text(text, text) : text*`,
 /// the pieces between a one-byte separator.
 pub fn split_text(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     targs: &[Typ],
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
@@ -117,7 +117,7 @@ pub fn split_text(
 /// `dec $strip_prefix(text, text) : text`,
 /// the text without its prefix, which must be present.
 pub fn strip_prefix(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     targs: &[Typ],
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
@@ -137,7 +137,7 @@ pub fn strip_prefix(
 /// `dec $strip_suffix(text, text) : text`,
 /// the text without its suffix, which must be present.
 pub fn strip_suffix(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     targs: &[Typ],
     values: &[Value],
 ) -> Result<Value, BuiltinError> {
@@ -156,7 +156,7 @@ pub fn strip_suffix(
 
 /// `dec $strip_all_whitespace(text) : text`, the text without spaces.
 pub fn strip_all_whitespace(
-    arena: &mut ValueArena,
+    arena: &mut Arena,
     targs: &[Typ],
     values: &[Value],
 ) -> Result<Value, BuiltinError> {

@@ -10,7 +10,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, ValueArena, make},
+        value::{Arena, Value, make},
     },
 };
 
@@ -34,7 +34,7 @@ impl HashExtern {
     /// Hash(PSA_HashAlgorithm_t algo);
     /// ```
     pub fn init(
-        arena: &ValueArena,
+        arena: &Arena,
         _value_targs: Value,
         value_ids: Value,
         value_args: Value,
@@ -135,7 +135,7 @@ impl HashExtern {
         let value_result = pack::p4_arbitrary_int(ctx.arena_mut(), int_hash)?;
         let value_result = func::cast_op(ctx, value_typ, value_result)?;
         let typ = typ::make::opt(typ::make::var(
-            crate::phrase!(node: "value".to_owned(), span: Span::default()),
+            crate::phrase!(node: "value".into(), span: Span::default()),
             Vec::new(),
         ));
         let value_opt =

@@ -3,14 +3,49 @@
 //! `find_var_of_exp` maps `x*` used as an expression back to the slot of the iterated
 //! variable; `iterate_vars` computes the slots one iteration outward.
 
-use crate::lang::data::var::{SlotIdx, Var, VarSlot};
+use crate::lang::data::{
+    typ,
+    value::TypeNote,
+    var::{SlotIdx, Var, VarSlot},
+};
 
 use super::{context::ReadContext, prepare::ast};
 
-/// Advances prepared variables through one iterator dimension.
-pub fn iterate_vars(ctx: &impl ReadContext, vars: &[ast::Var], iter: ast::Iter) -> Vec<ast::Var> {
+/// A variable borrowed one iteration outward, with its resolved slot.
+#[derive(Clone, Copy, Debug)]
+pub struct VarIter<'a> {
+    /// Prepared slot one iteration outward.
+    pub slot: SlotIdx,
+    /// Inner variable whose type and iteration path are borrowed.
+    var: &'a VarSlot,
+    /// The additional iteration around the inner type.
+    iter: ast::Iter,
+}
+
+impl VarIter<'_> {
+    /// Chooses an annotation recipe without reserving an arena identity yet.
+    pub(crate) fn note(&self, ctx: &impl ReadContext) -> TypeNote {
+        match ctx.find_iterated_type_template(self.var, self.iter) {
+            Some(typ_template) => TypeNote::FreshClone(typ_template.clone()),
+            None => TypeNote::Shared(self.typ().node.into()),
+        }
+    }
+
+    /// Builds the outer type only when an output value needs it.
+    pub fn typ(&self) -> ast::Typ {
+        let typ = typ::make::iterate(self.var.var.typ.clone(), &self.var.var.iters);
+        typ::make::iterate(typ, &[self.iter])
+    }
+}
+
+/// Advances slots while borrowing the variables' types and iteration paths.
+pub fn iterate_vars<'a>(
+    ctx: &impl ReadContext,
+    vars: &'a [ast::Var],
+    iter: ast::Iter,
+) -> Vec<VarIter<'a>> {
     vars.iter()
-        .map(|var| ctx.find_var_iterated(var, iter))
+        .map(|var| VarIter { slot: ctx.find_slot_iterated(var, iter), var, iter })
         .collect()
 }
 
@@ -40,7 +75,7 @@ pub fn find_var_of_exp(ctx: &impl ReadContext, exp: &ast::Exp) -> Option<VarSlot
             slot: id.slot,
             var: Var {
                 id: id.id.clone(),
-                typ: crate::phrase!(node: exp.note.as_ref().clone(), span: exp.span.clone()),
+                typ: crate::phrase!(node: exp.note.as_ref().clone(), span: exp.span),
                 iters: vec![],
             },
         }),
