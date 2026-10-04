@@ -29,6 +29,11 @@ use p4spectec::{
 
 /// Loads a checked list map with additional constructor shapes for comparison.
 fn fixture(deep: bool, missing: bool, empty_vars: bool, direct: bool) -> Global {
+    Global::load(fixture_spec(deep, missing, empty_vars, direct)).unwrap()
+}
+
+/// Builds source syntax while preserving shared annotations when it is cloned.
+fn fixture_spec(deep: bool, missing: bool, empty_vars: bool, direct: bool) -> sl_source::Spec {
     let mut spec = super::support::sl_spec(
         "var x : nat\nvar y : nat\ndec $fixture(nat*, nat*) : (nat, nat)*\ndef $fixture(x*, y*) = (x, y)*\n",
     );
@@ -104,7 +109,7 @@ fn fixture(deep: bool, missing: bool, empty_vars: bool, direct: bool) -> Global 
             exp_iter.vars.clear();
         }
     }
-    Global::load(spec).unwrap()
+    spec
 }
 
 /// Resolves the fixture's existing outer-scope binding without changing its layout.
@@ -518,4 +523,128 @@ fn fixed_case_metadata_preserves_fresh_types_and_preinterned_rows() {
     }
     assert_ne!(notes[0], notes[1]);
     assert_eq!(notes[0], notes[2]);
+}
+
+#[test]
+fn case_map_hints_recheck_later_rows_when_column_mappings_share_the_first_row() {
+    let mut spec = fixture_spec(false, false, false, true);
+    let mut def = spec
+        .iter()
+        .find(|def| {
+            matches!(def.node, sl_source::DefKind::MetaFunc(sl_source::MetaFuncDef::Defined(_)))
+        })
+        .unwrap()
+        .clone();
+    let sl_source::DefKind::MetaFunc(sl_source::MetaFuncDef::Defined(func)) = &mut def.node else {
+        unreachable!()
+    };
+    func.id.node = Rc::from("swapped");
+    let sl_source::InstrKind::If(instr_if) = &mut func.block[0].node else { unreachable!() };
+    let sl_source::InstrKind::Return(instr_return) = &mut instr_if.block[0].node else {
+        unreachable!()
+    };
+    let source::ExpKind::Iter(exp_inner, _) = &mut instr_return.exp.node else { unreachable!() };
+    let source::ExpKind::Case(not_exp) = &mut exp_inner.node else { unreachable!() };
+    not_exp.args_mut().swap(0, 1);
+    spec.push(def);
+    let global = Global::load(spec).unwrap();
+    let ctx_root = Context::new(&global);
+    let mut runner =
+        runner::build_sl(vec![], Config::new(false, false, false), NullExtern).unwrap();
+    let mut runner_reference =
+        runner::build_sl(vec![], Config::new(false, false, false), NullExtern).unwrap();
+    // Reset discards prior hints, and zero or one row needs no later-row lookup
+    for len in [7, 0, 1, 7] {
+        runner.reset();
+        runner_reference.reset();
+        let columns = |arena: &mut Arena| {
+            let mut values = inputs(arena, [len, len]);
+            if len > 0 {
+                let value_head =
+                    p4spectec::lang::data::value::get::list(arena, &values[0]).unwrap()[0];
+                let mut values_col = p4spectec::lang::data::value::get::list(arena, &values[1])
+                    .unwrap()
+                    .to_vec();
+                values_col[0] = value_head;
+                let typ = arena.typ(&values[1]).clone();
+                values[1] = make::list(arena, typ, values_col, Span::default()).unwrap();
+            }
+            values
+        };
+        let values_input = columns(runner.arena_mut());
+        assert_eq!(values_input, columns(runner_reference.arena_mut()));
+        let mut outputs = Vec::new();
+        // Reuse the same columns and type identities across both column mappings
+        for (name, num_outer) in [
+            ("fixture", 999),
+            ("fixture", 999),
+            ("swapped", 999),
+            ("fixture", 999),
+            ("fixture", 1000),
+            ("swapped", 1000),
+            ("fixture", 999),
+        ] {
+            let id = phrase!(node: Rc::from(name), span: Span::default());
+            let func = ctx_root.find_func(&id).unwrap();
+            let ast::MetaFuncDef::Defined(func_def) = &func.def else { unreachable!() };
+            let ast::InstrKind::If(instr_if) = &func_def.block[0].node else { unreachable!() };
+            let instr = &instr_if.block[0];
+            let ast::InstrKind::Return(instr_return) = &instr.node else { unreachable!() };
+            let ast::ExpKind::Iter(_, exp_iter) = &instr_return.exp.node else { unreachable!() };
+            let value_outer =
+                make::nat(runner.arena_mut(), (num_outer as u64).into(), Span::default()).unwrap();
+            assert_eq!(
+                value_outer,
+                make::nat(runner_reference.arena_mut(), (num_outer as u64).into(), Span::default())
+                    .unwrap()
+            );
+            let mut ctx = ctx_root.localize_with_layout(&func.layout);
+            ctx.add_value_at_slot(outer_slot(func), value_outer);
+            for (col, var) in exp_iter.vars.iter().enumerate() {
+                ctx.add_value_at_slot(
+                    ctx.find_slot_iterated(var, Iter::List),
+                    values_input[col % 2],
+                );
+            }
+            let instr_reference = instr.clone();
+            assert!(ctx.find_construct_plan(&instr_return.exp).is_some());
+            let Flow::Return(value) =
+                eval_instr(&mut runner.context(), Cow::Borrowed(&ctx), instr, false).unwrap()
+            else {
+                unreachable!()
+            };
+            let Flow::Return(value_reference) = eval_instr(
+                &mut runner_reference.context(),
+                Cow::Borrowed(&ctx),
+                &instr_reference,
+                false,
+            )
+            .unwrap() else {
+                unreachable!()
+            };
+            let values = handles(runner.arena(), value.node);
+            assert_eq!(values, handles(runner_reference.arena(), value_reference.node));
+            for value in &values {
+                assert_eq!(runner.arena().typ(value), runner_reference.arena().typ(value));
+                assert_eq!(runner.arena().span(value), runner_reference.arena().span(value));
+            }
+            outputs.push(
+                p4spectec::lang::data::value::get::list(runner.arena(), &value.node)
+                    .unwrap()
+                    .to_vec(),
+            );
+            let sentinel = |arena: &mut Arena| {
+                make::tuple(arena, typ::make::tuple(vec![]).node.into(), vec![], Span::default())
+                    .unwrap()
+            };
+            assert_eq!(sentinel(runner.arena_mut()), sentinel(runner_reference.arena_mut()));
+        }
+        if len > 1 {
+            assert_eq!(outputs[0][0], outputs[2][0]);
+            assert_ne!(outputs[0][1], outputs[2][1]);
+            assert_eq!(outputs[0], outputs[1]);
+            assert_eq!(outputs[0], outputs[3]);
+            assert_eq!(outputs[0], outputs[6]);
+        }
+    }
 }

@@ -14,7 +14,7 @@ use smallvec::SmallVec;
 use crate::lang::{
     common::{ds::map::IdMap, source::Span},
     data::{
-        value::{Arena, Value, get, make},
+        value::{Arena, Value, ValueArgs, get, make},
         var::{SlotIdx, VarSlot},
     },
 };
@@ -123,6 +123,15 @@ pub trait IterContext: WriteContext {
         arena: &'arena Arena,
         vars: &[VarIter<'_>],
     ) -> Result<Vec<&'arena [Value]>, Error>;
+
+    /// Optionally returns identities of already validated input lists.
+    ///
+    /// Called after `find_list_values_by_var` succeeds for these same variables.
+    /// This lookup must have no effects or additional failures;
+    /// returned lists must supply those columns in the same order.
+    fn find_list_handles_by_var(&self, _vars: &[VarIter<'_>]) -> Option<ValueArgs> {
+        None
+    }
 
     /// Finds the option values bound to `vars`, all present or all absent.
     fn find_opt_values_by_var(
@@ -609,6 +618,12 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
     // == Finders
 
     // - Values
+
+    fn find_list_handles_by_var(&self, vars: &[VarIter<'_>]) -> Option<ValueArgs> {
+        vars.iter()
+            .map(|var| self.find_value_at_slot(var.slot).copied())
+            .collect()
+    }
 
     fn find_list_values_by_var<'a>(
         &self,

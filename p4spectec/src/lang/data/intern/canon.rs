@@ -137,6 +137,32 @@ impl<T> CanonInterner<T> {
 // - Interning
 
 impl<T: Eq + Hash> CanonInterner<T> {
+    /// Checks an exact hint before falling back to ordinary query interning.
+    ///
+    /// Hints may be absent, stale, or from another interner.
+    /// Only an equivalent entry with a completed canonical identity is reused.
+    /// Query and construction obey the same contract as `intern_with`.
+    pub fn intern_with_hint<Ctx: ?Sized, Q: Hash + Equivalent<T>>(
+        &mut self,
+        query: Q,
+        ctx: &Ctx,
+        hint: Option<Interned<T>>,
+        make: impl FnOnce(Q) -> T,
+    ) -> Result<Interned<T>, TryFromIntError>
+    where
+        T: CanonEq<Ctx> + CanonHash<Ctx>,
+    {
+        // A hint must pass the complete exact comparison in this interner
+        if let Some(id) = hint
+            && (id.index as usize) < self.canon.len()
+            && query.equivalent(self.storage.get(id))
+        {
+            return Ok(id);
+        }
+        // Missing, incomplete, and unequal hints use common insertion
+        self.intern_with(query, ctx, make)
+    }
+
     /// Interns exactly, then assigns the canonical identity.
     ///
     /// Exact equality must imply canonical equality;

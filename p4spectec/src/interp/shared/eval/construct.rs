@@ -42,6 +42,7 @@ pub(crate) fn map(
     let len = values_by_var.first().map_or(0, Vec::len);
     let mut values = Vec::with_capacity(len);
     let mut stack = SmallVec::<[Value; 16]>::new();
+    let mut key_map = None;
     // Select the direct constructor once for the entire map
     if let Some(reads) = &plan.reads {
         let instr = plan.instrs.last().expect("a constructor plan is nonempty");
@@ -56,10 +57,19 @@ pub(crate) fn map(
                 )
                 .map_err(|error| with_frames(error, exp_inner, plan, plan.instrs.len() - 1))?;
                 values.push(value);
+                // Hints only serve later rows, after the first ordinary success
+                let mut node_list = None;
+                if len > 1
+                    && let Some(values_input) = ctx.find_list_handles_by_var(&vars_outer)
+                {
+                    let (key, node) = session.find_map_hint(value, &values_input);
+                    key_map = Some(key);
+                    node_list = node;
+                }
                 for (idx, _) in values_rows_tail.iter().enumerate() {
                     read_row(ctx, vars, reads, &values_by_var, idx + 1, &mut stack);
-                    let value =
-                        from_result(session.next(&stack), &instr.span).map_err(|error| {
+                    let value = from_result(session.next(&stack, node_list, idx + 1), &instr.span)
+                        .map_err(|error| {
                             with_frames(error, exp_inner, plan, plan.instrs.len() - 1)
                         })?;
                     values.push(value);
@@ -90,10 +100,14 @@ pub(crate) fn map(
             )));
         }
     }
-    ok!(unwrap_from_result!(
+    let value = unwrap_from_result!(
         make::list(arena, exp.note.clone(), values, Span::default()),
         &exp.span
-    ))
+    );
+    if let Some(key) = key_map {
+        arena.remember_case_map(key, value);
+    }
+    ok!(value)
 }
 
 /// Checks input slots and reads direct operands in their original order.

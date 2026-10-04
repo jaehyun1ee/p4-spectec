@@ -6,7 +6,9 @@
 //! Bodies are interned canonically, types by `Rc` identity, spans exactly;
 //! the default span is interned first so generated values share it.
 
-use std::rc::Rc;
+use std::{collections::HashMap, fmt, rc::Rc};
+
+use foldhash::fast::RandomState;
 
 use crate::lang::{
     common::source::Span,
@@ -22,6 +24,7 @@ use super::{
     error::ValueError,
     handle::{Value, ValueKind},
     primitive::Primitive,
+    session::CaseMapKey,
     view::ValueRef,
 };
 
@@ -34,12 +37,23 @@ pub(super) enum TypeNote {
 // = Arena storage
 
 /// Storage for the notation shapes and the values of one run.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Arena {
     /// Notation shapes of case bodies.
     pub(super) shape: ShapeArena,
     /// Value bodies, types, and spans.
     pub(super) value: ValueArena,
+    /// Completed output lists used only as validated case-body hints.
+    pub(super) case_maps: HashMap<CaseMapKey, Interned<ValueKind>, RandomState>,
+}
+
+impl fmt::Debug for Arena {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("Arena")
+            .field("shape", &self.shape)
+            .field("value", &self.value)
+            .finish()
+    }
 }
 
 /// Storage for value bodies, types, and spans.
@@ -112,16 +126,35 @@ impl Arena {
         span: Span,
         into_values: impl FnOnce(Values) -> Vec<Value>,
     ) -> Result<Value, ValueError> {
+        self.alloc_parts_note_hint(parts, note, span, None, into_values)
+    }
+
+    /// Validates a body hint while preserving ordinary type and span stages.
+    pub(super) fn alloc_parts_note_hint<Values: AsRef<[Value]>>(
+        &mut self,
+        parts: ValueParts<Values>,
+        note: TypeNote,
+        span: Span,
+        hint: Option<Interned<ValueKind>>,
+        into_values: impl FnOnce(Values) -> Vec<Value>,
+    ) -> Result<Value, ValueError> {
         let node = self
             .value
             .values
-            .intern_with(parts, &self.shape, |parts| parts.into_kind(&self.shape, into_values))?;
+            .intern_with_hint(parts, &self.shape, hint, |parts| {
+                parts.into_kind(&self.shape, into_values)
+            })?;
         let note = match note {
             TypeNote::Shared(typ) => self.value.types.intern(typ)?,
             TypeNote::Known(note) => note,
         };
         let span = self.value.spans.intern(span)?;
         Ok(Value { node, note, span })
+    }
+
+    /// Publishes hints only after the map's outer list has been interned.
+    pub(crate) fn remember_case_map(&mut self, key: CaseMapKey, value: Value) {
+        self.case_maps.insert(key, value.node);
     }
 
     /// Interns a borrowed primitive before cloning a new payload.
