@@ -11,7 +11,7 @@ use std::rc::Rc;
 use crate::lang::{
     common::source::Span,
     data::{
-        intern::{CanonId, CanonInterner, Interner, RcInterner},
+        intern::{CanonId, CanonInterner, Interned, Interner, RcInterner},
         notation::ShapeArena,
         typ::TypKind,
     },
@@ -24,6 +24,12 @@ use super::{
     primitive::Primitive,
     view::ValueRef,
 };
+
+/// Resolves a new annotation or reuses one retained by an exclusive session.
+pub(super) enum TypeNote {
+    Shared(Rc<TypKind>),
+    Known(Interned<TypKind>),
+}
 
 // = Arena storage
 
@@ -95,11 +101,25 @@ impl Arena {
         span: Span,
         into_values: impl FnOnce(Values) -> Vec<Value>,
     ) -> Result<Value, ValueError> {
+        self.alloc_parts_note(parts, TypeNote::Shared(typ), span, into_values)
+    }
+
+    /// Keeps body and span interning common when a session already owns the type.
+    pub(super) fn alloc_parts_note<Values: AsRef<[Value]>>(
+        &mut self,
+        parts: ValueParts<Values>,
+        note: TypeNote,
+        span: Span,
+        into_values: impl FnOnce(Values) -> Vec<Value>,
+    ) -> Result<Value, ValueError> {
         let node = self
             .value
             .values
             .intern_with(parts, &self.shape, |parts| parts.into_kind(&self.shape, into_values))?;
-        let note = self.value.types.intern(typ)?;
+        let note = match note {
+            TypeNote::Shared(typ) => self.value.types.intern(typ)?,
+            TypeNote::Known(note) => note,
+        };
         let span = self.value.spans.intern(span)?;
         Ok(Value { node, note, span })
     }

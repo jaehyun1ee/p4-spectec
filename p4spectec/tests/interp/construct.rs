@@ -171,8 +171,8 @@ fn inputs(arena: &mut Arena, lens: [usize; 2]) -> [Value; 2] {
     })
 }
 
-#[test]
-fn prepared_constructor_rows_keep_all_handles_after_moves_and_resets() {
+/// Compares repeated maps with fresh arenas or intervening allocations.
+fn compare_constructor_invocations(reset: bool) {
     for (deep, direct) in [(false, false), (true, false), (false, true), (true, true)] {
         for empty_vars in [false, true] {
             let global = fixture(deep, false, empty_vars, direct);
@@ -193,9 +193,11 @@ fn prepared_constructor_rows_keep_all_handles_after_moves_and_resets() {
                 runner::build_sl(vec![], Config::new(false, false, false), NullExtern).unwrap();
             let mut runner_reference =
                 runner::build_sl(vec![], Config::new(false, false, false), NullExtern).unwrap();
-            for len in [0, 1, 9] {
-                runner.reset();
-                runner_reference.reset();
+            for len in [0, 1, 9, 1] {
+                if reset {
+                    runner.reset();
+                    runner_reference.reset();
+                }
                 let values = inputs(runner.arena_mut(), [len, len]);
                 let values_reference = inputs(runner_reference.arena_mut(), [len, len]);
                 assert_eq!(values, values_reference);
@@ -263,6 +265,16 @@ fn prepared_constructor_rows_keep_all_handles_after_moves_and_resets() {
             }
         }
     }
+}
+
+#[test]
+fn prepared_constructor_rows_keep_all_handles_after_moves_and_resets() {
+    compare_constructor_invocations(true);
+}
+
+#[test]
+fn prepared_constructor_metadata_stays_local_to_each_map() {
+    compare_constructor_invocations(false);
 }
 
 #[test]
@@ -398,4 +410,112 @@ fn direct_constructor_rows_keep_empty_and_primitive_handles() {
             assert_eq!(outputs[0], outputs[1], "root {form}, rows {len}");
         }
     }
+}
+
+/// Reuses one arena across equal but independently prepared constructor syntax.
+#[test]
+fn fixed_case_metadata_preserves_fresh_types_and_preinterned_rows() {
+    let globals = [fixture(false, false, false, true), fixture(false, false, false, true)];
+    let mut runner =
+        runner::build_sl(vec![], Config::new(false, false, false), NullExtern).unwrap();
+    let mut runner_reference =
+        runner::build_sl(vec![], Config::new(false, false, false), NullExtern).unwrap();
+    let mut notes = Vec::new();
+    // The third call reuses the first allocation after visiting equal fresh syntax
+    for idx in [0, 1, 0] {
+        let ctx_root = Context::new(&globals[idx]);
+        let id = phrase!(node: Rc::from("fixture"), span: Span::default());
+        let func = ctx_root.find_func(&id).unwrap();
+        let ast::MetaFuncDef::Defined(func_def) = &func.def else { unreachable!() };
+        let ast::InstrKind::If(instr_if) = &func_def.block[0].node else { unreachable!() };
+        let instr = &instr_if.block[0];
+        let ast::InstrKind::Return(instr_return) = &instr.node else { unreachable!() };
+        let ast::ExpKind::Iter(exp_inner, exp_iter) = &instr_return.exp.node else {
+            unreachable!()
+        };
+        let ast::ExpKind::Case(not_exp) = &exp_inner.node else { unreachable!() };
+        let values = inputs(runner.arena_mut(), [3, 3]);
+        assert_eq!(values, inputs(runner_reference.arena_mut(), [3, 3]));
+        let value_outer = make::nat(runner.arena_mut(), 999_u64.into(), Span::default()).unwrap();
+        assert_eq!(
+            value_outer,
+            make::nat(runner_reference.arena_mut(), 999_u64.into(), Span::default()).unwrap()
+        );
+        let mut ctx = ctx_root.localize_with_layout(&func.layout);
+        ctx.add_value_at_slot(outer_slot(func), value_outer);
+        let mut ctx_row = ctx.clone();
+        for (col, var) in exp_iter.vars.iter().enumerate() {
+            let value = values[col % 2];
+            ctx.add_value_at_slot(ctx.find_slot_iterated(var, Iter::List), value);
+            let value = p4spectec::lang::data::value::get::list(runner.arena(), &value).unwrap()[0];
+            ctx_row.add_value_at_slot(var.slot, value);
+        }
+        // Seed the first exact body, shape and type before either map starts
+        let values_row: Vec<_> = not_exp
+            .args()
+            .iter()
+            .map(|exp| {
+                let ast::ExpKind::Id(id) = &exp.node else { unreachable!() };
+                *ctx_row.find_value_at_slot(id.slot).unwrap()
+            })
+            .collect();
+        let value_seed = make::case_from_slice(
+            runner.arena_mut(),
+            exp_inner.note.clone(),
+            not_exp.mixop(),
+            &values_row,
+            Span::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            value_seed,
+            make::case_from_slice(
+                runner_reference.arena_mut(),
+                exp_inner.note.clone(),
+                not_exp.mixop(),
+                &values_row,
+                Span::default()
+            )
+            .unwrap()
+        );
+        let instr_reference = instr.clone();
+        let ast::InstrKind::Return(instr_return_reference) = &instr_reference.node else {
+            unreachable!()
+        };
+        assert!(ctx.find_construct_plan(&instr_return.exp).is_some());
+        assert!(
+            ctx.find_construct_plan(&instr_return_reference.exp)
+                .is_none()
+        );
+        let Flow::Return(value) =
+            eval_instr(&mut runner.context(), Cow::Borrowed(&ctx), instr, false).unwrap()
+        else {
+            unreachable!()
+        };
+        let Flow::Return(value_reference) = eval_instr(
+            &mut runner_reference.context(),
+            Cow::Borrowed(&ctx),
+            &instr_reference,
+            false,
+        )
+        .unwrap() else {
+            unreachable!()
+        };
+        assert_eq!(
+            handles(runner.arena(), value.node),
+            handles(runner_reference.arena(), value_reference.node)
+        );
+        let value_row =
+            p4spectec::lang::data::value::get::list(runner.arena(), &value.node).unwrap()[0];
+        assert_eq!(value_row, value_seed);
+        notes.push(value_row.note);
+        // A new annotation after the map exposes any shifted handle numbering
+        let sentinel = |arena: &mut Arena| {
+            make::tuple(arena, Rc::new(typ::make::tuple(vec![]).node), vec![], Span::default())
+                .unwrap()
+        };
+        assert_eq!(sentinel(runner.arena_mut()), sentinel(runner_reference.arena_mut()));
+    }
+    assert_ne!(notes[0], notes[1]);
+    assert_eq!(notes[0], notes[2]);
 }

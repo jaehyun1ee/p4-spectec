@@ -17,6 +17,7 @@ mod handle;
 pub mod make;
 mod node;
 mod primitive;
+mod session;
 pub mod tree;
 mod view;
 
@@ -25,5 +26,6 @@ pub use args::ValueArgs;
 pub use error::ValueError;
 pub use handle::{Handle, Value, ValueCase, ValueField, ValueKind};
 pub use node::{ValueNode, ValueRepr, ValueTag};
+pub(crate) use session::CaseSession;
 pub use tree::Tree;
 pub use view::ValueRef;

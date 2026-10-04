@@ -7,7 +7,7 @@ use smallvec::SmallVec;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Arena, Value, ValueError, make},
+    data::value::{Arena, CaseSession, Value, ValueError, make},
     traits::print::Print,
 };
 
@@ -46,25 +46,32 @@ pub(crate) fn map(
     if let Some(reads) = &plan.reads {
         let instr = plan.instrs.last().expect("a constructor plan is nonempty");
         let values_rows = values_by_var.first().map_or(&[][..], Vec::as_slice);
-        for (idx, _) in values_rows.iter().enumerate() {
-            // Check every input slot before reading the constructor operands
-            for var in vars {
-                let _ = ctx.find_value_at_slot(var.slot);
-            }
-            stack.clear();
-            // Preserve left-to-right reads, including unbound caller slots
-            for read in reads {
-                let value = match read {
-                    ConstructRead::Slot(slot) => {
-                        *ctx.find_value_at_slot(*slot).expect("value must be bound")
-                    }
-                    ConstructRead::Column(col) => values_by_var[*col][idx],
-                };
-                stack.push(value);
-            }
-            let value = from_result(eval_constructor(arena, instr, &stack), &instr.span)
+        // One fixed case can retain metadata after its first complete success
+        if let ConstructOp::Case(mixop, _) = &instr.op {
+            if let Some((_, values_rows_tail)) = values_rows.split_first() {
+                read_row(ctx, vars, reads, &values_by_var, 0, &mut stack);
+                let (mut session, value) = from_result(
+                    CaseSession::start(arena, instr.typ.clone(), mixop, &stack),
+                    &instr.span,
+                )
                 .map_err(|error| with_frames(error, exp_inner, plan, plan.instrs.len() - 1))?;
-            values.push(value);
+                values.push(value);
+                for (idx, _) in values_rows_tail.iter().enumerate() {
+                    read_row(ctx, vars, reads, &values_by_var, idx + 1, &mut stack);
+                    let value =
+                        from_result(session.next(&stack), &instr.span).map_err(|error| {
+                            with_frames(error, exp_inner, plan, plan.instrs.len() - 1)
+                        })?;
+                    values.push(value);
+                }
+            }
+        } else {
+            for (idx, _) in values_rows.iter().enumerate() {
+                read_row(ctx, vars, reads, &values_by_var, idx, &mut stack);
+                let value = from_result(eval_constructor(arena, instr, &stack), &instr.span)
+                    .map_err(|error| with_frames(error, exp_inner, plan, plan.instrs.len() - 1))?;
+                values.push(value);
+            }
         }
     } else {
         for idx in 0..len {
@@ -87,6 +94,32 @@ pub(crate) fn map(
         make::list(arena, exp.note.clone(), values, Span::default()),
         &exp.span
     ))
+}
+
+/// Checks input slots and reads direct operands in their original order.
+fn read_row(
+    ctx: &impl ReadContext,
+    vars: &[ast::Var],
+    reads: &[ConstructRead],
+    values_by_var: &[Vec<Value>],
+    idx: usize,
+    stack: &mut SmallVec<[Value; 16]>,
+) {
+    // Check every input slot before reading the constructor operands
+    for var in vars {
+        let _ = ctx.find_value_at_slot(var.slot);
+    }
+    stack.clear();
+    // Preserve left-to-right reads, including unbound caller slots
+    for read in reads {
+        let value = match read {
+            ConstructRead::Slot(slot) => {
+                *ctx.find_value_at_slot(*slot).expect("value must be bound")
+            }
+            ConstructRead::Column(col) => values_by_var[*col][idx],
+        };
+        stack.push(value);
+    }
 }
 
 /// Evaluates reads and constructors with one operand stack reused across rows.
