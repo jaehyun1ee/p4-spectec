@@ -8,7 +8,7 @@ use serde_derive_state::{DeserializeState, SerializeState};
 use crate::lang::data::{
     arena::Arena,
     value::{
-        Value,
+        ValueFlat,
         external::{DecodeContext, EncodeContext},
     },
 };
@@ -38,9 +38,9 @@ impl CloneInfo {
     /// Reads the clone type, session, and field-list index from the arguments.
     pub fn new(
         arena: &Arena,
-        value_clone_type: &Value,
-        value_session: &Value,
-        value_idx: &Value,
+        value_clone_type: &ValueFlat,
+        value_session: &ValueFlat,
+        value_idx: &ValueFlat,
     ) -> Result<Self, ExternError> {
         let (_, name) = unpack::p4_enum(arena, value_clone_type)?;
         let clone_type = match name.as_str() {
@@ -91,7 +91,7 @@ pub enum Entrypoint {
 pub struct Packet {
     /// Evaluation context.
     #[serde(state)]
-    pub value_ctx: Value,
+    pub value_ctx: ValueFlat,
     /// Packet input.
     pub packet_in: PacketIn,
     /// Block to resume after parser and verify have already run.

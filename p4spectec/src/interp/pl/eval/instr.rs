@@ -9,7 +9,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, get},
+    data::value::{ValueFlat, get},
     hints::input,
     traits::print::Print,
 };
@@ -344,7 +344,7 @@ fn eval_case_instr<'global, Tier, Iface: Interface, Ext: Extern>(
 fn eval_guard<'global, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, PlInterp, Iface, Ext>,
     ctx: Context<'global>,
-    value: Value,
+    value: ValueFlat,
     guard: &ast::Guard,
 ) -> Backtrack<Option<Context<'global>>> {
     // Test the scrutinee before introducing checked bindings
@@ -685,7 +685,10 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
                 &Span::default()
             );
             // Copy handles before the callback can allocate in the arena
-            let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
+            let values_by_var: Vec<_> = values_by_var
+                .into_iter()
+                .map(<[ValueFlat]>::to_vec)
+                .collect();
             let len = values_by_var.first().map_or(0, Vec::len);
             let mut ctx_sub = ctx.clone();
             for idx in 0..len {

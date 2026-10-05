@@ -20,7 +20,7 @@ use crate::lang::{
         arena::Arena,
         typ,
         value::{
-            Value,
+            ValueFlat,
             external::{DecodeContext, EncodeContext, Encoding, decode_with, encode_with},
             get, make,
         },
@@ -75,7 +75,11 @@ impl ExternObject {
     // - Encoding
 
     /// Encodes the object as the specification's `objectState` external value.
-    pub fn to_value(&self, arena: &mut Arena, encoding: Encoding) -> Result<Value, ExternError> {
+    pub fn to_value(
+        &self,
+        arena: &mut Arena,
+        encoding: Encoding,
+    ) -> Result<ValueFlat, ExternError> {
         let payload = encode_with(arena, encoding, self)?;
         let typ = typ::make::var(
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
@@ -90,7 +94,7 @@ impl ExternObject {
     pub fn from_value(
         arena: &mut Arena,
         encoding: Encoding,
-        value: &Value,
+        value: &ValueFlat,
     ) -> Result<Self, ExternError> {
         let json = get::external(arena, value)?.clone();
         decode_with(arena, encoding, json.as_ref()).map_err(ExternError::from)
@@ -129,7 +133,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
 /// The initial architecture state: an encoded unit value.
 pub(super) fn init_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Ebpf>,
@@ -150,8 +154,8 @@ where
 /// Constructs a `CounterArray`; any other object gets an empty state.
 pub(super) fn eval_extern_init<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
-    values: &[Value],
-) -> Result<Value, ExternError>
+    values: &[ValueFlat],
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Ebpf>,
@@ -178,8 +182,8 @@ where
 /// Dispatches an extern function call; only `verify` is supported.
 pub(super) fn eval_extern_func_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
-    values: &[Value],
-) -> Result<Vec<Value>, ExternError>
+    values: &[ValueFlat],
+) -> Result<Vec<ValueFlat>, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Ebpf>,
@@ -208,7 +212,7 @@ where
 /// Builds the error naming an unsupported method call.
 fn unsupported_method(
     arena: &Arena,
-    value_id: Value,
+    value_id: ValueFlat,
     name: &str,
     names: &[String],
 ) -> Result<ExternError, ExternError> {
@@ -229,8 +233,8 @@ fn unsupported_method(
 /// The object is decoded, updated by its method, and written back.
 pub(super) fn eval_extern_method_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
-    values: &[Value],
-) -> Result<Vec<Value>, ExternError>
+    values: &[ValueFlat],
+) -> Result<Vec<ValueFlat>, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Ebpf>,
@@ -303,7 +307,7 @@ where
 /// Instantiates the program and returns the initial simulator state.
 pub fn init_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ebpf>,
-    program: Value,
+    program: ValueFlat,
 ) -> Result<SimState, ExternError>
 where
     Iface: Interface,

@@ -48,7 +48,7 @@ use crate::lang::{
     data::{
         notation::Mixop,
         typ,
-        value::{Value, ValueCase, ValueError, ValueKind, make},
+        value::{ValueCase, ValueError, ValueFlat, ValueFlatKind, make},
     },
 };
 
@@ -69,10 +69,10 @@ pub enum Token {
     /// Type name at the start of a postfix expression.
     TypeNameExpression,
     Identifier,
-    Name(Value),
-    StringLiteral(Value),
-    NumberInt(Value, String),
-    Number(Value, String),
+    Name(ValueFlat),
+    StringLiteral(ValueFlat),
+    NumberInt(ValueFlat, String),
+    Number(ValueFlat, String),
     LessEqual,
     GreaterEqual,
     ShiftLeft,
@@ -186,7 +186,7 @@ pub enum Token {
     BitAndAssign,
     BitXorAssign,
     BitOrAssign,
-    UnexpectedToken(Value),
+    UnexpectedToken(ValueFlat),
 }
 
 /// What the lexer expects next.
@@ -221,7 +221,7 @@ pub struct Lexer<'source, 'arena> {
     /// Tokens split off an earlier one, emitted before scanning on.
     pending: VecDeque<Phrase<Token>>,
     /// A name whose classification token is emitted on the next call.
-    deferred_classification: Option<(Value, Span, LexerState)>,
+    deferred_classification: Option<(ValueFlat, Span, LexerState)>,
     /// Open template angle brackets.
     template_depth: usize,
     /// Set once `End` was emitted.
@@ -433,16 +433,16 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
     // - Name classification
 
     /// Schedules a name's classification for the next call.
-    fn defer_classification(&mut self, value: &Value, span: &Span, next: LexerState) {
+    fn defer_classification(&mut self, value: &ValueFlat, span: &Span, next: LexerState) {
         self.deferred_classification = Some((*value, span.clone(), next));
     }
 
     /// Classifies a name as type or identifier
     /// and decides whether template arguments follow.
-    fn classify_name(&mut self, value: &Value, span: &Span, next: LexerState) -> Phrase<Token> {
+    fn classify_name(&mut self, value: &ValueFlat, span: &Span, next: LexerState) -> Phrase<Token> {
         let arena = self.ctx.arena();
         let name = match arena.kind(value) {
-            crate::lang::data::value::ValueKind::Text(name) => name,
+            crate::lang::data::value::ValueFlatKind::Text(name) => name,
             _ => return phrase!(node: Token::Identifier, span: span.clone()),
         };
         // Type names may start an expression; either kind may take `<...>`
@@ -735,7 +735,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
                 let value = make::new(
                     &mut arena,
-                    ValueKind::Case(value_case),
+                    ValueFlatKind::Case(value_case),
                     (typ::make::var(id_typ, vec![])).node.into(),
                     span,
                 )?;

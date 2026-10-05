@@ -1,6 +1,6 @@
 use lalrpop_util::ParseError;
 
-use crate::lang::data::value::{make, Value};
+use crate::lang::data::value::{make, ValueFlat};
 
 use crate::interface::p4::{
     binary::{self, BinaryExpressionPart, BinaryOperator},
@@ -24,10 +24,10 @@ extern {
         "TYPENAME" => Token::TypeName,
         "TYPENAME_EXPR" => Token::TypeNameExpression,
         "IDENTIFIER" => Token::Identifier,
-        "NAME" => Token::Name(<Value>),
-        "STRING_LITERAL" => Token::StringLiteral(<Value>),
-        "NUMBER_INT" => Token::NumberInt(<Value>, <String>),
-        "NUMBER" => Token::Number(<Value>, <String>),
+        "NAME" => Token::Name(<ValueFlat>),
+        "STRING_LITERAL" => Token::StringLiteral(<ValueFlat>),
+        "NUMBER_INT" => Token::NumberInt(<ValueFlat>, <String>),
+        "NUMBER" => Token::Number(<ValueFlat>, <String>),
         "LE" => Token::LessEqual,
         "GE" => Token::GreaterEqual,
         "SHL" => Token::ShiftLeft,
@@ -136,7 +136,7 @@ extern {
         "BIT_AND_ASSIGN" => Token::BitAndAssign,
         "BIT_XOR_ASSIGN" => Token::BitXorAssign,
         "BIT_OR_ASSIGN" => Token::BitOrAssign,
-        "UNEXPECTED_TOKEN" => Token::UnexpectedToken(<Value>),
+        "UNEXPECTED_TOKEN" => Token::UnexpectedToken(<ValueFlat>),
     }
 }
 
@@ -166,17 +166,17 @@ push_scope: () = {
 
 // A name followed by `(` or `<...>(` may already carry postfix-expression
 // classification when the surrounding declaration reduces.
-declarationName: Value = {
+declarationName: ValueFlat = {
     name,
     expressionTypeName,
 };
 
-push_name: Value = {
+push_name: ValueFlat = {
     // push_name ::= name
     <n:declarationName> => { ctx.scope_push(); declare::typ(ctx, &n, false); n },
 };
 
-push_externName: Value = {
+push_externName: ValueFlat = {
     // push_externName ::= externName
     <n:externName> => { ctx.scope_push(); declare::typ(ctx, &n, false); n },
 };
@@ -215,12 +215,12 @@ clear_parent_namespace: () = {
 
 // - Aux
 
-externName: Value = {
+externName: ValueFlat = {
     // externName ::= nonTypeName
     <n:nonTypeName> => { declare::typ(ctx, &n, false); n },
 };
 
-int: Value = {
+int: ValueFlat = {
     // int ::= "NUMBER_INT"
     <int:"NUMBER_INT"> => int.0,
 };
@@ -244,7 +244,7 @@ l_angle: () = {
 // - Misc
 
 // `TRAILING_COMMA` preserves the canonical `COMMA` after lexer lookahead.
-trailingCommaOpt: Value = {
+trailingCommaOpt: ValueFlat = {
     // trailingCommaOpt ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -266,7 +266,7 @@ trailingCommaOpt: Value = {
 
 // - Booleans
 
-booleanLiteral: Value = {
+booleanLiteral: ValueFlat = {
     // booleanLiteral ::= "TRUE"
     <l:@L> "TRUE" <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -288,7 +288,7 @@ booleanLiteral: Value = {
 
 // - Integers
 
-integerLiteral: Value = {
+integerLiteral: ValueFlat = {
     // integerLiteral ::= int
     <l:@L> <int:int> <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -304,7 +304,7 @@ integerLiteral: Value = {
 
 // - Strings
 
-stringLiteral: Value = {
+stringLiteral: ValueFlat = {
     // stringLiteral ::= "STRING_LITERAL"
     <l:@L> <text:"STRING_LITERAL"> <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -317,7 +317,7 @@ stringLiteral: Value = {
 
 // - Names
 
-identifier: Value = {
+identifier: ValueFlat = {
     // identifier ::= "NAME" "IDENTIFIER"
     <l:@L> <text:"NAME"> "IDENTIFIER" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -328,7 +328,7 @@ identifier: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-typeIdentifier: Value = {
+typeIdentifier: ValueFlat = {
     // typeIdentifier ::= "NAME" "TYPENAME"
     <l:@L> <text:"NAME"> "TYPENAME" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -341,7 +341,7 @@ typeIdentifier: Value = {
 
 // - Non-type names
 
-nonTypeName: Value = {
+nonTypeName: ValueFlat = {
     // nonTypeName ::= identifier
     <id:identifier> => id,
 
@@ -409,7 +409,7 @@ nonTypeName: Value = {
     }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-prefixedNonTypeName: Value = {
+prefixedNonTypeName: ValueFlat = {
     // prefixedNonTypeName ::= nonTypeName
     <n:nonTypeName> => n,
 
@@ -425,12 +425,12 @@ prefixedNonTypeName: Value = {
 
 // - Type names
 
-typeName: Value = {
+typeName: ValueFlat = {
     // typeName ::= typeIdentifier
     <n:typeIdentifier> => n,
 };
 
-prefixedTypeName: Value = {
+prefixedTypeName: ValueFlat = {
     // prefixedTypeName ::= typeName
     <n:typeName> => n,
 
@@ -446,7 +446,7 @@ prefixedTypeName: Value = {
 
 // - Table custom property names
 
-tableCustomName: Value = {
+tableCustomName: ValueFlat = {
     // tableCustomName ::= identifier
     <id:identifier> => id,
 
@@ -492,7 +492,7 @@ tableCustomName: Value = {
 
 // - Names
 
-name: Value = {
+name: ValueFlat = {
     // name ::= nonTypeName
     <n:nonTypeName> => n,
 
@@ -509,7 +509,7 @@ name: Value = {
     }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-nameList: Value = {
+nameList: ValueFlat = {
     // nameList ::= name
     <n:name> => n,
 
@@ -523,7 +523,7 @@ nameList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-member: Value = {
+member: ValueFlat = {
     // member ::= name
     <name:name> => name,
 };
@@ -531,7 +531,7 @@ member: Value = {
 // - Directions
 
 #[inline]
-direction: Value = {
+direction: ValueFlat = {
     // direction ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -573,7 +573,7 @@ direction: Value = {
 
 // - Base types
 
-baseType: Value = {
+baseType: ValueFlat = {
     // baseType ::= "BOOL"
     <l:@L> "BOOL" <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -685,7 +685,7 @@ baseType: Value = {
 
 // - Named types
 
-specializedType: Value = {
+specializedType: ValueFlat = {
     // specializedType ::= prefixedTypeName l_angle typeArgumentList r_angle
     <l:@L> <n:prefixedTypeName> "L_ANGLE_ARGS" <tal:typeArgumentList> r_angle <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -696,7 +696,7 @@ specializedType: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-namedType: Value = {
+namedType: ValueFlat = {
     // namedType ::= prefixedTypeName
     <t:prefixedTypeName> => t,
 
@@ -707,7 +707,7 @@ namedType: Value = {
 // - Array types
 
 #[inline]
-arrayType: Value = {
+arrayType: ValueFlat = {
     // arrayType ::= typeRef "L_BRACKET" expression "R_BRACKET"
     <l:@L> <t:typeRef> "L_BRACKET" <e:expression> "R_BRACKET" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -720,7 +720,7 @@ arrayType: Value = {
 
 // - List types
 
-listType: Value = {
+listType: ValueFlat = {
     // listType ::= "LIST" l_angle typeArgument r_angle
     <l:@L> "LIST" "L_ANGLE_ARGS" <targ:typeArgument> r_angle <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -733,7 +733,7 @@ listType: Value = {
 
 // - Tuple types
 
-tupleType: Value = {
+tupleType: ValueFlat = {
     // tupleType ::= "TUPLE" l_angle typeArgumentList r_angle
     <l:@L> "TUPLE" "L_ANGLE_ARGS" <targs:typeArgumentList> r_angle <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -746,7 +746,7 @@ tupleType: Value = {
 
 // - Types
 
-typeRef: Value = {
+typeRef: ValueFlat = {
     // typeRef ::= baseType
     <t:baseType> => t,
 
@@ -763,7 +763,7 @@ typeRef: Value = {
     <t:tupleType> => t,
 };
 
-typeOrVoid: Value = {
+typeOrVoid: ValueFlat = {
     // typeOrVoid ::= typeRef
     <t:typeRef> => t,
 
@@ -782,12 +782,12 @@ typeOrVoid: Value = {
 
 // - Type parameters
 
-typeParameter: Value = {
+typeParameter: ValueFlat = {
     // typeParameter ::= name
     <n:name> => n,
 };
 
-typeParameterList: Value = {
+typeParameterList: ValueFlat = {
     // typeParameterList ::= typeParameter
     <tp:typeParameter> => tp,
 
@@ -801,7 +801,7 @@ typeParameterList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-typeParameterListOpt: Value = {
+typeParameterListOpt: ValueFlat = {
     // typeParameterListOpt ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -826,7 +826,7 @@ typeParameterListOpt: Value = {
 
 // - Parameters
 
-parameter: Value = {
+parameter: ValueFlat = {
     // parameter ::= annotationList direction typeRef name initializerOpt
     <l:@L> <al:annotationList> <dir:direction> <t:typeRef> <n:name> <i:initializerOpt> <r:@R>
         =>? (|| -> Result<_, P4Error> { Ok({
@@ -841,7 +841,7 @@ parameter: Value = {
         }) })().map_err(|error| ParseError::User { error }),
 };
 
-nonEmptyParameterList: Value = {
+nonEmptyParameterList: ValueFlat = {
     // nonEmptyParameterList ::= parameter
     <p:parameter> => p,
 
@@ -856,7 +856,7 @@ nonEmptyParameterList: Value = {
 };
 
 #[inline]
-parameterList: Value = {
+parameterList: ValueFlat = {
     // parameterList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -872,7 +872,7 @@ parameterList: Value = {
 
 // - Constructor parameters
 
-constructorParameterListOpt: Value = {
+constructorParameterListOpt: ValueFlat = {
     // constructorParameterListOpt ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -894,7 +894,7 @@ constructorParameterListOpt: Value = {
 
 // - Expression key-value pairs
 
-namedExpression: Value = {
+namedExpression: ValueFlat = {
     // namedExpression ::= name "ASSIGN" expression
     <l:@L> <n:name> "ASSIGN" <e:expression> <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -905,7 +905,7 @@ namedExpression: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-namedExpressionList: Value = {
+namedExpressionList: ValueFlat = {
     // namedExpressionList ::= namedExpression
     <e:namedExpression> => e,
 
@@ -923,7 +923,7 @@ namedExpressionList: Value = {
 
 // - Literal expressions
 
-literalExpression: Value = {
+literalExpression: ValueFlat = {
     // literalExpression ::= booleanLiteral
     <bool:booleanLiteral> => bool,
 
@@ -936,7 +936,7 @@ literalExpression: Value = {
 
 // - Reference expressions
 
-referenceExpression: Value = {
+referenceExpression: ValueFlat = {
     // referenceExpression ::= prefixedNonTypeName
     <n:prefixedNonTypeName> => n,
 
@@ -952,7 +952,7 @@ referenceExpression: Value = {
 
 // - Default expressions
 
-defaultExpression: Value = {
+defaultExpression: ValueFlat = {
     // defaultExpression ::= "DOTS"
     <l:@L> "DOTS" <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -992,7 +992,7 @@ defaultExpression: Value = {
 // errorAccessExpression ::= "ERROR" "DOT" member
 // memberAccessExpression ::= memberAccessBase "DOT" member
 // indexAccessExpression ::= expression "L_BRACKET" expression "R_BRACKET"
-sliceop: Value = {
+sliceop: ValueFlat = {
     // sliceop ::= "COLON"
     <l:@L> colon <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -1040,7 +1040,7 @@ sliceop: Value = {
 
 // - LALRPOP precedence lowering
 
-TernaryExpression: Value = {
+TernaryExpression: ValueFlat = {
     // TernaryExpression ::= ExpressionOr
     ExpressionOr,
 
@@ -1055,7 +1055,7 @@ TernaryExpression: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-ExpressionOr: Value = {
+ExpressionOr: ValueFlat = {
     // ExpressionOr ::= ExpressionAnd
     ExpressionAnd,
 
@@ -1080,7 +1080,7 @@ ExpressionOr: Value = {
     }) })().map_err(|error| ParseError::User { error }),
 };
 
-ExpressionAnd: Value = {
+ExpressionAnd: ValueFlat = {
     // ExpressionAnd ::= ExpressionEquality
     ExpressionEquality,
 
@@ -1106,7 +1106,7 @@ ExpressionAnd: Value = {
         }) })().map_err(|error| ParseError::User { error }),
 };
 
-ExpressionEquality: Value = {
+ExpressionEquality: ValueFlat = {
     // ExpressionEquality ::= ExpressionComparison
     ExpressionComparison,
 
@@ -1153,7 +1153,7 @@ ExpressionEquality: Value = {
         }) })().map_err(|error| ParseError::User { error }),
 };
 
-ExpressionComparison: Value = {
+ExpressionComparison: ValueFlat = {
     <first:ExpressionAdditive> <parts:ExpressionPrecedencePart*> =>? binary::fold(&mut ctx.arena_mut(), first, parts).map_err(|error| ParseError::User { error }),
 };
 
@@ -1178,7 +1178,7 @@ ExpressionPrecedencePart: BinaryExpressionPart = {
         BinaryExpressionPart::new(BinaryOperator::ShiftRight, ctx.location_span(l, r), rhs),
 };
 
-ExpressionAdditive: Value = {
+ExpressionAdditive: ValueFlat = {
     // ExpressionAdditive ::= ExpressionMultiplicative
     ExpressionMultiplicative,
 
@@ -1288,7 +1288,7 @@ ExpressionAdditive: Value = {
         }) })().map_err(|error| ParseError::User { error }),
 };
 
-ExpressionMultiplicative: Value = {
+ExpressionMultiplicative: ValueFlat = {
     // ExpressionMultiplicative ::= ExpressionPrefix
     ExpressionPrefix,
 
@@ -1356,7 +1356,7 @@ ExpressionMultiplicative: Value = {
         }) })().map_err(|error| ParseError::User { error }),
 };
 
-ExpressionPrefix: Value = {
+ExpressionPrefix: ValueFlat = {
     // ExpressionPrefix ::= ExpressionPostfix
     ExpressionPostfix,
 
@@ -1450,7 +1450,7 @@ ExpressionPrefix: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-ExpressionPostfix: Value = {
+ExpressionPostfix: ValueFlat = {
     // ExpressionPostfix ::= ExpressionPrimary
     ExpressionPrimary,
 
@@ -1526,7 +1526,7 @@ ExpressionPostfix: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-ExpressionPrimary: Value = {
+ExpressionPrimary: ValueFlat = {
     // ExpressionPrimary ::= literalExpression
     literalExpression,
 
@@ -1578,7 +1578,7 @@ ExpressionPrimary: Value = {
 
 // The canonical expression alternatives are implemented by the precedence
 // ladder above
-expression: Value = {
+expression: ValueFlat = {
     // expression ::= TernaryExpression
     TernaryExpression,
 };
@@ -1588,7 +1588,7 @@ expression: Value = {
 // The Rust lexer marks type names used inside expressions separately so the
 // precedence ladder can distinguish constructor calls from value calls.
 
-expressionTypeIdentifier: Value = {
+expressionTypeIdentifier: ValueFlat = {
     // expressionTypeIdentifier ::= "NAME" "TYPENAME_EXPR"
     <l:@L> <text:"NAME"> "TYPENAME_EXPR" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -1599,12 +1599,12 @@ expressionTypeIdentifier: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-expressionTypeName: Value = {
+expressionTypeName: ValueFlat = {
     // expressionTypeName ::= expressionTypeIdentifier
     expressionTypeIdentifier,
 };
 
-expressionPrefixedTypeName: Value = {
+expressionPrefixedTypeName: ValueFlat = {
     // expressionPrefixedTypeName ::= expressionTypeName
     expressionTypeName,
 
@@ -1618,7 +1618,7 @@ expressionPrefixedTypeName: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-expressionSpecializedType: Value = {
+expressionSpecializedType: ValueFlat = {
     // expressionSpecializedType ::= expressionPrefixedTypeName "L_ANGLE_ARGS"
     //   typeArgumentList r_angle
     <l:@L> <name:expressionPrefixedTypeName> "L_ANGLE_ARGS" <arguments:typeArgumentList> r_angle
@@ -1631,7 +1631,7 @@ expressionSpecializedType: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-expressionNamedType: Value = {
+expressionNamedType: ValueFlat = {
     // expressionNamedType ::= expressionPrefixedTypeName
     expressionPrefixedTypeName,
 
@@ -1640,12 +1640,12 @@ expressionNamedType: Value = {
 };
 
 // LALRPOP factors the canonical expressionList through its non-empty form
-expressionList: Value = {
+expressionList: ValueFlat = {
     // expressionList ::= expressionListNonEmpty
     expressionListNonEmpty,
 };
 
-expressionListNonEmpty: Value = {
+expressionListNonEmpty: ValueFlat = {
     // expressionListNonEmpty ::= expression
     <e:expression> => e,
 
@@ -1662,7 +1662,7 @@ expressionListNonEmpty: Value = {
 // memberAccessBase ::= prefixedTypeName | expression
 
 // LALRPOP lowering for expressionList ::= epsilon
-sequenceElementExpression: Value = {
+sequenceElementExpression: ValueFlat = {
     <l:@L> <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
         shape: "_EMPTY",
@@ -1675,7 +1675,7 @@ sequenceElementExpression: Value = {
     expressionList,
 };
 
-recordElementExpression: Value = {
+recordElementExpression: ValueFlat = {
     // recordElementExpression ::= name "ASSIGN" expression
     <l:@L> <n:name> "ASSIGN" <e:expression> <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -1715,7 +1715,7 @@ recordElementExpression: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-sequenceOrRecordElementExpression: Value = {
+sequenceOrRecordElementExpression: ValueFlat = {
     // sequenceOrRecordElementExpression ::= sequenceElementExpression
     <e:sequenceElementExpression> => e,
 
@@ -1726,7 +1726,7 @@ sequenceOrRecordElementExpression: Value = {
 // - Non-brace Expressions
 
 // The shared ladder implements the canonical brace-free alternatives
-expressionNonBrace: Value = {
+expressionNonBrace: ValueFlat = {
     // expressionNonBrace ::= expression
     expression,
 };
@@ -1736,7 +1736,7 @@ expressionNonBrace: Value = {
 
 // - Keyset expressions
 
-simpleKeysetExpression: Value = {
+simpleKeysetExpression: ValueFlat = {
     // simpleKeysetExpression ::= expression
     <e:expression> => e,
 
@@ -1777,7 +1777,7 @@ simpleKeysetExpression: Value = {
     }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-simpleKeysetExpressionList: Value = {
+simpleKeysetExpressionList: ValueFlat = {
     // simpleKeysetExpressionList ::= simpleKeysetExpression
     <e:simpleKeysetExpression> => e,
 
@@ -1791,7 +1791,7 @@ simpleKeysetExpressionList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-tupleKeysetExpression: Value = {
+tupleKeysetExpression: ValueFlat = {
     // tupleKeysetExpression ::= "L_PAREN" expression "MASK" expression "R_PAREN"
     <l:@L> "L_PAREN" <b:expression> "MASK" <m:expression> "R_PAREN" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -1840,7 +1840,7 @@ tupleKeysetExpression: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-keysetExpression: Value = {
+keysetExpression: ValueFlat = {
     // keysetExpression ::= simpleKeysetExpression
     <e:simpleKeysetExpression> => e,
 
@@ -1850,7 +1850,7 @@ keysetExpression: Value = {
 
 // - Type arguments
 
-realTypeArgument: Value = {
+realTypeArgument: ValueFlat = {
     // realTypeArgument ::= typeRef
     <t:typeRef> => t,
 
@@ -1873,7 +1873,7 @@ realTypeArgument: Value = {
     }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-realTypeArgumentList: Value = {
+realTypeArgumentList: ValueFlat = {
     // realTypeArgumentList ::= realTypeArgument
     <targ:realTypeArgument> => targ,
 
@@ -1887,7 +1887,7 @@ realTypeArgumentList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-typeArgument: Value = {
+typeArgument: ValueFlat = {
     // typeArgument ::= typeRef
     <t:typeRef> => t,
 
@@ -1913,7 +1913,7 @@ typeArgument: Value = {
     }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-typeArgumentList: Value = {
+typeArgumentList: ValueFlat = {
     // typeArgumentList ::= epsilon
     <l:@L> <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -1927,7 +1927,7 @@ typeArgumentList: Value = {
     typeArgumentListNonEmpty,
 };
 
-typeArgumentListNonEmpty: Value = {
+typeArgumentListNonEmpty: ValueFlat = {
     // typeArgumentListNonEmpty ::= typeArgument
     <targ:typeArgument> => targ,
 
@@ -1943,7 +1943,7 @@ typeArgumentListNonEmpty: Value = {
 
 // - Arguments
 
-argument: Value = {
+argument: ValueFlat = {
     // argument ::= expression
     <e:expression> => e,
 
@@ -1975,7 +1975,7 @@ argument: Value = {
     }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-argumentListNonEmpty: Value = {
+argumentListNonEmpty: ValueFlat = {
     // argumentListNonEmpty ::= argument
     <arg:argument> => arg,
 
@@ -1989,7 +1989,7 @@ argumentListNonEmpty: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-argumentList: Value = {
+argumentList: ValueFlat = {
     // argumentList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2005,7 +2005,7 @@ argumentList: Value = {
 
 // - L-values
 
-lvalue: Value = {
+lvalue: ValueFlat = {
     // lvalue ::= referenceExpression
     <e:referenceExpression> => e,
 
@@ -2051,7 +2051,7 @@ lvalue: Value = {
 
 // - Empty statements
 
-emptyStatement: Value = {
+emptyStatement: ValueFlat = {
     // emptyStatement ::= "SEMICOLON"
     <l:@L> "SEMICOLON" <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2064,7 +2064,7 @@ emptyStatement: Value = {
 
 // - Assignment statements
 
-assignop: Value = {
+assignop: ValueFlat = {
     // assignop ::= "ASSIGN"
     <l:@L> "ASSIGN" <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2183,7 +2183,7 @@ assignop: Value = {
     }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-assignmentStatement: Value = {
+assignmentStatement: ValueFlat = {
     // assignmentStatement ::= lvalue assignop expression "SEMICOLON"
     <l:@L> <lv:lvalue> <o:assignop> <e:expression> "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2196,7 +2196,7 @@ assignmentStatement: Value = {
 
 // - Call statements
 
-callStatement: Value = {
+callStatement: ValueFlat = {
     // callStatement ::= lvalue "L_PAREN" argumentList "R_PAREN" "SEMICOLON"
     <l:@L> <lv:lvalue> "L_PAREN" <args:argumentList> "R_PAREN" "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2222,12 +2222,12 @@ callStatement: Value = {
 
 // The lexer marks a bare canonical `namedType` as expression-ctx before
 // `.`, but a specialized type retains its declaration-ctx marker.
-directApplicationType: Value = {
+directApplicationType: ValueFlat = {
     namedType,
     expressionNamedType,
 };
 
-directApplicationStatement: Value = {
+directApplicationStatement: ValueFlat = {
     // directApplicationStatement ::= namedType "DOT" "APPLY" "L_PAREN"
     //   argumentList "R_PAREN" "SEMICOLON"
     <l:@L> <t:directApplicationType> "DOT" "APPLY" "L_PAREN" <args:argumentList> "R_PAREN"
@@ -2242,7 +2242,7 @@ directApplicationStatement: Value = {
 
 // - Return statements
 
-returnStatement: Value = {
+returnStatement: ValueFlat = {
     // returnStatement ::= "RETURN" "SEMICOLON"
     <l:@L> "RETURN" "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2264,7 +2264,7 @@ returnStatement: Value = {
 
 // - Exit statements
 
-exitStatement: Value = {
+exitStatement: ValueFlat = {
     // exitStatement ::= "EXIT" "SEMICOLON"
     <l:@L> "EXIT" "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2277,7 +2277,7 @@ exitStatement: Value = {
 
 // - Block statements
 
-blockStatement: Value = {
+blockStatement: ValueFlat = {
     // blockStatement ::= annotationList "L_BRACE" push_scope
     //   blockElementStatementList "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "L_BRACE" push_scope <sl:blockElementStatementList> "R_BRACE"
@@ -2297,7 +2297,7 @@ blockStatement: Value = {
 
 // - For statements
 
-forInitStatement: Value = {
+forInitStatement: ValueFlat = {
     // forInitStatement ::= annotationList typeRef name initializerOpt
     <l:@L> <al:annotationList> <t:typeRef> <n:name> <i:initializerOpt> <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2336,7 +2336,7 @@ forInitStatement: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-forInitStatementListNonEmpty: Value = {
+forInitStatementListNonEmpty: ValueFlat = {
     // forInitStatementListNonEmpty ::= forInitStatement
     <s:forInitStatement> => s,
 
@@ -2351,7 +2351,7 @@ forInitStatementListNonEmpty: Value = {
 };
 
 #[inline]
-forInitStatementList: Value = {
+forInitStatementList: ValueFlat = {
     // forInitStatementList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2365,12 +2365,12 @@ forInitStatementList: Value = {
     <sl:forInitStatementListNonEmpty> => sl,
 };
 
-forUpdateStatement: Value = {
+forUpdateStatement: ValueFlat = {
     // forUpdateStatement ::= forInitStatement
     <s:forInitStatement> => s,
 };
 
-forUpdateStatementListNonEmpty: Value = {
+forUpdateStatementListNonEmpty: ValueFlat = {
     // forUpdateStatementListNonEmpty ::= forUpdateStatement
     <s:forUpdateStatement> => s,
 
@@ -2385,7 +2385,7 @@ forUpdateStatementListNonEmpty: Value = {
 };
 
 #[inline]
-forUpdateStatementList: Value = {
+forUpdateStatementList: ValueFlat = {
     // forUpdateStatementList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2399,7 +2399,7 @@ forUpdateStatementList: Value = {
     <sl:forUpdateStatementListNonEmpty> => sl,
 };
 
-forCollectionExpression: Value = {
+forCollectionExpression: ValueFlat = {
     // forCollectionExpression ::= expression
     <e:expression> => e,
 
@@ -2422,7 +2422,7 @@ forCollectionExpression: Value = {
 
 // - Switch statements
 
-switchLabel: Value = {
+switchLabel: ValueFlat = {
     // switchLabel ::= "DEFAULT"
     <l:@L> "DEFAULT" <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2437,7 +2437,7 @@ switchLabel: Value = {
 };
 
 #[inline]
-switchCase: Value = {
+switchCase: ValueFlat = {
     // switchCase ::= switchLabel "COLON" blockStatement
     <l:@L> <label:switchLabel> "BLOCK_COLON" <body:blockStatement> <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2457,7 +2457,7 @@ switchCase: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-switchCaseList: Value = {
+switchCaseList: ValueFlat = {
     // switchCaseList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2477,7 +2477,7 @@ switchCaseList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-switchStatement: Value = {
+switchStatement: ValueFlat = {
     // switchStatement ::= "SWITCH" "L_PAREN" expression "R_PAREN" "L_BRACE" switchCaseList "R_BRACE"
     <l:@L> "SWITCH" "L_PAREN" <e:expression> "R_PAREN" "L_BRACE" <cs:switchCaseList> "R_BRACE"
         <r:@R> =>? make::case_shaped! {
@@ -2491,7 +2491,7 @@ switchStatement: Value = {
 
 // - Break and continue statements
 
-breakStatement: Value = {
+breakStatement: ValueFlat = {
     // breakStatement ::= "BREAK" "SEMICOLON"
     <l:@L> "BREAK" "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2502,7 +2502,7 @@ breakStatement: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-continueStatement: Value = {
+continueStatement: ValueFlat = {
     // continueStatement ::= "CONTINUE" "SEMICOLON"
     <l:@L> "CONTINUE" "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2516,7 +2516,7 @@ continueStatement: Value = {
 // - Statements
 
 // The matched forms below implement the canonical statement alternatives
-statement: Value = {
+statement: ValueFlat = {
     // statement ::= MatchedStatement
     MatchedStatement,
 
@@ -2529,7 +2529,7 @@ statement: Value = {
 // Matched and unmatched forms attach each `ELSE` to the nearest open `IF`
 // without moving the canonical statement productions from this section.
 
-MatchedStatement: Value = {
+MatchedStatement: ValueFlat = {
     // MatchedStatement ::= emptyStatement
     emptyStatement,
 
@@ -2575,7 +2575,7 @@ MatchedStatement: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-UnmatchedStatement: Value = {
+UnmatchedStatement: ValueFlat = {
     // UnmatchedStatement ::= UnmatchedForStatement
     UnmatchedForStatement,
 
@@ -2600,7 +2600,7 @@ UnmatchedStatement: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-MatchedForStatement: Value = {
+MatchedForStatement: ValueFlat = {
     // MatchedForStatement ::= annotationList "FOR" "L_PAREN" forInitStatementList "SEMICOLON"
     //     expression "SEMICOLON" forUpdateStatementList "R_PAREN" MatchedStatement
     <l:@L> <annotations:annotationList> "FOR" "L_PAREN" <init:forInitStatementList> "SEMICOLON"
@@ -2644,7 +2644,7 @@ MatchedForStatement: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-UnmatchedForStatement: Value = {
+UnmatchedForStatement: ValueFlat = {
     // UnmatchedForStatement ::= annotationList "FOR" "L_PAREN" forInitStatementList "SEMICOLON"
     //     expression "SEMICOLON" forUpdateStatementList "R_PAREN" UnmatchedStatement
     <l:@L> <annotations:annotationList> "FOR" "L_PAREN" <init:forInitStatementList> "SEMICOLON"
@@ -2691,7 +2691,7 @@ UnmatchedForStatement: Value = {
 // - Declarations
 
 // - Constant and variable declarations
-initialValue: Value = {
+initialValue: ValueFlat = {
     // initialValue ::= "ASSIGN" expression
     <l:@L> "ASSIGN" <e:expression> <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2702,7 +2702,7 @@ initialValue: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-constantDeclaration: Value = {
+constantDeclaration: ValueFlat = {
     // constantDeclaration ::= annotationList "CONST" typeRef name initialValue "SEMICOLON"
     <l:@L> <al:annotationList> "CONST" <t:typeRef> <n:name> <i:initialValue> "SEMICOLON"
         <r:@R> =>? make::case_shaped! {
@@ -2715,7 +2715,7 @@ constantDeclaration: Value = {
 };
 
 #[inline]
-initializerOpt: Value = {
+initializerOpt: ValueFlat = {
     // initializerOpt ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2729,7 +2729,7 @@ initializerOpt: Value = {
     <i:initialValue> => i,
 };
 
-variableDeclaration: Value = {
+variableDeclaration: ValueFlat = {
     // variableDeclaration ::= annotationList typeRef name initializerOpt "SEMICOLON"
     <l:@L> <al:annotationList> <t:typeRef> <n:name> <i:initializerOpt> "SEMICOLON" <r:@R> =>? (|| -> Result<_, P4Error> { Ok({
         declare::var(ctx, &n, false, Some(&t));
@@ -2743,7 +2743,7 @@ variableDeclaration: Value = {
     }) })().map_err(|error| ParseError::User { error }),
 };
 
-blockElementStatement: Value = {
+blockElementStatement: ValueFlat = {
     // blockElementStatement ::= constantDeclaration
     <d:constantDeclaration> => d,
 
@@ -2754,7 +2754,7 @@ blockElementStatement: Value = {
     <d:statement> => d,
 };
 
-blockElementStatementList: Value = {
+blockElementStatementList: ValueFlat = {
     // blockElementStatementList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2775,7 +2775,7 @@ blockElementStatementList: Value = {
 };
 
 // - Function declarations
-functionPrototype: Value = {
+functionPrototype: ValueFlat = {
     // functionPrototype ::= typeOrVoid name push_scope typeParameterListOpt "L_PAREN" parameterList
     //     "R_PAREN"
     <l:@L> <t:typeOrVoid> <n:declarationName> push_scope <tpl:typeParameterListOpt> "L_PAREN"
@@ -2788,7 +2788,7 @@ functionPrototype: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-functionDeclaration: Value = {
+functionDeclaration: ValueFlat = {
     // functionDeclaration ::= annotationList functionPrototype blockStatement pop_scope
     <l:@L> <al:annotationList> <p:functionPrototype> <b:blockStatement> pop_scope <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2800,7 +2800,7 @@ functionDeclaration: Value = {
 };
 
 // - Action declarations
-actionDeclaration: Value = {
+actionDeclaration: ValueFlat = {
     // actionDeclaration ::= annotationList "ACTION" name "L_PAREN" parameterList "R_PAREN"
     //     blockStatement
     <l:@L> <al:annotationList> "ACTION" <n:name> "L_PAREN" <pl:parameterList> "R_PAREN"
@@ -2814,7 +2814,7 @@ actionDeclaration: Value = {
 };
 
 // - Instantiations
-objectInitializer: Value = {
+objectInitializer: ValueFlat = {
     // objectInitializer ::= "ASSIGN" "L_BRACE" objectDeclarationList "R_BRACE"
     <l:@L> "ASSIGN" "L_BRACE" <ds:objectDeclarationList> "R_BRACE" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2827,7 +2827,7 @@ objectInitializer: Value = {
 
 // A type name may already carry expression-leading classification when this
 // production reduces, so both alternatives denote the same type reference.
-instantiationTypeRef: Value = {
+instantiationTypeRef: ValueFlat = {
     // instantiationTypeRef ::= typeRef
     typeRef,
 
@@ -2835,7 +2835,7 @@ instantiationTypeRef: Value = {
     expressionNamedType,
 };
 
-instantiation: Value = {
+instantiation: ValueFlat = {
     // instantiation ::= annotationList instantiationTypeRef "L_PAREN" argumentList "R_PAREN" name
     //     "SEMICOLON"
     <l:@L> <al:annotationList> <t:instantiationTypeRef> "L_PAREN" <args:argumentList> "R_PAREN"
@@ -2859,7 +2859,7 @@ instantiation: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-objectDeclaration: Value = {
+objectDeclaration: ValueFlat = {
     // objectDeclaration ::= functionDeclaration
     <d:functionDeclaration> => d,
 
@@ -2867,7 +2867,7 @@ objectDeclaration: Value = {
     <d:instantiation> => d,
 };
 
-objectDeclarationList: Value = {
+objectDeclarationList: ValueFlat = {
     // objectDeclarationList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2888,7 +2888,7 @@ objectDeclarationList: Value = {
 };
 
 // - Error declarations
-errorDeclaration: Value = {
+errorDeclaration: ValueFlat = {
     // errorDeclaration ::= "ERROR" "L_BRACE" nameList "R_BRACE"
     <l:@L> "ERROR" "L_BRACE" <nl:nameList> "R_BRACE" <r:@R> =>? (|| -> Result<_, P4Error> { Ok({
         declare::vars(ctx, &nl);
@@ -2903,7 +2903,7 @@ errorDeclaration: Value = {
 };
 
 // - Match kind declarations
-matchKindDeclaration: Value = {
+matchKindDeclaration: ValueFlat = {
     // matchKindDeclaration ::= "MATCH_KIND" "L_BRACE" nameList trailingCommaOpt "R_BRACE"
     <l:@L> "MATCH_KIND" "L_BRACE" <nl:nameList> <c:trailingCommaOpt> "R_BRACE" <r:@R> =>? (|| -> Result<_, P4Error> { Ok({
         declare::vars(ctx, &nl);
@@ -2921,7 +2921,7 @@ matchKindDeclaration: Value = {
 
 // - Enum declarations
 
-enumTypeDeclaration: Value = {
+enumTypeDeclaration: ValueFlat = {
     // enumTypeDeclaration ::= annotationList "ENUM" name "L_BRACE" nameList trailingCommaOpt "R_BRACE"
     <l:@L> <al:annotationList> "ENUM" <n:name> "L_BRACE" <nl:nameList> <c:trailingCommaOpt>
         "R_BRACE" <r:@R> =>? make::case_shaped! {
@@ -2946,7 +2946,7 @@ enumTypeDeclaration: Value = {
 
 // - Struct, header, and union declarations
 
-typeField: Value = {
+typeField: ValueFlat = {
     // typeField ::= annotationList typeRef name "SEMICOLON"
     <l:@L> <al:annotationList> <t:typeRef> <n:name> "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -2957,7 +2957,7 @@ typeField: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-typeFieldList: Value = {
+typeFieldList: ValueFlat = {
     // typeFieldList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -2977,7 +2977,7 @@ typeFieldList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-structTypeDeclaration: Value = {
+structTypeDeclaration: ValueFlat = {
     // structTypeDeclaration ::= annotationList "STRUCT" name typeParameterListOpt "L_BRACE"
     //     typeFieldList "R_BRACE"
     <l:@L> <al:annotationList> "STRUCT" <n:name> <tpl:typeParameterListOpt> "L_BRACE"
@@ -2990,7 +2990,7 @@ structTypeDeclaration: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-headerTypeDeclaration: Value = {
+headerTypeDeclaration: ValueFlat = {
     // headerTypeDeclaration ::= annotationList "HEADER" name typeParameterListOpt "L_BRACE"
     //     typeFieldList "R_BRACE"
     <l:@L> <al:annotationList> "HEADER" <n:name> <tpl:typeParameterListOpt> "L_BRACE"
@@ -3003,7 +3003,7 @@ headerTypeDeclaration: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-headerUnionTypeDeclaration: Value = {
+headerUnionTypeDeclaration: ValueFlat = {
     // headerUnionTypeDeclaration ::= annotationList "HEADER_UNION" name typeParameterListOpt "L_BRACE"
     //     typeFieldList "R_BRACE"
     <l:@L> <al:annotationList> "HEADER_UNION" <n:name> <tpl:typeParameterListOpt> "L_BRACE"
@@ -3016,7 +3016,7 @@ headerUnionTypeDeclaration: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-derivedTypeDeclaration: Value = {
+derivedTypeDeclaration: ValueFlat = {
     // derivedTypeDeclaration ::= enumTypeDeclaration
     <d:enumTypeDeclaration> => d,
 
@@ -3031,7 +3031,7 @@ derivedTypeDeclaration: Value = {
 };
 
 // - Typedef and newtype declarations
-typedef: Value = {
+typedef: ValueFlat = {
     // typedef ::= typeRef
     <t:typeRef> => t,
 
@@ -3045,7 +3045,7 @@ typedef: Value = {
 },
 };
 
-typedefDeclaration: Value = {
+typedefDeclaration: ValueFlat = {
     // typedefDeclaration ::= annotationList "TYPEDEF" typedef name "SEMICOLON"
     <l:@L> <al:annotationList> "TYPEDEF" <t:typedef> <n:name> "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3066,7 +3066,7 @@ typedefDeclaration: Value = {
 };
 
 // - Extern declarations
-externFunctionDeclaration: Value = {
+externFunctionDeclaration: ValueFlat = {
     // externFunctionDeclaration ::= annotationList "EXTERN" functionPrototype pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "EXTERN" <p:functionPrototype> pop_scope "SEMICOLON" <r:@R> =>? (|| -> Result<_, P4Error> { Ok({
         let id = extract::id_function_prototype(&ctx.arena(), &p)
@@ -3088,7 +3088,7 @@ externFunctionDeclaration: Value = {
 
 // An extern constructor name can carry either type-name marker depending on
 // the following token, so this production accepts both classifications.
-constructorTypeIdentifier: Value = {
+constructorTypeIdentifier: ValueFlat = {
     // constructorTypeIdentifier ::= "NAME" "TYPENAME"
     <l:@L> <text:"NAME"> "TYPENAME" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3108,7 +3108,7 @@ constructorTypeIdentifier: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-externConstructorPrototype: Value = {
+externConstructorPrototype: ValueFlat = {
     // externConstructorPrototype ::= annotationList constructorTypeIdentifier "L_PAREN" parameterList
     //     "R_PAREN" "SEMICOLON"
     <l:@L> <al:annotationList> <tid:constructorTypeIdentifier> "L_PAREN" <pl:parameterList>
@@ -3121,7 +3121,7 @@ externConstructorPrototype: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-externMethodPrototype: Value = {
+externMethodPrototype: ValueFlat = {
     // externMethodPrototype ::= annotationList functionPrototype pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> <p:functionPrototype> pop_scope "SEMICOLON" <r:@R> =>? (|| -> Result<_, P4Error> { Ok({
         let id = extract::id_function_prototype(&ctx.arena(), &p)
@@ -3160,7 +3160,7 @@ externMethodPrototype: Value = {
         }) })().map_err(|error| ParseError::User { error }),
 };
 
-externConstructorOrMethodPrototype: Value = {
+externConstructorOrMethodPrototype: ValueFlat = {
     // externConstructorOrMethodPrototype ::= externConstructorPrototype
     <p:externConstructorPrototype> => p,
 
@@ -3168,7 +3168,7 @@ externConstructorOrMethodPrototype: Value = {
     <p:externMethodPrototype> => p,
 };
 
-externConstructorOrMethodPrototypeList: Value = {
+externConstructorOrMethodPrototypeList: ValueFlat = {
     // externConstructorOrMethodPrototypeList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3190,7 +3190,7 @@ externConstructorOrMethodPrototypeList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-externObjectDeclaration: Value = {
+externObjectDeclaration: ValueFlat = {
     // externObjectDeclaration ::= annotationList "EXTERN" push_externName typeParameterListOpt
     //     "L_BRACE" externConstructorOrMethodPrototypeList "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "EXTERN" <n:push_externName> <tpl:typeParameterListOpt> "L_BRACE"
@@ -3213,7 +3213,7 @@ externObjectDeclaration: Value = {
         }) })().map_err(|error| ParseError::User { error }),
 };
 
-externDeclaration: Value = {
+externDeclaration: ValueFlat = {
     // externDeclaration ::= externFunctionDeclaration
     <d:externFunctionDeclaration> => d,
 
@@ -3224,7 +3224,7 @@ externDeclaration: Value = {
 // - Parser statements and declarations
 
 // - Select expressions
-selectCase: Value = {
+selectCase: ValueFlat = {
     // selectCase ::= keysetExpression "COLON" name "SEMICOLON"
     <l:@L> <k:keysetExpression> colon <n:name> "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3235,7 +3235,7 @@ selectCase: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-selectCaseList: Value = {
+selectCaseList: ValueFlat = {
     // selectCaseList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -3255,7 +3255,7 @@ selectCaseList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-selectExpression: Value = {
+selectExpression: ValueFlat = {
     // selectExpression ::= "SELECT" "L_PAREN" "R_PAREN" "L_BRACE" selectCaseList "R_BRACE"
     <l:@L> "SELECT" "L_PAREN" <empty_l:@L> "R_PAREN" "L_BRACE" <cl:selectCaseList> "R_BRACE" <r:@R> =>? (|| -> Result<_, P4Error> { Ok({
     let empty = make::case_shaped! {
@@ -3287,7 +3287,7 @@ selectExpression: Value = {
 };
 
 // - Transition statements
-stateExpression: Value = {
+stateExpression: ValueFlat = {
     // stateExpression ::= name "SEMICOLON"
     <l:@L> <n:name> "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3302,7 +3302,7 @@ stateExpression: Value = {
 };
 
 #[inline]
-transitionStatement: Value = {
+transitionStatement: ValueFlat = {
     // transitionStatement ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -3322,8 +3322,8 @@ transitionStatement: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-// - Value set declarations
-valueSetType: Value = {
+// - ValueFlat set declarations
+valueSetType: ValueFlat = {
     // valueSetType ::= baseType
     <t:baseType> => t,
 
@@ -3334,7 +3334,7 @@ valueSetType: Value = {
     <t:prefixedTypeName> => t,
 };
 
-valueSetDeclaration: Value = {
+valueSetDeclaration: ValueFlat = {
     // valueSetDeclaration ::= annotationList "VALUE_SET" l_angle valueSetType
     //   r_angle "L_PAREN" expression "R_PAREN" name "SEMICOLON"
     <l:@L> <al:annotationList> "VALUE_SET" "L_ANGLE_ARGS" <t:valueSetType> r_angle "L_PAREN"
@@ -3348,7 +3348,7 @@ valueSetDeclaration: Value = {
 };
 
 // - Parser type declarations
-parserTypeDeclaration: Value = {
+parserTypeDeclaration: ValueFlat = {
     // parserTypeDeclaration ::= annotationList "PARSER" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "PARSER" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
@@ -3362,7 +3362,7 @@ parserTypeDeclaration: Value = {
 };
 
 // - Parser declarations
-parserBlockElementStatement: Value = {
+parserBlockElementStatement: ValueFlat = {
     // parserBlockElementStatement ::= constantDeclaration
     <s:constantDeclaration> => s,
 
@@ -3373,7 +3373,7 @@ parserBlockElementStatement: Value = {
     <s:parserStatement> => s,
 };
 
-parserBlockElementStatementList: Value = {
+parserBlockElementStatementList: ValueFlat = {
     // parserBlockElementStatementList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3394,7 +3394,7 @@ parserBlockElementStatementList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-parserBlockStatement: Value = {
+parserBlockStatement: ValueFlat = {
     // parserBlockStatement ::= annotationList "L_BRACE" parserBlockElementStatementList "R_BRACE"
     <l:@L> <al:annotationList> "L_BRACE" <sl:parserBlockElementStatementList> "R_BRACE"
         <r:@R> =>? make::case_shaped! {
@@ -3412,7 +3412,7 @@ parserBlockStatement: Value = {
 //     parserStatement
 
 // The matched forms below implement the canonical parserStatement alternatives
-parserStatement: Value = {
+parserStatement: ValueFlat = {
     // parserStatement ::= ParserMatchedStatement
     ParserMatchedStatement,
 
@@ -3422,7 +3422,7 @@ parserStatement: Value = {
 
 // - LALRPOP parser-statement dangling-else lowering
 
-ParserMatchedStatement: Value = {
+ParserMatchedStatement: ValueFlat = {
     // ParserMatchedStatement ::= emptyStatement
     emptyStatement,
 
@@ -3450,7 +3450,7 @@ ParserMatchedStatement: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-ParserUnmatchedStatement: Value = {
+ParserUnmatchedStatement: ValueFlat = {
     // ParserUnmatchedStatement ::= "IF" "L_PAREN" expression "R_PAREN" parserStatement
     <l:@L> "IF" "L_PAREN" <condition:expression> "R_PAREN" <yes:parserStatement> <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3472,7 +3472,7 @@ ParserUnmatchedStatement: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-parserState: Value = {
+parserState: ValueFlat = {
     // parserState ::= annotationList "STATE" push_name "L_BRACE" parserBlockElementStatementList
     //     transitionStatement "R_BRACE" pop_scope
     <l:@L> <al:annotationList> "STATE" <n:push_name> "L_BRACE"
@@ -3486,7 +3486,7 @@ parserState: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-parserStateList: Value = {
+parserStateList: ValueFlat = {
     // parserStateList ::= parserState
     <s:parserState> => s,
 
@@ -3500,7 +3500,7 @@ parserStateList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-parserLocalDeclaration: Value = {
+parserLocalDeclaration: ValueFlat = {
     // parserLocalDeclaration ::= constantDeclaration
     <d:constantDeclaration> => d,
 
@@ -3514,7 +3514,7 @@ parserLocalDeclaration: Value = {
     <d:valueSetDeclaration> => d,
 };
 
-parserLocalDeclarationList: Value = {
+parserLocalDeclarationList: ValueFlat = {
     // parserLocalDeclarationList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -3534,7 +3534,7 @@ parserLocalDeclarationList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-parserDeclaration: Value = {
+parserDeclaration: ValueFlat = {
     // parserDeclaration ::= annotationList "PARSER" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" constructorParameterListOpt "L_BRACE" parserLocalDeclarationList
     //     parserStateList "R_BRACE" pop_scope
@@ -3554,7 +3554,7 @@ parserDeclaration: Value = {
 // - Table declarations
 
 #[inline]
-constOpt: Value = {
+constOpt: ValueFlat = {
     // constOpt ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -3576,7 +3576,7 @@ constOpt: Value = {
 
 // - Table key property
 
-tableKey: Value = {
+tableKey: ValueFlat = {
     // tableKey ::= expression "COLON" name annotationList "SEMICOLON"
     <l:@L> <e:expression> colon <n:name> <al:annotationList> "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3587,7 +3587,7 @@ tableKey: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-tableKeyList: Value = {
+tableKeyList: ValueFlat = {
     // tableKeyList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -3609,7 +3609,7 @@ tableKeyList: Value = {
 
 // - Table actions property
 
-tableActionReference: Value = {
+tableActionReference: ValueFlat = {
     // tableActionReference ::= prefixedNonTypeName
     <n:prefixedNonTypeName> => n,
 
@@ -3623,7 +3623,7 @@ tableActionReference: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-tableAction: Value = {
+tableAction: ValueFlat = {
     // tableAction ::= annotationList tableActionReference "SEMICOLON"
     <l:@L> <al:annotationList> <ac:tableActionReference> "SEMICOLON" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3634,7 +3634,7 @@ tableAction: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-tableActionList: Value = {
+tableActionList: ValueFlat = {
     // tableActionList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -3656,7 +3656,7 @@ tableActionList: Value = {
 
 // - Table entry property
 
-tableEntryPriority: Value = {
+tableEntryPriority: ValueFlat = {
     // tableEntryPriority ::= "PRIORITY" "ASSIGN" integerLiteral "COLON"
     <l:@L> "PRIORITY" "ASSIGN" <int:integerLiteral> colon <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3676,7 +3676,7 @@ tableEntryPriority: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-tableEntry: Value = {
+tableEntry: ValueFlat = {
     // tableEntry ::= constOpt tableEntryPriority keysetExpression "COLON"
     //   tableActionReference annotationList "SEMICOLON"
     <l:@L> <c:constOpt> <p:tableEntryPriority> <k:keysetExpression> colon
@@ -3700,7 +3700,7 @@ tableEntry: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-tableEntryList: Value = {
+tableEntryList: ValueFlat = {
     // tableEntryList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -3722,7 +3722,7 @@ tableEntryList: Value = {
 
 // - Table properties
 
-tableProperty: Value = {
+tableProperty: ValueFlat = {
     // tableProperty ::= "KEY" "ASSIGN" "L_BRACE" tableKeyList "R_BRACE"
     <l:@L> "KEY" "ASSIGN" "L_BRACE" <kl:tableKeyList> "R_BRACE" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -3763,7 +3763,7 @@ tableProperty: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-tablePropertyList: Value = {
+tablePropertyList: ValueFlat = {
     // tablePropertyList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -3783,7 +3783,7 @@ tablePropertyList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-tableDeclaration: Value = {
+tableDeclaration: ValueFlat = {
     // tableDeclaration ::= annotationList "TABLE" name "L_BRACE" tablePropertyList "R_BRACE"
     <l:@L> <al:annotationList> "TABLE" <n:name> "L_BRACE" <pl:tablePropertyList> "R_BRACE"
         <r:@R> =>? make::case_shaped! {
@@ -3796,7 +3796,7 @@ tableDeclaration: Value = {
 };
 
 // - Control type declarations
-controlTypeDeclaration: Value = {
+controlTypeDeclaration: ValueFlat = {
     // controlTypeDeclaration ::= annotationList "CONTROL" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "CONTROL" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
@@ -3810,12 +3810,12 @@ controlTypeDeclaration: Value = {
 };
 
 // - Control declarations
-controlBody: Value = {
+controlBody: ValueFlat = {
     // controlBody ::= blockStatement
     <b:blockStatement> => b,
 };
 
-controlLocalDeclaration: Value = {
+controlLocalDeclaration: ValueFlat = {
     // controlLocalDeclaration ::= constantDeclaration
     <d:constantDeclaration> => d,
 
@@ -3836,7 +3836,7 @@ controlLocalDeclaration: Value = {
 },
 };
 
-controlLocalDeclarationList: Value = {
+controlLocalDeclarationList: ValueFlat = {
     // controlLocalDeclarationList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -3856,7 +3856,7 @@ controlLocalDeclarationList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-controlDeclaration: Value = {
+controlDeclaration: ValueFlat = {
     // controlDeclaration ::= annotationList "CONTROL" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" constructorParameterListOpt "L_BRACE" controlLocalDeclarationList
     //     "APPLY" controlBody "R_BRACE" pop_scope
@@ -3873,7 +3873,7 @@ controlDeclaration: Value = {
 
 // - Package type declarations
 
-packageTypeDeclaration: Value = {
+packageTypeDeclaration: ValueFlat = {
     // packageTypeDeclaration ::= annotationList "PACKAGE" push_name typeParameterListOpt "L_PAREN"
     //     parameterList "R_PAREN" pop_scope "SEMICOLON"
     <l:@L> <al:annotationList> "PACKAGE" <n:push_name> <tpl:typeParameterListOpt> "L_PAREN"
@@ -3888,7 +3888,7 @@ packageTypeDeclaration: Value = {
 
 // - Type declarations
 
-typeDeclaration: Value = {
+typeDeclaration: ValueFlat = {
     // typeDeclaration ::= derivedTypeDeclaration
     <d:derivedTypeDeclaration> => d,
 
@@ -3907,7 +3907,7 @@ typeDeclaration: Value = {
 
 // - Declarations
 
-declaration: Value = {
+declaration: ValueFlat = {
     // declaration ::= constantDeclaration
     <constant:constantDeclaration> => {
     let id = extract::id_declaration(&ctx.arena(), &constant).expect("known P4 declaration shape");
@@ -3984,7 +3984,7 @@ declaration: Value = {
 
 // LALRPOP also accepts expression-ctx type and angle markers emitted by
 // the Rust lexer; both retain the canonical annotation token value.
-annotationToken: Value = {
+annotationToken: ValueFlat = {
     // annotationToken ::= "UNEXPECTED_TOKEN"
     <l:@L> "UNEXPECTED_TOKEN" <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -4784,7 +4784,7 @@ annotationToken: Value = {
     }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-annotationBody: Value = {
+annotationBody: ValueFlat = {
     // annotationBody ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -4813,7 +4813,7 @@ annotationBody: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-structuredAnnotationBody: Value = {
+structuredAnnotationBody: ValueFlat = {
     // structuredAnnotationBody ::= sequenceOrRecordElementExpression trailingCommaOpt
     <l:@L> <e:sequenceOrRecordElementExpression> <c:trailingCommaOpt> <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -4824,7 +4824,7 @@ structuredAnnotationBody: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-annotation: Value = {
+annotation: ValueFlat = {
     // annotation ::= "AT" name
     <l:@L> "AT" <name:name> <r:@R> =>? make::case_shaped! {
             arena: &mut ctx.arena_mut(),
@@ -4862,7 +4862,7 @@ annotation: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-annotationListNonEmpty: Value = {
+annotationListNonEmpty: ValueFlat = {
     // annotationListNonEmpty ::= annotation
     <a:annotation> => a,
 
@@ -4877,7 +4877,7 @@ annotationListNonEmpty: Value = {
 };
 
 #[inline]
-annotationList: Value = {
+annotationList: ValueFlat = {
     // annotationList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -4893,7 +4893,7 @@ annotationList: Value = {
 
 // - P4 program
 
-declarationList: Value = {
+declarationList: ValueFlat = {
     // declarationList ::= epsilon
     <l:@L>  <r:@R> =>? make::case_shaped! {
         arena: &mut ctx.arena_mut(),
@@ -4922,7 +4922,7 @@ declarationList: Value = {
         }.map_err(|error| P4Error::new(ctx.location_span(l, r), error)).map_err(|error| ParseError::User { error }),
 };
 
-pub p4program: Value = {
+pub p4program: ValueFlat = {
     // p4program ::= declarationList "END"
     <program:declarationList> "END" => program,
 };

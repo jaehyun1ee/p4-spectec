@@ -19,7 +19,7 @@ use crate::{
     sim_plugin::dummy::Dummy,
 };
 
-use crate::lang::data::{arena::Arena, notation::ShapeArena, value::Value};
+use crate::lang::data::{arena::Arena, notation::ShapeArena, value::ValueFlat};
 
 use crate::lang::al;
 
@@ -187,8 +187,8 @@ where
     pub fn eval_program(
         &mut self,
         name: &str,
-        program: Value,
-    ) -> Result<Vec<Value>, InterpreterError> {
+        program: ValueFlat,
+    ) -> Result<Vec<ValueFlat>, InterpreterError> {
         let mut ctx = self.context();
         ctx.call_program(name, program)
     }

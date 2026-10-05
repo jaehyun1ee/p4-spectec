@@ -5,7 +5,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, get, make},
+    data::value::{ValueFlat, get, make},
 };
 
 use crate::runner::{Extern, ExternError, Interface, Interpreter, InterpreterError, RunnerContext};
@@ -17,7 +17,7 @@ use crate::sim_plugin::error;
 /// The `LOCAL` cursor, selecting the current call's scope.
 pub(crate) fn local_cursor(
     arena: &mut crate::lang::data::arena::Arena,
-) -> Result<Value, ExternError> {
+) -> Result<ValueFlat, ExternError> {
     Ok(make::case_shaped! {
         arena: arena,
         shape: "LOCAL",
@@ -31,7 +31,7 @@ pub(crate) fn local_cursor(
 pub(crate) fn bare_name(
     arena: &mut crate::lang::data::arena::Arena,
     name: &str,
-) -> Result<Value, ExternError> {
+) -> Result<ValueFlat, ExternError> {
     let value_name = make::text(arena, name.to_owned(), Span::default())?;
     Ok(make::case_shaped! {
         arena: arena,
@@ -47,10 +47,10 @@ pub(crate) fn bare_name(
 /// Looks a variable's value up at a cursor with `find_var_value_t`.
 pub fn find_var_value_t<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_cursor: &Value,
-    value_ctx: &Value,
+    value_cursor: &ValueFlat,
+    value_ctx: &ValueFlat,
     name: &str,
-) -> Result<Value, InterpreterError>
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -73,9 +73,9 @@ where
 /// Looks a local variable's value up.
 pub fn find_var_value_t_local<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: &Value,
+    value_ctx: &ValueFlat,
     name: &str,
-) -> Result<Value, InterpreterError>
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -96,9 +96,9 @@ where
 /// Looks a local variable up with `find_var_e`.
 pub fn find_var_e_local<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: Value,
+    value_ctx: ValueFlat,
     name: &str,
-) -> Result<Value, InterpreterError>
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -114,9 +114,9 @@ where
 /// Looks a local type up with `find_type_e`; a missing type is an error.
 pub fn find_type_e_local<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: Value,
+    value_ctx: ValueFlat,
     name: &str,
-) -> Result<Value, InterpreterError>
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -134,9 +134,9 @@ where
 /// Substitutes local type arguments into a type with `subst_type_e`.
 pub fn subst_type_e_local<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: Value,
-    value_typ: Value,
-) -> Result<Value, InterpreterError>
+    value_ctx: ValueFlat,
+    value_typ: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -149,8 +149,8 @@ where
 /// The default value of a type.
 pub fn default<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_typ: Value,
-) -> Result<Value, InterpreterError>
+    value_typ: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -162,7 +162,7 @@ where
 /// The minimum size of a type in bits.
 pub fn sizeof_min_size_in_bits<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_typ: Value,
+    value_typ: ValueFlat,
 ) -> Result<num_bigint::BigInt, InterpreterError>
 where
     Iface: Interface,
@@ -179,7 +179,7 @@ where
 /// The maximum size of a type in bits.
 pub fn sizeof_max_size_in_bits<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_typ: Value,
+    value_typ: ValueFlat,
 ) -> Result<num_bigint::BigInt, InterpreterError>
 where
     Iface: Interface,
@@ -196,9 +196,9 @@ where
 /// Casts a value to a type.
 pub fn cast_op<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_typ: Value,
-    value: Value,
-) -> Result<Value, InterpreterError>
+    value_typ: ValueFlat,
+    value: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -212,8 +212,8 @@ where
 /// Serializes a value to its bits.
 pub fn write_bits_from_value<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_source: Value,
-) -> Result<Value, InterpreterError>
+    value_source: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -225,10 +225,10 @@ where
 /// Fills a value from bits, sizing its variable field to `size_varsize`.
 pub fn write_value_from_bits<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_target: Value,
+    value_target: ValueFlat,
     size_varsize: usize,
     bits: &[bool],
-) -> Result<Value, InterpreterError>
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -261,10 +261,10 @@ where
 /// Extracts the bit range `hi..lo` of a value.
 pub fn bitacc_range_op<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_base: Value,
-    value_hi: Value,
-    value_lo: Value,
-) -> Result<Value, InterpreterError>
+    value_base: ValueFlat,
+    value_hi: ValueFlat,
+    value_lo: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -278,8 +278,8 @@ where
 /// The keys of a table: name, match kind, and type each.
 pub fn key_interface_of_table_object<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_table: Value,
-) -> Result<Vec<(Value, Value, Value)>, InterpreterError>
+    value_table: ValueFlat,
+) -> Result<Vec<(ValueFlat, ValueFlat, ValueFlat)>, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -302,12 +302,12 @@ where
 /// Adds an entry to a table object; `None` when the entry was rejected.
 pub fn table_object_add_entry<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: Value,
-    value_table: Value,
-    value_priority: Value,
-    value_keys: Value,
-    value_action: Value,
-) -> Result<Option<Value>, InterpreterError>
+    value_ctx: ValueFlat,
+    value_table: ValueFlat,
+    value_priority: ValueFlat,
+    value_keys: ValueFlat,
+    value_action: ValueFlat,
+) -> Result<Option<ValueFlat>, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -324,10 +324,10 @@ where
 /// Sets a table object's default action.
 pub fn table_object_add_default_action<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: Value,
-    value_table: Value,
-    value_action: Value,
-) -> Result<Value, InterpreterError>
+    value_ctx: ValueFlat,
+    value_table: ValueFlat,
+    value_action: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -343,9 +343,9 @@ where
 /// Finds an object by qualified name.
 pub fn find_object_qualified_e<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_arch: Value,
-    value_id: Value,
-) -> Result<Option<Value>, InterpreterError>
+    value_arch: ValueFlat,
+    value_id: ValueFlat,
+) -> Result<Option<ValueFlat>, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -358,9 +358,9 @@ where
 /// Finds an object by bare name.
 pub fn find_object_unqualified_e<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_arch: Value,
-    value_id: Value,
-) -> Result<Option<Value>, InterpreterError>
+    value_arch: ValueFlat,
+    value_id: ValueFlat,
+) -> Result<Option<ValueFlat>, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -375,10 +375,10 @@ where
 /// Replaces an object found by qualified name.
 pub fn update_object_qualified_e<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_arch: Value,
-    value_id: Value,
-    value_object: Value,
-) -> Result<Value, InterpreterError>
+    value_arch: ValueFlat,
+    value_id: ValueFlat,
+    value_object: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -390,10 +390,10 @@ where
 /// Replaces an object found by bare name.
 pub fn update_object_unqualified_e<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_arch: Value,
-    value_id: Value,
-    value_object: Value,
-) -> Result<Value, InterpreterError>
+    value_arch: ValueFlat,
+    value_id: ValueFlat,
+    value_object: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -407,9 +407,9 @@ where
 /// The state of an extern object; missing state is an error.
 pub fn find_object_state_e<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_arch: Value,
-    value_id: Value,
-) -> Result<Value, InterpreterError>
+    value_arch: ValueFlat,
+    value_id: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -424,10 +424,10 @@ where
 /// Replaces the state of an extern object; missing state is an error.
 pub fn update_object_state_e<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_arch: Value,
-    value_id: Value,
-    value_state: Value,
-) -> Result<Value, InterpreterError>
+    value_arch: ValueFlat,
+    value_id: ValueFlat,
+    value_state: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -445,8 +445,8 @@ where
 /// The architecture state.
 pub fn find_arch_state_e<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_arch: Value,
-) -> Result<Value, InterpreterError>
+    value_arch: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -458,9 +458,9 @@ where
 /// Replaces the architecture state.
 pub fn update_arch_state_e<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_arch: Value,
-    value_state: Value,
-) -> Result<Value, InterpreterError>
+    value_arch: ValueFlat,
+    value_state: ValueFlat,
+) -> Result<ValueFlat, InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,

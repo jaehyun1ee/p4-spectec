@@ -28,7 +28,7 @@ pub type Error = Box<Report>;
 /// Namespace of a failed context lookup.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntityKind {
-    Value,
+    ValueFlat,
     Type,
     DefinedType,
     Relation,
@@ -38,7 +38,7 @@ pub enum EntityKind {
 impl fmt::Display for EntityKind {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
-            Self::Value => "value",
+            Self::ValueFlat => "value",
             Self::Type => "type",
             Self::DefinedType => "defined type",
             Self::Relation => "relation",

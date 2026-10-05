@@ -15,7 +15,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{Value, ValueKind, get, make},
+        value::{ValueFlat, ValueFlatKind, get, make},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
@@ -27,18 +27,22 @@ use super::{BuiltinError, extract};
 // == Conversion between runtime values and Rust collections
 
 /// The elements of a list value.
-fn list_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], BuiltinError> {
+fn list_of_value<'a>(arena: &'a Arena, value: &ValueFlat) -> Result<&'a [ValueFlat], BuiltinError> {
     get::list(arena, value).map_err(BuiltinError::from)
 }
 
 /// The integer in a number value.
-fn bigint_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
+fn bigint_of_value<'a>(arena: &'a Arena, value: &ValueFlat) -> Result<&'a BigInt, BuiltinError> {
     let num = get::num(arena, value).map_err(BuiltinError::from)?;
     Ok(num::to_int(num))
 }
 
 /// `dec $rev_<X>(X*) : X*`, the list reversed.
-pub fn rev_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
+pub fn rev_(
+    arena: &mut Arena,
+    targs: &[Typ],
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let typ = extract::one(targs)?;
     let typ_list = typ::make::list(typ.clone());
     let value_list = extract::one(values)?;
@@ -49,7 +53,11 @@ pub fn rev_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value,
 }
 
 /// `dec $concat_<X>((X*)*) : X*`, the lists joined in order.
-pub fn concat_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
+pub fn concat_(
+    arena: &mut Arena,
+    targs: &[Typ],
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let typ = extract::one(targs)?;
     let typ_list = typ::make::list(typ.clone());
     let mut concatenated = Vec::new();
@@ -69,8 +77,8 @@ pub fn concat_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Val
 pub fn distinct_(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let _typ = extract::one(targs)?;
     let value_list = extract::one(values)?;
     let values = list_of_value(arena, value_list)?;
@@ -89,8 +97,8 @@ pub fn distinct_(
 pub fn partition_(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let typ = extract::one(targs)?;
     let typ_list = Rc::new(typ::make::list(typ.clone()).node);
     let (value_list, value_len) = extract::two(values)?;
@@ -123,14 +131,18 @@ pub fn partition_(
 
 /// `dec $assoc_<X, Y>(X, (X, Y)*) : Y?`,
 /// the value of the first pair whose key matches, if any.
-pub fn assoc_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
+pub fn assoc_(
+    arena: &mut Arena,
+    targs: &[Typ],
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let (_typ_key, typ_value) = extract::two(targs)?;
     let (value, value_list) = extract::two(values)?;
     let mut found = None;
     for pair in list_of_value(arena, value_list)? {
         // Every element must be a pair
         let pair = match arena.kind(pair) {
-            ValueKind::Tuple(pair) if pair.len() == 2 => pair,
+            ValueFlatKind::Tuple(pair) if pair.len() == 2 => pair,
             _ => {
                 return Err(BuiltinError::argument_invalid("expected an association pair"));
             }
@@ -147,7 +159,11 @@ pub fn assoc_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Valu
 
 /// `dec $sort_<X>((nat, X)*) : (nat, X)*`,
 /// the pairs sorted by their natural key, stably.
-pub fn sort_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
+pub fn sort_(
+    arena: &mut Arena,
+    targs: &[Typ],
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let typ_value = extract::one(targs)?;
     let typ_pair = typ::make::tuple(vec![typ::make::nat(), typ_value.clone()]);
     let typ_list = typ::make::list(typ_pair);
@@ -157,7 +173,7 @@ pub fn sort_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value
     for pair in pairs {
         // Every element must be a pair whose first component is the key
         let pair_values = match arena.kind(pair) {
-            ValueKind::Tuple(pair) if pair.len() == 2 => pair,
+            ValueFlatKind::Tuple(pair) if pair.len() == 2 => pair,
             _ => {
                 return Err(BuiltinError::argument_invalid("expected a numeric pair"));
             }
@@ -176,8 +192,8 @@ pub fn sort_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value
 pub fn transpose_(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let typ = extract::one(targs)?;
     let typ_list = typ::make::list(typ.clone());
     let typ_matrix = typ::make::list(typ_list.clone());

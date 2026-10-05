@@ -15,7 +15,7 @@ use lalrpop_util::ParseError;
 
 use crate::lang::{
     common::source::{Phrase, Position, Span},
-    data::{arena::Arena, value::Value},
+    data::{arena::Arena, value::ValueFlat},
 };
 
 use super::{
@@ -77,7 +77,7 @@ pub fn parse_string(
     arena: &mut Arena,
     path: impl AsRef<Path>,
     source: &str,
-) -> Result<Value, P4Error> {
+) -> Result<ValueFlat, P4Error> {
     let file: Rc<str> = Rc::from(path.as_ref().to_string_lossy().into_owned());
     // The lexer and parser share one context for name classification
     let ctx = Rc::new(Context::new(arena));
@@ -96,7 +96,7 @@ pub fn parse_file(
     arena: &mut Arena,
     includes: &[PathBuf],
     path: impl AsRef<Path>,
-) -> Result<Value, P4Error> {
+) -> Result<ValueFlat, P4Error> {
     let path = path.as_ref();
     let source = preprocess(includes, path)?;
     parse_string(arena, path, &source)

@@ -11,7 +11,7 @@ use thiserror::Error;
 
 use crate::lang::{
     common::prim::num::NumericError,
-    data::value::{Value, ValueError},
+    data::value::{ValueError, ValueFlat},
 };
 
 use crate::lang::il::ast::Typ;
@@ -119,8 +119,8 @@ pub trait Extern: Sized {
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
-        values: &[Value],
-    ) -> Result<(Vec<Value>, bool), ExternError>
+        values: &[ValueFlat],
+    ) -> Result<(Vec<ValueFlat>, bool), ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
@@ -131,8 +131,8 @@ pub trait Extern: Sized {
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         targs: &[Typ],
-        values: &[Value],
-    ) -> Result<(Value, bool), ExternError>
+        values: &[ValueFlat],
+    ) -> Result<(ValueFlat, bool), ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
@@ -151,8 +151,8 @@ impl Extern for NullExtern {
         &self,
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _name: &str,
-        _values: &[Value],
-    ) -> Result<(Vec<Value>, bool), ExternError>
+        _values: &[ValueFlat],
+    ) -> Result<(Vec<ValueFlat>, bool), ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -166,8 +166,8 @@ impl Extern for NullExtern {
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         _name: &str,
         _targs: &[Typ],
-        _values: &[Value],
-    ) -> Result<(Value, bool), ExternError>
+        _values: &[ValueFlat],
+    ) -> Result<(ValueFlat, bool), ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,

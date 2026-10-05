@@ -3,7 +3,7 @@
 //! Re-exports the shared assignment and adds parameters,
 //! whose patterns live in the parameter, not in a separate argument list.
 
-use crate::lang::data::{arena::Arena, value::Value};
+use crate::lang::data::{arena::Arena, value::ValueFlat};
 
 use crate::runtime::envs::interp::sl::ast_prepared as ast;
 
@@ -21,7 +21,7 @@ fn assign_param<'global>(
     ctx_caller: &Context<'_>,
     ctx: Context<'global>,
     param: &ast::Param,
-    value: Value,
+    value: ValueFlat,
 ) -> Backtrack<Context<'global>> {
     match &param.node {
         ast::ParamKind::Exp(_, exp) => assign_exp(arena, ctx, exp, value),
@@ -35,7 +35,7 @@ pub(in crate::interp::sl) fn assign_params<'global>(
     ctx_caller: &Context<'_>,
     mut ctx: Context<'global>,
     params: &[ast::Param],
-    values: &[Value],
+    values: &[ValueFlat],
 ) -> Backtrack<Context<'global>> {
     // Argument count must match the parameters
     assert_eq!(params.len(), values.len(), "validated parameter argument arity");

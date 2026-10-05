@@ -11,7 +11,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        value::{Value, make},
+        value::{ValueFlat, make},
     },
 };
 
@@ -48,12 +48,12 @@ pub(crate) struct BinaryExpressionPart {
     /// Where the operator was written.
     span: Span,
     /// Its right operand.
-    value_r: Value,
+    value_r: ValueFlat,
 }
 
 impl BinaryExpressionPart {
     /// A step from its parts.
-    pub(crate) fn new(op: BinaryOperator, span: Span, value_r: Value) -> Self {
+    pub(crate) fn new(op: BinaryOperator, span: Span, value_r: ValueFlat) -> Self {
         Self { op, span, value_r }
     }
 }
@@ -105,7 +105,7 @@ impl BinaryOperator {
 /// Pops one operator and its operands, pushing the binary expression.
 fn reduce(
     arena: &mut Arena,
-    values: &mut Vec<Value>,
+    values: &mut Vec<ValueFlat>,
     operators: &mut Vec<StackedOperator>,
 ) -> Result<(), P4Error> {
     let op = operators.pop().expect("binary operator");
@@ -132,9 +132,9 @@ fn reduce(
 /// left-associative.
 pub(crate) fn fold(
     arena: &mut Arena,
-    first: Value,
+    first: ValueFlat,
     parts: Vec<BinaryExpressionPart>,
-) -> Result<Value, P4Error> {
+) -> Result<ValueFlat, P4Error> {
     let mut values = vec![first];
     let mut operators: Vec<StackedOperator> = Vec::new();
 

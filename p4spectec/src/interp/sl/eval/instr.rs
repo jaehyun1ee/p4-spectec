@@ -11,7 +11,7 @@ use std::borrow::Cow;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, ValueKind, get},
+    data::value::{ValueFlat, ValueFlatKind, get},
     hints::input,
     traits::print::Print,
 };
@@ -282,7 +282,7 @@ fn eval_guard<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     span: &Span,
-    value: Value,
+    value: ValueFlat,
     guard: &ast::Guard,
 ) -> Backtrack<bool> {
     // The trivial guard reads the boolean itself
@@ -421,7 +421,7 @@ fn eval_return_instr<Iface: Interface, Ext: Extern>(
         if scope == Scope::Local
             || values
                 .iter()
-                .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
+                .any(|value| matches!(runner_ctx.arena().kind(value), ValueFlatKind::Func(_)))
         {
             let value =
                 unwrap!(SlInterp::invoke_func(runner_ctx, ctx.as_ref(), id, &targs, &values));
@@ -504,7 +504,10 @@ fn eval_cond_iter<Iface: Interface, Ext: Extern>(
                 &Span::default()
             );
             // Copy handles before the callback can allocate in the arena
-            let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
+            let values_by_var: Vec<_> = values_by_var
+                .into_iter()
+                .map(<[ValueFlat]>::to_vec)
+                .collect();
             let len = values_by_var.first().map_or(0, Vec::len);
             let mut ctx_sub = ctx.clone();
             for idx in 0..len {

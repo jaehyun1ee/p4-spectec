@@ -16,7 +16,7 @@ use super::{notation::ShapeArena, value::ValueArena};
 pub struct Arena {
     /// Notation shapes of prepared syntax and case bodies.
     pub(super) shape: ShapeArena,
-    /// Value bodies, types, and spans.
+    /// ValueFlat bodies, types, and spans.
     pub(super) value: ValueArena,
 }
 
@@ -35,7 +35,7 @@ impl Arena {
 
     /// Drops every value, type, and span, keeping the shapes.
     ///
-    /// Value, type, and span handles issued before become invalid
+    /// ValueFlat, type, and span handles issued before become invalid
     /// and numbering starts over; shape handles stay valid.
     pub fn reset_values(&mut self) {
         self.value = ValueArena::default();

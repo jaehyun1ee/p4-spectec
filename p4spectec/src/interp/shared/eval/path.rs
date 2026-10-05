@@ -7,7 +7,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, get, make},
+    data::value::{ValueFlat, get, make},
 };
 
 use crate::runner::{Extern, Interface, RunnerContext};
@@ -25,9 +25,9 @@ use super::{Invoker, expr::eval_exp, ops};
 fn eval_access_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
-    value_base: &Value,
+    value_base: &ValueFlat,
     path: &ast::Path,
-) -> Backtrack<Value> {
+) -> Backtrack<ValueFlat> {
     match &path.node {
         // The root is the base value itself
         ast::PathKind::Root => ok!(*value_base),
@@ -49,10 +49,10 @@ fn eval_access_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext:
 fn eval_access_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
-    value_base: &Value,
+    value_base: &ValueFlat,
     path: &ast::Path,
     exp_idx: &ast::Exp,
-) -> Backtrack<Value> {
+) -> Backtrack<ValueFlat> {
     // Read the prefix, then index it
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
@@ -65,11 +65,11 @@ fn eval_access_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
 fn eval_access_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
-    value_base: &Value,
+    value_base: &ValueFlat,
     path: &ast::Path,
     exp_idx: &ast::Exp,
     exp_len: &ast::Exp,
-) -> Backtrack<Value> {
+) -> Backtrack<ValueFlat> {
     // Read the prefix, then slice it with the evaluated bounds
     let typ = &path.note;
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
@@ -95,10 +95,10 @@ fn eval_access_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface
 fn eval_access_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
-    value_base: &Value,
+    value_base: &ValueFlat,
     path: &ast::Path,
     atom: &ast::Atom,
-) -> Backtrack<Value> {
+) -> Backtrack<ValueFlat> {
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     ops::access_dot(runner_ctx.arena(), &value, atom, &path.span)
 }
@@ -114,10 +114,10 @@ pub(crate) fn eval_update_path<
 >(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
-    value_base: &Value,
+    value_base: &ValueFlat,
     path: &ast::Path,
-    value_upd: Value,
-) -> Backtrack<Value> {
+    value_upd: ValueFlat,
+) -> Backtrack<ValueFlat> {
     match &path.node {
         // At the root the update replaces the whole value
         ast::PathKind::Root => ok!(value_upd),
@@ -139,11 +139,11 @@ pub(crate) fn eval_update_path<
 fn eval_update_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
-    value_base: &Value,
+    value_base: &ValueFlat,
     path: &ast::Path,
     exp_idx: &ast::Exp,
-    value_upd: Value,
-) -> Backtrack<Value> {
+    value_upd: ValueFlat,
+) -> Backtrack<ValueFlat> {
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
@@ -166,12 +166,12 @@ fn eval_update_idx_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
 fn eval_update_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
-    value_base: &Value,
+    value_base: &ValueFlat,
     path: &ast::Path,
     exp_idx: &ast::Exp,
     exp_len: &ast::Exp,
-    value_upd: Value,
-) -> Backtrack<Value> {
+    value_upd: ValueFlat,
+) -> Backtrack<ValueFlat> {
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
@@ -197,11 +197,11 @@ fn eval_update_slice_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface
 fn eval_update_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
     ctx: &Interp::Context<'global>,
-    value_base: &Value,
+    value_base: &ValueFlat,
     path: &ast::Path,
     atom: &ast::Atom,
-    value_upd: Value,
-) -> Backtrack<Value> {
+    value_upd: ValueFlat,
+) -> Backtrack<ValueFlat> {
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
     let value_fields =

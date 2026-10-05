@@ -11,7 +11,7 @@ pub mod iter;
 pub(crate) mod ops;
 pub(crate) mod path;
 
-use crate::lang::data::value::Value;
+use crate::lang::data::value::ValueFlat;
 
 use crate::runner::{Extern, Interface, Interpreter, RunnerContext};
 
@@ -36,14 +36,14 @@ where
         ctx: &Self::Context<'global>,
         id: &ast::Id,
         targs: &[ast::Typ],
-        values: &[Value],
-    ) -> Backtrack<Value>;
+        values: &[ValueFlat],
+    ) -> Backtrack<ValueFlat>;
 
     /// Calls relation `id` with its evaluated inputs, returning the outputs.
     fn invoke_rel<'global>(
         runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         ctx: &Self::Context<'global>,
         id: &ast::Id,
-        values: &[Value],
-    ) -> Backtrack<Vec<Value>>;
+        values: &[ValueFlat],
+    ) -> Backtrack<Vec<ValueFlat>>;
 }

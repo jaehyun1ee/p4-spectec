@@ -12,3 +12,6 @@ pub mod notation;
 pub mod typ;
 pub mod value;
 pub mod var;
+
+#[cfg(test)]
+mod tests;

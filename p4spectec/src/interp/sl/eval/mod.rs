@@ -9,7 +9,7 @@ pub mod call;
 pub mod expr;
 pub mod instr;
 
-use crate::lang::data::value::Value;
+use crate::lang::data::value::ValueFlat;
 
 use crate::runtime::envs::interp::sl::ast_prepared as ast;
 
@@ -27,8 +27,8 @@ impl<Iface: Interface, Ext: Extern> Invoker<Iface, Ext> for SlInterp {
         ctx: &Context<'global>,
         id: &ast::Id,
         targs: &[ast::Typ],
-        values: &[Value],
-    ) -> Backtrack<Value> {
+        values: &[ValueFlat],
+    ) -> Backtrack<ValueFlat> {
         call::invoke_func(runner_ctx, ctx, id, targs, values)
     }
 
@@ -36,8 +36,8 @@ impl<Iface: Interface, Ext: Extern> Invoker<Iface, Ext> for SlInterp {
         runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
         ctx: &Context<'global>,
         id: &ast::Id,
-        values: &[Value],
-    ) -> Backtrack<Vec<Value>> {
+        values: &[ValueFlat],
+    ) -> Backtrack<Vec<ValueFlat>> {
         call::invoke_rel(runner_ctx, ctx, id, values)
     }
 }

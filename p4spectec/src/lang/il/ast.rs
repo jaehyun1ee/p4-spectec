@@ -132,9 +132,9 @@ pub struct TypCase<P: Stage = Source> {
 // == Values
 
 /// A runtime value handle.
-pub type Value = data::value::Value;
+pub type ValueFlat = data::value::ValueFlat;
 /// The forms of a runtime value.
-pub type ValueKind = data::value::ValueKind;
+pub type ValueFlatKind = data::value::ValueFlatKind;
 /// One field of a struct value.
 pub type ValueField = data::value::ValueField;
 /// A variant value: a mixfix skeleton with values as arguments.

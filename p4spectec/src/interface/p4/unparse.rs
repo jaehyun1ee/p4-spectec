@@ -18,7 +18,7 @@ use crate::lang::{
             Mixop,
             walk::{self, Piece},
         },
-        value::{Value, ValueCase, ValueKind},
+        value::{ValueCase, ValueFlat, ValueFlatKind},
     },
     hints::alter::{self, AlterHint, Renderer},
     traits::print::Print,
@@ -116,30 +116,32 @@ impl P4Unparser {
     // - Rendering
 
     /// Renders a value as P4 text.
-    pub fn render(&self, arena: &Arena, value: &Value) -> Result<String, P4UnparseError> {
+    pub fn render(&self, arena: &Arena, value: &ValueFlat) -> Result<String, P4UnparseError> {
         match arena.kind(value) {
             // Primitives print as themselves
-            ValueKind::Bool(value) => Ok(value.to_string()),
-            ValueKind::Num(Number::Nat(value)) => Ok(value.to_string()),
-            ValueKind::Num(Number::Int(value)) => Ok(value.to_string()),
-            ValueKind::Text(value) => Ok(escape_text(value)),
+            ValueFlatKind::Bool(value) => Ok(value.to_string()),
+            ValueFlatKind::Num(Number::Nat(value)) => Ok(value.to_string()),
+            ValueFlatKind::Num(Number::Int(value)) => Ok(value.to_string()),
+            ValueFlatKind::Text(value) => Ok(escape_text(value)),
             // Structs have no P4 spelling
-            ValueKind::Struct(_) => Err(P4UnparseError::ValueUnsupported("Struct")),
+            ValueFlatKind::Struct(_) => Err(P4UnparseError::ValueUnsupported("Struct")),
             // Cases go through their hint or shape
-            ValueKind::Case(value_case) => self.render_case(arena, arena.typ(value), value_case),
+            ValueFlatKind::Case(value_case) => {
+                self.render_case(arena, arena.typ(value), value_case)
+            }
             // Tuples in parentheses, comma separated
-            ValueKind::Tuple(values) => {
+            ValueFlatKind::Tuple(values) => {
                 let rendered = self.render_values(arena, values, ", ")?;
                 Ok(format!("({rendered})"))
             }
             // An option is its content or nothing
-            ValueKind::Opt(Some(value)) => self.render(arena, value),
-            ValueKind::Opt(None) => Ok(String::new()),
+            ValueFlatKind::Opt(Some(value)) => self.render(arena, value),
+            ValueFlatKind::Opt(None) => Ok(String::new()),
             // Lists are space separated
-            ValueKind::List(values) => self.render_values(arena, values, " "),
+            ValueFlatKind::List(values) => self.render_values(arena, values, " "),
             // Functions and externs have no P4 spelling
-            ValueKind::Func(_) => Err(P4UnparseError::ValueUnsupported("Func")),
-            ValueKind::Extern(_) => Err(P4UnparseError::ValueUnsupported("Extern")),
+            ValueFlatKind::Func(_) => Err(P4UnparseError::ValueUnsupported("Func")),
+            ValueFlatKind::Extern(_) => Err(P4UnparseError::ValueUnsupported("Extern")),
         }
     }
 
@@ -167,7 +169,7 @@ impl P4Unparser {
         &self,
         arena: &Arena,
         hint: &AlterHint,
-        values: &[&Value],
+        values: &[&ValueFlat],
     ) -> Result<String, P4UnparseError> {
         let rendered = alter::alternate(hint, values, &ValueRenderer(self, arena));
         match rendered {
@@ -180,7 +182,7 @@ impl P4Unparser {
     fn render_values(
         &self,
         arena: &Arena,
-        values: &[Value],
+        values: &[ValueFlat],
         separator: &str,
     ) -> Result<String, P4UnparseError> {
         let rendered = values
@@ -243,7 +245,7 @@ impl P4Unparser {
 /// The print-hint renderer producing P4 text.
 struct ValueRenderer<'a>(&'a P4Unparser, &'a Arena);
 
-impl Renderer<&Value> for ValueRenderer<'_> {
+impl Renderer<&ValueFlat> for ValueRenderer<'_> {
     type Output = Result<String, P4UnparseError>;
 
     fn empty(&self) -> Self::Output {
@@ -278,7 +280,7 @@ impl Renderer<&Value> for ValueRenderer<'_> {
         Ok(Print::to_string(exp))
     }
 
-    fn item(&self, item: &&Value) -> Self::Output {
+    fn item(&self, item: &&ValueFlat) -> Self::Output {
         self.0.render(self.1, item)
     }
 }

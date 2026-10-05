@@ -57,8 +57,8 @@ pub type TypCase = il::ast::TypCase;
 
 // Values
 
-pub type Value = il::ast::Value;
-pub type ValueKind = il::ast::ValueKind;
+pub type ValueFlat = il::ast::ValueFlat;
+pub type ValueFlatKind = il::ast::ValueFlatKind;
 
 pub type ValueField = il::ast::ValueField;
 pub type ValueCase = il::ast::ValueCase;

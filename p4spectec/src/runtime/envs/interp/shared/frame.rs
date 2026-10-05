@@ -10,7 +10,7 @@ use std::{collections::HashMap, rc::Rc};
 use crate::lang::{
     common::{Id, Iter},
     data::{
-        value::Value,
+        value::ValueFlat,
         var::{IdSlot, SlotIdx, Var, VarSlot},
     },
 };
@@ -121,7 +121,7 @@ impl FrameLayout {
     }
 }
 
-// == Value frames
+// == ValueFlat frames
 
 /// Values of one callable's slots, copy-on-write across clones.
 #[derive(Clone, Debug, Default)]
@@ -129,7 +129,7 @@ pub struct Frame {
     /// Layout the slots follow.
     layout: Rc<FrameLayout>,
     /// Slot values in one allocation, shared until written.
-    values: Rc<[Option<Value>]>,
+    values: Rc<[Option<ValueFlat>]>,
 }
 
 impl Frame {
@@ -152,14 +152,14 @@ impl Frame {
         &self.layout
     }
 
-    pub fn get(&self, slot: SlotIdx) -> Option<&Value> {
+    pub fn get(&self, slot: SlotIdx) -> Option<&ValueFlat> {
         self.values[slot.0].as_ref()
     }
 
     // - Updates
 
     /// Writes a slot, copying the values first if they are shared.
-    pub fn set(&mut self, slot: SlotIdx, value: Value) {
+    pub fn set(&mut self, slot: SlotIdx, value: ValueFlat) {
         Rc::make_mut(&mut self.values)[slot.0] = Some(value);
     }
 }

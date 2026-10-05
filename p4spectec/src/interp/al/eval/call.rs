@@ -12,7 +12,7 @@ use std::rc::Rc;
 use crate::lang::{
     data::{
         arena::Arena,
-        value::{Value, ValueKind},
+        value::{ValueFlat, ValueFlatKind},
     },
     hints::input,
 };
@@ -49,7 +49,7 @@ pub(in crate::interp::al) fn check_rel_inputs(
     arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
-    values: &[Value],
+    values: &[ValueFlat],
     guard: bool,
 ) -> Backtrack<()> {
     let rel = unwrap_from_result!(ctx.find_rel(id), &id.span);
@@ -83,7 +83,7 @@ pub(in crate::interp::al) fn check_func_inputs(
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
-    values: &[Value],
+    values: &[ValueFlat],
     guard: bool,
 ) -> Backtrack<()> {
     let typ = unwrap_from_result!(ctx.find_func_typ(id), &id.span);
@@ -111,7 +111,7 @@ fn check_values(
     ctx: &Context<'_>,
     id: &ast::Id,
     typs: &[ast::Typ],
-    values: &[Value],
+    values: &[ValueFlat],
     diagnostic: impl FnOnce() -> Diagnostic,
 ) -> Backtrack<()> {
     // Subtyping resolves type names and function types through the context
@@ -136,7 +136,7 @@ fn check_func_output(
     tparams: &[ast::TParam],
     typ: &ast::Typ,
     targs: &[ast::Typ],
-    value: &Value,
+    value: &ValueFlat,
 ) -> Backtrack<()> {
     // Substitute the type arguments into the declared result type
     let theta = unwrap_from_result!(typ::Theta::from_lists(tparams, targs), &id.span);
@@ -167,14 +167,14 @@ pub(in crate::interp::al) fn cache_func<Iface: Interface, Ext: Extern>(
     runner_ctx: &RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
-    values: &[Value],
+    values: &[ValueFlat],
 ) -> bool {
     runner_ctx.interp().config.cache
         && matches!(ctx.find_func_with_scope(id), Ok((Scope::Global, func))
             if !matches!(&func.def, ast::MetaFuncDef::Extern(_)))
         && !values
             .iter()
-            .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
+            .any(|value| matches!(runner_ctx.arena().kind(value), ValueFlatKind::Func(_)))
 }
 
 // = Relation invocation
@@ -184,8 +184,8 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, AlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
-    values: &[Value],
-) -> Backtrack<Vec<Value>> {
+    values: &[ValueFlat],
+) -> Backtrack<Vec<ValueFlat>> {
     // Serve from the cache when eligible
     let cache = cache_rel(runner_ctx, ctx, id);
     if cache
@@ -231,8 +231,8 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::ExternRel,
-    values: &[Value],
-) -> Backtrack<Vec<Value>> {
+    values: &[ValueFlat],
+) -> Backtrack<Vec<ValueFlat>> {
     // The host reports whether the call had a side effect
     let result = runner_ctx.call_extern_rel(&id.node, values);
     runner_ctx
@@ -266,8 +266,8 @@ fn eval_rule_path<Iface: Interface, Ext: Extern>(
     layout: &Rc<FrameLayout>,
     rule_match: &ast::RuleMatch,
     path: &ast::RulePath,
-    values: &[Value],
-) -> Backtrack<Vec<Value>> {
+    values: &[ValueFlat],
+) -> Backtrack<Vec<ValueFlat>> {
     // Input count must match the rule's input patterns
     assert_eq!(rule_match.exps_input.len(), values.len(), "validated rule input arity");
     // Inputs bind into a fresh frame for the rule
@@ -291,8 +291,8 @@ fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
     layout: &Rc<FrameLayout>,
     id: &ast::Id,
     rel: &ast::DefinedRel,
-    values: &[Value],
-) -> Backtrack<Vec<Value>> {
+    values: &[ValueFlat],
+) -> Backtrack<Vec<ValueFlat>> {
     let det = runner_ctx.interp().config.det;
     // Flatten the groups into (group, path) candidates
     let paths: Vec<_> = rel
@@ -357,8 +357,8 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
-    values: &[Value],
-) -> Backtrack<Value> {
+    values: &[ValueFlat],
+) -> Backtrack<ValueFlat> {
     // Serve from the cache when eligible
     let cache = cache_func(runner_ctx, ctx, id, values);
     if cache
@@ -409,8 +409,8 @@ fn invoke_extern_func<Iface: Interface, Ext: Extern>(
     id: &ast::Id,
     extern_func: &ast::ExternFunc,
     targs: &[ast::Typ],
-    values: &[Value],
-) -> Backtrack<Value> {
+    values: &[ValueFlat],
+) -> Backtrack<ValueFlat> {
     // The host reports whether the call had a side effect
     let result = runner_ctx.call_extern_func(&id.node, &[], values);
     runner_ctx
@@ -443,8 +443,8 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
     id: &ast::Id,
     builtin_func: &ast::BuiltinFunc,
     targs: &[ast::Typ],
-    values: &[Value],
-) -> Backtrack<Value> {
+    values: &[ValueFlat],
+) -> Backtrack<ValueFlat> {
     // Builtins report effects like host calls
     let result = runner_ctx.call_builtin(id, targs, values);
     runner_ctx
@@ -480,8 +480,8 @@ fn eval_table_row<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     layout: &Rc<FrameLayout>,
     table_row: &ast::TableRow,
-    values: &[Value],
-) -> Backtrack<Value> {
+    values: &[ValueFlat],
+) -> Backtrack<ValueFlat> {
     // Argument count must match the row
     assert_eq!(table_row.node.args.len(), values.len(), "validated table row argument arity");
     // Arguments bind into a fresh frame for the row
@@ -503,8 +503,8 @@ fn invoke_table_func<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     layout: &Rc<FrameLayout>,
     table_func: &ast::TableFunc,
-    values: &[Value],
-) -> Backtrack<Value> {
+    values: &[ValueFlat],
+) -> Backtrack<ValueFlat> {
     choose_sequential(&table_func.table_rows, |table_row| {
         eval_table_row(runner_ctx, ctx, layout, table_row, values)
     })
@@ -518,8 +518,8 @@ fn eval_clause<Iface: Interface, Ext: Extern>(
     ctx_caller: &Context<'_>,
     ctx_callee: &Context<'_>,
     clause: &ast::Clause,
-    values: &[Value],
-) -> Backtrack<Value> {
+    values: &[ValueFlat],
+) -> Backtrack<ValueFlat> {
     // Argument count must match the clause
     assert_eq!(clause.node.args.len(), values.len(), "validated clause argument arity");
     // Arguments bind into the callee scope, evaluated in the caller's
@@ -542,8 +542,8 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
     layout: &Rc<FrameLayout>,
     defined_func: &ast::DefinedFunc,
     targs: &[ast::Typ],
-    values: &[Value],
-) -> Backtrack<Value> {
+    values: &[ValueFlat],
+) -> Backtrack<ValueFlat> {
     // Bind type arguments in the callee frame
     let ctx_local = unwrap!(assign_tparams(
         ctx.localize_with_layout(layout),

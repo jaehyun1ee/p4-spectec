@@ -11,7 +11,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{Value, get, make},
+        value::{ValueFlat, get, make},
     },
     traits::print::Print,
 };
@@ -23,12 +23,12 @@ use super::{BuiltinError, extract};
 // == Conversion between runtime values and text
 
 /// The text in a text value.
-fn text_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a str, BuiltinError> {
+fn text_of_value<'a>(arena: &'a Arena, value: &ValueFlat) -> Result<&'a str, BuiltinError> {
     get::text(arena, value).map_err(BuiltinError::from)
 }
 
 /// A number value printed as text.
-fn numeric_text(arena: &Arena, value: &Value) -> Result<String, BuiltinError> {
+fn numeric_text(arena: &Arena, value: &ValueFlat) -> Result<String, BuiltinError> {
     let num = get::num(arena, value).map_err(BuiltinError::from)?;
     Ok(Print::to_string(num))
 }
@@ -40,8 +40,8 @@ fn numeric_text(arena: &Arena, value: &Value) -> Result<String, BuiltinError> {
 pub fn text_to_int(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     extract::zero(targs)?;
     let value_text = extract::one(values)?;
     let text = text_of_value(arena, value_text)?;
@@ -80,8 +80,8 @@ pub fn text_to_int(
 pub fn int_to_text(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     extract::zero(targs)?;
     let value_int = extract::one(values)?;
     let text = numeric_text(arena, value_int)?;
@@ -94,8 +94,8 @@ pub fn int_to_text(
 pub fn split_text(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     extract::zero(targs)?;
     let (value_text, value_separator) = extract::two(values)?;
     let text = text_of_value(arena, value_text)?;
@@ -120,8 +120,8 @@ pub fn split_text(
 pub fn strip_prefix(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     extract::zero(targs)?;
     let (value_text, value_prefix) = extract::two(values)?;
     let text = text_of_value(arena, value_text)?;
@@ -140,8 +140,8 @@ pub fn strip_prefix(
 pub fn strip_suffix(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     extract::zero(targs)?;
     let (value_text, value_suffix) = extract::two(values)?;
     let text = text_of_value(arena, value_text)?;
@@ -159,8 +159,8 @@ pub fn strip_suffix(
 pub fn strip_all_whitespace(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     extract::zero(targs)?;
     let value_text = extract::one(values)?;
     let text = text_of_value(arena, value_text)?.replace(' ', "");

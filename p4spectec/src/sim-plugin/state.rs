@@ -4,7 +4,7 @@
 //! through every specification call
 //! and written back here; `txs` collects the packets one input produced.
 
-use crate::lang::data::value::Value;
+use crate::lang::data::value::ValueFlat;
 
 use super::io::Tx;
 
@@ -15,9 +15,9 @@ use super::io::Tx;
 /// `txs` holds one input packet's outputs in order.
 pub struct SimState {
     /// The specification's evaluation context.
-    pub value_ctx: Value,
+    pub value_ctx: ValueFlat,
     /// The architecture state, including object states and queues.
-    pub value_arch: Value,
+    pub value_arch: ValueFlat,
     /// Packets transmitted while driving the current input.
     pub txs: Vec<Tx>,
 }

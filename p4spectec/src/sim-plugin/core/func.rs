@@ -8,7 +8,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{Value, make},
+        value::{ValueFlat, make},
     },
 };
 
@@ -35,9 +35,9 @@ use super::super::spec::{func, unpack};
 /// ```
 pub fn static_assert<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: &Value,
+    value_ctx: &ValueFlat,
     has_message: bool,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -72,9 +72,9 @@ where
 /// ```
 pub fn verify<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: Value,
-    value_arch: Value,
-) -> Result<(Value, Value, Value), ExternError>
+    value_ctx: ValueFlat,
+    value_arch: ValueFlat,
+) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
 where
     Iface: Interface,
     Ext: Extern,

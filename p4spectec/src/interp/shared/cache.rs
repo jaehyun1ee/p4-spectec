@@ -12,7 +12,7 @@ use hashbrown::{Equivalent, HashMap};
 use crate::lang::data::{
     arena::Arena,
     intern::CanonId,
-    value::{Value, ValueKind},
+    value::{ValueFlat, ValueFlatKind},
 };
 
 // = Call identity
@@ -21,12 +21,12 @@ use crate::lang::data::{
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CallKey {
     name: String,
-    values: Vec<CanonId<ValueKind>>,
+    values: Vec<CanonId<ValueFlatKind>>,
 }
 
 impl CallKey {
     /// Builds the key; type arguments and annotations never distinguish calls.
-    pub(crate) fn new(arena: &Arena, name: &str, values: &[Value]) -> Self {
+    pub(crate) fn new(arena: &Arena, name: &str, values: &[ValueFlat]) -> Self {
         Self {
             name: name.to_owned(),
             values: values.iter().map(|value| arena.canon_id(value)).collect(),
@@ -38,7 +38,7 @@ impl CallKey {
 struct CallQuery<'a> {
     arena: &'a Arena,
     name: &'a str,
-    values: &'a [Value],
+    values: &'a [ValueFlat],
 }
 
 impl Hash for CallQuery<'_> {
@@ -70,16 +70,21 @@ impl Equivalent<CallKey> for CallQuery<'_> {
 #[derive(Default)]
 pub struct Cache {
     /// Function results by call.
-    pub(crate) funcs: HashMap<CallKey, Value, RandomState>,
+    pub(crate) funcs: HashMap<CallKey, ValueFlat, RandomState>,
     /// Relation outputs by call.
-    pub(crate) rels: HashMap<CallKey, Vec<Value>, RandomState>,
+    pub(crate) rels: HashMap<CallKey, Vec<ValueFlat>, RandomState>,
     /// One flag per active invocation: whether it had a side effect so far.
     effects: Vec<bool>,
 }
 
 impl Cache {
     /// Looks up a function without allocating an owned call key.
-    pub(crate) fn find_func(&self, arena: &Arena, name: &str, values: &[Value]) -> Option<&Value> {
+    pub(crate) fn find_func(
+        &self,
+        arena: &Arena,
+        name: &str,
+        values: &[ValueFlat],
+    ) -> Option<&ValueFlat> {
         self.funcs.get(&CallQuery { arena, name, values })
     }
 
@@ -88,8 +93,8 @@ impl Cache {
         &self,
         arena: &Arena,
         name: &str,
-        values: &[Value],
-    ) -> Option<&Vec<Value>> {
+        values: &[ValueFlat],
+    ) -> Option<&Vec<ValueFlat>> {
         self.rels.get(&CallQuery { arena, name, values })
     }
 

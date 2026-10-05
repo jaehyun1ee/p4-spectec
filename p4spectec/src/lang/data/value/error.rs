@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::lang::data::notation::ShapeError;
 
-use super::node::ValueTag;
+use super::flat::ValueTag;
 
 /// A failure building or projecting a value.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]

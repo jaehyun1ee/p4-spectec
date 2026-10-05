@@ -3,7 +3,7 @@
 //! Extern calls reach the pipeline module;
 //! the only stateful object is a counter array.
 
-use crate::lang::data::value::Value;
+use crate::lang::data::value::ValueFlat;
 
 use crate::runner::{ExternError, Interface, Interpreter, RunnerContext};
 
@@ -21,8 +21,8 @@ impl externs::Impl for Ebpf {
     fn eval_extern_init<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[Value],
-    ) -> Result<Value, ExternError>
+        values: &[ValueFlat],
+    ) -> Result<ValueFlat, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -33,8 +33,8 @@ impl externs::Impl for Ebpf {
     fn eval_extern_func_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[Value],
-    ) -> Result<Vec<Value>, ExternError>
+        values: &[ValueFlat],
+    ) -> Result<Vec<ValueFlat>, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -45,8 +45,8 @@ impl externs::Impl for Ebpf {
     fn eval_extern_method_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[Value],
-    ) -> Result<Vec<Value>, ExternError>
+        values: &[ValueFlat],
+    ) -> Result<Vec<ValueFlat>, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -57,7 +57,7 @@ impl externs::Impl for Ebpf {
     fn init_arch_state<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-    ) -> Result<Value, ExternError>
+    ) -> Result<ValueFlat, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,

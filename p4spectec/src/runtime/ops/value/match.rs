@@ -16,7 +16,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         notation::MixopRepr,
-        value::{Value, ValueKind},
+        value::{ValueFlat, ValueFlatKind},
     },
 };
 
@@ -63,27 +63,27 @@ pub fn sub<'env, P: Stage, F>(
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
     typ: &Typ,
-    value: &Value,
+    value: &ValueFlat,
 ) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncTyp>,
 {
     match &typ.node {
         // Booleans
-        TypKind::Bool => Ok(matches!(arena.kind(value), ValueKind::Bool(_))),
+        TypKind::Bool => Ok(matches!(arena.kind(value), ValueFlatKind::Bool(_))),
         // Naturals: a natural, or a non-negative integer
         TypKind::Num(NumTyp::Nat) => Ok(match arena.kind(value) {
             // Naturals as such
-            ValueKind::Num(Number::Nat(_)) => true,
+            ValueFlatKind::Num(Number::Nat(_)) => true,
             // Integers when non-negative
-            ValueKind::Num(Number::Int(int)) => !int.is_negative(),
+            ValueFlatKind::Num(Number::Int(int)) => !int.is_negative(),
             // Anything else
             _ => false,
         }),
         // Integers: any number
-        TypKind::Num(NumTyp::Int) => Ok(matches!(arena.kind(value), ValueKind::Num(_))),
+        TypKind::Num(NumTyp::Int) => Ok(matches!(arena.kind(value), ValueFlatKind::Num(_))),
         // Text
-        TypKind::Text => Ok(matches!(arena.kind(value), ValueKind::Text(_))),
+        TypKind::Text => Ok(matches!(arena.kind(value), ValueFlatKind::Text(_))),
         // A named type: unfold its definition
         TypKind::Var(id, targs) => {
             let typdef = find_typdef_opt(id).ok_or_else(|| MatchError::TypeUndefined {
@@ -96,7 +96,7 @@ where
                     Err(MatchError::TypeVariableUnexpected { span: typ.span.clone() })
                 }
                 // Extern types hold extern values
-                TypeDef::Extern => Ok(matches!(arena.kind(value), ValueKind::Extern(_))),
+                TypeDef::Extern => Ok(matches!(arena.kind(value), ValueFlatKind::Extern(_))),
                 // A defined type: instantiate, then match the body
                 TypeDef::Defined(tparams, def_typ) => {
                     // Type arguments must match the parameters
@@ -114,7 +114,7 @@ where
                             sub(arena, find_typdef_opt, find_func, &typ, value)
                         }
                         // A struct: same fields, each in its field type
-                        (DefTypKind::Struct(typ_fields), ValueKind::Struct(value_fields)) => {
+                        (DefTypKind::Struct(typ_fields), ValueFlatKind::Struct(value_fields)) => {
                             if typ_fields.len() != value_fields.len() {
                                 return Ok(false);
                             }
@@ -132,7 +132,7 @@ where
                             Ok(true)
                         }
                         // A variant: a same-shaped case accepts the arguments
-                        (DefTypKind::Variant(typ_cases), ValueKind::Case(value_case)) => {
+                        (DefTypKind::Variant(typ_cases), ValueFlatKind::Case(value_case)) => {
                             for TypCase { not_typ, .. } in typ_cases {
                                 // Skip cases of a different shape
                                 if !not_typ
@@ -165,7 +165,7 @@ where
         }
         // Tuples: componentwise
         TypKind::Tuple(typs) => match arena.kind(value) {
-            ValueKind::Tuple(values) => {
+            ValueFlatKind::Tuple(values) => {
                 subs_inner(arena, find_typdef_opt, find_func, typs.iter(), values.iter())
             }
             // Not a tuple
@@ -174,15 +174,17 @@ where
         // Options: absent, or present with the element type
         TypKind::Iter(typ_inner, Iter::Opt) => match arena.kind(value) {
             // A present option checks its payload
-            ValueKind::Opt(Some(value)) => sub(arena, find_typdef_opt, find_func, typ_inner, value),
+            ValueFlatKind::Opt(Some(value)) => {
+                sub(arena, find_typdef_opt, find_func, typ_inner, value)
+            }
             // An absent option has no payload to check
-            ValueKind::Opt(None) => Ok(true),
+            ValueFlatKind::Opt(None) => Ok(true),
             // Other value kinds are not options
             _ => Ok(false),
         },
         // Lists: every element in the element type
         TypKind::Iter(typ_inner, Iter::List) => match arena.kind(value) {
-            ValueKind::List(values) => {
+            ValueFlatKind::List(values) => {
                 for value in values {
                     if !sub(arena, find_typdef_opt, find_func, typ_inner, value)? {
                         return Ok(false);
@@ -195,7 +197,7 @@ where
         },
         // Function values: the named function's type must be equivalent
         TypKind::Func(func_typ) => match arena.kind(value) {
-            ValueKind::Func(id) => {
+            ValueFlatKind::Func(id) => {
                 let func_typ_actual = find_func(&id.node).ok_or_else(|| {
                     MatchError::FunctionUndefined { name: id.node.clone(), span: id.span.clone() }
                 })?;
@@ -215,7 +217,7 @@ pub fn subs<'env, P: Stage, F>(
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
     typs: &[Typ],
-    values: &[Value],
+    values: &[ValueFlat],
 ) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncTyp>,
@@ -234,7 +236,7 @@ fn subs_inner<'env, 'typ, 'value, P: Stage, F, T, V>(
 where
     F: Fn(&str) -> Option<FuncTyp>,
     T: ExactSizeIterator<Item = &'typ Typ>,
-    V: ExactSizeIterator<Item = &'value Value>,
+    V: ExactSizeIterator<Item = &'value ValueFlat>,
 {
     if typs.len() != values.len() {
         return Ok(false);
@@ -255,7 +257,7 @@ pub fn check<'env, P: Stage, F>(
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
     subcheck: &Subcheck<P>,
-    value: &Value,
+    value: &ValueFlat,
 ) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncTyp>,
@@ -264,11 +266,11 @@ where
         // Statically known to hold
         (Subcheck::Skip, _) => Ok(true),
         // Variant case: the tag must be one of the accepted
-        (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => Ok(mixops
+        (Subcheck::Mixop(mixops), ValueFlatKind::Case(value_case)) => Ok(mixops
             .iter()
             .any(|mixop| mixop.matches_shape(arena.arena_shape(), *value_case.mixop()))),
         // Componentwise
-        (Subcheck::Tuple(subchecks), ValueKind::Tuple(values)) => {
+        (Subcheck::Tuple(subchecks), ValueFlatKind::Tuple(values)) => {
             if subchecks.len() != values.len() {
                 return Ok(false);
             }
@@ -280,13 +282,13 @@ where
             Ok(true)
         }
         // An absent option holds
-        (Subcheck::Iter(Iter::Opt, _), ValueKind::Opt(None)) => Ok(true),
+        (Subcheck::Iter(Iter::Opt, _), ValueFlatKind::Opt(None)) => Ok(true),
         // A present option checks its element
-        (Subcheck::Iter(Iter::Opt, subcheck), ValueKind::Opt(Some(value))) => {
+        (Subcheck::Iter(Iter::Opt, subcheck), ValueFlatKind::Opt(Some(value))) => {
             check(arena, find_typdef_opt, find_func, subcheck, value)
         }
         // Every element
-        (Subcheck::Iter(Iter::List, subcheck), ValueKind::List(values)) => {
+        (Subcheck::Iter(Iter::List, subcheck), ValueFlatKind::List(values)) => {
             for value in values {
                 if !check(arena, find_typdef_opt, find_func, subcheck, value)? {
                     return Ok(false);

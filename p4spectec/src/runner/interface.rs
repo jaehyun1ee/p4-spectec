@@ -9,7 +9,7 @@
 
 use thiserror::Error;
 
-use crate::lang::data::{arena::Arena, value::Value};
+use crate::lang::data::{arena::Arena, value::ValueFlat};
 
 use crate::lang::il::ast::{Id, Typ};
 
@@ -64,8 +64,8 @@ pub trait Interface {
         arena: &mut Arena,
         id: &Id,
         targs: &[Typ],
-        values: &[Value],
-    ) -> Result<(Value, bool), InterfaceError>;
+        values: &[ValueFlat],
+    ) -> Result<(ValueFlat, bool), InterfaceError>;
 
     /// Resets builtin state between programs.
     fn clear(&mut self);
@@ -90,8 +90,8 @@ impl Interface for BuiltinInterface {
         arena: &mut Arena,
         id: &Id,
         targs: &[Typ],
-        values: &[Value],
-    ) -> Result<(Value, bool), InterfaceError> {
+        values: &[ValueFlat],
+    ) -> Result<(ValueFlat, bool), InterfaceError> {
         self.builtins
             .invoke(arena, id, targs, values)
             .map_err(InterfaceError::from)
@@ -111,8 +111,8 @@ impl Interface for NullInterface {
         _arena: &mut Arena,
         _id: &Id,
         _targs: &[Typ],
-        _values: &[Value],
-    ) -> Result<(Value, bool), InterfaceError> {
+        _values: &[ValueFlat],
+    ) -> Result<(ValueFlat, bool), InterfaceError> {
         Err(InterfaceError::diagnostic_unconfigured())
     }
 

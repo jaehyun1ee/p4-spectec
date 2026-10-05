@@ -12,7 +12,7 @@ use crate::lang::{
         arena::Arena,
         notation::{Mixfix, Mixop, mixop::shape},
         typ,
-        value::{Value, get, make},
+        value::{ValueFlat, get, make},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
@@ -21,10 +21,10 @@ use crate::lang::il::ast::Typ;
 
 use super::{BuiltinError, extract};
 
-// == Value set
+// == ValueFlat set
 
 /// A set as a sorted list without duplicates.
-type ValueSet = Vec<Value>;
+type ValueSet = Vec<ValueFlat>;
 
 /// Sorts by syntax and drops syntactic duplicates.
 fn sort_set(arena: &Arena, set: &mut ValueSet) {
@@ -33,7 +33,7 @@ fn sort_set(arena: &Arena, set: &mut ValueSet) {
 }
 
 /// Membership by binary search; the set must be sorted.
-fn contains(arena: &Arena, set: &[Value], value: &Value) -> bool {
+fn contains(arena: &Arena, set: &[ValueFlat], value: &ValueFlat) -> bool {
     set.binary_search_by(|value_element| arena.view(*value_element).syntax_cmp(&arena.view(*value)))
         .is_ok()
 }
@@ -46,7 +46,7 @@ fn set_mixop() -> Rc<Mixop> {
 }
 
 /// Decodes a `set<K>` value into a sorted set.
-fn set_of_value(arena: &Arena, value: &Value) -> Result<ValueSet, BuiltinError> {
+fn set_of_value(arena: &Arena, value: &ValueFlat) -> Result<ValueSet, BuiltinError> {
     let value_case =
         get::case(arena, value).map_err(|_| BuiltinError::argument_invalid("expected a set"))?;
     let set_mixop = set_mixop();
@@ -66,7 +66,11 @@ fn set_of_value(arena: &Arena, value: &Value) -> Result<ValueSet, BuiltinError> 
 }
 
 /// Encodes a set as a `set<K>` value.
-fn value_of_set(arena: &mut Arena, typ_key: &Typ, set: ValueSet) -> Result<Value, BuiltinError> {
+fn value_of_set(
+    arena: &mut Arena,
+    typ_key: &Typ,
+    set: ValueSet,
+) -> Result<ValueFlat, BuiltinError> {
     // The element list is typed `K*`, the case `set<K>`
     let values_elem = set.into_iter().collect();
     let typ_list = typ::make::list(typ_key.clone());
@@ -85,8 +89,8 @@ fn value_of_set(arena: &mut Arena, typ_key: &Typ, set: ValueSet) -> Result<Value
 pub fn intersect_set(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let typ_key = extract::one(targs)?;
     let (value_set_l, value_set_r) = extract::two(values)?;
     let set_l = set_of_value(arena, value_set_l)?;
@@ -102,8 +106,8 @@ pub fn intersect_set(
 pub fn union_set(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let typ_key = extract::one(targs)?;
     let (value_set_l, value_set_r) = extract::two(values)?;
     let set_l = set_of_value(arena, value_set_l)?;
@@ -118,8 +122,8 @@ pub fn union_set(
 pub fn unions_set(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[Value],
-) -> Result<Value, BuiltinError> {
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let typ_key = extract::one(targs)?;
     let value_sets = extract::one(values)?;
     let values = get::list(arena, value_sets).map_err(BuiltinError::from)?;
@@ -135,7 +139,11 @@ pub fn unions_set(
 
 /// `dec $diff_set<K>(set<K>, set<K>) : set<K>`,
 /// the elements of the first not in the second.
-pub fn diff_set(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
+pub fn diff_set(
+    arena: &mut Arena,
+    targs: &[Typ],
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let typ_key = extract::one(targs)?;
     let (value_set_l, value_set_r) = extract::two(values)?;
     let set_l = set_of_value(arena, value_set_l)?;
@@ -149,7 +157,11 @@ pub fn diff_set(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Va
 
 /// `dec $sub_set<K>(set<K>, set<K>) : bool`,
 /// whether the first is a subset of the second.
-pub fn sub_set(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
+pub fn sub_set(
+    arena: &mut Arena,
+    targs: &[Typ],
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let _typ_key = extract::one(targs)?;
     let (value_set_l, value_set_r) = extract::two(values)?;
     let set_l = set_of_value(arena, value_set_l)?;
@@ -161,7 +173,11 @@ pub fn sub_set(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Val
 
 /// `dec $eq_set<K>(set<K>, set<K>) : bool`,
 /// whether both have the same elements.
-pub fn eq_set(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value, BuiltinError> {
+pub fn eq_set(
+    arena: &mut Arena,
+    targs: &[Typ],
+    values: &[ValueFlat],
+) -> Result<ValueFlat, BuiltinError> {
     let _typ_key = extract::one(targs)?;
     let (value_set_l, value_set_r) = extract::two(values)?;
     let set_l = set_of_value(arena, value_set_l)?;

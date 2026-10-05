@@ -24,7 +24,7 @@ use crate::lang::{
         arena::Arena,
         typ,
         value::{
-            Value, ValueError,
+            ValueError, ValueFlat,
             external::{DecodeContext, EncodeContext, Encoding, decode_with, encode_with},
             get, make,
         },
@@ -113,7 +113,11 @@ impl ObjectState {
     // - Encoding
 
     /// Encodes the object as the specification's `objectState` external value.
-    pub fn to_value(&self, arena: &mut Arena, encoding: Encoding) -> Result<Value, ExternError> {
+    pub fn to_value(
+        &self,
+        arena: &mut Arena,
+        encoding: Encoding,
+    ) -> Result<ValueFlat, ExternError> {
         let payload = encode_with(arena, encoding, self)?;
         let typ = typ::make::var(
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
@@ -128,7 +132,7 @@ impl ObjectState {
     pub fn from_value(
         arena: &mut Arena,
         encoding: Encoding,
-        value: &Value,
+        value: &ValueFlat,
     ) -> Result<Self, ExternError> {
         let json = get::external(arena, value)?.clone();
         decode_with(arena, encoding, json.as_ref()).map_err(ExternError::from)
@@ -170,7 +174,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
 /// The initial architecture state: empty queue, tables, and requests.
 pub(super) fn init_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -182,7 +186,7 @@ where
 /// Decodes the architecture state stored in `value_arch`.
 pub fn find_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
+    value_arch: ValueFlat,
 ) -> Result<Arch, ExternError>
 where
     Iface: Interface,
@@ -196,9 +200,9 @@ where
 /// Encodes `arch` back into `value_arch`.
 pub fn update_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
+    value_arch: ValueFlat,
     arch: &Arch,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -213,8 +217,8 @@ where
 /// Decodes the object named `value_id` from `value_arch`.
 pub fn find_object_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
-    value_id: Value,
+    value_arch: ValueFlat,
+    value_id: ValueFlat,
 ) -> Result<ObjectState, ExternError>
 where
     Iface: Interface,
@@ -228,7 +232,7 @@ where
 /// The `packet_in` object of the current packet.
 fn find_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
+    value_arch: ValueFlat,
 ) -> Result<PacketIn, ExternError>
 where
     Iface: Interface,
@@ -251,7 +255,7 @@ where
 /// The `packet_out` object of the current packet.
 fn find_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
+    value_arch: ValueFlat,
 ) -> Result<PacketOut, ExternError>
 where
     Iface: Interface,
@@ -281,8 +285,8 @@ where
 /// and parameter values; core objects and unknown names get an empty state.
 pub(super) fn eval_extern_init<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    values: &[Value],
-) -> Result<Value, ExternError>
+    values: &[ValueFlat],
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -337,8 +341,8 @@ where
 /// and the parameter names; the result adds the call result to the pair.
 pub(super) fn eval_extern_func_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    values: &[Value],
-) -> Result<Vec<Value>, ExternError>
+    values: &[ValueFlat],
+) -> Result<Vec<ValueFlat>, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -406,8 +410,8 @@ where
 /// and parameter names.
 pub(super) fn eval_extern_method_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    values: &[Value],
-) -> Result<Vec<Value>, ExternError>
+    values: &[ValueFlat],
+) -> Result<Vec<ValueFlat>, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -518,10 +522,10 @@ where
 /// Configures mirror `session` to send clones to `port`.
 pub fn add_mirror_session<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
+    value_arch: ValueFlat,
     session: usize,
     port: usize,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -534,10 +538,10 @@ where
 /// Multicast mirror sessions are not supported.
 pub fn add_mirror_session_mc<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    _value_arch: Value,
+    _value_arch: ValueFlat,
     _session: usize,
     _group: usize,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -554,9 +558,9 @@ where
 /// Creates multicast group `group`.
 pub fn mc_mgrp_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
+    value_arch: ValueFlat,
     group: usize,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -569,10 +573,10 @@ where
 /// Creates a multicast node with replication id `instance` on `ports`.
 pub fn mc_node_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
+    value_arch: ValueFlat,
     instance: usize,
     ports: &[usize],
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -585,10 +589,10 @@ where
 /// Adds node `handle` to multicast group `group`.
 pub fn mc_node_associate<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_arch: Value,
+    value_arch: ValueFlat,
     group: usize,
     handle: usize,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -603,10 +607,10 @@ where
 /// Control-plane register reads are not supported.
 pub fn register_read<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    _value_arch: Value,
+    _value_arch: ValueFlat,
     _name: &str,
     _idx: usize,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -621,11 +625,11 @@ where
 /// Control-plane register writes are not supported.
 pub fn register_write<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    _value_arch: Value,
+    _value_arch: ValueFlat,
     _name: &str,
     _idx: usize,
     _int: BigInt,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -640,9 +644,9 @@ where
 /// Control-plane register resets are not supported.
 pub fn register_reset<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    _value_arch: Value,
+    _value_arch: ValueFlat,
     _name: &str,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -788,7 +792,7 @@ where
 /// Instantiates the program and returns the initial simulator state.
 pub fn init_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    program: Value,
+    program: ValueFlat,
 ) -> Result<SimState, ExternError>
 where
     Iface: Interface,
@@ -870,7 +874,7 @@ where
 pub fn drive_vr<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -885,7 +889,7 @@ where
 pub fn drive_pipe_pre<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -905,7 +909,7 @@ where
 pub fn drive_ck<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -920,7 +924,7 @@ where
 pub fn drive_dep<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -1277,7 +1281,7 @@ where
 pub fn drive_ig<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-) -> Result<Value, ExternError>
+) -> Result<ValueFlat, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -1333,7 +1337,7 @@ where
 pub fn drive_eg<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
     state: &mut SimState,
-) -> Result<Option<Value>, ExternError>
+) -> Result<Option<ValueFlat>, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,

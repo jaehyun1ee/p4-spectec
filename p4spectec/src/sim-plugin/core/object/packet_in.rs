@@ -15,7 +15,7 @@ use crate::lang::{
     common::{prim::num, source::Span},
     data::{
         typ,
-        value::{Value, get, make},
+        value::{ValueFlat, get, make},
     },
 };
 
@@ -107,9 +107,9 @@ impl PacketIn {
     pub fn extract<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: Value,
-        value_arch: Value,
-    ) -> Result<(Self, Value, Value, Value), ExternError>
+        value_ctx: ValueFlat,
+        value_arch: ValueFlat,
+    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -170,9 +170,9 @@ impl PacketIn {
     pub fn extract_varsize<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: Value,
-        value_arch: Value,
-    ) -> Result<(Self, Value, Value, Value), ExternError>
+        value_ctx: ValueFlat,
+        value_arch: ValueFlat,
+    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -304,9 +304,9 @@ impl PacketIn {
     pub fn lookahead<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: Value,
-        value_arch: Value,
-    ) -> Result<(Self, Value, Value, Value), ExternError>
+        value_ctx: ValueFlat,
+        value_arch: ValueFlat,
+    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -366,9 +366,9 @@ impl PacketIn {
     pub fn advance<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: Value,
-        value_arch: Value,
-    ) -> Result<(Self, Value, Value, Value), ExternError>
+        value_ctx: ValueFlat,
+        value_arch: ValueFlat,
+    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -423,9 +423,9 @@ impl PacketIn {
     pub fn length<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: Value,
-        value_arch: Value,
-    ) -> Result<(Self, Value, Value, Value), ExternError>
+        value_ctx: ValueFlat,
+        value_arch: ValueFlat,
+    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
     where
         Iface: Interface,
         Ext: Extern,

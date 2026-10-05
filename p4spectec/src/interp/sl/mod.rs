@@ -12,7 +12,7 @@ pub mod flow;
 
 pub mod eval;
 
-use crate::lang::{common::source::Span, data::value::Value};
+use crate::lang::{common::source::Span, data::value::ValueFlat};
 
 use crate::lang::sl::ast;
 
@@ -64,16 +64,16 @@ impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for SlInterp {
     fn eval_program(
         runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
-        program: Value,
-    ) -> Result<Vec<Value>, InterpreterError> {
+        program: ValueFlat,
+    ) -> Result<Vec<ValueFlat>, InterpreterError> {
         runner_ctx.call_rel(name, &[program])
     }
 
     fn eval_rel(
         runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
-        values: &[Value],
-    ) -> Result<Vec<Value>, InterpreterError> {
+        values: &[ValueFlat],
+    ) -> Result<Vec<ValueFlat>, InterpreterError> {
         // Public entries start from a fresh cache
         runner_ctx.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());
@@ -93,8 +93,8 @@ impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for SlInterp {
         runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         targs: &[ast::Typ],
-        values: &[Value],
-    ) -> Result<Value, InterpreterError> {
+        values: &[ValueFlat],
+    ) -> Result<ValueFlat, InterpreterError> {
         // Public entries start from a fresh cache
         runner_ctx.interp_mut().cache.clear();
         let id = crate::phrase!(node: name.to_owned(), span: Span::default());

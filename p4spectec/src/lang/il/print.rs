@@ -139,7 +139,7 @@ impl Print for [TypCase] {
 /// Prints a value in full, resolving handles through the arena.
 pub fn print_value(
     arena: &crate::lang::data::arena::Arena,
-    value: &Value,
+    value: &ValueFlat,
     printer: &mut Printer<'_>,
 ) -> fmt::Result {
     write_value_with(arena, printer, value, false, 0)
@@ -149,20 +149,20 @@ pub fn print_value(
 fn write_value_with(
     arena: &crate::lang::data::arena::Arena,
     output: &mut Printer<'_>,
-    value: &Value,
+    value: &ValueFlat,
     short: bool,
     level: usize,
 ) -> fmt::Result {
     match arena.kind(value) {
-        ValueKind::Bool(value) => write!(output, "{value}"),
-        ValueKind::Num(value) => value.print(output),
-        ValueKind::Text(text) => output.write_str(&escape_text(text)),
+        ValueFlatKind::Bool(value) => write!(output, "{value}"),
+        ValueFlatKind::Num(value) => value.print(output),
+        ValueFlatKind::Text(text) => output.write_str(&escape_text(text)),
         // Empty structs stay on one line
-        ValueKind::Struct(fields) if fields.is_empty() => output.write_str("{}"),
+        ValueFlatKind::Struct(fields) if fields.is_empty() => output.write_str("{}"),
         // Short form: field count only
-        ValueKind::Struct(fields) if short => write!(output, "{{ .../{} }}", fields.len()),
+        ValueFlatKind::Struct(fields) if short => write!(output, "{{ .../{} }}", fields.len()),
         // One field per line, indented one level deeper
-        ValueKind::Struct(fields) => {
+        ValueFlatKind::Struct(fields) => {
             output.write_str("{\n")?;
             for (index, (atom, value)) in fields.iter().enumerate() {
                 if index != 0 {
@@ -178,9 +178,11 @@ fn write_value_with(
             output.write_char('}')
         }
         // Short form: the case skeleton without arguments
-        ValueKind::Case(case) if short => arena.arena_shape().to_mixop(*case.mixop()).print(output),
-        ValueKind::Case(case) => write_notval_with(arena, output, case, level),
-        ValueKind::Tuple(values) => {
+        ValueFlatKind::Case(case) if short => {
+            arena.arena_shape().to_mixop(*case.mixop()).print(output)
+        }
+        ValueFlatKind::Case(case) => write_notval_with(arena, output, case, level),
+        ValueFlatKind::Tuple(values) => {
             output.write_char('(')?;
             for (index, value) in values.iter().enumerate() {
                 if index != 0 {
@@ -190,18 +192,18 @@ fn write_value_with(
             }
             output.write_char(')')
         }
-        ValueKind::Opt(Some(value)) => {
+        ValueFlatKind::Opt(Some(value)) => {
             output.write_str("Some(")?;
             write_value_with(arena, output, value, short, level + 1)?;
             output.write_char(')')
         }
-        ValueKind::Opt(None) => output.write_str("None"),
+        ValueFlatKind::Opt(None) => output.write_str("None"),
         // Empty lists stay on one line
-        ValueKind::List(values) if values.is_empty() => output.write_str("[]"),
+        ValueFlatKind::List(values) if values.is_empty() => output.write_str("[]"),
         // Short form: element count only
-        ValueKind::List(values) if short => write!(output, "[ .../{} ]", values.len()),
+        ValueFlatKind::List(values) if short => write!(output, "[ .../{} ]", values.len()),
         // One element per line, indented one level deeper
-        ValueKind::List(values) => {
+        ValueFlatKind::List(values) => {
             output.write_str("[\n")?;
             for (index, value) in values.iter().enumerate() {
                 if index != 0 {
@@ -214,11 +216,11 @@ fn write_value_with(
             output.write_str(&indent(level))?;
             output.write_char(']')
         }
-        ValueKind::Func(id) => {
+        ValueFlatKind::Func(id) => {
             output.write_char('$')?;
             output.write_str(&id.node)
         }
-        ValueKind::Extern(_) => output.write_str("extern"),
+        ValueFlatKind::Extern(_) => output.write_str("extern"),
     }
 }
 

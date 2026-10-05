@@ -17,32 +17,32 @@ use crate::lang::{
     },
 };
 
-use super::{Value, ValueCase, ValueError, ValueField, ValueKind};
+use super::{ValueCase, ValueError, ValueField, ValueFlat, ValueFlatKind};
 
 // - General
 
 /// Allocates a value of the given kind, type, and span.
 pub fn new(
     arena: &mut Arena,
-    kind: ValueKind,
+    kind: ValueFlatKind,
     typ: Rc<TypKind>,
     span: Span,
-) -> Result<Value, ValueError> {
+) -> Result<ValueFlat, ValueError> {
     arena.alloc(kind, typ, span)
 }
 
 // - Primitives
 
 /// A boolean.
-pub fn bool(arena: &mut Arena, value: bool, span: Span) -> Result<Value, ValueError> {
+pub fn bool(arena: &mut Arena, value: bool, span: Span) -> Result<ValueFlat, ValueError> {
     thread_local! {
         static TYP: Rc<TypKind> = Rc::new(TypKind::Bool);
     }
-    TYP.with(|typ| new(arena, ValueKind::Bool(value), typ.clone(), span))
+    TYP.with(|typ| new(arena, ValueFlatKind::Bool(value), typ.clone(), span))
 }
 
 /// A number, typed by its kind.
-pub fn num(arena: &mut Arena, value: Number, span: Span) -> Result<Value, ValueError> {
+pub fn num(arena: &mut Arena, value: Number, span: Span) -> Result<ValueFlat, ValueError> {
     thread_local! {
         static TYP_NAT: Rc<TypKind> = Rc::new(TypKind::Num(num::Typ::Nat));
         static TYP_INT: Rc<TypKind> = Rc::new(TypKind::Num(num::Typ::Int));
@@ -51,25 +51,29 @@ pub fn num(arena: &mut Arena, value: Number, span: Span) -> Result<Value, ValueE
         num::Typ::Nat => TYP_NAT.with(Rc::clone),
         num::Typ::Int => TYP_INT.with(Rc::clone),
     };
-    new(arena, ValueKind::Num(value), typ, span)
+    new(arena, ValueFlatKind::Num(value), typ, span)
 }
 
 /// A natural number.
-pub fn nat(arena: &mut Arena, value: num::Natural, span: Span) -> Result<Value, ValueError> {
+pub fn nat(arena: &mut Arena, value: num::Natural, span: Span) -> Result<ValueFlat, ValueError> {
     num(arena, Number::Nat(value), span)
 }
 
 /// An integer.
-pub fn int(arena: &mut Arena, value: num_bigint::BigInt, span: Span) -> Result<Value, ValueError> {
+pub fn int(
+    arena: &mut Arena,
+    value: num_bigint::BigInt,
+    span: Span,
+) -> Result<ValueFlat, ValueError> {
     num(arena, Number::Int(value), span)
 }
 
 /// A text.
-pub fn text(arena: &mut Arena, value: String, span: Span) -> Result<Value, ValueError> {
+pub fn text(arena: &mut Arena, value: String, span: Span) -> Result<ValueFlat, ValueError> {
     thread_local! {
         static TYP: Rc<TypKind> = Rc::new(TypKind::Text);
     }
-    TYP.with(|typ| new(arena, ValueKind::Text(value), typ.clone(), span))
+    TYP.with(|typ| new(arena, ValueFlatKind::Text(value), typ.clone(), span))
 }
 
 // - Structures
@@ -80,8 +84,8 @@ pub fn structure(
     typ: Rc<TypKind>,
     value_fields: Vec<ValueField>,
     span: Span,
-) -> Result<Value, ValueError> {
-    new(arena, ValueKind::Struct(value_fields), typ, span)
+) -> Result<ValueFlat, ValueError> {
+    new(arena, ValueFlatKind::Struct(value_fields), typ, span)
 }
 
 // - Cases
@@ -92,15 +96,15 @@ pub fn structure(
 pub fn case(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    mixfix: Mixfix<Rc<Mixop>, Value>,
+    mixfix: Mixfix<Rc<Mixop>, ValueFlat>,
     span: Span,
-) -> Result<Value, ValueError> {
+) -> Result<ValueFlat, ValueError> {
     let (mixop, values) = mixfix.into_parts();
     let arena_shape = arena.arena_shape_mut();
     let shape = arena_shape.intern_shared(&mixop)?;
     let value_case =
         ValueCase::new_in(arena_shape, shape, values).expect("a mixfix fills every position");
-    new(arena, ValueKind::Case(value_case), typ, span)
+    new(arena, ValueFlatKind::Case(value_case), typ, span)
 }
 
 /// A variant case from a mixop text, its arguments, and its type name.
@@ -136,30 +140,30 @@ pub(crate) use case_shaped;
 pub fn tuple(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    values: Vec<Value>,
+    values: Vec<ValueFlat>,
     span: Span,
-) -> Result<Value, ValueError> {
-    new(arena, ValueKind::Tuple(values), typ, span)
+) -> Result<ValueFlat, ValueError> {
+    new(arena, ValueFlatKind::Tuple(values), typ, span)
 }
 
 /// An option.
 pub fn opt(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    value: Option<Value>,
+    value: Option<ValueFlat>,
     span: Span,
-) -> Result<Value, ValueError> {
-    new(arena, ValueKind::Opt(value), typ, span)
+) -> Result<ValueFlat, ValueError> {
+    new(arena, ValueFlatKind::Opt(value), typ, span)
 }
 
 /// A list.
 pub fn list(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    values: Vec<Value>,
+    values: Vec<ValueFlat>,
     span: Span,
-) -> Result<Value, ValueError> {
-    new(arena, ValueKind::List(values), typ, span)
+) -> Result<ValueFlat, ValueError> {
+    new(arena, ValueFlatKind::List(values), typ, span)
 }
 
 // - Functions
@@ -172,9 +176,9 @@ pub fn func(
     typs_params: Vec<Typ>,
     typ_ret: Typ,
     span: Span,
-) -> Result<Value, ValueError> {
+) -> Result<ValueFlat, ValueError> {
     let typ = typ::make::func(tparams, typs_params, typ_ret).node;
-    new(arena, ValueKind::Func(id), Rc::new(typ), span)
+    new(arena, ValueFlatKind::Func(id), Rc::new(typ), span)
 }
 
 // - Externals
@@ -185,6 +189,6 @@ pub fn external(
     typ: Rc<TypKind>,
     json: Rc<json>,
     span: Span,
-) -> Result<Value, ValueError> {
-    new(arena, ValueKind::Extern(json), typ, span)
+) -> Result<ValueFlat, ValueError> {
+    new(arena, ValueFlatKind::Extern(json), typ, span)
 }

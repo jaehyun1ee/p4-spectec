@@ -11,7 +11,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{Value, make},
+        value::{ValueFlat, make},
     },
 };
 
@@ -43,9 +43,9 @@ impl Counter {
     /// ```
     pub fn init(
         arena: &Arena,
-        _value_targs: Value,
-        value_ids: Value,
-        value_args: Value,
+        _value_targs: ValueFlat,
+        value_ids: ValueFlat,
+        value_args: ValueFlat,
     ) -> Result<Self, ExternError> {
         let args = args::assoc(arena, value_ids, value_args)?;
         let value_size = args::find(&args, "n_counters")?;
@@ -70,9 +70,9 @@ impl Counter {
     pub fn count<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: Value,
-        value_arch: Value,
-    ) -> Result<(Self, Value, Value, Value), ExternError>
+        value_ctx: ValueFlat,
+        value_arch: ValueFlat,
+    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
     where
         Iface: Interface,
         Ext: Extern,

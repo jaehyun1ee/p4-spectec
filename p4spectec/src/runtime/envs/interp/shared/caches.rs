@@ -1,18 +1,18 @@
 //! Standard hash-map caches used by dynamic evaluation
 //!
-//! Value computations key directly by immutable runtime values;
+//! ValueFlat computations key directly by immutable runtime values;
 //! function calls key by a shared function name and argument slice.
 //! Inserting the same call twice therefore replaces its previous result
 //! with normal `HashMap` semantics.
 
 use std::{collections::HashMap, rc::Rc};
 
-use crate::lang::data::value::Value;
+use crate::lang::data::value::ValueFlat;
 
-// == Value cache
+// == ValueFlat cache
 
 /// Results keyed by an immutable value.
-pub type ValueCache<V> = HashMap<Value, V>;
+pub type ValueCache<V> = HashMap<ValueFlat, V>;
 
 // == Call cache
 
@@ -22,7 +22,7 @@ pub struct CallKey {
     /// Function name.
     pub id: Rc<str>,
     /// Argument values.
-    pub values: Rc<[Value]>,
+    pub values: Rc<[ValueFlat]>,
 }
 
 /// Results keyed by call.
