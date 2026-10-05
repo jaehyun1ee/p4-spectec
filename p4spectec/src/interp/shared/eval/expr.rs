@@ -16,10 +16,7 @@ use crate::lang::{
     traits::print::Print,
 };
 
-use crate::runtime::{
-    ops::typ::{TypeError, subst_typ},
-    typdef::TypeDef,
-};
+use crate::runtime::ops::typ::{TypeError, subst_typ};
 
 use crate::runner::{Extern, Interface, RunnerContext};
 
@@ -524,7 +521,7 @@ pub(crate) fn resolve_targs(
 ) -> Result<Vec<ast::Typ>, TypeError> {
     // Only unparameterized plain aliases in local scope are substituted
     let find_subst = |id: &ast::Id| match ctx.find_typdef_local_opt(id)? {
-        TypeDef::Defined(tparams, def_typ) if tparams.is_empty() => match &def_typ.node {
+        ast::TypeDef::Defined(tparams, def_typ) if tparams.is_empty() => match &def_typ.node {
             ast::DefTypKind::Plain(typ) => Some(typ),
             _ => None,
         },

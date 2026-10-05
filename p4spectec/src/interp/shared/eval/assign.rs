@@ -19,7 +19,7 @@ use crate::lang::{
     traits::at::At,
 };
 
-use crate::runtime::typdef::TypeDef;
+use crate::interp::shared::prepare::ast::TypeDef;
 
 use crate::interp::shared::{
     backtrack::{Backtrack, ok, unwrap, unwrap_from_result},

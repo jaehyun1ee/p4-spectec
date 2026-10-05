@@ -57,9 +57,9 @@ pub enum MatchError {
 // == Type membership
 
 /// Tests whether `value` inhabits `typ`.
-pub fn sub<'env, F>(
+pub fn sub<'env, P: Stage, F>(
     arena: &Arena,
-    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
+    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
     typ: &Typ,
     value: &Value,
@@ -134,9 +134,10 @@ where
                         (DefTypKind::Variant(typ_cases), ValueKind::Case(value_case)) => {
                             for TypCase { not_typ, .. } in typ_cases {
                                 // Skip cases of a different shape
-                                if !arena
-                                    .arena_shape()
-                                    .eq_mixop(*value_case.mixop(), not_typ.node.mixop())
+                                if !not_typ
+                                    .node
+                                    .mixop()
+                                    .matches_shape(arena.arena_shape(), *value_case.mixop())
                                 {
                                     continue;
                                 }
@@ -208,9 +209,9 @@ where
 }
 
 /// Tests values against types pairwise.
-pub fn subs<'env, F>(
+pub fn subs<'env, P: Stage, F>(
     arena: &Arena,
-    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
+    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
     typs: &[Typ],
     values: &[Value],
@@ -222,9 +223,9 @@ where
 }
 
 /// Pairwise membership; differing counts fail.
-fn subs_inner<'env, 'typ, 'value, F, T, V>(
+fn subs_inner<'env, 'typ, 'value, P: Stage, F, T, V>(
     arena: &Arena,
-    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
+    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
     typs: T,
     values: V,
@@ -250,7 +251,7 @@ where
 /// Runs a precomputed subtype check on a value.
 pub fn check<'env, P: Stage, F>(
     arena: &Arena,
-    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
+    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
     subcheck: &Subcheck<P>,
     value: &Value,

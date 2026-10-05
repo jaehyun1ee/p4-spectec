@@ -87,22 +87,22 @@ pub enum Subcheck<P: Stage = Source> {
 // Defined types
 
 /// A notation type with its span.
-pub type NotTyp = Phrase<NotTypKind>;
+pub type NotTyp<P = Source> = Phrase<NotTypKind<P>>;
 /// A notation type: a mixfix skeleton with types as arguments.
-pub type NotTypKind = Mixfix<Rc<Mixop>, Typ>;
+pub type NotTypKind<P = Source> = Mixfix<<P as Stage>::Mixop, Typ>;
 
 /// The body of a type definition.
-pub type DefTyp = Phrase<DefTypKind>;
+pub type DefTyp<P = Source> = Phrase<DefTypKind<P>>;
 
 /// An alias, a struct of fields, or a variant of cases.
 #[derive(Clone, Debug, PartialEq)]
-pub enum DefTypKind {
+pub enum DefTypKind<P: Stage = Source> {
     /// An alias for another type.
     Plain(Typ),
     /// A struct with named fields.
     Struct(Vec<TypField>),
     /// A variant with notation cases.
-    Variant(Vec<TypCase>),
+    Variant(Vec<TypCase<P>>),
 }
 
 /// One field of a struct type.
@@ -123,8 +123,8 @@ pub struct TypOriginKind {
 
 /// One case of a variant type, with the type that introduced it.
 #[derive(Clone, Debug, PartialEq)]
-pub struct TypCase {
-    pub not_typ: NotTyp,
+pub struct TypCase<P: Stage = Source> {
+    pub not_typ: NotTyp<P>,
     pub typ_origin: TypOrigin,
     pub hints: Vec<Hint>,
 }

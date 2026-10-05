@@ -21,6 +21,8 @@ use crate::lang::{
 
 use crate::lang::il::ast;
 
+use crate::interp::shared::prepare::ast::Prepared;
+
 use crate::runtime::ops::{
     typ::{Theta, subst_typ},
     value,
@@ -125,11 +127,11 @@ pub(crate) fn cmpop(
 // - Subtype checks
 
 /// Runs the precomputed subtype check against a value.
-pub(crate) fn sub<P: ast::Stage>(
+pub(crate) fn sub(
     arena: &Arena,
     ctx: &impl ReadContext,
     span: &Span,
-    subcheck: &ast::Subcheck<P>,
+    subcheck: &ast::Subcheck<Prepared>,
     value: Value,
 ) -> Backtrack<bool> {
     let find_typdef_opt = |id: &ast::Id| ctx.find_typdef_opt(id);

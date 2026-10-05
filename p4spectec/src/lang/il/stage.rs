@@ -14,7 +14,7 @@ use crate::lang::data::notation::{Mixop, MixopRepr};
 use super::ast::{Id, Var};
 
 /// The parts of syntax that differ between source and prepared forms.
-pub trait Stage: Clone + fmt::Debug + PartialEq {
+pub trait Stage: Clone + fmt::Debug + PartialEq + 'static {
     /// Identifier occurrences
     type Id: Clone + fmt::Debug + PartialEq;
     /// Variable occurrences

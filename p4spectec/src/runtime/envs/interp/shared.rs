@@ -10,7 +10,7 @@ pub mod frame;
 
 use crate::lang::common::ds::map::IdMap;
 
-use crate::runtime::typdef::TypeDef;
+use crate::interp::shared::prepare::ast::TypeDef;
 
 /// Type names to their definitions.
 pub type TDEnv = IdMap<TypeDef>;

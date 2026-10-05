@@ -11,9 +11,9 @@ use crate::lang::data::{
 
 use crate::lang::al::ast as source;
 
-use crate::runtime::{
-    envs::interp::{al::ast_prepared as ast, shared::callable::Callable},
-    typdef::TypeDef,
+use crate::runtime::envs::interp::{
+    al::ast_prepared::{self as ast, TypeDef},
+    shared::callable::Callable,
 };
 
 use crate::interp::shared::{
@@ -49,7 +49,13 @@ impl Global {
                         ast::TypDef::Extern(typdef) => (typdef.id, TypeDef::Extern),
                         ast::TypDef::Defined(typdef) => {
                             let ast::DefinedTyp { id, tparams, def_typ, .. } = *typdef;
-                            (id, TypeDef::Defined(tparams, Box::new(def_typ)))
+                            (
+                                id,
+                                TypeDef::Defined(
+                                    tparams,
+                                    Box::new(ast::prepare_def_typ(def_typ, arena_shape)),
+                                ),
+                            )
                         }
                     };
                     loaded.insert_typdef(id, typdef);

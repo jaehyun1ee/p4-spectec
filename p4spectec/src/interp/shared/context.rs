@@ -19,14 +19,13 @@ use crate::lang::{
 
 use crate::diagnostic::{Label, Report};
 
-use crate::runtime::{
-    envs::interp::shared::{
-        TDEnv,
-        callable::Callable,
-        frame::{Frame, FrameLayout},
-    },
-    typdef::TypeDef,
+use crate::runtime::envs::interp::shared::{
+    TDEnv,
+    callable::Callable,
+    frame::{Frame, FrameLayout},
 };
+
+use crate::interp::shared::prepare::ast::TypeDef;
 
 use crate::interp::shared::{
     backtrack::{Backtrack, ok, unwrap_from_result},
