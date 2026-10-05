@@ -9,9 +9,10 @@ use std::rc::Rc;
 use crate::lang::{
     common::source::Span,
     data::{
+        arena::Arena,
         notation::{Mixfix, Mixop, mixop::shape},
         typ,
-        value::{Arena, Value, get, make},
+        value::{Value, get, make},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };

@@ -15,8 +15,9 @@ use crate::util::text::escape_text;
 use crate::lang::{
     common::source::{Phrase, Span},
     data::{
+        arena::Arena,
         typ,
-        value::{Arena, Value, make},
+        value::{Value, make},
     },
     traits::print::Print,
 };

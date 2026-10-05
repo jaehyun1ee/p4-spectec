@@ -9,7 +9,7 @@
 
 use thiserror::Error;
 
-use crate::lang::data::value::{Arena, Value};
+use crate::lang::data::{arena::Arena, value::Value};
 
 use crate::lang::il::ast::{Id, Typ};
 

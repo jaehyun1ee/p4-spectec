@@ -17,7 +17,7 @@ use std::{
 
 use crate::lang::{
     common::source::{Position, Span},
-    data::value::Arena,
+    data::arena::Arena,
 };
 
 use super::error::ContextError;

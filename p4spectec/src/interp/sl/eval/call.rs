@@ -10,7 +10,10 @@
 use std::{borrow::Cow, rc::Rc};
 
 use crate::lang::{
-    data::value::{Arena, Value, ValueKind},
+    data::{
+        arena::Arena,
+        value::{Value, ValueKind},
+    },
     hints::input,
 };
 

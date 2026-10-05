@@ -11,12 +11,13 @@ use crate::lang::{
         source::Span,
     },
     data::{
+        arena::Arena,
         notation::{Mixfix, Mixop},
         typ::{self, Typ, TypKind},
     },
 };
 
-use super::{Arena, Value, ValueCase, ValueError, ValueField, ValueKind};
+use super::{Value, ValueCase, ValueError, ValueField, ValueKind};
 
 // - General
 

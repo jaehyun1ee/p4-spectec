@@ -11,8 +11,9 @@ use std::rc::Rc;
 use crate::lang::{
     common::{ds::map::IdMap, source::Span},
     data::{
+        arena::Arena,
         typ,
-        value::{Arena, Value, get, make},
+        value::{Value, get, make},
         var::{SlotIdx, VarSlot},
     },
 };

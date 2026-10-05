@@ -12,8 +12,9 @@ use crate::util::bigint::remainder;
 use crate::lang::{
     common::source::Span,
     data::{
+        arena::Arena,
         typ,
-        value::{Arena, Value, make},
+        value::{Value, make},
     },
 };
 

@@ -8,13 +8,11 @@ use std::cmp::Ordering;
 
 use crate::lang::{
     common::prim::num,
+    data::arena::Arena,
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
 
-use super::{
-    arena::Arena,
-    flat::{Value, ValueKind},
-};
+use super::flat::{Value, ValueKind};
 
 // = Borrowed views
 

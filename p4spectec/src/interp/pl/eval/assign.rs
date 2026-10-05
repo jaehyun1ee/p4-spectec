@@ -6,7 +6,7 @@
 
 use std::borrow::Borrow;
 
-use crate::lang::data::value::{Arena, Value};
+use crate::lang::data::{arena::Arena, value::Value};
 
 use crate::runtime::envs::interp::pl::ast_prepared as ast;
 

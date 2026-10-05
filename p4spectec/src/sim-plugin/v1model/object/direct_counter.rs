@@ -10,8 +10,9 @@ use serde::{Deserialize, Serialize};
 use crate::lang::{
     common::source::Span,
     data::{
+        arena::Arena,
         typ,
-        value::{Arena, Value, make},
+        value::{Value, make},
     },
 };
 

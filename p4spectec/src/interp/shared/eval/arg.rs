@@ -5,7 +5,10 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Arena, Value, make},
+    data::{
+        arena::Arena,
+        value::{Value, make},
+    },
     traits::print::Print,
 };
 

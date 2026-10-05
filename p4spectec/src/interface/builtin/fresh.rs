@@ -7,7 +7,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Arena, Value, make},
+    data::{
+        arena::Arena,
+        value::{Value, make},
+    },
 };
 
 use crate::lang::il::ast::Typ;

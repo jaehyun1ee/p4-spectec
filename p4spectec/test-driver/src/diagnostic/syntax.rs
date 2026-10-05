@@ -1,6 +1,6 @@
 //! Source syntax rejection through the production P4 parser
 
-use p4spectec::lang::data::value::Arena;
+use p4spectec::lang::data::arena::Arena;
 
 use p4spectec::diagnostic::Report;
 

@@ -10,7 +10,7 @@ use num_traits::{One, ToPrimitive, Zero};
 
 use crate::util::bigint::{remainder, width_bit};
 
-use crate::lang::data::value::{Arena, Value};
+use crate::lang::data::{arena::Arena, value::Value};
 
 use crate::runner::ExternError;
 

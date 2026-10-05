@@ -10,8 +10,9 @@ use foldhash::fast::RandomState;
 use hashbrown::{Equivalent, HashMap};
 
 use crate::lang::data::{
+    arena::Arena,
     intern::CanonId,
-    value::{Arena, Value, ValueKind},
+    value::{Value, ValueKind},
 };
 
 // = Call identity

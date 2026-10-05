@@ -20,13 +20,13 @@ use crate::lang::{
         source::{NotePhrase, Phrase},
     },
     data::{
+        arena::Arena,
         notation::{AtomPhrase, Mixfix, Mixop, Node},
         typ::TypKind,
     },
 };
 
 use super::{
-    arena::Arena,
     error::ValueError,
     flat::{Value as ArenaValue, ValueCase as ArenaValueCase, ValueKind as ArenaValueKind},
     node::{ValueNode, ValueRepr},

@@ -19,13 +19,14 @@ use crate::util::json::json;
 use crate::lang::{
     common::{Id, prim::num::Number, source::Span},
     data::{
+        arena::Arena,
         intern::Interned,
         notation::{AtomPhrase, Mixop, Node, ShapeArena, ShapeKind},
         typ::TypKind,
     },
 };
 
-use super::{Arena, Value, ValueCase, ValueField, ValueKind, tree};
+use super::{Value, ValueCase, ValueField, ValueKind, tree};
 
 // = Configuration
 

@@ -13,8 +13,9 @@ use num_traits::{One, ToPrimitive, Zero};
 use crate::lang::{
     common::{prim::num, source::Span},
     data::{
+        arena::Arena,
         typ,
-        value::{Arena, Value, get, make},
+        value::{Value, get, make},
     },
 };
 

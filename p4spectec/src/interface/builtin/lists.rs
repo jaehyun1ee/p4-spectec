@@ -13,8 +13,9 @@ use num_bigint::BigInt;
 use crate::lang::{
     common::{prim::num, source::Span},
     data::{
+        arena::Arena,
         typ,
-        value::{Arena, Value, ValueKind, get, make},
+        value::{Value, ValueKind, get, make},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };

@@ -12,8 +12,9 @@ use std::{borrow::Borrow, rc::Rc};
 use crate::lang::{
     common::source::Span,
     data::{
+        arena::Arena,
         typ,
-        value::{Arena, Value, ValueKind, get, make},
+        value::{Value, ValueKind, get, make},
         var::IdSlot,
     },
     traits::at::At,

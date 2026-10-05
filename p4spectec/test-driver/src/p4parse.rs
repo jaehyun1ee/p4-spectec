@@ -7,7 +7,7 @@ use std::{
 use expect_test::expect_file;
 use indicatif::{ProgressBar, ProgressStyle};
 
-use p4spectec::lang::data::value::Arena;
+use p4spectec::lang::data::arena::Arena;
 
 use p4spectec::interface::p4::{
     error::P4Error,

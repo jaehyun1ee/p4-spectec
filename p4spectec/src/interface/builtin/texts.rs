@@ -9,8 +9,9 @@ use num_bigint::BigInt;
 use crate::lang::{
     common::source::Span,
     data::{
+        arena::Arena,
         typ,
-        value::{Arena, Value, get, make},
+        value::{Value, get, make},
     },
     traits::print::Print,
 };

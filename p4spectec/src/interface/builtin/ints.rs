@@ -7,7 +7,10 @@ use num_traits::Zero;
 
 use crate::lang::{
     common::{prim::num, source::Span},
-    data::value::{Arena, Value, get, make},
+    data::{
+        arena::Arena,
+        value::{Value, get, make},
+    },
 };
 
 use crate::lang::il::ast::Typ;

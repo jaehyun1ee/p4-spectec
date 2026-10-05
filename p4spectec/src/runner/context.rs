@@ -4,7 +4,7 @@
 //! An extern receives the same context and can reenter the interpreter
 //! after its own shared borrow has been copied into a local reference.
 
-use crate::lang::data::value::{Arena, Value};
+use crate::lang::data::{arena::Arena, value::Value};
 
 use crate::lang::il::ast::{Id, Typ};
 

@@ -13,8 +13,9 @@ use crate::lang::{
         source::{Phrase, Span},
     },
     data::{
+        arena::Arena,
         notation::MixopRepr,
-        value::{Arena, Value, ValueKind, get, make},
+        value::{Value, ValueKind, get, make},
     },
     traits::eq::SyntaxEq,
 };

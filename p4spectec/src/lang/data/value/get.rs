@@ -4,9 +4,9 @@ use std::rc::Rc;
 
 use crate::util::json::json;
 
-use crate::lang::common::prim::num::Number;
+use crate::lang::{common::prim::num::Number, data::arena::Arena};
 
-use super::{Arena, Value, ValueCase, ValueError, ValueField, ValueKind, ValueTag};
+use super::{Value, ValueCase, ValueError, ValueField, ValueKind, ValueTag};
 
 // - Errors
 

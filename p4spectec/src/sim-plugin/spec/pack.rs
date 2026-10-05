@@ -7,7 +7,10 @@ use num_bigint::BigInt;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Arena, Value, make},
+    data::{
+        arena::Arena,
+        value::{Value, make},
+    },
 };
 
 use crate::runner::ExternError;

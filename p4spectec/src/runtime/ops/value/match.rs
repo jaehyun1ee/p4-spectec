@@ -14,8 +14,9 @@ use crate::lang::{
         source::Span,
     },
     data::{
+        arena::Arena,
         notation::MixopRepr,
-        value::{Arena, Value, ValueKind},
+        value::{Value, ValueKind},
     },
 };
 

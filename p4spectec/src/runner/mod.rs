@@ -19,10 +19,7 @@ use crate::{
     sim_plugin::dummy::Dummy,
 };
 
-use crate::lang::data::{
-    notation::ShapeArena,
-    value::{Arena, Value},
-};
+use crate::lang::data::{arena::Arena, notation::ShapeArena, value::Value};
 
 use crate::lang::al;
 

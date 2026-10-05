@@ -13,11 +13,12 @@ use crate::util::text::escape_text;
 use crate::lang::{
     common::{notation::atom::Atom, prim::num::Number},
     data::{
+        arena::Arena,
         notation::{
             Mixop,
             walk::{self, Piece},
         },
-        value::{Arena, Value, ValueCase, ValueKind},
+        value::{Value, ValueCase, ValueKind},
     },
     hints::alter::{self, AlterHint, Renderer},
     traits::print::Print,

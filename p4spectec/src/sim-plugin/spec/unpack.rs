@@ -8,7 +8,10 @@ use num_bigint::BigInt;
 
 use crate::lang::{
     common::prim::num,
-    data::value::{Arena, Value, ValueError, get},
+    data::{
+        arena::Arena,
+        value::{Value, ValueError, get},
+    },
 };
 
 use crate::runner::ExternError;

@@ -3,7 +3,10 @@
 //! The specification passes parameter names and argument values as two lists;
 //! `assoc` zips them and `find` looks one up.
 
-use crate::lang::data::value::{Arena, Value, ValueError, get};
+use crate::lang::data::{
+    arena::Arena,
+    value::{Value, ValueError, get},
+};
 
 use crate::runner::ExternError;
 

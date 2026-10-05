@@ -138,7 +138,7 @@ impl Print for [TypCase] {
 
 /// Prints a value in full, resolving handles through the arena.
 pub fn print_value(
-    arena: &crate::lang::data::value::Arena,
+    arena: &crate::lang::data::arena::Arena,
     value: &Value,
     printer: &mut Printer<'_>,
 ) -> fmt::Result {
@@ -147,7 +147,7 @@ pub fn print_value(
 
 /// Prints a value; `short` elides struct and list contents to a count.
 fn write_value_with(
-    arena: &crate::lang::data::value::Arena,
+    arena: &crate::lang::data::arena::Arena,
     output: &mut Printer<'_>,
     value: &Value,
     short: bool,
@@ -224,7 +224,7 @@ fn write_value_with(
 
 /// Prints a variant value with its arguments filled into the skeleton.
 fn write_notval_with(
-    arena: &crate::lang::data::value::Arena,
+    arena: &crate::lang::data::arena::Arena,
     output: &mut Printer<'_>,
     not_val: &ValueCase,
     level: usize,

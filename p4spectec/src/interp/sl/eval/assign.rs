@@ -3,7 +3,7 @@
 //! Re-exports the shared assignment and adds parameters,
 //! whose patterns live in the parameter, not in a separate argument list.
 
-use crate::lang::data::value::{Arena, Value};
+use crate::lang::data::{arena::Arena, value::Value};
 
 use crate::runtime::envs::interp::sl::ast_prepared as ast;
 

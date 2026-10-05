@@ -21,9 +21,10 @@ use serde_derive_state::{DeserializeState, SerializeState};
 use crate::lang::{
     common::source::Span,
     data::{
+        arena::Arena,
         typ,
         value::{
-            Arena, Value, ValueError,
+            Value, ValueError,
             external::{DecodeContext, EncodeContext, Encoding, decode_with, encode_with},
             get, make,
         },

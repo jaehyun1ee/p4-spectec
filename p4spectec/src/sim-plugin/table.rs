@@ -8,8 +8,9 @@
 use crate::lang::{
     common::source::Span,
     data::{
+        arena::Arena,
         typ,
-        value::{Arena, Value, ValueError, get, make},
+        value::{Value, ValueError, get, make},
     },
 };
 

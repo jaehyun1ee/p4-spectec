@@ -5,7 +5,10 @@
 //! Each matches the value's mixop text
 //! against the grammar productions it may come from.
 
-use crate::lang::data::value::{Arena, Value, get};
+use crate::lang::data::{
+    arena::Arena,
+    value::{Value, get},
+};
 
 use super::{context::TypeId, error::ExtractError};
 
