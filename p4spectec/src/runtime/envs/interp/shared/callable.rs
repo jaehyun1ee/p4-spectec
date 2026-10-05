@@ -1,16 +1,14 @@
 //! Prepared callable syntax and its local frame layout
 //!
 //! `Callable::prepare` runs the `Prepare` traversal once,
-//! resolving every name to a slot and recording the layout its frames follow.
+//! resolving every name to a slot and recording the layout its frames follow;
+//! notations are interned into the specification's shapes on the way.
 
-use std::{fmt, rc::Rc};
+use std::rc::Rc;
 
-use crate::lang::traits::{
-    eq::SyntaxEq,
-    print::{Print, Printer},
-};
+use crate::lang::data::notation::ShapeArena;
 
-use crate::interp::shared::prepare::Prepare;
+use crate::interp::shared::prepare::{Prepare, PrepareContext};
 
 use super::frame::FrameLayout;
 
@@ -25,22 +23,13 @@ pub struct Callable<T> {
 
 impl<T> Callable<T> {
     /// Prepares a definition, collecting its slot layout.
-    pub fn prepare<S: Prepare<Output = T>>(source: S) -> Self {
+    ///
+    /// Notations are interned into `arena_shape`,
+    /// which must stay with the prepared definition for evaluation.
+    pub fn prepare<S: Prepare<Output = T>>(source: S, arena_shape: &mut ShapeArena) -> Self {
         // The traversal fills the layout as it resolves names
         let mut layout = FrameLayout::default();
-        let def = source.prepare(&mut layout);
+        let def = source.prepare(&mut PrepareContext { layout: &mut layout, arena_shape });
         Self { def, layout: Rc::new(layout) }
-    }
-}
-
-impl<T: Print> Print for Callable<T> {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        self.def.print(printer)
-    }
-}
-
-impl<T: SyntaxEq> SyntaxEq for Callable<T> {
-    fn syntax_eq(&self, other: &Self) -> bool {
-        self.def.syntax_eq(&other.def)
     }
 }

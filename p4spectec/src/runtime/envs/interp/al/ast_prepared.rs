@@ -10,9 +10,7 @@ pub use crate::lang::al::ast::{
     BuiltinFunc, DefinedTyp, ExternFunc, ExternRel, ExternTyp, TypDef, VarDef,
 };
 
-use crate::runtime::envs::interp::shared::frame::FrameLayout;
-
-use crate::interp::shared::prepare::Prepare;
+use crate::interp::shared::prepare::{Prepare, PrepareContext};
 
 pub use crate::interp::shared::prepare::ast::*;
 
@@ -75,17 +73,15 @@ pub type Spec = Vec<Def>;
 impl Prepare for source::PremKind {
     type Output = PremKind;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         match self {
-            source::PremKind::Rule(prem_inner) => PremKind::Rule(prem_inner.prepare(layout)),
-            source::PremKind::If(prem_inner) => PremKind::If(prem_inner.prepare(layout)),
-            source::PremKind::IfHold(prem_inner) => PremKind::IfHold(prem_inner.prepare(layout)),
-            source::PremKind::IfNotHold(prem_inner) => {
-                PremKind::IfNotHold(prem_inner.prepare(layout))
-            }
-            source::PremKind::Let(prem_inner) => PremKind::Let(prem_inner.prepare(layout)),
-            source::PremKind::Iter(prem_inner) => PremKind::Iter(prem_inner.prepare(layout)),
-            source::PremKind::Debug(prem_inner) => PremKind::Debug(prem_inner.prepare(layout)),
+            source::PremKind::Rule(prem_inner) => PremKind::Rule(prem_inner.prepare(ctx)),
+            source::PremKind::If(prem_inner) => PremKind::If(prem_inner.prepare(ctx)),
+            source::PremKind::IfHold(prem_inner) => PremKind::IfHold(prem_inner.prepare(ctx)),
+            source::PremKind::IfNotHold(prem_inner) => PremKind::IfNotHold(prem_inner.prepare(ctx)),
+            source::PremKind::Let(prem_inner) => PremKind::Let(prem_inner.prepare(ctx)),
+            source::PremKind::Iter(prem_inner) => PremKind::Iter(prem_inner.prepare(ctx)),
+            source::PremKind::Debug(prem_inner) => PremKind::Debug(prem_inner.prepare(ctx)),
         }
     }
 }
@@ -95,8 +91,8 @@ impl Prepare for source::PremKind {
 impl Prepare for source::RulePrem {
     type Output = RulePrem;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        RulePrem { id: self.id, not_exp: self.not_exp.prepare(layout), input_hint: self.input_hint }
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        RulePrem { id: self.id, not_exp: self.not_exp.prepare(ctx), input_hint: self.input_hint }
     }
 }
 
@@ -105,8 +101,8 @@ impl Prepare for source::RulePrem {
 impl Prepare for source::IfPrem {
     type Output = IfPrem;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        IfPrem { exp: self.exp.prepare(layout) }
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        IfPrem { exp: self.exp.prepare(ctx) }
     }
 }
 
@@ -115,8 +111,8 @@ impl Prepare for source::IfPrem {
 impl Prepare for source::IfHoldPrem {
     type Output = IfHoldPrem;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        IfHoldPrem { id: self.id, not_exp: self.not_exp.prepare(layout) }
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        IfHoldPrem { id: self.id, not_exp: self.not_exp.prepare(ctx) }
     }
 }
 
@@ -125,8 +121,8 @@ impl Prepare for source::IfHoldPrem {
 impl Prepare for source::IfNotHoldPrem {
     type Output = IfNotHoldPrem;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        IfNotHoldPrem { id: self.id, not_exp: self.not_exp.prepare(layout) }
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        IfNotHoldPrem { id: self.id, not_exp: self.not_exp.prepare(ctx) }
     }
 }
 
@@ -135,8 +131,8 @@ impl Prepare for source::IfNotHoldPrem {
 impl Prepare for source::LetPrem {
     type Output = LetPrem;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        LetPrem { exp_l: self.exp_l.prepare(layout), exp_r: self.exp_r.prepare(layout) }
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        LetPrem { exp_l: self.exp_l.prepare(ctx), exp_r: self.exp_r.prepare(ctx) }
     }
 }
 
@@ -145,8 +141,8 @@ impl Prepare for source::LetPrem {
 impl Prepare for source::IterPrem {
     type Output = IterPrem;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        IterPrem { prem: self.prem.prepare(layout), prem_iter: self.prem_iter.prepare(layout) }
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        IterPrem { prem: self.prem.prepare(ctx), prem_iter: self.prem_iter.prepare(ctx) }
     }
 }
 
@@ -155,8 +151,8 @@ impl Prepare for source::IterPrem {
 impl Prepare for source::DebugPrem {
     type Output = DebugPrem;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        DebugPrem { exp: self.exp.prepare(layout) }
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        DebugPrem { exp: self.exp.prepare(ctx) }
     }
 }
 
@@ -167,11 +163,11 @@ impl Prepare for source::DebugPrem {
 impl Prepare for source::RuleGroupKind {
     type Output = RuleGroupKind;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         RuleGroupKind {
             id: self.id,
-            rule_match: self.rule_match.prepare(layout),
-            rule_paths: self.rule_paths.prepare(layout),
+            rule_match: self.rule_match.prepare(ctx),
+            rule_paths: self.rule_paths.prepare(ctx),
         }
     }
 }
@@ -181,11 +177,11 @@ impl Prepare for source::RuleGroupKind {
 impl Prepare for source::ElseGroupKind {
     type Output = ElseGroupKind;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         ElseGroupKind {
             id: self.id,
-            rule_match: self.rule_match.prepare(layout),
-            rule_path: self.rule_path.prepare(layout),
+            rule_match: self.rule_match.prepare(ctx),
+            rule_path: self.rule_path.prepare(ctx),
         }
     }
 }
@@ -195,11 +191,11 @@ impl Prepare for source::ElseGroupKind {
 impl Prepare for source::RuleMatch {
     type Output = RuleMatch;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         RuleMatch {
-            exps_signature: self.exps_signature.prepare(layout),
-            exps_input: self.exps_input.prepare(layout),
-            prems: self.prems.prepare(layout),
+            exps_signature: self.exps_signature.prepare(ctx),
+            exps_input: self.exps_input.prepare(ctx),
+            prems: self.prems.prepare(ctx),
         }
     }
 }
@@ -209,11 +205,11 @@ impl Prepare for source::RuleMatch {
 impl Prepare for source::RulePath {
     type Output = RulePath;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         RulePath {
             id: self.id,
-            prems: self.prems.prepare(layout),
-            exps_output: self.exps_output.prepare(layout),
+            prems: self.prems.prepare(ctx),
+            exps_output: self.exps_output.prepare(ctx),
         }
     }
 }
@@ -223,11 +219,11 @@ impl Prepare for source::RulePath {
 impl Prepare for source::ClauseKind {
     type Output = ClauseKind;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         ClauseKind {
-            args: self.args.prepare(layout),
-            exp: self.exp.prepare(layout),
-            prems: self.prems.prepare(layout),
+            args: self.args.prepare(ctx),
+            exp: self.exp.prepare(ctx),
+            prems: self.prems.prepare(ctx),
         }
     }
 }
@@ -237,12 +233,12 @@ impl Prepare for source::ClauseKind {
 impl Prepare for source::TableRowKind {
     type Output = TableRowKind;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         TableRowKind {
-            exps_signature: self.exps_signature.prepare(layout),
-            args: self.args.prepare(layout),
-            exp: self.exp.prepare(layout),
-            prems: self.prems.prepare(layout),
+            exps_signature: self.exps_signature.prepare(ctx),
+            args: self.args.prepare(ctx),
+            exp: self.exp.prepare(ctx),
+            prems: self.prems.prepare(ctx),
         }
     }
 }
@@ -254,10 +250,10 @@ impl Prepare for source::TableRowKind {
 impl Prepare for source::RelDef {
     type Output = RelDef;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         match self {
             source::RelDef::Extern(rel_inner) => RelDef::Extern(rel_inner),
-            source::RelDef::Defined(rel_inner) => RelDef::Defined(rel_inner.prepare(layout)),
+            source::RelDef::Defined(rel_inner) => RelDef::Defined(rel_inner.prepare(ctx)),
         }
     }
 }
@@ -267,13 +263,13 @@ impl Prepare for source::RelDef {
 impl Prepare for source::DefinedRel {
     type Output = DefinedRel;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         DefinedRel {
             id: self.id,
             not_typ: self.not_typ,
             input_hint: self.input_hint,
-            rule_groups: self.rule_groups.prepare(layout),
-            else_group: self.else_group.prepare(layout),
+            rule_groups: self.rule_groups.prepare(ctx),
+            else_group: self.else_group.prepare(ctx),
             hints: self.hints,
         }
     }
@@ -286,15 +282,13 @@ impl Prepare for source::DefinedRel {
 impl Prepare for source::MetaFuncDef {
     type Output = MetaFuncDef;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         match self {
             source::MetaFuncDef::Extern(func_inner) => MetaFuncDef::Extern(func_inner),
             source::MetaFuncDef::Builtin(func_inner) => MetaFuncDef::Builtin(func_inner),
-            source::MetaFuncDef::Table(func_inner) => {
-                MetaFuncDef::Table(func_inner.prepare(layout))
-            }
+            source::MetaFuncDef::Table(func_inner) => MetaFuncDef::Table(func_inner.prepare(ctx)),
             source::MetaFuncDef::Defined(func_inner) => {
-                MetaFuncDef::Defined(func_inner.prepare(layout))
+                MetaFuncDef::Defined(func_inner.prepare(ctx))
             }
         }
     }
@@ -305,12 +299,12 @@ impl Prepare for source::MetaFuncDef {
 impl Prepare for source::TableFunc {
     type Output = TableFunc;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         TableFunc {
             id: self.id,
             params: self.params,
             typ: self.typ,
-            table_rows: self.table_rows.prepare(layout),
+            table_rows: self.table_rows.prepare(ctx),
             hints: self.hints,
         }
     }
@@ -321,14 +315,14 @@ impl Prepare for source::TableFunc {
 impl Prepare for source::DefinedFunc {
     type Output = DefinedFunc;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         DefinedFunc {
             id: self.id,
             tparams: self.tparams,
             params: self.params,
             typ: self.typ,
-            clauses: self.clauses.prepare(layout),
-            else_clause: self.else_clause.prepare(layout),
+            clauses: self.clauses.prepare(ctx),
+            else_clause: self.else_clause.prepare(ctx),
             hints: self.hints,
         }
     }
@@ -339,12 +333,12 @@ impl Prepare for source::DefinedFunc {
 impl Prepare for source::DefKind {
     type Output = DefKind;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         match self {
             source::DefKind::Typ(typdef) => DefKind::Typ(typdef),
             source::DefKind::Var(def_var) => DefKind::Var(def_var),
-            source::DefKind::Rel(rel_inner) => DefKind::Rel(rel_inner.prepare(layout)),
-            source::DefKind::MetaFunc(func_inner) => DefKind::MetaFunc(func_inner.prepare(layout)),
+            source::DefKind::Rel(rel_inner) => DefKind::Rel(rel_inner.prepare(ctx)),
+            source::DefKind::MetaFunc(func_inner) => DefKind::MetaFunc(func_inner.prepare(ctx)),
         }
     }
 }

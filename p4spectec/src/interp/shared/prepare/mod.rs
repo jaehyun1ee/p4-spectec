@@ -3,42 +3,53 @@
 //! `Prepare` walks IL syntax once
 //! and replaces identifiers and variables by frame slots (`IdSlot`, `VarSlot`),
 //! so evaluation indexes a frame instead of looking names up;
-//! containers, phrases, and notation recurse structurally.
+//! notations' mixops are interned as shapes in the specification's
+//! `ShapeArena` on the way, and containers and phrases recurse structurally.
 
 pub mod ast;
+
+use std::rc::Rc;
 
 use crate::lang::{
     common::{Id, source::NotePhrase},
     data::{
-        notation::Mixfix,
+        notation::{Mixfix, Mixop, Shape, ShapeArena},
         var::{IdSlot, Var, VarSlot},
     },
 };
 
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
 
+/// Where preparation records slots and shapes.
+pub struct PrepareContext<'a> {
+    /// The callable's frame layout, filled as names resolve.
+    pub layout: &'a mut FrameLayout,
+    /// The specification's shapes, filled as mixops are interned.
+    pub arena_shape: &'a mut ShapeArena,
+}
+
 /// Slot resolution of one syntax node.
 pub trait Prepare: Sized {
-    /// The same node with identifiers resolved to slots.
+    /// The same node with identifiers resolved to slots and mixops to shapes.
     type Output;
 
-    /// Resolves the node's identifiers in `layout`.
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output;
+    /// Resolves the node's identifiers and mixops through `ctx`.
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output;
 }
 
 impl Prepare for Id {
     type Output = IdSlot;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        layout.resolve_id(self)
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        ctx.layout.resolve_id(self)
     }
 }
 
 impl Prepare for Var {
     type Output = VarSlot;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        layout.resolve_var(self)
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        ctx.layout.resolve_var(self)
     }
 }
 
@@ -47,26 +58,24 @@ impl Prepare for Var {
 impl<T: Prepare> Prepare for Vec<T> {
     type Output = Vec<T::Output>;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        self.into_iter()
-            .map(|syntax| syntax.prepare(layout))
-            .collect()
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        self.into_iter().map(|syntax| syntax.prepare(ctx)).collect()
     }
 }
 
 impl<T: Prepare> Prepare for Box<T> {
     type Output = Box<T::Output>;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        Box::new((*self).prepare(layout))
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        Box::new((*self).prepare(ctx))
     }
 }
 
 impl<T: Prepare> Prepare for Option<T> {
     type Output = Option<T::Output>;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        self.map(|syntax| syntax.prepare(layout))
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        self.map(|syntax| syntax.prepare(ctx))
     }
 }
 
@@ -75,10 +84,10 @@ impl<T: Prepare> Prepare for Option<T> {
 impl<T: Prepare, N, S> Prepare for NotePhrase<T, N, S> {
     type Output = NotePhrase<T::Output, N, S>;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         // Grow the stack for deep syntax trees
         stacker::maybe_grow(64 * 1024, 1024 * 1024, || NotePhrase {
-            node: self.node.prepare(layout),
+            node: self.node.prepare(ctx),
             note: self.note,
             span: self.span,
         })
@@ -87,10 +96,20 @@ impl<T: Prepare, N, S> Prepare for NotePhrase<T, N, S> {
 
 // - Notation
 
-impl<M, T: Prepare> Prepare for Mixfix<M, T> {
-    type Output = Mixfix<M, T::Output>;
+impl<T: Prepare> Prepare for Mixfix<Rc<Mixop>, T> {
+    type Output = Mixfix<Shape, T::Output>;
 
-    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
-        self.map_into(|arg| arg.prepare(layout))
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        let (mixop, args) = self.into_parts();
+        let shape = prepare_mixop(&mixop, ctx);
+        let args = args.prepare(ctx);
+        Mixfix::new_in(ctx.arena_shape, shape, args).expect("a mixfix fills every position")
     }
+}
+
+/// Interns a shared mixop as a shape, walking it once per specification.
+pub(crate) fn prepare_mixop(mixop: &Rc<Mixop>, ctx: &mut PrepareContext<'_>) -> Shape {
+    ctx.arena_shape
+        .intern_shared(mixop)
+        .expect("specification mixops fit in 32-bit shape handles")
 }

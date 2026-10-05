@@ -84,7 +84,13 @@ fn eval_if_prem<'global, Iface: Interface, Ext: Extern>(
     if get::bool(runner_ctx.arena(), &value).expect("condition must be a boolean") {
         ok!(ctx)
     } else {
-        unmatch!(prem.exp.span.clone(), error::prem::condition_unmet(Print::to_string(&prem.exp)),)
+        unmatch!(
+            prem.exp.span.clone(),
+            error::prem::condition_unmet(Print::to_string_in(
+                &prem.exp,
+                runner_ctx.arena().arena_shape()
+            )),
+        )
     }
 }
 
@@ -169,7 +175,7 @@ fn eval_debug_prem<'global, Iface: Interface, Ext: Extern>(
     prem: &ast::DebugPrem,
 ) -> Backtrack<Context<'global>> {
     let value = unwrap!(expr::eval_exp(runner_ctx, &ctx, &prem.exp));
-    let exp_text = Print::to_string(&prem.exp);
+    let exp_text = Print::to_string_in(&prem.exp, runner_ctx.arena().arena_shape());
     println!("{}: {}", prem.exp.span, exp_text);
     // Print the value's source span when it has one
     let span_text = runner_ctx.arena().span(&value).to_string();

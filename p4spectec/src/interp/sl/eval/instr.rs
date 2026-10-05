@@ -13,7 +13,7 @@ use crate::lang::{
     common::source::Span,
     data::value::{Value, ValueKind, get},
     hints::input,
-    traits::{eq::SyntaxEq, print::Print},
+    traits::print::Print,
 };
 
 use crate::diagnostic::Report;
@@ -187,7 +187,10 @@ fn eval_if_instr<Iface: Interface, Ext: Extern>(
     } else {
         ok!(Flow::cont(
             instr.exp.span.clone(),
-            error::prem::condition_unmet(Print::to_string(&instr.exp)),
+            error::prem::condition_unmet(Print::to_string_in(
+                &instr.exp,
+                runner_ctx.arena().arena_shape()
+            )),
         ))
     }
 }
@@ -267,7 +270,10 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
     // No guard accepted: fall through
     ok!(Flow::cont(
         instr.exp.span.clone(),
-        error::prem::condition_unmet(format!("case {}", Print::to_string(&instr.exp))),
+        error::prem::condition_unmet(format!(
+            "case {}",
+            Print::to_string_in(&instr.exp, runner_ctx.arena().arena_shape())
+        )),
     ))
 }
 
@@ -360,16 +366,7 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
         input::split(&instr.input_hint, instr.not_exp.args().iter().collect())
             .expect("input hint must fit relation");
     // A tail-position call whose block just returns its outputs is a tail call
-    if tail
-        && instr.iter_instrs.is_empty()
-        && let [instr_result] = instr.block.as_slice()
-        && let ast::InstrKind::Result(instr_result) = &instr_result.node
-        && exps_output.len() == instr_result.exps.len()
-        && exps_output
-            .iter()
-            .zip(&instr_result.exps)
-            .all(|(exp_l, exp_r)| exp_l.syntax_eq(exp_r))
-    {
+    if tail && instr.returns_outputs {
         let values = unwrap!(eval_exps(runner_ctx, ctx.as_ref(), &exps_input));
         return ok!(Flow::TailRel(phrase!(
             node: (instr.id.clone(), values),
@@ -450,7 +447,11 @@ fn eval_debug_instr<Iface: Interface, Ext: Extern>(
     tail: bool,
 ) -> Backtrack<Flow> {
     let value = unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
-    println!("{}: {}", instr.exp.span, Print::to_string(&instr.exp));
+    println!(
+        "{}: {}",
+        instr.exp.span,
+        Print::to_string_in(&instr.exp, runner_ctx.arena().arena_shape())
+    );
     // Print the value's source span when it has one
     let span = runner_ctx.arena().span(&value).to_string();
     if span.is_empty() {

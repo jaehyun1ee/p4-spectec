@@ -4,7 +4,10 @@
 //! `Context` retains the shared scope, binding, and iteration operations;
 //! `FuncSignature` extracts types from prepared PL function definitions.
 
-use crate::lang::data::typ::{FuncTyp, make};
+use crate::lang::data::{
+    notation::ShapeArena,
+    typ::{FuncTyp, make},
+};
 
 use crate::lang::pl::ast as source;
 
@@ -34,7 +37,7 @@ impl Global {
     /// Loads type definitions and prepares each callable for slot execution.
     ///
     /// Panics if a global definition is repeated.
-    pub fn load(spec: source::Spec) -> Result<Self, Error> {
+    pub fn load(spec: source::Spec, arena_shape: &mut ShapeArena) -> Result<Self, Error> {
         let mut loaded = Self::new();
         // Move source definitions into the execution environments
         for def in spec {
@@ -54,7 +57,7 @@ impl Global {
                 source::DefKind::Var(_) => {}
                 source::DefKind::Rel(rel) => {
                     // Relations are prepared into callables with a frame layout
-                    let rel = Callable::prepare(rel);
+                    let rel = Callable::prepare(rel, arena_shape);
                     let id = match &rel.def {
                         ast::RelDef::Extern(rel) => &rel.id,
                         ast::RelDef::Defined(rel) => &rel.id,
@@ -63,7 +66,7 @@ impl Global {
                 }
                 source::DefKind::MetaFunc(func) => {
                     // Prepare functions before sharing them with local bindings
-                    let func = Callable::prepare(func);
+                    let func = Callable::prepare(func, arena_shape);
                     let id = match &func.def {
                         ast::MetaFuncDef::Extern(func) => &func.id,
                         ast::MetaFuncDef::Builtin(func) => &func.id,

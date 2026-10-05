@@ -2,8 +2,12 @@
 //!
 //! `Print::print` writes to a `Printer`, which tracks indentation;
 //! `to_string` renders into a fresh string.
+//! Prepared syntax holds notation shapes, so it prints only through a printer
+//! that has their shape arena (`Printer::with_arena_shape`, `Print::to_string_in`).
 
 use std::fmt;
+
+use crate::lang::data::notation::ShapeArena;
 
 // == Printing
 
@@ -22,6 +26,17 @@ pub trait Print {
         }
         output
     }
+
+    /// Renders this value with the shape arena its notations belong to.
+    fn to_string_in(&self, arena_shape: &ShapeArena) -> String {
+        let mut output = String::new();
+        {
+            let mut printer = Printer::with_arena_shape(&mut output, arena_shape);
+            self.print(&mut printer)
+                .expect("writing to a String cannot fail");
+        }
+        output
+    }
 }
 
 // - Printer
@@ -32,12 +47,24 @@ pub struct Printer<'a> {
     output: &'a mut dyn fmt::Write,
     /// Current indentation depth, two spaces per level.
     level: usize,
+    /// The shapes notation handles refer to, when printing prepared syntax.
+    arena_shape: Option<&'a ShapeArena>,
 }
 
 impl<'a> Printer<'a> {
     /// Creates a printer at the outermost indentation level.
     pub fn new(output: &'a mut dyn fmt::Write) -> Self {
-        Self { output, level: 0 }
+        Self { output, level: 0, arena_shape: None }
+    }
+
+    /// Creates a printer that can print notation shapes of `arena_shape`.
+    pub fn with_arena_shape(output: &'a mut dyn fmt::Write, arena_shape: &'a ShapeArena) -> Self {
+        Self { output, level: 0, arena_shape: Some(arena_shape) }
+    }
+
+    /// The shape arena, when the printer has one.
+    pub fn arena_shape(&self) -> Option<&'a ShapeArena> {
+        self.arena_shape
     }
 
     /// Writes text without changing layout state.

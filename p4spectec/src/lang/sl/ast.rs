@@ -238,6 +238,9 @@ pub struct RuleInstr<P: Stage = Source> {
     pub input_hint: InputHint,
     pub iter_instrs: Vec<InstrIter<P::Var>>,
     pub block: Block<P>,
+    /// Whether the block only returns the outputs unchanged,
+    /// so a call in tail position is a tail call; set when preparing
+    pub returns_outputs: bool,
 }
 /// The relation's outputs.
 #[derive(Clone, Debug, PartialEq)]

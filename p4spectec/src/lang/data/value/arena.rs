@@ -2,7 +2,8 @@
 //!
 //! An `Arena` holds a `ShapeArena` beside a `ValueArena`;
 //! handles belong to one arena; annotation changes preserve the stored body.
-//! A case body's notation is a shape in the arena's `ShapeArena`.
+//! The shapes are the specification's, shared with its prepared syntax,
+//! and outlive `reset_values`; a case body's notation is one of them.
 //! Bodies are interned canonically, types by `Rc` identity, spans exactly;
 //! the default span is interned first so generated values share it.
 
@@ -25,10 +26,12 @@ use super::{
 
 // = Arena storage
 
-/// Storage for the notation shapes and the values of one run.
+/// Storage for a specification's notation shapes and the values of one run.
+///
+/// Shapes survive `reset_values`; value, type, and span handles do not.
 #[derive(Debug, Default)]
 pub struct Arena {
-    /// Notation shapes of case bodies.
+    /// Notation shapes of prepared syntax and case bodies.
     pub(super) shape: ShapeArena,
     /// Value bodies, types, and spans.
     pub(super) value: ValueArena,
@@ -61,6 +64,19 @@ impl Arena {
     /// An empty arena with the default span pre-interned.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// An empty value store over shapes interned earlier.
+    pub fn with_arena_shape(arena_shape: ShapeArena) -> Self {
+        Self { shape: arena_shape, value: ValueArena::default() }
+    }
+
+    /// Drops every value, type, and span, keeping the shapes.
+    ///
+    /// Value, type, and span handles issued before become invalid
+    /// and numbering starts over; shape handles stay valid.
+    pub fn reset_values(&mut self) {
+        self.value = ValueArena::default();
     }
 
     // - Interning

@@ -101,7 +101,10 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
         }
     })();
     result.with_frame(exp.span.clone(), || {
-        format!("while evaluating expression {}", Print::to_string(exp))
+        format!(
+            "while evaluating expression {}",
+            Print::to_string_in(exp, runner_ctx.arena().arena_shape())
+        )
     })
 }
 
@@ -273,8 +276,10 @@ fn eval_case_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
         Ok(case) => case,
         Err(result) => return result,
     };
+    // The prepared shape already belongs to the arena
+    let kind = ValueKind::Case(case);
     let value = unwrap_from_result!(
-        make::case(runner_ctx.arena_mut(), typ.clone(), case, Span::default()),
+        make::new(runner_ctx.arena_mut(), kind, typ.clone(), Span::default()),
         span
     );
     ok!(value)

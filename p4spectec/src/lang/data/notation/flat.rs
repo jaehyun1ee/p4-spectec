@@ -14,11 +14,16 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use crate::lang::data::intern::{CanonEq, CanonHash, CanonInterner, Interned};
+use crate::lang::{
+    data::intern::{CanonEq, CanonHash, CanonInterner, Interned},
+    traits::print::Printer,
+};
 
 use super::{
     arena::ShapeArena,
+    mixop::MixopRepr,
     node::{Node, Repr},
+    walk,
 };
 
 // = Representation
@@ -44,6 +49,27 @@ pub type ShapeKind = Node<Flat>;
 
 /// A notation handle valid only in the `ShapeArena` that issued it.
 pub type Shape = Interned<ShapeKind>;
+
+// - Shapes as a stage holds them
+
+// Prepared syntax holds shapes; they print through a printer that has
+// their arena, and match a value's shape by canonical identity
+impl MixopRepr for Shape {
+    fn print_with(
+        &self,
+        printer: &mut Printer<'_>,
+        print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
+    ) -> fmt::Result {
+        let arena_shape = printer
+            .arena_shape()
+            .expect("printing prepared syntax needs the shape arena");
+        walk::print_with(arena_shape, arena_shape.kind(*self), printer, print_arg)
+    }
+
+    fn matches_shape(&self, arena_shape: &ShapeArena, shape: Shape) -> bool {
+        arena_shape.canon_eq(shape, *self)
+    }
+}
 
 // = Exact equality and hashing
 

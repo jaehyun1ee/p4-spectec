@@ -4,7 +4,8 @@
 //! and how a notation's mixop is held.
 //! `Source` keeps names and shares mixop trees, as elaboration and the passes
 //! produce and rewrite them;
-//! the interpreters prepare syntax into a stage with frame slots.
+//! the interpreters prepare syntax into a stage with frame slots and
+//! interned shapes.
 
 use std::{fmt, rc::Rc};
 

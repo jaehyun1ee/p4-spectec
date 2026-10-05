@@ -100,7 +100,14 @@ fn insert_let_instr(instr_ol: ol::LetInstr, dangle: bool) -> sl::InstrKind {
 fn insert_rule_instr(instr_ol: ol::RuleInstr, dangle: bool) -> sl::InstrKind {
     let ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block: block_ol } = instr_ol;
     let block = insert_block(block_ol, dangle);
-    sl::InstrKind::Rule(sl::RuleInstr { id, not_exp, input_hint, iter_instrs, block })
+    sl::InstrKind::Rule(sl::RuleInstr {
+        id,
+        not_exp,
+        input_hint,
+        iter_instrs,
+        block,
+        returns_outputs: false,
+    })
 }
 
 // - Result instruction

@@ -19,7 +19,10 @@ use crate::{
     sim_plugin::dummy::Dummy,
 };
 
-use crate::lang::data::value::{Arena, Value};
+use crate::lang::data::{
+    notation::ShapeArena,
+    value::{Arena, Value},
+};
 
 use crate::lang::al;
 
@@ -87,9 +90,10 @@ pub fn build_al<Ext: Extern>(
     let interface = builtin::p4(&spec);
     let Spec::Al(spec) = spec else { unreachable!() };
     // Load and prepare the definitions
-    let global = AlGlobal::load(spec)?;
+    let mut arena_shape = ShapeArena::new();
+    let global = AlGlobal::load(spec, &mut arena_shape)?;
     let config = AlConfig::new(config.cache, config.det, config.guard);
-    Ok(Runner::new(global, AlInterp::new(config), interface, external))
+    Ok(Runner::new(global, arena_shape, AlInterp::new(config), interface, external))
 }
 
 /// Builds an SL runner from a specification, with the P4 builtins.
@@ -105,9 +109,10 @@ pub fn build_sl<Ext: Extern>(
     let interface = builtin::p4(&spec);
     let Spec::Sl(spec) = spec else { unreachable!() };
     // Load and prepare the definitions
-    let global = SlGlobal::load(spec)?;
+    let mut arena_shape = ShapeArena::new();
+    let global = SlGlobal::load(spec, &mut arena_shape)?;
     let config = SlConfig::new(config.cache, config.det, config.guard);
-    Ok(Runner::new(global, SlInterp::new(config), interface, external))
+    Ok(Runner::new(global, arena_shape, SlInterp::new(config), interface, external))
 }
 
 /// Builds a PL runner from a specification, with the P4 builtins.
@@ -121,9 +126,10 @@ pub fn build_pl<Ext: Extern>(
     let spec = Spec::Pl(spec);
     let interface = builtin::p4(&spec);
     let Spec::Pl(spec) = spec else { unreachable!() };
-    let global = PlGlobal::load(spec)?;
+    let mut arena_shape = ShapeArena::new();
+    let global = PlGlobal::load(spec, &mut arena_shape)?;
     let config = PlConfig::new(config.cache, config.det, config.guard);
-    Ok(Runner::new(global, PlInterp::new(config), interface, external))
+    Ok(Runner::new(global, arena_shape, PlInterp::new(config), interface, external))
 }
 
 // == Runner assembly
@@ -148,9 +154,15 @@ where
     Iface: Interface,
     Ext: Extern,
 {
-    /// Assembles the components around a fresh arena.
-    pub fn new(spec: Interp::Spec, interp: Interp, interface: Iface, external: Ext) -> Self {
-        Self { arena: Arena::new(), spec, interp, interface, external }
+    /// Assembles the components around an arena over the specification's shapes.
+    pub fn new(
+        spec: Interp::Spec,
+        arena_shape: ShapeArena,
+        interp: Interp,
+        interface: Iface,
+        external: Ext,
+    ) -> Self {
+        Self { arena: Arena::with_arena_shape(arena_shape), spec, interp, interface, external }
     }
 
     /// Borrows the assembled components for a stage-specific evaluation entry.
@@ -188,14 +200,15 @@ where
 
     /// Starts an independent program, keeping definitions and configuration.
     ///
-    /// All previously returned arena handles become invalid.
+    /// All previously returned value handles become invalid;
+    /// the specification's shapes stay, since its prepared syntax refers to them.
     /// Call this before parsing the next program,
     /// after discarding the preceding program's values.
     pub fn reset(&mut self) {
         self.interp.reset();
         self.external.clear();
         self.interface.clear();
-        self.arena = Arena::new();
+        self.arena.reset_values();
     }
 }
 
