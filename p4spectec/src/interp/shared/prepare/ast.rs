@@ -1,19 +1,21 @@
 //! Slot instantiation of shared IL syntax
 //!
-//! The type aliases name the slot-resolved IL forms;
-//! the `Prepare` impls rewrite each node.
+//! `Prepared` is the IL stage with frame slots for identifiers and variables;
+//! the type aliases name its forms, and the `Prepare` impls rewrite each node.
 //! Iterations also register the outer variable `x*` for every iterated `x`,
 //! so `eval::iter` can find its slot.
 
+use std::rc::Rc;
+
 use crate::lang::data::var::{IdSlot, VarSlot};
 
-use crate::lang::il::ast as source;
+use crate::lang::il::ast::{self as source, Stage};
 
 pub use crate::lang::il::ast::{
     Atom, BinOp, CmpOp, DefTyp, DefTypKind, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter,
     ListPattern, Mixop, NotTyp, NotTypKind, Num, NumOp, OpTyp, OptPattern, Param, ParamKind,
-    Pattern, Subcheck, TParam, Targ, TargKind, Text, Typ, TypCase, TypDef, TypField, TypKind,
-    TypOrigin, TypOriginKind, UnOp, Value, ValueCase, ValueField, ValueKind, VarDef,
+    TParam, Targ, TargKind, Text, Typ, TypCase, TypDef, TypField, TypKind, TypOrigin,
+    TypOriginKind, UnOp, Value, ValueCase, ValueField, ValueKind, VarDef,
 };
 
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
@@ -21,6 +23,18 @@ use crate::runtime::envs::interp::shared::frame::FrameLayout;
 use super::Prepare;
 
 // == Prepared syntax
+
+// - Stage
+
+/// IL syntax whose identifiers and variables are resolved to frame slots.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Prepared;
+
+impl Stage for Prepared {
+    type Id = IdSlot;
+    type Var = VarSlot;
+    type Mixop = Rc<Mixop>;
+}
 
 // - Variables
 
@@ -30,23 +44,30 @@ pub type Var = VarSlot;
 // - Expressions
 
 /// An expression over slot-resolved identifiers.
-pub type Exp = source::Exp<IdSlot, VarSlot>;
-pub type ExpField = source::ExpField<IdSlot, VarSlot>;
-pub type ExpKind = source::ExpKind<IdSlot, VarSlot>;
-pub type NotExp = source::NotExp<IdSlot, VarSlot>;
+pub type Exp = source::Exp<Prepared>;
+pub type ExpField = source::ExpField<Prepared>;
+pub type ExpKind = source::ExpKind<Prepared>;
+pub type NotExp = source::NotExp<Prepared>;
 pub type ExpIter = source::ExpIter<VarSlot>;
 
 // - Paths
 
 /// A path over slot-resolved identifiers.
-pub type Path = source::Path<IdSlot, VarSlot>;
-pub type PathKind = source::PathKind<IdSlot, VarSlot>;
+pub type Path = source::Path<Prepared>;
+pub type PathKind = source::PathKind<Prepared>;
 
 // - Arguments
 
 /// An argument over slot-resolved identifiers.
-pub type Arg = source::Arg<IdSlot, VarSlot>;
-pub type ArgKind = source::ArgKind<IdSlot, VarSlot>;
+pub type Arg = source::Arg<Prepared>;
+pub type ArgKind = source::ArgKind<Prepared>;
+
+// - Patterns and subtype checks
+
+/// A pattern over prepared mixops.
+pub type Pattern = source::Pattern<Prepared>;
+/// A runtime subtype check over prepared mixops.
+pub type Subcheck = source::Subcheck<Prepared>;
 
 // - Premises
 
@@ -55,6 +76,35 @@ pub type PremIter = source::PremIter<VarSlot>;
 
 // == Preparation
 
+// - Patterns and subtype checks
+
+impl Prepare for source::Pattern {
+    type Output = Pattern;
+
+    fn prepare(self, _layout: &mut FrameLayout) -> Self::Output {
+        match self {
+            source::Pattern::Case(mixop) => Pattern::Case(mixop),
+            source::Pattern::List(pattern) => Pattern::List(pattern),
+            source::Pattern::Opt(pattern) => Pattern::Opt(pattern),
+        }
+    }
+}
+
+impl Prepare for source::Subcheck {
+    type Output = Subcheck;
+
+    fn prepare(self, layout: &mut FrameLayout) -> Self::Output {
+        match self {
+            source::Subcheck::Skip => Subcheck::Skip,
+            source::Subcheck::Mixop(mixops) => Subcheck::Mixop(mixops),
+            source::Subcheck::Tuple(subchecks) => Subcheck::Tuple(subchecks.prepare(layout)),
+            source::Subcheck::Iter(iter, subcheck) => {
+                Subcheck::Iter(iter, subcheck.prepare(layout))
+            }
+            source::Subcheck::Recurse(typ) => Subcheck::Recurse(typ),
+        }
+    }
+}
 // - Expressions
 
 impl Prepare for source::ExpKind {
@@ -82,10 +132,10 @@ impl Prepare for source::ExpKind {
                 ExpKind::DownCast(typ_inner, exp_inner.prepare(layout))
             }
             source::ExpKind::Sub(exp_inner, typ_inner, check_inner) => {
-                ExpKind::Sub(exp_inner.prepare(layout), typ_inner, check_inner)
+                ExpKind::Sub(exp_inner.prepare(layout), typ_inner, check_inner.prepare(layout))
             }
             source::ExpKind::Match(exp_inner, pattern_inner) => {
-                ExpKind::Match(exp_inner.prepare(layout), pattern_inner)
+                ExpKind::Match(exp_inner.prepare(layout), pattern_inner.prepare(layout))
             }
             source::ExpKind::Tuple(exps_inner) => ExpKind::Tuple(exps_inner.prepare(layout)),
             source::ExpKind::Case(not_exp_inner) => ExpKind::Case(not_exp_inner.prepare(layout)),

@@ -7,7 +7,7 @@
 //! `ast` is the model, `eq` compares it ignoring spans,
 //! `free` collects identifiers,
 //! `fresh` mints variables, `var` turns variables into expressions,
-//! `print` renders it.
+//! `print` renders it, and `stage` separates source and prepared forms.
 
 pub mod ast;
 pub mod eq;
@@ -15,4 +15,5 @@ pub mod free;
 pub mod fresh;
 pub mod has_call;
 pub mod print;
+pub mod stage;
 pub mod var;

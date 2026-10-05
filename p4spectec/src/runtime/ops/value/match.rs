@@ -13,11 +13,14 @@ use crate::lang::{
         prim::num::{Number, Typ as NumTyp},
         source::Span,
     },
-    data::value::{Arena, Value, ValueKind},
+    data::{
+        notation::MixopRepr,
+        value::{Arena, Value, ValueKind},
+    },
 };
 
 use crate::lang::il::ast::{
-    DefTypKind, FuncTyp, Id, Iter, Subcheck, Typ, TypCase, TypField, TypKind,
+    DefTypKind, FuncTyp, Id, Iter, Stage, Subcheck, Typ, TypCase, TypField, TypKind,
 };
 
 use crate::runtime::{
@@ -245,11 +248,11 @@ where
 // == Subtype-check execution
 
 /// Runs a precomputed subtype check on a value.
-pub fn check<'env, F>(
+pub fn check<'env, P: Stage, F>(
     arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
-    subcheck: &Subcheck,
+    subcheck: &Subcheck<P>,
     value: &Value,
 ) -> Result<bool, MatchError>
 where
@@ -261,7 +264,7 @@ where
         // Variant case: the tag must be one of the accepted
         (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => Ok(mixops
             .iter()
-            .any(|mixop| arena.arena_shape().eq_mixop(*value_case.mixop(), mixop))),
+            .any(|mixop| mixop.matches_shape(arena.arena_shape(), *value_case.mixop()))),
         // Componentwise
         (Subcheck::Tuple(subchecks), ValueKind::Tuple(values)) => {
             if subchecks.len() != values.len() {

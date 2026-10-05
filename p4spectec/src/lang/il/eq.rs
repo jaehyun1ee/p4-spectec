@@ -4,6 +4,8 @@
 //! Type notes on expressions are ignored too, as are subtype checks,
 //! which are derived from the types they annotate.
 
+use std::rc::Rc;
+
 use crate::lang::traits::eq::SyntaxEq;
 
 use super::ast::*;
@@ -79,7 +81,7 @@ impl SyntaxEq for TypCase {
 
 // - Subtype checks
 
-impl SyntaxEq for Subcheck {
+impl<P: Stage> SyntaxEq for Subcheck<P> {
     fn syntax_eq(&self, _other: &Self) -> bool {
         true
     }
@@ -99,7 +101,7 @@ impl SyntaxEq for OpTyp {
 
 // - Expressions
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpKind<I, V> {
+impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for ExpKind<P> {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (ExpKind::Bool(value_l), ExpKind::Bool(value_r)) => value_l == value_r,
@@ -182,7 +184,7 @@ impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpKind<I, V> {
     }
 }
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ExpField<I, V> {
+impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for ExpField<P> {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.atom.syntax_eq(&other.atom) && self.exp.syntax_eq(&other.exp)
     }
@@ -196,7 +198,7 @@ impl<V: SyntaxEq> SyntaxEq for ExpIter<V> {
 
 // - Patterns
 
-impl SyntaxEq for Pattern {
+impl<P: Stage> SyntaxEq for Pattern<P> {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Pattern::Case(mixop_l), Pattern::Case(mixop_r)) => mixop_l == mixop_r,
@@ -221,7 +223,7 @@ impl SyntaxEq for OptPattern {
 
 // - Paths
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for PathKind<I, V> {
+impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for PathKind<P> {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (PathKind::Root, PathKind::Root) => true,
@@ -266,7 +268,7 @@ impl SyntaxEq for ParamKind {
 
 // - Arguments
 
-impl<I: SyntaxEq, V: SyntaxEq> SyntaxEq for ArgKind<I, V> {
+impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for ArgKind<P> {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (ArgKind::Exp(exp_l), ArgKind::Exp(exp_r)) => exp_l.syntax_eq(exp_r),

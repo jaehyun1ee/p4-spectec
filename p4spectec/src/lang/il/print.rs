@@ -12,6 +12,7 @@ use crate::util::text::escape_text;
 
 use crate::lang::{
     common::prim::num,
+    data::notation::MixopRepr,
     traits::print::{Print, Printer},
 };
 
@@ -235,7 +236,7 @@ fn write_notval_with(
 
 // - Expressions
 
-impl<I: Print, V: Print> Print for Exp<I, V> {
+impl<P: Stage<Id: Print, Var: Print>> Print for Exp<P> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ExpKind::Bool(value) => write!(printer, "{value}"),
@@ -374,13 +375,13 @@ impl<I: Print, V: Print> Print for Exp<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for [Exp<I, V>] {
+impl<P: Stage<Id: Print, Var: Print>> Print for [Exp<P>] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.separated(self, ", ")
     }
 }
 
-impl<I: Print, V: Print> Print for NotExp<I, V> {
+impl<P: Stage<Id: Print, Var: Print>> Print for NotExp<P> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.print_with(printer, |exp, printer| exp.print(printer))
     }
@@ -414,10 +415,10 @@ impl<V: Print> Print for [ExpIter<V>] {
 
 // - Patterns
 
-impl Print for Pattern {
+impl<P: Stage> Print for Pattern<P> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
-            Pattern::Case(mixop) => mixop.print(printer),
+            Pattern::Case(mixop) => mixop.print_with(printer, |_, printer| printer.write("%")),
             Pattern::List(ListPattern::Cons) => printer.write_str("_ :: _"),
             Pattern::List(ListPattern::Fixed(length)) => write!(printer, "[ _/{length} ]"),
             Pattern::List(ListPattern::Nil) => printer.write_str("[]"),
@@ -429,7 +430,7 @@ impl Print for Pattern {
 
 // - Paths
 
-impl<I: Print, V: Print> Print for Path<I, V> {
+impl<P: Stage<Id: Print, Var: Print>> Print for Path<P> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             PathKind::Root => Ok(()),
@@ -497,7 +498,7 @@ impl Print for [Param] {
 
 // - Arguments
 
-impl<I: Print, V: Print> Print for Arg<I, V> {
+impl<P: Stage<Id: Print, Var: Print>> Print for Arg<P> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ArgKind::Exp(exp) => exp.print(printer),
@@ -509,7 +510,7 @@ impl<I: Print, V: Print> Print for Arg<I, V> {
     }
 }
 
-impl<I: Print, V: Print> Print for [Arg<I, V>] {
+impl<P: Stage<Id: Print, Var: Print>> Print for [Arg<P>] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         if self.is_empty() {
             return Ok(());

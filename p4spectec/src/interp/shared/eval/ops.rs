@@ -12,7 +12,10 @@ use crate::lang::{
         prim::{bool, num},
         source::{Phrase, Span},
     },
-    data::value::{Arena, Value, ValueKind, get, make},
+    data::{
+        notation::MixopRepr,
+        value::{Arena, Value, ValueKind, get, make},
+    },
     traits::eq::SyntaxEq,
 };
 
@@ -122,11 +125,11 @@ pub(crate) fn cmpop(
 // - Subtype checks
 
 /// Runs the precomputed subtype check against a value.
-pub(crate) fn sub(
+pub(crate) fn sub<P: ast::Stage>(
     arena: &Arena,
     ctx: &impl ReadContext,
     span: &Span,
-    subcheck: &ast::Subcheck,
+    subcheck: &ast::Subcheck<P>,
     value: Value,
 ) -> Backtrack<bool> {
     let find_typdef_opt = |id: &ast::Id| ctx.find_typdef_opt(id);
@@ -143,11 +146,15 @@ pub(crate) fn sub(
 // - Pattern matching
 
 /// Tests a value against a case, list, or option pattern.
-pub(crate) fn r#match(arena: &Arena, pattern: &ast::Pattern, value: Value) -> bool {
+pub(crate) fn r#match<P: ast::Stage>(
+    arena: &Arena,
+    pattern: &ast::Pattern<P>,
+    value: Value,
+) -> bool {
     match (pattern, arena.kind(&value)) {
         // Case: same constructor shape
         (ast::Pattern::Case(mixop), ValueKind::Case(value_case)) => {
-            arena.arena_shape().eq_mixop(*value_case.mixop(), mixop)
+            mixop.matches_shape(arena.arena_shape(), *value_case.mixop())
         }
         // List: non-empty, fixed length, or empty
         (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {

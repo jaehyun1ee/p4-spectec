@@ -44,8 +44,8 @@ impl Prepare for pl::ExpKind {
             }
             P::UpCast(typ, exp) => E::UpCast(typ, exp.prepare(layout)),
             P::DownCast(typ, exp) => E::DownCast(typ, exp.prepare(layout)),
-            P::Sub(exp, typ, check) => E::Sub(exp.prepare(layout), typ, check),
-            P::Match(exp, pattern) => E::Match(exp.prepare(layout), pattern),
+            P::Sub(exp, typ, check) => E::Sub(exp.prepare(layout), typ, check.prepare(layout)),
+            P::Match(exp, pattern) => E::Match(exp.prepare(layout), pattern.prepare(layout)),
             P::Tuple(exps) => E::Tuple(exps.prepare(layout)),
             P::Case(not_exp) => E::Case(not_exp.prepare(layout)),
             P::Str(fields) => E::Str(
@@ -154,14 +154,14 @@ impl Prepare for pl::Guard {
         match self {
             pl::Guard::Bool(cond) => ast::Guard::Bool(cond),
             pl::Guard::Cmp(op, typ, exp) => ast::Guard::Cmp(op, typ, exp.prepare(layout)),
-            pl::Guard::Sub(typ, check) => ast::Guard::Sub(typ, check),
-            pl::Guard::Match(pattern) => ast::Guard::Match(pattern),
+            pl::Guard::Sub(typ, check) => ast::Guard::Sub(typ, check.prepare(layout)),
+            pl::Guard::Match(pattern) => ast::Guard::Match(pattern.prepare(layout)),
             pl::Guard::Mem(exp) => ast::Guard::Mem(exp.prepare(layout)),
             pl::Guard::CheckLetSub(typ, check, exp) => {
-                ast::Guard::CheckLetSub(typ, check, exp.prepare(layout))
+                ast::Guard::CheckLetSub(typ, check.prepare(layout), exp.prepare(layout))
             }
             pl::Guard::CheckLetMatch(pattern, exp) => {
-                ast::Guard::CheckLetMatch(pattern, exp.prepare(layout))
+                ast::Guard::CheckLetMatch(pattern.prepare(layout), exp.prepare(layout))
             }
         }
     }
@@ -218,7 +218,7 @@ impl<Tier: Prepare> Prepare for pl::InstrKind<Tier> {
             pl::InstrKind::CheckLetSub(instr) => {
                 ast::InstrKind::CheckLetSub(ast::CheckLetSubInstr {
                     typ: instr.typ,
-                    subcheck: instr.subcheck,
+                    subcheck: instr.subcheck.prepare(layout),
                     exp_l: instr.exp_l.prepare(layout),
                     exp_r: instr.exp_r.prepare(layout),
                     block: instr.block.prepare(layout),
@@ -226,7 +226,7 @@ impl<Tier: Prepare> Prepare for pl::InstrKind<Tier> {
             }
             pl::InstrKind::CheckLetMatch(instr) => {
                 ast::InstrKind::CheckLetMatch(ast::CheckLetMatchInstr {
-                    pattern: instr.pattern,
+                    pattern: instr.pattern.prepare(layout),
                     exp_l: instr.exp_l.prepare(layout),
                     exp_r: instr.exp_r.prepare(layout),
                     block: instr.block.prepare(layout),

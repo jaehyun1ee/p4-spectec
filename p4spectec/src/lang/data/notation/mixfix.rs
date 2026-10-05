@@ -23,7 +23,7 @@ use super::{
     arena::ShapeArena,
     error::ArityMismatch,
     flat::Shape,
-    mixop::Mixop,
+    mixop::{Mixop, MixopRepr},
     node::{AtomPhrase, Node},
     walk::{self, Piece},
 };
@@ -168,18 +168,19 @@ impl<M: Borrow<Mixop>, T> Mixfix<M, T> {
             compare_arg(&self.args[pos], &mixfix_other.args[pos])
         })
     }
+}
 
-    // - Printing
+// - Printing
 
+impl<M: MixopRepr, T> Mixfix<M, T> {
     /// Writes atoms and arguments, separating non-empty pieces with spaces.
     pub fn print_with(
         &self,
         printer: &mut Printer<'_>,
         mut print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
     ) -> fmt::Result {
-        walk::print_with(&(), self.mixop.borrow(), printer, |pos, printer| {
-            print_arg(&self.args[pos], printer)
-        })
+        self.mixop
+            .print_with(printer, |pos, printer| print_arg(&self.args[pos], printer))
     }
 }
 

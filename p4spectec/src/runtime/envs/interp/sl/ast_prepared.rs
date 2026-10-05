@@ -4,8 +4,6 @@
 //! reserving slots in the callable's `FrameLayout` as they go.
 //! Extern and builtin definitions prepare their parameters only.
 
-use crate::lang::data::var::{IdSlot, VarSlot};
-
 use crate::lang::sl::ast as source;
 
 pub use crate::lang::sl::ast::{DefinedTyp, ExternTyp, RelSignature, TypDef, VarDef};
@@ -20,8 +18,8 @@ pub use crate::interp::shared::prepare::ast::*;
 
 // - Parameters
 
-pub type Param = source::Param<IdSlot, VarSlot>;
-pub type ParamKind = source::ParamKind<IdSlot, VarSlot>;
+pub type Param = source::Param<Prepared>;
+pub type ParamKind = source::ParamKind<Prepared>;
 
 // - Dangling
 
@@ -29,55 +27,55 @@ pub type Dangle = source::Dangle;
 
 // - Holding conditions
 
-pub type HoldCase = source::HoldCase<IdSlot, VarSlot>;
+pub type HoldCase = source::HoldCase<Prepared>;
 
 // - Case analysis
 
-pub type Guard = source::Guard<IdSlot, VarSlot>;
-pub type Case = source::Case<IdSlot, VarSlot>;
+pub type Guard = source::Guard<Prepared>;
+pub type Case = source::Case<Prepared>;
 
 // - Instructions
 
-pub type Instr = source::Instr<IdSlot, VarSlot>;
-pub type InstrKind = source::InstrKind<IdSlot, VarSlot>;
-pub type IfInstr = source::IfInstr<IdSlot, VarSlot>;
-pub type HoldInstr = source::HoldInstr<IdSlot, VarSlot>;
-pub type CaseInstr = source::CaseInstr<IdSlot, VarSlot>;
-pub type GroupInstr = source::GroupInstr<IdSlot, VarSlot>;
-pub type LetInstr = source::LetInstr<IdSlot, VarSlot>;
-pub type RuleInstr = source::RuleInstr<IdSlot, VarSlot>;
-pub type ResultInstr = source::ResultInstr<IdSlot, VarSlot>;
-pub type ReturnInstr = source::ReturnInstr<IdSlot, VarSlot>;
-pub type DebugInstr = source::DebugInstr<IdSlot, VarSlot>;
+pub type Instr = source::Instr<Prepared>;
+pub type InstrKind = source::InstrKind<Prepared>;
+pub type IfInstr = source::IfInstr<Prepared>;
+pub type HoldInstr = source::HoldInstr<Prepared>;
+pub type CaseInstr = source::CaseInstr<Prepared>;
+pub type GroupInstr = source::GroupInstr<Prepared>;
+pub type LetInstr = source::LetInstr<Prepared>;
+pub type RuleInstr = source::RuleInstr<Prepared>;
+pub type ResultInstr = source::ResultInstr<Prepared>;
+pub type ReturnInstr = source::ReturnInstr<Prepared>;
+pub type DebugInstr = source::DebugInstr<Prepared>;
 pub type InstrIter = PremIter;
 
 // - Blocks
 
-pub type Block = source::Block<IdSlot, VarSlot>;
-pub type ElseBlock = source::ElseBlock<IdSlot, VarSlot>;
+pub type Block = source::Block<Prepared>;
+pub type ElseBlock = source::ElseBlock<Prepared>;
 
 // - Table rows
 
-pub type TableRow = source::TableRow<IdSlot, VarSlot>;
+pub type TableRow = source::TableRow<Prepared>;
 
 // - Relation definitions
 
-pub type RelDef = source::RelDef<IdSlot, VarSlot>;
-pub type ExternRel = source::ExternRel<IdSlot, VarSlot>;
-pub type DefinedRel = source::DefinedRel<IdSlot, VarSlot>;
+pub type RelDef = source::RelDef<Prepared>;
+pub type ExternRel = source::ExternRel<Prepared>;
+pub type DefinedRel = source::DefinedRel<Prepared>;
 
 // - Meta-function definitions
 
-pub type MetaFuncDef = source::MetaFuncDef<IdSlot, VarSlot>;
-pub type ExternFunc = source::ExternFunc<IdSlot, VarSlot>;
-pub type BuiltinFunc = source::BuiltinFunc<IdSlot, VarSlot>;
-pub type TableFunc = source::TableFunc<IdSlot, VarSlot>;
-pub type DefinedFunc = source::DefinedFunc<IdSlot, VarSlot>;
+pub type MetaFuncDef = source::MetaFuncDef<Prepared>;
+pub type ExternFunc = source::ExternFunc<Prepared>;
+pub type BuiltinFunc = source::BuiltinFunc<Prepared>;
+pub type TableFunc = source::TableFunc<Prepared>;
+pub type DefinedFunc = source::DefinedFunc<Prepared>;
 
 // - Definitions
 
-pub type Def = source::Def<IdSlot, VarSlot>;
-pub type DefKind = source::DefKind<IdSlot, VarSlot>;
+pub type Def = source::Def<Prepared>;
+pub type DefKind = source::DefKind<Prepared>;
 pub type Spec = Vec<Def>;
 
 // == Preparation traversal
@@ -274,8 +272,10 @@ impl Prepare for source::Guard {
             source::Guard::Cmp(op_inner, typ_op_inner, exp_inner) => {
                 Guard::Cmp(op_inner, typ_op_inner, exp_inner.prepare(layout))
             }
-            source::Guard::Sub(typ_inner, subcheck_inner) => Guard::Sub(typ_inner, subcheck_inner),
-            source::Guard::Match(pattern_inner) => Guard::Match(pattern_inner),
+            source::Guard::Sub(typ_inner, subcheck_inner) => {
+                Guard::Sub(typ_inner, subcheck_inner.prepare(layout))
+            }
+            source::Guard::Match(pattern_inner) => Guard::Match(pattern_inner.prepare(layout)),
             source::Guard::Mem(exp_inner) => Guard::Mem(exp_inner.prepare(layout)),
         }
     }

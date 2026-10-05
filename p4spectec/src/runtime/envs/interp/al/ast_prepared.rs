@@ -4,8 +4,6 @@
 //! reserving slots in the callable's `FrameLayout` as they go.
 //! Extern and builtin definitions have no body and pass through unchanged.
 
-use crate::lang::data::var::{IdSlot, VarSlot};
-
 use crate::lang::al::ast as source;
 
 pub use crate::lang::al::ast::{
@@ -22,52 +20,52 @@ pub use crate::interp::shared::prepare::ast::*;
 
 // - Premises
 
-pub type Prem = source::Prem<IdSlot, VarSlot>;
-pub type PremKind = source::PremKind<IdSlot, VarSlot>;
-pub type RulePrem = source::RulePrem<IdSlot, VarSlot>;
-pub type IfPrem = source::IfPrem<IdSlot, VarSlot>;
-pub type IfHoldPrem = source::IfHoldPrem<IdSlot, VarSlot>;
-pub type IfNotHoldPrem = source::IfNotHoldPrem<IdSlot, VarSlot>;
-pub type LetPrem = source::LetPrem<IdSlot, VarSlot>;
-pub type IterPrem = source::IterPrem<IdSlot, VarSlot>;
-pub type DebugPrem = source::DebugPrem<IdSlot, VarSlot>;
+pub type Prem = source::Prem<Prepared>;
+pub type PremKind = source::PremKind<Prepared>;
+pub type RulePrem = source::RulePrem<Prepared>;
+pub type IfPrem = source::IfPrem<Prepared>;
+pub type IfHoldPrem = source::IfHoldPrem<Prepared>;
+pub type IfNotHoldPrem = source::IfNotHoldPrem<Prepared>;
+pub type LetPrem = source::LetPrem<Prepared>;
+pub type IterPrem = source::IterPrem<Prepared>;
+pub type DebugPrem = source::DebugPrem<Prepared>;
 
 // - Rules
 
-pub type RuleGroup = source::RuleGroup<IdSlot, VarSlot>;
-pub type RuleGroupKind = source::RuleGroupKind<IdSlot, VarSlot>;
-pub type ElseGroup = source::ElseGroup<IdSlot, VarSlot>;
-pub type ElseGroupKind = source::ElseGroupKind<IdSlot, VarSlot>;
-pub type RuleMatch = source::RuleMatch<IdSlot, VarSlot>;
-pub type RulePath = source::RulePath<IdSlot, VarSlot>;
+pub type RuleGroup = source::RuleGroup<Prepared>;
+pub type RuleGroupKind = source::RuleGroupKind<Prepared>;
+pub type ElseGroup = source::ElseGroup<Prepared>;
+pub type ElseGroupKind = source::ElseGroupKind<Prepared>;
+pub type RuleMatch = source::RuleMatch<Prepared>;
+pub type RulePath = source::RulePath<Prepared>;
 
 // - Clauses
 
-pub type Clause = source::Clause<IdSlot, VarSlot>;
-pub type ClauseKind = source::ClauseKind<IdSlot, VarSlot>;
-pub type ElseClause = source::ElseClause<IdSlot, VarSlot>;
-pub type ElseClauseKind = source::ElseClauseKind<IdSlot, VarSlot>;
+pub type Clause = source::Clause<Prepared>;
+pub type ClauseKind = source::ClauseKind<Prepared>;
+pub type ElseClause = source::ElseClause<Prepared>;
+pub type ElseClauseKind = source::ElseClauseKind<Prepared>;
 
 // - Table rows
 
-pub type TableRow = source::TableRow<IdSlot, VarSlot>;
-pub type TableRowKind = source::TableRowKind<IdSlot, VarSlot>;
+pub type TableRow = source::TableRow<Prepared>;
+pub type TableRowKind = source::TableRowKind<Prepared>;
 
 // - Relation definitions
 
-pub type RelDef = source::RelDef<IdSlot, VarSlot>;
-pub type DefinedRel = source::DefinedRel<IdSlot, VarSlot>;
+pub type RelDef = source::RelDef<Prepared>;
+pub type DefinedRel = source::DefinedRel<Prepared>;
 
 // - Meta-function definitions
 
-pub type MetaFuncDef = source::MetaFuncDef<IdSlot, VarSlot>;
-pub type TableFunc = source::TableFunc<IdSlot, VarSlot>;
-pub type DefinedFunc = source::DefinedFunc<IdSlot, VarSlot>;
+pub type MetaFuncDef = source::MetaFuncDef<Prepared>;
+pub type TableFunc = source::TableFunc<Prepared>;
+pub type DefinedFunc = source::DefinedFunc<Prepared>;
 
 // - Definitions
 
-pub type Def = source::Def<IdSlot, VarSlot>;
-pub type DefKind = source::DefKind<IdSlot, VarSlot>;
+pub type Def = source::Def<Prepared>;
+pub type DefKind = source::DefKind<Prepared>;
 pub type Spec = Vec<Def>;
 
 // == Preparation traversal

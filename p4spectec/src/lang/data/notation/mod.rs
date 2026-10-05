@@ -21,6 +21,6 @@ pub use arena::ShapeArena;
 pub use error::{ArityMismatch, ShapeError};
 pub use flat::{Flat, Shape, ShapeKind};
 pub use mixfix::{Mixfix, MixfixRef, View};
-pub use mixop::Mixop;
+pub use mixop::{Mixop, MixopRepr};
 pub use node::{AtomPhrase, Node, Repr};
 pub use tree::Tree;

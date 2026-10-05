@@ -2,21 +2,52 @@
 //!
 //! A `Mixop` is a `Node<Tree>`:
 //! the atoms of a notation form and where its arguments go.
+//! `MixopRepr` is how a syntax stage holds one, so code generic
+//! over the stage prints notations without knowing which;
 //! `shape` parses a mixop from its text once and caches it.
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 use crate::lang::{
     common::ds::set::IdSet,
-    traits::{eq::SyntaxEq, free::FreeIds},
+    traits::{eq::SyntaxEq, free::FreeIds, print::Printer},
 };
 
 use crate::frontend;
 
-use super::{node::Node, tree::Tree};
+use super::{arena::ShapeArena, flat::Shape, node::Node, tree::Tree, walk};
 
 /// A notation form with argument positions and no arguments.
 pub type Mixop = Node<Tree>;
+
+// == Mixops as a stage holds them
+
+/// A mixop as a syntax stage holds it: a shared tree or an interned shape.
+pub trait MixopRepr: Clone + fmt::Debug + PartialEq {
+    /// Writes the form, with `print_arg` writing the argument at each position.
+    fn print_with(
+        &self,
+        printer: &mut Printer<'_>,
+        print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
+    ) -> fmt::Result;
+
+    /// Whether a shape has this mixop's structure and atom names.
+    fn matches_shape(&self, arena_shape: &ShapeArena, shape: Shape) -> bool;
+}
+
+impl MixopRepr for Rc<Mixop> {
+    fn print_with(
+        &self,
+        printer: &mut Printer<'_>,
+        print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
+    ) -> fmt::Result {
+        walk::print_with(&(), self.as_ref(), printer, print_arg)
+    }
+
+    fn matches_shape(&self, arena_shape: &ShapeArena, shape: Shape) -> bool {
+        arena_shape.eq_mixop(shape, self)
+    }
+}
 
 // == Syntax operations
 
