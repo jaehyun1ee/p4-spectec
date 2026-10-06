@@ -42,26 +42,12 @@ impl MixopArena {
 
     /// Interns a tree node by node, children first, copying atoms.
     pub fn intern(&mut self, mixop: &tree::Mixop) -> Result<flat::Mixop, MixopError> {
-        // Children get their canonical identities before the parent is hashed
-        let kind = match mixop {
-            tree::Mixop::Arg => flat::MixopKind::Arg,
-            tree::Mixop::Atom(atom) => flat::MixopKind::Atom(atom.clone()),
-            tree::Mixop::Brack(atom_l, mixop_inner, atom_r) => {
-                let mixop_id_inner = self.intern(mixop_inner)?;
-                flat::MixopKind::Brack(atom_l.clone(), mixop_id_inner, atom_r.clone())
-            }
-            tree::Mixop::Infix(mixop_l, atom, mixop_r) => {
-                let mixop_id_l = self.intern(mixop_l)?;
-                let mixop_id_r = self.intern(mixop_r)?;
-                flat::MixopKind::Infix(mixop_id_l, atom.clone(), mixop_id_r)
-            }
-            tree::Mixop::Seq(mixops) => flat::MixopKind::Seq(
-                mixops
-                    .iter()
-                    .map(|mixop| self.intern(mixop))
-                    .collect::<Result<_, _>>()?,
-            ),
-        };
+        mixop.to_flat(self)
+    }
+
+    /// Interns a node whose children already belong to this arena.
+    pub(super) fn intern_kind(&mut self, kind: flat::MixopKind) -> Result<flat::Mixop, MixopError> {
+        // Child canonical identities are available when the parent is hashed
         let mixop_id = self.mixops.intern(kind, &())?;
         // A new mixop sums its children's positions, which are recorded
         if mixop_id.index() as usize == self.arities.len() {

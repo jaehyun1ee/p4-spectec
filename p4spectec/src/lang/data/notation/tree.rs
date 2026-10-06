@@ -229,32 +229,88 @@ impl Print for Mixop {
     }
 }
 
+// = Arena conversion
+
 /// Expands a handle into an owned notation, preserving atom spans.
 pub fn from_flat(arena_mixop: &MixopArena, mixop: flat::Mixop) -> Mixop {
-    match arena_mixop.kind(mixop) {
-        flat::MixopKind::Arg => Mixop::Arg,
-        flat::MixopKind::Atom(atom) => Mixop::Atom(atom.clone()),
-        flat::MixopKind::Brack(atom_l, child, atom_r) => {
-            Mixop::Brack(atom_l.clone(), Box::new(from_flat(arena_mixop, *child)), atom_r.clone())
-        }
-        flat::MixopKind::Infix(child_l, atom, child_r) => Mixop::Infix(
-            Box::new(from_flat(arena_mixop, *child_l)),
-            atom.clone(),
-            Box::new(from_flat(arena_mixop, *child_r)),
-        ),
-        flat::MixopKind::Seq(elems) => Mixop::Seq(
-            elems
-                .iter()
-                .map(|elem| from_flat(arena_mixop, *elem))
-                .collect(),
-        ),
-    }
+    Mixop::from_flat(arena_mixop, mixop)
 }
 
 /// Interns an owned notation in the target arena.
-pub fn into_flat(
-    arena_mixop: &mut MixopArena,
-    mixop_tree: Mixop,
-) -> Result<flat::Mixop, MixopError> {
-    arena_mixop.intern(&mixop_tree)
+pub fn into_flat(arena_mixop: &mut MixopArena, mixop: Mixop) -> Result<flat::Mixop, MixopError> {
+    mixop.into_flat(arena_mixop)
+}
+
+impl Mixop {
+    /// Copies atoms and expands child handles in notation order.
+    fn from_flat(arena_mixop: &MixopArena, mixop: flat::Mixop) -> Self {
+        match arena_mixop.kind(mixop) {
+            flat::MixopKind::Arg => Self::Arg,
+            flat::MixopKind::Atom(atom) => Self::Atom(atom.clone()),
+            flat::MixopKind::Brack(atom_l, mixop, atom_r) => Self::Brack(
+                atom_l.clone(),
+                Box::new(Self::from_flat(arena_mixop, *mixop)),
+                atom_r.clone(),
+            ),
+            flat::MixopKind::Infix(mixop_l, atom, mixop_r) => Self::Infix(
+                Box::new(Self::from_flat(arena_mixop, *mixop_l)),
+                atom.clone(),
+                Box::new(Self::from_flat(arena_mixop, *mixop_r)),
+            ),
+            flat::MixopKind::Seq(mixops) => Self::Seq(
+                mixops
+                    .iter()
+                    .map(|mixop| Self::from_flat(arena_mixop, *mixop))
+                    .collect(),
+            ),
+        }
+    }
+
+    /// Moves atoms into the arena, interning children before their parent.
+    fn into_flat(self, arena_mixop: &mut MixopArena) -> Result<flat::Mixop, MixopError> {
+        let kind = match self {
+            Self::Arg => flat::MixopKind::Arg,
+            Self::Atom(atom) => flat::MixopKind::Atom(atom),
+            Self::Brack(atom_l, mixop, atom_r) => {
+                let mixop = mixop.into_flat(arena_mixop)?;
+                flat::MixopKind::Brack(atom_l, mixop, atom_r)
+            }
+            Self::Infix(mixop_l, atom, mixop_r) => {
+                let mixop_l = mixop_l.into_flat(arena_mixop)?;
+                let mixop_r = mixop_r.into_flat(arena_mixop)?;
+                flat::MixopKind::Infix(mixop_l, atom, mixop_r)
+            }
+            Self::Seq(mixops) => flat::MixopKind::Seq(
+                mixops
+                    .into_iter()
+                    .map(|mixop| mixop.into_flat(arena_mixop))
+                    .collect::<Result<_, _>>()?,
+            ),
+        };
+        arena_mixop.intern_kind(kind)
+    }
+
+    /// Copies atoms into the arena, interning children before their parent.
+    pub(super) fn to_flat(&self, arena_mixop: &mut MixopArena) -> Result<flat::Mixop, MixopError> {
+        let kind = match self {
+            Self::Arg => flat::MixopKind::Arg,
+            Self::Atom(atom) => flat::MixopKind::Atom(atom.clone()),
+            Self::Brack(atom_l, mixop, atom_r) => {
+                let mixop = mixop.to_flat(arena_mixop)?;
+                flat::MixopKind::Brack(atom_l.clone(), mixop, atom_r.clone())
+            }
+            Self::Infix(mixop_l, atom, mixop_r) => {
+                let mixop_l = mixop_l.to_flat(arena_mixop)?;
+                let mixop_r = mixop_r.to_flat(arena_mixop)?;
+                flat::MixopKind::Infix(mixop_l, atom.clone(), mixop_r)
+            }
+            Self::Seq(mixops) => flat::MixopKind::Seq(
+                mixops
+                    .iter()
+                    .map(|mixop| mixop.to_flat(arena_mixop))
+                    .collect::<Result<_, _>>()?,
+            ),
+        };
+        arena_mixop.intern_kind(kind)
+    }
 }
