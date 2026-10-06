@@ -75,85 +75,87 @@ impl Mixop {
         mut compare_arg: impl FnMut(usize) -> Ordering,
     ) -> Ordering {
         let mut pos = 0;
-        cmp_inner(self, mixop_other, &mut pos, &mut compare_arg)
+        self.cmp_by_inner(mixop_other, &mut pos, &mut compare_arg)
+    }
+
+    /// Structural comparison, threading the position and the argument comparator.
+    fn cmp_by_inner(
+        &self,
+        mixop_r: &Self,
+        pos: &mut usize,
+        compare_arg: &mut impl FnMut(usize) -> Ordering,
+    ) -> Ordering {
+        match (self, mixop_r) {
+            // Arguments by the caller's comparator
+            (Mixop::Arg, Mixop::Arg) => {
+                let order = compare_arg(*pos);
+                *pos += 1;
+                order
+            }
+            // Atoms by name
+            (Mixop::Atom(atom_l), Mixop::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
+            // Brackets: opening atom, inner form, closing atom
+            (
+                Mixop::Brack(atom_l_l, child_l, atom_l_r),
+                Mixop::Brack(atom_r_l, child_r, atom_r_r),
+            ) => atom_l_l
+                .node
+                .cmp(&atom_r_l.node)
+                .then_with(|| child_l.cmp_by_inner(child_r, pos, compare_arg))
+                .then_with(|| atom_l_r.node.cmp(&atom_r_r.node)),
+            // Infix: left form, operator, right form
+            (
+                Mixop::Infix(child_l_l, atom_l, child_l_r),
+                Mixop::Infix(child_r_l, atom_r, child_r_r),
+            ) => child_l_l
+                .cmp_by_inner(child_r_l, pos, compare_arg)
+                .then_with(|| atom_l.node.cmp(&atom_r.node))
+                .then_with(|| child_l_r.cmp_by_inner(child_r_r, pos, compare_arg)),
+            // Sequences: common prefix first, then length
+            (Mixop::Seq(elems_l), Mixop::Seq(elems_r)) => {
+                let mixops_l = elems_l.iter();
+                let mixops_r = elems_r.iter();
+                for (mixop_l, mixop_r) in mixops_l.zip(mixops_r) {
+                    let order = mixop_l.cmp_by_inner(mixop_r, pos, compare_arg);
+                    if order != Ordering::Equal {
+                        return order;
+                    }
+                }
+                elems_l.len().cmp(&elems_r.len())
+            }
+            // Different forms order by variant
+            _ => self.tag().cmp(&mixop_r.tag()),
+        }
     }
 
     /// Visits atoms and argument positions in reading order.
     pub(super) fn visit<'a>(&'a self, mut visit_piece: impl FnMut(Piece<'a>)) {
         let mut pos = 0;
-        visit_inner(self, &mut pos, &mut visit_piece);
+        self.visit_inner(&mut pos, &mut visit_piece);
     }
-}
 
-/// Structural comparison, threading the position and the argument comparator.
-fn cmp_inner(
-    mixop_l: &Mixop,
-    mixop_r: &Mixop,
-    pos: &mut usize,
-    compare_arg: &mut impl FnMut(usize) -> Ordering,
-) -> Ordering {
-    match (mixop_l, mixop_r) {
-        // Arguments by the caller's comparator
-        (Mixop::Arg, Mixop::Arg) => {
-            let order = compare_arg(*pos);
-            *pos += 1;
-            order
-        }
-        // Atoms by name
-        (Mixop::Atom(atom_l), Mixop::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
-        // Brackets: opening atom, inner form, closing atom
-        (Mixop::Brack(atom_l_l, child_l, atom_l_r), Mixop::Brack(atom_r_l, child_r, atom_r_r)) => {
-            atom_l_l
-                .node
-                .cmp(&atom_r_l.node)
-                .then_with(|| cmp_inner(child_l, child_r, pos, compare_arg))
-                .then_with(|| atom_l_r.node.cmp(&atom_r_r.node))
-        }
-        // Infix: left form, operator, right form
-        (
-            Mixop::Infix(child_l_l, atom_l, child_l_r),
-            Mixop::Infix(child_r_l, atom_r, child_r_r),
-        ) => cmp_inner(child_l_l, child_r_l, pos, compare_arg)
-            .then_with(|| atom_l.node.cmp(&atom_r.node))
-            .then_with(|| cmp_inner(child_l_r, child_r_r, pos, compare_arg)),
-        // Sequences: common prefix first, then length
-        (Mixop::Seq(elems_l), Mixop::Seq(elems_r)) => {
-            let mixops_l = elems_l.iter();
-            let mixops_r = elems_r.iter();
-            for (mixop_l, mixop_r) in mixops_l.zip(mixops_r) {
-                let order = cmp_inner(mixop_l, mixop_r, pos, compare_arg);
-                if order != Ordering::Equal {
-                    return order;
-                }
+    /// Visits one mixop, threading the position.
+    fn visit_inner<'a>(&'a self, pos: &mut usize, visit_piece: &mut impl FnMut(Piece<'a>)) {
+        match self {
+            Mixop::Arg => {
+                visit_piece(Piece::Arg(*pos));
+                *pos += 1;
             }
-            elems_l.len().cmp(&elems_r.len())
-        }
-        // Different forms order by variant
-        _ => mixop_l.tag().cmp(&mixop_r.tag()),
-    }
-}
-
-/// Visits one mixop, threading the position.
-fn visit_inner<'a>(mixop: &'a Mixop, pos: &mut usize, visit_piece: &mut impl FnMut(Piece<'a>)) {
-    match mixop {
-        Mixop::Arg => {
-            visit_piece(Piece::Arg(*pos));
-            *pos += 1;
-        }
-        Mixop::Atom(atom) => visit_piece(Piece::Atom(atom)),
-        Mixop::Brack(atom_l, child, atom_r) => {
-            visit_piece(Piece::Atom(atom_l));
-            visit_inner(child, pos, visit_piece);
-            visit_piece(Piece::Atom(atom_r));
-        }
-        Mixop::Infix(child_l, atom, child_r) => {
-            visit_inner(child_l, pos, visit_piece);
-            visit_piece(Piece::Atom(atom));
-            visit_inner(child_r, pos, visit_piece);
-        }
-        Mixop::Seq(elems) => {
-            for elem in elems {
-                visit_inner(elem, pos, visit_piece);
+            Mixop::Atom(atom) => visit_piece(Piece::Atom(atom)),
+            Mixop::Brack(atom_l, child, atom_r) => {
+                visit_piece(Piece::Atom(atom_l));
+                child.visit_inner(pos, visit_piece);
+                visit_piece(Piece::Atom(atom_r));
+            }
+            Mixop::Infix(child_l, atom, child_r) => {
+                child_l.visit_inner(pos, visit_piece);
+                visit_piece(Piece::Atom(atom));
+                child_r.visit_inner(pos, visit_piece);
+            }
+            Mixop::Seq(elems) => {
+                for elem in elems {
+                    elem.visit_inner(pos, visit_piece);
+                }
             }
         }
     }

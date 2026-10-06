@@ -139,90 +139,129 @@ pub(super) fn cmp_by(
     mut compare_arg: impl FnMut(usize) -> Ordering,
 ) -> Ordering {
     let mut pos = 0;
-    cmp_inner(
+    arena_mixop_l.kind(mixop_l).cmp_by_inner(
         arena_mixop_l,
-        arena_mixop_l.kind(mixop_l),
-        arena_mixop_r,
         arena_mixop_r.kind(mixop_r),
+        arena_mixop_r,
         &mut pos,
         &mut compare_arg,
     )
 }
 
-/// Structural comparison, threading the position and the argument comparator.
-fn cmp_inner(
-    arena_mixop_l: &MixopArena,
-    kind_l: &MixopKind,
-    arena_mixop_r: &MixopArena,
-    kind_r: &MixopKind,
-    pos: &mut usize,
-    compare_arg: &mut impl FnMut(usize) -> Ordering,
-) -> Ordering {
-    match (kind_l, kind_r) {
-        // Arguments by the caller's comparator
-        (MixopKind::Arg, MixopKind::Arg) => {
-            let order = compare_arg(*pos);
-            *pos += 1;
-            order
-        }
-        // Atoms by name
-        (MixopKind::Atom(atom_l), MixopKind::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
-        // Brackets: opening atom, inner form, closing atom
-        (
-            MixopKind::Brack(atom_l_l, child_l, atom_l_r),
-            MixopKind::Brack(atom_r_l, child_r, atom_r_r),
-        ) => atom_l_l
-            .node
-            .cmp(&atom_r_l.node)
-            .then_with(|| {
-                cmp_inner(
+impl MixopKind {
+    /// Structural comparison, threading the position and the argument comparator.
+    fn cmp_by_inner(
+        &self,
+        arena_mixop_l: &MixopArena,
+        kind_r: &Self,
+        arena_mixop_r: &MixopArena,
+        pos: &mut usize,
+        compare_arg: &mut impl FnMut(usize) -> Ordering,
+    ) -> Ordering {
+        match (self, kind_r) {
+            // Arguments by the caller's comparator
+            (MixopKind::Arg, MixopKind::Arg) => {
+                let order = compare_arg(*pos);
+                *pos += 1;
+                order
+            }
+            // Atoms by name
+            (MixopKind::Atom(atom_l), MixopKind::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
+            // Brackets: opening atom, inner form, closing atom
+            (
+                MixopKind::Brack(atom_l_l, child_l, atom_l_r),
+                MixopKind::Brack(atom_r_l, child_r, atom_r_r),
+            ) => atom_l_l
+                .node
+                .cmp(&atom_r_l.node)
+                .then_with(|| {
+                    arena_mixop_l.kind(*child_l).cmp_by_inner(
+                        arena_mixop_l,
+                        arena_mixop_r.kind(*child_r),
+                        arena_mixop_r,
+                        pos,
+                        compare_arg,
+                    )
+                })
+                .then_with(|| atom_l_r.node.cmp(&atom_r_r.node)),
+            // Infix: left form, operator, right form
+            (
+                MixopKind::Infix(child_l_l, atom_l, child_l_r),
+                MixopKind::Infix(child_r_l, atom_r, child_r_r),
+            ) => arena_mixop_l
+                .kind(*child_l_l)
+                .cmp_by_inner(
                     arena_mixop_l,
-                    arena_mixop_l.kind(*child_l),
+                    arena_mixop_r.kind(*child_r_l),
                     arena_mixop_r,
-                    arena_mixop_r.kind(*child_r),
                     pos,
                     compare_arg,
                 )
-            })
-            .then_with(|| atom_l_r.node.cmp(&atom_r_r.node)),
-        // Infix: left form, operator, right form
-        (
-            MixopKind::Infix(child_l_l, atom_l, child_l_r),
-            MixopKind::Infix(child_r_l, atom_r, child_r_r),
-        ) => cmp_inner(
-            arena_mixop_l,
-            arena_mixop_l.kind(*child_l_l),
-            arena_mixop_r,
-            arena_mixop_r.kind(*child_r_l),
-            pos,
-            compare_arg,
-        )
-        .then_with(|| atom_l.node.cmp(&atom_r.node))
-        .then_with(|| {
-            cmp_inner(
-                arena_mixop_l,
-                arena_mixop_l.kind(*child_l_r),
-                arena_mixop_r,
-                arena_mixop_r.kind(*child_r_r),
-                pos,
-                compare_arg,
-            )
-        }),
-        // Sequences: common prefix first, then length
-        (MixopKind::Seq(elems_l), MixopKind::Seq(elems_r)) => {
-            let kinds_l = elems_l.iter().map(|elem| arena_mixop_l.kind(*elem));
-            let kinds_r = elems_r.iter().map(|elem| arena_mixop_r.kind(*elem));
-            for (kind_l, kind_r) in kinds_l.zip(kinds_r) {
-                let order =
-                    cmp_inner(arena_mixop_l, kind_l, arena_mixop_r, kind_r, pos, compare_arg);
-                if order != Ordering::Equal {
-                    return order;
+                .then_with(|| atom_l.node.cmp(&atom_r.node))
+                .then_with(|| {
+                    arena_mixop_l.kind(*child_l_r).cmp_by_inner(
+                        arena_mixop_l,
+                        arena_mixop_r.kind(*child_r_r),
+                        arena_mixop_r,
+                        pos,
+                        compare_arg,
+                    )
+                }),
+            // Sequences: common prefix first, then length
+            (MixopKind::Seq(elems_l), MixopKind::Seq(elems_r)) => {
+                let kinds_l = elems_l.iter().map(|elem| arena_mixop_l.kind(*elem));
+                let kinds_r = elems_r.iter().map(|elem| arena_mixop_r.kind(*elem));
+                for (kind_l, kind_r) in kinds_l.zip(kinds_r) {
+                    let order =
+                        kind_l.cmp_by_inner(arena_mixop_l, kind_r, arena_mixop_r, pos, compare_arg);
+                    if order != Ordering::Equal {
+                        return order;
+                    }
+                }
+                elems_l.len().cmp(&elems_r.len())
+            }
+            // Different forms order by variant
+            _ => self.tag().cmp(&kind_r.tag()),
+        }
+    }
+
+    /// Visits a stored node, threading the argument position.
+    fn visit_inner<'a>(
+        &'a self,
+        arena_mixop: &'a MixopArena,
+        pos: &mut usize,
+        visit_piece: &mut impl FnMut(Piece<'a>),
+    ) {
+        match self {
+            MixopKind::Arg => {
+                visit_piece(Piece::Arg(*pos));
+                *pos += 1;
+            }
+            MixopKind::Atom(atom) => visit_piece(Piece::Atom(atom)),
+            MixopKind::Brack(atom_l, child, atom_r) => {
+                visit_piece(Piece::Atom(atom_l));
+                arena_mixop
+                    .kind(*child)
+                    .visit_inner(arena_mixop, pos, visit_piece);
+                visit_piece(Piece::Atom(atom_r));
+            }
+            MixopKind::Infix(child_l, atom, child_r) => {
+                arena_mixop
+                    .kind(*child_l)
+                    .visit_inner(arena_mixop, pos, visit_piece);
+                visit_piece(Piece::Atom(atom));
+                arena_mixop
+                    .kind(*child_r)
+                    .visit_inner(arena_mixop, pos, visit_piece);
+            }
+            MixopKind::Seq(elems) => {
+                for elem in elems {
+                    arena_mixop
+                        .kind(*elem)
+                        .visit_inner(arena_mixop, pos, visit_piece);
                 }
             }
-            elems_l.len().cmp(&elems_r.len())
         }
-        // Different forms order by variant
-        _ => kind_l.tag().cmp(&kind_r.tag()),
     }
 }
 
@@ -233,38 +272,9 @@ pub(crate) fn visit<'a>(
     mut visit_piece: impl FnMut(Piece<'a>),
 ) {
     let mut pos = 0;
-    visit_inner(arena_mixop, arena_mixop.kind(mixop), &mut pos, &mut visit_piece);
-}
-
-/// Visits a stored node, threading the argument position.
-fn visit_inner<'a>(
-    arena_mixop: &'a MixopArena,
-    kind: &'a MixopKind,
-    pos: &mut usize,
-    visit_piece: &mut impl FnMut(Piece<'a>),
-) {
-    match kind {
-        MixopKind::Arg => {
-            visit_piece(Piece::Arg(*pos));
-            *pos += 1;
-        }
-        MixopKind::Atom(atom) => visit_piece(Piece::Atom(atom)),
-        MixopKind::Brack(atom_l, child, atom_r) => {
-            visit_piece(Piece::Atom(atom_l));
-            visit_inner(arena_mixop, arena_mixop.kind(*child), pos, visit_piece);
-            visit_piece(Piece::Atom(atom_r));
-        }
-        MixopKind::Infix(child_l, atom, child_r) => {
-            visit_inner(arena_mixop, arena_mixop.kind(*child_l), pos, visit_piece);
-            visit_piece(Piece::Atom(atom));
-            visit_inner(arena_mixop, arena_mixop.kind(*child_r), pos, visit_piece);
-        }
-        MixopKind::Seq(elems) => {
-            for elem in elems {
-                visit_inner(arena_mixop, arena_mixop.kind(*elem), pos, visit_piece);
-            }
-        }
-    }
+    arena_mixop
+        .kind(mixop)
+        .visit_inner(arena_mixop, &mut pos, &mut visit_piece);
 }
 
 /// Compares a stored form with an owned tree, ignoring atom spans.
