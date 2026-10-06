@@ -107,7 +107,7 @@ pub fn build_sl<Ext: Extern>(
     let Spec::Sl(spec) = spec else { unreachable!() };
     // Load and prepare the definitions
     let mut arena_mixop = MixopArena::new();
-    let global = SlGlobal::load(spec, &mut arena_mixop)?;
+    let global = SlGlobal::load(spec, &mut arena_mixop, config.det)?;
     let config = SlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(global, arena_mixop, SlInterp::new(config), interface, external))
 }

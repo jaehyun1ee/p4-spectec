@@ -9,5 +9,6 @@
 pub mod ast;
 pub mod eq;
 pub mod free;
+pub mod prepared;
 pub mod print;
 pub mod stage;

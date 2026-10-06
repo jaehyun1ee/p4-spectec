@@ -11,15 +11,14 @@ use crate::lang::data::{
 
 use crate::lang::sl::ast as source;
 
-use crate::runtime::envs::interp::{
-    shared::callable::Callable,
-    sl::ast_prepared::{self as ast, TypeDef},
-};
+use crate::runtime::envs::interp::sl::ast_prepared::{self as ast, TypeDef};
 
 use crate::interp::shared::{
     context::{self as shared, FuncSignature},
     error::Error,
 };
+
+use super::prepare::{prepare_func, prepare_rel};
 
 // = Context aliases
 
@@ -35,10 +34,15 @@ pub type Context<'global> = shared::Context<'global, ast::RelDef, ast::MetaFuncD
 
 impl Global {
     /// Loads a specification and prepares its callables for slot execution,
-    /// interning their notations into `arena_mixop`.
+    /// interning their notations and lowering calls for the selected `det` mode.
     ///
+    /// The loaded definitions must execute with the same `det` mode.
     /// Panics if a global definition is repeated.
-    pub fn load(spec: source::Spec, arena_mixop: &mut MixopArena) -> Result<Self, Error> {
+    pub fn load(
+        spec: source::Spec,
+        arena_mixop: &mut MixopArena,
+        det: bool,
+    ) -> Result<Self, Error> {
         let mut loaded = Self::new();
         // Prepare definitions before inserting them into their namespaces
         for def in spec {
@@ -64,7 +68,7 @@ impl Global {
                 source::DefKind::Var(_) => {}
                 source::DefKind::Rel(rel) => {
                     // Relations are prepared into callables with a frame layout
-                    let rel = Callable::prepare(rel, arena_mixop);
+                    let rel = prepare_rel(rel, arena_mixop, det);
                     let id = match &rel.def {
                         ast::RelDef::Extern(rel) => &rel.id,
                         ast::RelDef::Defined(rel) => &rel.id,
@@ -73,7 +77,7 @@ impl Global {
                 }
                 source::DefKind::MetaFunc(func) => {
                     // Prepare functions before sharing them with local bindings
-                    let func = Callable::prepare(func, arena_mixop);
+                    let func = prepare_func(func, arena_mixop, det);
                     let id = match &func.def {
                         ast::MetaFuncDef::Extern(func) => &func.id,
                         ast::MetaFuncDef::Builtin(func) => &func.id,

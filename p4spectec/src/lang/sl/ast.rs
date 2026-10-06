@@ -3,7 +3,7 @@
 //! Types, values, and expressions are re-exported from IL;
 //! SL adds parameters with patterns, guards, and the instruction forms.
 //! The stage parameter `P` (`stage::Stage`) lets the interpreter
-//! instantiate names with slots.
+//! instantiate names with slots and select the rule-call representation.
 
 use crate::lang::{common::source::Phrase, hints::input::InputHint};
 
@@ -181,8 +181,8 @@ pub enum InstrKind<P: Stage = Source> {
     Group(GroupInstr<P>),
     /// Bind a pattern, then run the block.
     Let(LetInstr<P>),
-    /// Call a relation, bind its outputs, then run the block.
-    Rule(RuleInstr<P>),
+    /// Call a relation using the stage's rule-call representation.
+    Rule(P::Rule),
     /// Conclude the relation with outputs.
     Result(ResultInstr<P>),
     /// Conclude the function with a value.
@@ -238,9 +238,6 @@ pub struct RuleInstr<P: Stage = Source> {
     pub input_hint: InputHint,
     pub iter_instrs: Vec<InstrIter<P::Var>>,
     pub block: Block<P>,
-    /// Whether the block only returns the outputs unchanged,
-    /// so a call in tail position is a tail call; set when preparing
-    pub returns_outputs: bool,
 }
 /// The relation's outputs.
 #[derive(Clone, Debug, PartialEq)]

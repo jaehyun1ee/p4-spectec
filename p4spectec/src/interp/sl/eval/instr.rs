@@ -5,7 +5,8 @@
 //! Guards and conditions evaluate under their iterations (`eval_cond_iter`),
 //! bindings under theirs (`eval_instr_iter`).
 //! The `tail` flag marks the last instruction of a callee body,
-//! so a return or rule call there can become a tail call.
+//! so a function return there can become a tail call.
+//! Relation tail calls are selected when the specification is prepared.
 
 use std::borrow::Cow;
 
@@ -148,9 +149,10 @@ pub fn eval_instr<Iface: Interface, Ext: Extern>(
             ast::InstrKind::Let(instr) => {
                 Flow::cont_from_unmatch(eval_let_instr(runner_ctx, ctx, instr, tail))
             }
-            ast::InstrKind::Rule(instr) => {
-                Flow::cont_from_unmatch(eval_rule_instr(runner_ctx, ctx, span, instr, tail))
-            }
+            ast::InstrKind::Rule(instr) => Flow::cont_from_unmatch(match instr {
+                ast::Rule::Call(instr) => eval_rule_instr(runner_ctx, ctx, instr, tail),
+                ast::Rule::Tail(instr) => eval_rule_tail_instr(runner_ctx, ctx, span, instr),
+            }),
             ast::InstrKind::Result(instr) => {
                 Flow::cont_from_unmatch(eval_result_instr(runner_ctx, ctx, span, instr))
             }
@@ -358,11 +360,10 @@ fn eval_let_instr<Iface: Interface, Ext: Extern>(
 
 // - Rule instruction
 
-/// Calls the relation and binds its outputs, or becomes a tail call.
+/// Calls the relation, binds its outputs, and runs the continuation.
 fn eval_rule_instr<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
-    span: &Span,
     instr: &ast::RuleInstr,
     tail: bool,
 ) -> Backtrack<Flow> {
@@ -370,15 +371,7 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
     let (exps_input, exps_output) =
         input::split(&instr.input_hint, instr.not_exp.args().iter().collect())
             .expect("input hint must fit relation");
-    // A tail-position call whose block just returns its outputs is a tail call
-    if tail && instr.returns_outputs {
-        let values = unwrap!(eval_exps(runner_ctx, ctx.as_ref(), &exps_input));
-        return ok!(Flow::TailRel(phrase!(
-            node: (instr.id.clone(), values),
-            span: span.clone(),
-        )));
-    }
-    // Otherwise call, bind the outputs under the iterators, and run the block
+    // Call and bind the outputs under the iterators
     let ctx = unwrap!(eval_instr_iter(
         runner_ctx,
         ctx.into_owned(),
@@ -391,6 +384,20 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
     ));
     // The block sees the bound outputs
     eval_block(runner_ctx, Cow::Owned(ctx), &instr.block, tail)
+}
+
+/// Evaluates a prepared tail call's inputs for the invocation loop.
+fn eval_rule_tail_instr<Iface: Interface, Ext: Extern>(
+    runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
+    ctx: Cow<'_, Context<'_>>,
+    span: &Span,
+    instr: &ast::RuleTailInstr,
+) -> Backtrack<Flow> {
+    let values = unwrap!(eval_exps(runner_ctx, ctx.as_ref(), &instr.exps_input));
+    ok!(Flow::TailRel(phrase!(
+        node: (instr.id.clone(), values),
+        span: span.clone(),
+    )))
 }
 
 // - Result instruction
