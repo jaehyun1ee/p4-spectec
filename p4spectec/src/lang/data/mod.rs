@@ -7,6 +7,7 @@
 //! `arena` stores a specification's notation shapes beside a run's values.
 
 pub mod arena;
+pub mod encoding;
 pub mod intern;
 pub mod notation;
 pub mod typ;

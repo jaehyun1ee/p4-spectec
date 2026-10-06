@@ -9,6 +9,9 @@
 //! by handle; `CanonEq` and `CanonHash` read atom names
 //! and children's canonical ids, so they ignore spans.
 
+use super::external::{DecodeContext, EncodeContext};
+use serde_derive_state::{DeserializeState, SerializeState};
+
 use std::{
     fmt,
     hash::{Hash, Hasher},
@@ -22,13 +25,16 @@ use crate::lang::{
 use super::{AtomPhrase, arena::MixopArena, mixop::MixopRepr, walk};
 
 /// One interned notation node, with child handles in the same arena.
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
+#[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
+#[serde(deserialize_state = "DecodeContext<'de>")]
+
 pub enum MixopFlat {
     Arg,
-    Atom(AtomPhrase),
-    Brack(AtomPhrase, MixopId, AtomPhrase),
-    Infix(MixopId, AtomPhrase, MixopId),
-    Seq(Vec<MixopId>),
+    Atom(#[serde(state)] AtomPhrase),
+    Brack(#[serde(state)] AtomPhrase, #[serde(state)] MixopId, #[serde(state)] AtomPhrase),
+    Infix(#[serde(state)] MixopId, #[serde(state)] AtomPhrase, #[serde(state)] MixopId),
+    Seq(#[serde(state)] Vec<MixopId>),
 }
 
 /// A notation handle valid only in its issuing arena.

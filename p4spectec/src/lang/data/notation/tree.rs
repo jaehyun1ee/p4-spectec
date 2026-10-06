@@ -13,10 +13,11 @@ use std::{
 
 use crate::lang::traits::print::{Print, Printer};
 
-use super::{AtomPhrase, walk};
+use super::{AtomPhrase, MixopArena, MixopError, MixopId, walk};
+use serde::{Deserialize, Serialize};
 
 /// An owned notation with an argument hole at each position.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum MixopTree {
     Arg,
     Atom(AtomPhrase),
@@ -92,4 +93,17 @@ impl Print for MixopTree {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         walk::print_tree_with(self, printer, |_, printer| printer.write("%"))
     }
+}
+
+/// Expands a handle into an owned notation, preserving atom spans.
+pub fn from_flat(arena_mixop: &MixopArena, mixop_id: MixopId) -> MixopTree {
+    arena_mixop.to_tree(mixop_id)
+}
+
+/// Interns an owned notation in the target arena.
+pub fn into_flat(
+    arena_mixop: &mut MixopArena,
+    mixop_tree: MixopTree,
+) -> Result<MixopId, MixopError> {
+    arena_mixop.intern(&mixop_tree)
 }

@@ -2,11 +2,12 @@ use std::rc::Rc;
 
 use super::{
     arena::Arena,
+    encoding::Encoding,
     notation::Mixfix,
     typ,
     value::{
         ValueFlat,
-        external::{self, Encoding},
+        external::{self},
         get, make,
     },
 };
@@ -192,4 +193,115 @@ fn resetting_values_preserves_prepared_mixops() {
     assert!(!get::bool(&arena, &value).unwrap());
     assert_eq!(arena.span(&value), &Span::default());
     assert_eq!(value.span.index(), 0);
+}
+
+#[test]
+fn mixop_encodings_preserve_contents_across_arenas() {
+    use super::{
+        encoding::Encoding,
+        notation::{MixopArena, MixopFlat, MixopId, MixopTree, external},
+    };
+    let mut arena_a = MixopArena::new();
+    let mixop_a = arena_a.intern(&MixopTree::Arg).unwrap();
+    let json = external::encode(&arena_a, &mixop_a).unwrap();
+    assert_eq!(json, serde_json::json!("Arg"));
+    let mut arena_b = MixopArena::new();
+    arena_b.intern(&MixopTree::Seq(vec![])).unwrap();
+    let mixop_b: MixopId =
+        external::decode_with(&mut arena_b, Encoding::ArenaIndependent, &json).unwrap();
+    assert_ne!(mixop_a.index(), mixop_b.index());
+    assert!(matches!(arena_b.kind(mixop_b), MixopFlat::Arg));
+    let json_relative = external::encode_with(&arena_b, Encoding::ArenaRelative, &mixop_b).unwrap();
+    assert_eq!(json_relative, serde_json::json!(mixop_b.index()));
+    let mixop_again: MixopId =
+        external::decode_with(&mut arena_b, Encoding::ArenaRelative, &json_relative).unwrap();
+    assert_eq!(mixop_b, mixop_again);
+
+    let mixop_tree = MixopTree::Brack(
+        crate::phrase!(node: Atom::LParen, span: span(1)),
+        Box::new(MixopTree::Infix(
+            Box::new(MixopTree::Seq(vec![
+                MixopTree::Arg,
+                MixopTree::Atom(crate::phrase!(node: Atom::Keyword("K".to_owned()), span: span(2))),
+            ])),
+            crate::phrase!(node: Atom::Keyword("OP".to_owned()), span: span(3)),
+            Box::new(MixopTree::Seq(vec![])),
+        )),
+        crate::phrase!(node: Atom::RParen, span: span(4)),
+    );
+    let mixop_a = arena_a.intern(&mixop_tree).unwrap();
+    let json = external::encode(&arena_a, &mixop_a).unwrap();
+    assert_eq!(json, serde_json::to_value(&mixop_tree).unwrap());
+    let mixop_b: MixopId =
+        external::decode_with(&mut arena_b, Encoding::ArenaIndependent, &json).unwrap();
+    assert_eq!(serde_json::to_value(arena_b.to_tree(mixop_b)).unwrap(), json);
+    // A flat body resolves its child handles using the same mode.
+    let json_body = external::encode(&arena_a, arena_a.kind(mixop_a)).unwrap();
+    assert_eq!(json_body, json);
+    let body: MixopFlat =
+        external::decode_with(&mut arena_b, Encoding::ArenaIndependent, &json_body).unwrap();
+    assert_eq!(&body, arena_b.kind(mixop_b));
+    let json_body_relative =
+        external::encode_with(&arena_a, Encoding::ArenaRelative, arena_a.kind(mixop_a)).unwrap();
+    let body: MixopFlat =
+        external::decode_with(&mut arena_a, Encoding::ArenaRelative, &json_body_relative).unwrap();
+    assert_eq!(&body, arena_a.kind(mixop_a));
+    for encoding in [Encoding::ArenaIndependent, Encoding::ArenaRelative] {
+        let mixops = vec![mixop_b, mixop_again, mixop_b];
+        let json = external::encode_with(&arena_b, encoding, &mixops).unwrap();
+        let mixops_again: Vec<MixopId> =
+            external::decode_with(&mut arena_b, encoding, &json).unwrap();
+        assert_eq!(mixops_again, mixops);
+    }
+}
+
+#[test]
+fn mixop_decoding_rejects_invalid_payloads() {
+    use super::{
+        encoding::Encoding,
+        notation::{MixopArena, MixopId, external},
+    };
+    let mut arena_mixop = MixopArena::new();
+    for json in [
+        serde_json::json!(-1),
+        serde_json::json!(4294967296u64),
+        serde_json::json!("Arg"),
+        serde_json::json!(0.5),
+    ] {
+        assert!(
+            external::decode_with::<MixopId>(&mut arena_mixop, Encoding::ArenaRelative, &json)
+                .is_err()
+        );
+    }
+    for json in [
+        serde_json::json!("Unknown"),
+        serde_json::json!({"Brack": []}),
+        serde_json::json!({"Seq": [0]}),
+        serde_json::json!(0),
+    ] {
+        assert!(
+            external::decode_with::<MixopId>(&mut arena_mixop, Encoding::ArenaIndependent, &json)
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn mixop_independent_encoding_handles_deep_trees() {
+    use super::{
+        encoding::Encoding,
+        notation::{MixopArena, MixopId, MixopTree, external},
+    };
+    let mut mixop_tree = MixopTree::Arg;
+    for _ in 0..256 {
+        mixop_tree = MixopTree::Seq(vec![mixop_tree]);
+    }
+    let mut arena_a = MixopArena::new();
+    let mixop_a = arena_a.intern(&mixop_tree).unwrap();
+    let json = external::encode(&arena_a, &mixop_a).unwrap();
+    let mut arena_b = MixopArena::new();
+    let mixop_b: MixopId =
+        external::decode_with(&mut arena_b, Encoding::ArenaIndependent, &json).unwrap();
+    assert_eq!(arena_b.arity(mixop_b), 1);
+    assert_eq!(external::encode(&arena_b, &mixop_b).unwrap(), json);
 }

@@ -13,6 +13,8 @@
 //! Resubmit returns the original packet to the parser; recirculate returns the
 //! deparsed packet to the parser
 
+use crate::lang::data::encoding::Encoding;
+
 use std::{cell::RefCell, io::Write};
 
 use num_bigint::BigInt;
@@ -25,7 +27,7 @@ use crate::lang::{
         typ,
         value::{
             ValueError, ValueFlat,
-            external::{DecodeContext, EncodeContext, Encoding, decode_with, encode_with},
+            external::{DecodeContext, EncodeContext, decode_with, encode_with},
             get, make,
         },
     },

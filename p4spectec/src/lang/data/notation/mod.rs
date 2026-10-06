@@ -8,10 +8,11 @@
 
 mod arena;
 mod error;
+pub mod external;
 mod flat;
 mod mixfix;
 pub mod mixop;
-mod tree;
+pub mod tree;
 pub mod walk;
 
 pub use arena::MixopArena;

@@ -12,6 +12,8 @@
 //! Accepted packets keep their original bytes and input port
 //! There is no deparser
 
+use crate::lang::data::encoding::Encoding;
+
 use serde_derive_state::{DeserializeState, SerializeState};
 
 use crate::lang::{
@@ -21,7 +23,7 @@ use crate::lang::{
         typ,
         value::{
             ValueFlat,
-            external::{DecodeContext, EncodeContext, Encoding, decode_with, encode_with},
+            external::{DecodeContext, EncodeContext, decode_with, encode_with},
             get, make,
         },
     },
