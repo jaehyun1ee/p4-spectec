@@ -14,7 +14,6 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::MixopMatch,
         value::{
             flat::{Value, ValueKind},
             get, make,
@@ -152,15 +151,11 @@ pub(crate) fn sub(
 // - Pattern matching
 
 /// Tests a value against a case, list, or option pattern.
-pub(crate) fn r#match<P: ast::Stage>(
-    arena: &Arena,
-    pattern: &ast::Pattern<P>,
-    value: Value,
-) -> bool {
+pub(crate) fn r#match(arena: &Arena, pattern: &ast::Pattern<Prepared>, value: Value) -> bool {
     match (pattern, arena.kind(&value)) {
         // Case: same constructor shape
         (ast::Pattern::Case(mixop), ValueKind::Case(value_case)) => {
-            mixop.matches_mixop(arena.arena_mixop(), *value_case.mixop())
+            arena.arena_mixop().canon_eq(*mixop, *value_case.mixop())
         }
         // List: non-empty, fixed length, or empty
         (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {

@@ -1,22 +1,12 @@
-//! Mixop matching and cached parsing
+//! Cached parsing of notation trees
 //!
-//! `MixopMatch` lets evaluation match source or prepared syntax
-//! against a stored value case;
 //! `shape` parses a mixop from its text once and caches it.
 
-use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::frontend;
 
-use super::{arena::MixopArena, flat::MixopId, tree::Mixop};
-
-// == Mixops as a stage holds them
-
-/// Matches a stored value case against source or prepared notation.
-pub trait MixopMatch: Clone + fmt::Debug + PartialEq {
-    /// Compares notation structure and atom names, ignoring spans.
-    fn matches_mixop(&self, arena_mixop: &MixopArena, mixop_id: MixopId) -> bool;
-}
+use super::tree::Mixop;
 
 // = Mixop parsing
 

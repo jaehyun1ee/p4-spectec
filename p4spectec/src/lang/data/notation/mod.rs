@@ -19,7 +19,6 @@ pub use arena::MixopArena;
 pub use error::{ArityMismatch, MixopError};
 pub use flat::MixopId;
 pub use mixfix::{Mixfix, MixfixRef, View};
-pub use mixop::MixopMatch;
 /// An atom with its source location.
 pub type AtomPhrase =
     crate::lang::common::source::Phrase<crate::lang::common::notation::atom::Atom>;

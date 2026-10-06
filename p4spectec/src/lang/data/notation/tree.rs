@@ -9,7 +9,6 @@ use std::{
     cmp::Ordering,
     fmt,
     hash::{Hash, Hasher},
-    rc::Rc,
 };
 
 use crate::lang::{
@@ -21,7 +20,7 @@ use crate::lang::{
     },
 };
 
-use super::{AtomPhrase, MixopArena, MixopError, MixopId, mixop::MixopMatch, walk};
+use super::{AtomPhrase, MixopArena, MixopError, MixopId, walk};
 use serde::{Deserialize, Serialize};
 
 /// An owned notation with an argument hole at each position.
@@ -48,14 +47,6 @@ impl Mixop {
             Self::Infix(..) => 3,
             Self::Seq(_) => 4,
         }
-    }
-}
-
-// = Matching
-
-impl MixopMatch for Rc<Mixop> {
-    fn matches_mixop(&self, arena_mixop: &MixopArena, mixop_id: MixopId) -> bool {
-        arena_mixop.matches_tree(mixop_id, self)
     }
 }
 

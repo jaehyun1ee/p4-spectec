@@ -15,7 +15,7 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::MixopMatch,
+        notation::MixopId,
         value::flat::{Value, ValueKind},
     },
 };
@@ -58,7 +58,7 @@ pub enum MatchError {
 // == Type membership
 
 /// Tests whether `value` inhabits `typ`.
-pub fn sub<'env, P: Stage, F>(
+pub fn sub<'env, P: Stage<Mixop = MixopId>, F>(
     arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
@@ -135,10 +135,9 @@ where
                         (DefTypKind::Variant(typ_cases), ValueKind::Case(value_case)) => {
                             for TypCase { not_typ, .. } in typ_cases {
                                 // Skip cases of a different shape
-                                if !not_typ
-                                    .node
-                                    .mixop()
-                                    .matches_mixop(arena.arena_mixop(), *value_case.mixop())
+                                if !arena
+                                    .arena_mixop()
+                                    .canon_eq(*not_typ.node.mixop(), *value_case.mixop())
                                 {
                                     continue;
                                 }
@@ -210,7 +209,7 @@ where
 }
 
 /// Tests values against types pairwise.
-pub fn subs<'env, P: Stage, F>(
+pub fn subs<'env, P: Stage<Mixop = MixopId>, F>(
     arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
@@ -224,7 +223,7 @@ where
 }
 
 /// Pairwise membership; differing counts fail.
-fn subs_inner<'env, 'typ, 'value, P: Stage, F, T, V>(
+fn subs_inner<'env, 'typ, 'value, P: Stage<Mixop = MixopId>, F, T, V>(
     arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
@@ -250,7 +249,7 @@ where
 // == Subtype-check execution
 
 /// Runs a precomputed subtype check on a value.
-pub fn check<'env, P: Stage, F>(
+pub fn check<'env, P: Stage<Mixop = MixopId>, F>(
     arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
@@ -266,7 +265,7 @@ where
         // Variant case: the tag must be one of the accepted
         (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => Ok(mixops
             .iter()
-            .any(|mixop| mixop.matches_mixop(arena.arena_mixop(), *value_case.mixop()))),
+            .any(|mixop| arena.arena_mixop().canon_eq(*mixop, *value_case.mixop()))),
         // Componentwise
         (Subcheck::Tuple(subchecks), ValueKind::Tuple(values)) => {
             if subchecks.len() != values.len() {

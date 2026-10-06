@@ -16,7 +16,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::lang::data::intern::{CanonEq, CanonHash, CanonInterner, Interned};
 
-use super::{AtomPhrase, arena::MixopArena, mixop::MixopMatch};
+use super::AtomPhrase;
 
 /// One interned notation node, with child handles in the same arena.
 #[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
@@ -43,15 +43,6 @@ impl Mixop {
             Self::Infix(..) => 3,
             Self::Seq(_) => 4,
         }
-    }
-}
-
-// - Mixops in prepared syntax
-
-// Prepared syntax matches a value's mixop by canonical identity
-impl MixopMatch for MixopId {
-    fn matches_mixop(&self, arena_mixop: &MixopArena, mixop_id: MixopId) -> bool {
-        arena_mixop.canon_eq(mixop_id, *self)
     }
 }
 
