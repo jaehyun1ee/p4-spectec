@@ -4,7 +4,7 @@
 //! the PRE and BQE schedule clones, multicast, resubmit, and recirculate.
 //! Stateful objects live in `object`, the scheduler in `pipe`.
 
-use crate::lang::data::value::ValueFlat;
+use crate::lang::data::value::Value;
 
 use crate::runner::{ExternError, Interface, Interpreter, RunnerContext};
 
@@ -26,8 +26,8 @@ impl externs::Impl for Psa {
     fn eval_extern_init<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[ValueFlat],
-    ) -> Result<ValueFlat, ExternError>
+        values: &[Value],
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -38,8 +38,8 @@ impl externs::Impl for Psa {
     fn eval_extern_func_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[ValueFlat],
-    ) -> Result<Vec<ValueFlat>, ExternError>
+        values: &[Value],
+    ) -> Result<Vec<Value>, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -50,8 +50,8 @@ impl externs::Impl for Psa {
     fn eval_extern_method_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[ValueFlat],
-    ) -> Result<Vec<ValueFlat>, ExternError>
+        values: &[Value],
+    ) -> Result<Vec<Value>, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -62,7 +62,7 @@ impl externs::Impl for Psa {
     fn init_arch_state<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-    ) -> Result<ValueFlat, ExternError>
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,

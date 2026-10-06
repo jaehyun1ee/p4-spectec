@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{ValueFlat, make},
+    data::value::{Value, make},
 };
 
 use crate::runner::{Extern, Interface, Interpreter, RunnerContext};
@@ -31,8 +31,8 @@ pub fn map<Ctx, Interp, Iface, Ext>(
     span: &Span,
     typ: &Rc<ast::TypKind>,
     exp_iter: &ast::ExpIter,
-    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Ext>, &Ctx) -> Backtrack<ValueFlat>,
-) -> Backtrack<ValueFlat>
+    mut eval: impl FnMut(&mut RunnerContext<'_, Interp, Iface, Ext>, &Ctx) -> Backtrack<Value>,
+) -> Backtrack<Value>
 where
     Ctx: IterContext,
     Interp: Interpreter<Iface, Ext>,
@@ -66,10 +66,7 @@ where
                 span
             );
             // Copy handles before the callback can allocate in the arena
-            let values_by_var: Vec<_> = values_by_var
-                .into_iter()
-                .map(<[ValueFlat]>::to_vec)
-                .collect();
+            let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
             // Evaluate row by row, binding each variable to its element
             let len = values_by_var.first().map_or(0, Vec::len);
             let mut ctx_sub = ctx.clone();
@@ -135,10 +132,7 @@ where
                 span
             );
             // Copy handles before the callback can allocate in the arena
-            let values_by_var: Vec<_> = values_by_var
-                .into_iter()
-                .map(<[ValueFlat]>::to_vec)
-                .collect();
+            let values_by_var: Vec<_> = values_by_var.into_iter().map(<[Value]>::to_vec).collect();
             let len = values_by_var.first().map_or(0, Vec::len);
             let mut ctx_sub = ctx.clone();
             for idx in 0..len {

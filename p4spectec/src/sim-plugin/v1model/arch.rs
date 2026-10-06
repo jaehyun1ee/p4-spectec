@@ -16,7 +16,7 @@ use crate::lang::{
         arena::Arena,
         typ,
         value::{
-            ValueFlat,
+            Value,
             external::{DecodeContext, EncodeContext, decode_with, encode_with},
             get, make,
         },
@@ -53,11 +53,7 @@ impl Arch {
     }
 
     /// Encodes the state as the specification's `archState` external value.
-    pub fn to_value(
-        &self,
-        arena: &mut Arena,
-        encoding: Encoding,
-    ) -> Result<ValueFlat, ExternError> {
+    pub fn to_value(&self, arena: &mut Arena, encoding: Encoding) -> Result<Value, ExternError> {
         let payload = encode_with(arena, encoding, self).map_err(ExternError::from)?;
         let typ = typ::make::var(
             crate::phrase!(node: "archState".to_owned(), span: Span::default()),
@@ -70,7 +66,7 @@ impl Arch {
     pub fn from_value(
         arena: &mut Arena,
         encoding: Encoding,
-        value: &ValueFlat,
+        value: &Value,
     ) -> Result<Self, ExternError> {
         let json = get::external(arena, value)?.clone();
         decode_with(arena, encoding, json.as_ref()).map_err(ExternError::from)

@@ -11,7 +11,7 @@ mod expr;
 mod instr;
 mod strip;
 
-use crate::lang::data::value::ValueFlat;
+use crate::lang::data::value::Value;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 
@@ -27,8 +27,8 @@ impl<Iface: Interface, Ext: Extern> Invoker<Iface, Ext> for PlInterp {
         ctx: &Self::Context<'global>,
         id: &ast::Id,
         targs: &[ast::Typ],
-        values: &[ValueFlat],
-    ) -> Backtrack<ValueFlat> {
+        values: &[Value],
+    ) -> Backtrack<Value> {
         call::invoke_func(runner_ctx, ctx, id, targs, values)
     }
 
@@ -36,8 +36,8 @@ impl<Iface: Interface, Ext: Extern> Invoker<Iface, Ext> for PlInterp {
         runner_ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         ctx: &Self::Context<'global>,
         id: &ast::Id,
-        values: &[ValueFlat],
-    ) -> Backtrack<Vec<ValueFlat>> {
+        values: &[Value],
+    ) -> Backtrack<Vec<Value>> {
         call::invoke_rel(runner_ctx, ctx, id, values)
     }
 }

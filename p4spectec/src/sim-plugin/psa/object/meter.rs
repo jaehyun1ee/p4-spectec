@@ -9,7 +9,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{ValueFlat, make},
+        value::{Value, make},
     },
 };
 
@@ -49,9 +49,9 @@ impl Meter {
     /// ```
     pub fn init(
         arena: &Arena,
-        _value_targs: ValueFlat,
-        value_ids: ValueFlat,
-        value_args: ValueFlat,
+        _value_targs: Value,
+        value_ids: Value,
+        value_args: Value,
     ) -> Result<Self, ExternError> {
         let args = args::assoc(arena, value_ids, value_args)?;
         let value_size = args::find(&args, "n_meters")?;
@@ -78,9 +78,9 @@ impl Meter {
     pub fn execute_color_aware<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -111,9 +111,9 @@ impl Meter {
     pub fn execute_color_blind<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,

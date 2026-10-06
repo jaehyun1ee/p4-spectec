@@ -9,7 +9,7 @@
 
 use crate::lang::{
     common::source::{Phrase, Span},
-    data::value::ValueFlat,
+    data::value::Value,
 };
 
 use crate::diagnostic::{Diagnostic, Label, Report};
@@ -27,13 +27,13 @@ pub enum Flow {
     /// Fell through, with the failures met so far.
     Cont(Vec<Report>),
     /// A function body returned a value.
-    Return(Phrase<ValueFlat>),
+    Return(Phrase<Value>),
     /// A relation body produced its outputs.
-    Result(Phrase<Vec<ValueFlat>>),
+    Result(Phrase<Vec<Value>>),
     /// A function call to make in place of the current one.
-    TailFunc(Phrase<(ast::Id, Vec<ast::Typ>, Vec<ValueFlat>)>),
+    TailFunc(Phrase<(ast::Id, Vec<ast::Typ>, Vec<Value>)>),
     /// A relation call to make in place of the current one.
-    TailRel(Phrase<(ast::Id, Vec<ValueFlat>)>),
+    TailRel(Phrase<(ast::Id, Vec<Value>)>),
 }
 
 impl Flow {

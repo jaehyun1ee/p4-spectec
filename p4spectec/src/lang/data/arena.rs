@@ -9,7 +9,7 @@ use super::{
     intern::CanonId,
     notation::MixopArena,
     typ::TypKind,
-    value::{ValueArena, ValueError, ValueFlat, ValueFlatKind, ValueRef},
+    value::{Value, ValueArena, ValueError, ValueFlatKind, ValueRef},
 };
 use crate::lang::common::source::Span;
 use std::rc::Rc;
@@ -23,7 +23,7 @@ use std::rc::Rc;
 pub struct Arena {
     /// Notation shapes of prepared syntax and case bodies.
     pub(super) mixop: MixopArena,
-    /// ValueFlat bodies, types, and spans.
+    /// Value bodies, types, and spans.
     pub(super) value: ValueArena,
 }
 
@@ -42,7 +42,7 @@ impl Arena {
 
     /// Drops every value, type, and span, keeping the shapes.
     ///
-    /// ValueFlat, type, and span handles issued before become invalid
+    /// Value, type, and span handles issued before become invalid
     /// and numbering starts over; shape handles stay valid.
     pub fn reset_values(&mut self) {
         self.value = ValueArena::default();
@@ -67,41 +67,41 @@ impl Arena {
         kind: ValueFlatKind,
         typ: Rc<TypKind>,
         span: Span,
-    ) -> Result<ValueFlat, ValueError> {
+    ) -> Result<Value, ValueError> {
         self.value.alloc(&self.mixop, kind, typ, span)
     }
 
     // - Lookup
 
     /// The body of a value.
-    pub fn kind(&self, value: &ValueFlat) -> &ValueFlatKind {
+    pub fn kind(&self, value: &Value) -> &ValueFlatKind {
         self.value.kind(value.node)
     }
 
     /// The canonical identity of a value's body.
-    pub fn canon_id(&self, value: &ValueFlat) -> CanonId<ValueFlatKind> {
+    pub fn canon_id(&self, value: &Value) -> CanonId<ValueFlatKind> {
         self.value.canon_id(value.node)
     }
 
     /// The type of a value.
-    pub fn typ(&self, value: &ValueFlat) -> &Rc<TypKind> {
+    pub fn typ(&self, value: &Value) -> &Rc<TypKind> {
         self.value.typ(value.note)
     }
 
     /// The span of a value.
-    pub fn span(&self, value: &ValueFlat) -> &Span {
+    pub fn span(&self, value: &Value) -> &Span {
         self.value.span(value.span)
     }
 
     /// Borrows a value issued by this arena for syntax comparisons.
-    pub fn view(&self, value: ValueFlat) -> ValueRef<'_> {
+    pub fn view(&self, value: Value) -> ValueRef<'_> {
         ValueRef { arena: self, value }
     }
 
     // - Printing
 
     /// Prints a value in full, resolving its stored contents.
-    pub fn to_string(&self, value: &ValueFlat) -> String {
+    pub fn to_string(&self, value: &Value) -> String {
         let mut output = String::new();
         let mut printer = crate::lang::traits::print::Printer::new(&mut output);
         super::value::print::print_value(self, value, &mut printer)

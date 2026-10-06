@@ -11,7 +11,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{ValueFlat, make},
+        value::{Value, make},
     },
 };
 
@@ -48,9 +48,9 @@ impl DirectMeter {
     /// `direct_meter(MeterType type);`
     pub fn init(
         arena: &Arena,
-        _value_targs: ValueFlat,
-        value_ids: ValueFlat,
-        value_args: ValueFlat,
+        _value_targs: Value,
+        value_ids: Value,
+        value_args: Value,
     ) -> Result<Self, ExternError> {
         let args = args::assoc(arena, value_ids, value_args)?;
         let value_type = args::find(&args, "type")?;
@@ -89,10 +89,10 @@ impl DirectMeter {
     pub fn read<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
+        value_ctx: Value,
+        value_arch: Value,
         _packet_in: &PacketIn,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,

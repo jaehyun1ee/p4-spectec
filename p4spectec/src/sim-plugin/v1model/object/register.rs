@@ -11,7 +11,7 @@ use crate::lang::{
     data::{
         typ,
         value::{
-            ValueFlat,
+            Value,
             external::{DecodeContext, EncodeContext},
             make,
         },
@@ -32,10 +32,10 @@ use crate::sim_plugin::{
 pub struct Register {
     #[serde(state)]
     /// Element type `T`.
-    pub value_typ: ValueFlat,
+    pub value_typ: Value,
     #[serde(state)]
     /// The `size` elements.
-    pub values: Vec<ValueFlat>,
+    pub values: Vec<Value>,
 }
 
 impl Register {
@@ -53,9 +53,9 @@ impl Register {
     /// `register(bit<32> size);`
     pub fn init<Interp, Iface, Ext>(
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_targs: ValueFlat,
-        value_ids: ValueFlat,
-        value_args: ValueFlat,
+        value_targs: Value,
+        value_ids: Value,
+        value_args: Value,
     ) -> Result<Self, ExternError>
     where
         Iface: Interface,
@@ -96,9 +96,9 @@ impl Register {
     pub fn read<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -152,9 +152,9 @@ impl Register {
     pub fn write<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,

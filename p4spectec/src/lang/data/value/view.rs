@@ -12,7 +12,7 @@ use crate::lang::{
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
 
-use super::flat::{ValueFlat, ValueFlatKind};
+use super::{Value, ValueFlatKind};
 
 // = Borrowed views
 
@@ -20,7 +20,7 @@ use super::flat::{ValueFlat, ValueFlatKind};
 #[derive(Clone, Copy, Debug)]
 pub struct ValueRef<'a> {
     pub(in crate::lang::data) arena: &'a Arena,
-    pub(in crate::lang::data) value: ValueFlat,
+    pub(in crate::lang::data) value: Value,
 }
 
 // = Syntax comparison
@@ -39,12 +39,12 @@ impl SyntaxEq for ValueRef<'_> {
 impl SyntaxCmp for ValueRef<'_> {
     fn syntax_cmp(&self, value_other: &Self) -> Ordering {
         // Children are compared through their own arenas
-        let compare_value = |value_l: &ValueFlat, value_r: &ValueFlat| {
+        let compare_value = |value_l: &Value, value_r: &Value| {
             self.arena
                 .view(*value_l)
                 .syntax_cmp(&value_other.arena.view(*value_r))
         };
-        let compare_values = |values_l: &[ValueFlat], values_r: &[ValueFlat]| {
+        let compare_values = |values_l: &[Value], values_r: &[Value]| {
             values_l
                 .iter()
                 .zip(values_r)

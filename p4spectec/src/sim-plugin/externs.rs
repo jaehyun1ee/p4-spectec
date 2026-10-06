@@ -7,7 +7,7 @@
 //! Compile-time known calls (`static_assert`) are handled here
 //! for all architectures.
 
-use crate::lang::data::value::ValueFlat;
+use crate::lang::data::value::Value;
 
 use crate::lang::il::ast::Typ;
 
@@ -25,8 +25,8 @@ pub(crate) trait Impl: Extern {
     fn eval_extern_init<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[ValueFlat],
-    ) -> Result<ValueFlat, ExternError>
+        values: &[Value],
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
@@ -35,8 +35,8 @@ pub(crate) trait Impl: Extern {
     fn eval_extern_func_lctk_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[ValueFlat],
-    ) -> Result<Vec<ValueFlat>, ExternError>
+        values: &[Value],
+    ) -> Result<Vec<Value>, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -48,8 +48,8 @@ pub(crate) trait Impl: Extern {
     fn eval_extern_func_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[ValueFlat],
-    ) -> Result<Vec<ValueFlat>, ExternError>
+        values: &[Value],
+    ) -> Result<Vec<Value>, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
@@ -58,8 +58,8 @@ pub(crate) trait Impl: Extern {
     fn eval_extern_method_call<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        values: &[ValueFlat],
-    ) -> Result<Vec<ValueFlat>, ExternError>
+        values: &[Value],
+    ) -> Result<Vec<Value>, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
@@ -68,7 +68,7 @@ pub(crate) trait Impl: Extern {
     fn init_arch_state<Interp, Iface>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-    ) -> Result<ValueFlat, ExternError>
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>;
@@ -81,8 +81,8 @@ impl<Ext: Impl> Extern for Ext {
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
-        values: &[ValueFlat],
-    ) -> Result<(Vec<ValueFlat>, bool), ExternError>
+        values: &[Value],
+    ) -> Result<(Vec<Value>, bool), ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -108,8 +108,8 @@ impl<Ext: Impl> Extern for Ext {
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
         name: &str,
         _targs: &[Typ],
-        values: &[ValueFlat],
-    ) -> Result<(ValueFlat, bool), ExternError>
+        values: &[Value],
+    ) -> Result<(Value, bool), ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -136,8 +136,8 @@ impl<Ext: Impl> Extern for Ext {
 /// Evaluates `static_assert`, the only compile-time known extern function.
 pub(crate) fn eval_func_lctk<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    values: &[ValueFlat],
-) -> Result<Vec<ValueFlat>, ExternError>
+    values: &[Value],
+) -> Result<Vec<Value>, ExternError>
 where
     Iface: Interface,
     Ext: Extern,

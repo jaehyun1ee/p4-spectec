@@ -6,7 +6,7 @@
 
 use std::borrow::Borrow;
 
-use crate::lang::data::{arena::Arena, value::ValueFlat};
+use crate::lang::data::{arena::Arena, value::Value};
 
 use crate::runtime::envs::interp::pl::ast_prepared as ast;
 
@@ -28,7 +28,7 @@ pub(super) fn assign_exp<'g>(
     arena: &mut Arena,
     ctx: Context<'g>,
     exp: &ast::Exp,
-    value: ValueFlat,
+    value: Value,
 ) -> Backtrack<Context<'g>> {
     let exp_shared = strip_exp(exp);
     shared::assign_exp(arena, ctx, &exp_shared, value)
@@ -39,7 +39,7 @@ pub(super) fn assign_exps<'g, T: Borrow<ast::Exp>>(
     arena: &mut Arena,
     ctx: Context<'g>,
     exps: &[T],
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<Context<'g>> {
     let exps_shared = exps
         .iter()
@@ -56,7 +56,7 @@ pub(super) fn assign_params<'g>(
     ctx_caller: &Context<'_>,
     mut ctx: Context<'g>,
     params: &[ast::Param],
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<Context<'g>> {
     // Argument count must match the parameters
     assert_eq!(params.len(), values.len(), "validated parameter argument arity");

@@ -13,7 +13,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{ValueFlat, make},
+        value::{Value, make},
     },
 };
 
@@ -55,9 +55,9 @@ impl InternetChecksum {
     pub fn clear<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -84,9 +84,9 @@ impl InternetChecksum {
     pub fn add<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -102,9 +102,9 @@ impl InternetChecksum {
     pub fn subtract<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -117,10 +117,10 @@ impl InternetChecksum {
     fn update<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
+        value_ctx: Value,
+        value_arch: Value,
         algo: &str,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -151,9 +151,9 @@ impl InternetChecksum {
     pub fn get<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -170,9 +170,9 @@ impl InternetChecksum {
     pub fn get_state<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -202,9 +202,9 @@ impl InternetChecksum {
     pub fn set_state<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,

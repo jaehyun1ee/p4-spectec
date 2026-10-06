@@ -7,7 +7,7 @@
 
 use crate::lang::{
     common::source::{Phrase, Span},
-    data::value::ValueFlat,
+    data::value::Value,
 };
 
 use crate::diagnostic::{Diagnostic, Label, Report};
@@ -23,9 +23,9 @@ pub enum Flow {
     /// Fell through, with the failures met so far.
     Cont(Vec<Report>),
     /// A function body returned a value.
-    Return(Phrase<ValueFlat>),
+    Return(Phrase<Value>),
     /// A relation body produced its outputs.
-    Result(Phrase<Vec<ValueFlat>>),
+    Result(Phrase<Vec<Value>>),
 }
 
 impl Flow {

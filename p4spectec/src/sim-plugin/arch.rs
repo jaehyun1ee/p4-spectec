@@ -8,7 +8,7 @@
 
 use num_bigint::BigInt;
 
-use crate::lang::data::value::ValueFlat;
+use crate::lang::data::value::Value;
 
 use crate::runner::{Extern, ExternError, Interface, Interpreter, RunnerContext};
 
@@ -29,7 +29,7 @@ pub trait Architecture: Extern {
     /// Initializes the pipeline for a parsed program.
     fn init_pipe<Interp, Iface>(
         ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        program: ValueFlat,
+        program: Value,
     ) -> Result<SimState, ExternError>
     where
         Iface: Interface,
@@ -48,10 +48,10 @@ pub trait Architecture: Extern {
     /// `mirroring_add`: maps a session to a port.
     fn add_mirror_session<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        _value_arch: ValueFlat,
+        _value_arch: Value,
         _session: usize,
         _port: usize,
-    ) -> Result<ValueFlat, ExternError>
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -66,10 +66,10 @@ pub trait Architecture: Extern {
     /// `mirroring_add_mc`: maps a session to a multicast group.
     fn add_mirror_session_mc<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        _value_arch: ValueFlat,
+        _value_arch: Value,
         _session: usize,
         _group: usize,
-    ) -> Result<ValueFlat, ExternError>
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -84,9 +84,9 @@ pub trait Architecture: Extern {
     /// `mc_mgrp_create`: creates a multicast group.
     fn mc_mgrp_create<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        _value_arch: ValueFlat,
+        _value_arch: Value,
         _group: usize,
-    ) -> Result<ValueFlat, ExternError>
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -101,10 +101,10 @@ pub trait Architecture: Extern {
     /// `mc_node_create`: creates a replication node over ports.
     fn mc_node_create<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        _value_arch: ValueFlat,
+        _value_arch: Value,
         _instance: usize,
         _ports: &[usize],
-    ) -> Result<ValueFlat, ExternError>
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -119,10 +119,10 @@ pub trait Architecture: Extern {
     /// `mc_node_associate`: adds a node to a group.
     fn mc_node_associate<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        _value_arch: ValueFlat,
+        _value_arch: Value,
         _group: usize,
         _handle: usize,
-    ) -> Result<ValueFlat, ExternError>
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -137,10 +137,10 @@ pub trait Architecture: Extern {
     /// `register_read`: reads a register cell.
     fn register_read<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        _value_arch: ValueFlat,
+        _value_arch: Value,
         _name: &str,
         _idx: usize,
-    ) -> Result<ValueFlat, ExternError>
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -155,11 +155,11 @@ pub trait Architecture: Extern {
     /// `register_write`: writes a register cell.
     fn register_write<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        _value_arch: ValueFlat,
+        _value_arch: Value,
         _name: &str,
         _idx: usize,
         _int: BigInt,
-    ) -> Result<ValueFlat, ExternError>
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -174,9 +174,9 @@ pub trait Architecture: Extern {
     /// `register_reset`: clears a register.
     fn register_reset<Interp, Iface>(
         _ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-        _value_arch: ValueFlat,
+        _value_arch: Value,
         _name: &str,
-    ) -> Result<ValueFlat, ExternError>
+    ) -> Result<Value, ExternError>
     where
         Iface: Interface,
         Interp: Interpreter<Iface, Self>,
@@ -199,7 +199,7 @@ macro_rules! delegate_pipe {
 
         fn init_pipe<Interp, Iface>(
             ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-            program: ValueFlat,
+            program: Value,
         ) -> Result<SimState, ExternError>
         where
             Iface: Interface,
@@ -229,9 +229,9 @@ macro_rules! delegate_method {
     ($pipe:path, $name:ident $(, $arg:ident: $typ:ty)*) => {
         fn $name<Interp, Iface>(
             ctx: &mut RunnerContext<'_, Interp, Iface, Self>,
-            value_arch: ValueFlat,
+            value_arch: Value,
             $($arg: $typ),*
-        ) -> Result<ValueFlat, ExternError>
+        ) -> Result<Value, ExternError>
         where
             Iface: Interface,
             Interp: Interpreter<Iface, Self>,

@@ -3,7 +3,7 @@
 //! Each architecture's `_init` relation takes the parsed program
 //! and returns the initial context and architecture values.
 
-use crate::lang::data::value::{ValueFlat, get};
+use crate::lang::data::value::{Value, get};
 
 use crate::runner::{Extern, ExternError, Interface, Interpreter, InterpreterError, RunnerContext};
 
@@ -12,8 +12,8 @@ use crate::runner::{Extern, ExternError, Interface, Interpreter, InterpreterErro
 /// Runs `EBPF_init` on a program.
 pub fn ebpf_init<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    program: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat), InterpreterError>
+    program: Value,
+) -> Result<(Value, Value), InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -29,8 +29,8 @@ where
 /// Runs `PSA_init` on a program.
 pub fn psa_init<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    program: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat), InterpreterError>
+    program: Value,
+) -> Result<(Value, Value), InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -46,8 +46,8 @@ where
 /// Runs `V1Model_init` on a program.
 pub fn v1model_init<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    program: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat), InterpreterError>
+    program: Value,
+) -> Result<(Value, Value), InterpreterError>
 where
     Iface: Interface,
     Ext: Extern,

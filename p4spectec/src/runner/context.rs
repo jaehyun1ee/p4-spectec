@@ -4,7 +4,7 @@
 //! An extern receives the same context and can reenter the interpreter
 //! after its own shared borrow has been copied into a local reference.
 
-use crate::lang::data::{arena::Arena, value::ValueFlat};
+use crate::lang::data::{arena::Arena, value::Value};
 
 use crate::lang::il::ast::{Id, Typ};
 
@@ -76,8 +76,8 @@ where
     pub fn call_program(
         &mut self,
         name: &str,
-        program: ValueFlat,
-    ) -> Result<Vec<ValueFlat>, InterpreterError> {
+        program: Value,
+    ) -> Result<Vec<Value>, InterpreterError> {
         Interp::eval_program(self, name, program)
     }
 
@@ -87,8 +87,8 @@ where
     pub fn call_rel(
         &mut self,
         name: &str,
-        values: &[ValueFlat],
-    ) -> Result<Vec<ValueFlat>, InterpreterError> {
+        values: &[Value],
+    ) -> Result<Vec<Value>, InterpreterError> {
         Interp::eval_rel(self, name, values)
     }
 
@@ -100,8 +100,8 @@ where
         &mut self,
         name: &str,
         targs: &[Typ],
-        values: &[ValueFlat],
-    ) -> Result<ValueFlat, InterpreterError> {
+        values: &[Value],
+    ) -> Result<Value, InterpreterError> {
         Interp::eval_func(self, name, targs, values)
     }
 
@@ -112,8 +112,8 @@ where
         &mut self,
         id: &Id,
         targs: &[Typ],
-        values: &[ValueFlat],
-    ) -> Result<(ValueFlat, bool), InterpreterError> {
+        values: &[Value],
+    ) -> Result<(Value, bool), InterpreterError> {
         let result = self.interface.call_builtin(self.arena, id, targs, values)?;
         Ok(result)
     }
@@ -122,8 +122,8 @@ where
     pub fn call_extern_rel(
         &mut self,
         name: &str,
-        values: &[ValueFlat],
-    ) -> Result<(Vec<ValueFlat>, bool), InterpreterError> {
+        values: &[Value],
+    ) -> Result<(Vec<Value>, bool), InterpreterError> {
         // Copy the shared borrow so the extern can take `self` mutably
         let external = self.external;
         external.eval_rel(self, name, values).map_err(Into::into)
@@ -134,8 +134,8 @@ where
         &mut self,
         name: &str,
         targs: &[Typ],
-        values: &[ValueFlat],
-    ) -> Result<(ValueFlat, bool), InterpreterError> {
+        values: &[Value],
+    ) -> Result<(Value, bool), InterpreterError> {
         // Copy the shared borrow so the extern can take `self` mutably
         let external = self.external;
         external

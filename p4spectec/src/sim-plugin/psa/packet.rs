@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
 
 use crate::lang::data::value::{
-    ValueFlat,
+    Value,
     external::{DecodeContext, EncodeContext},
 };
 
@@ -28,7 +28,7 @@ pub enum Entrypoint {
 pub struct Packet {
     /// Evaluation context.
     #[serde(state)]
-    pub value_ctx: ValueFlat,
+    pub value_ctx: Value,
     /// Packet input.
     pub packet_in: PacketIn,
     /// Which pipeline the packet should begin processing.

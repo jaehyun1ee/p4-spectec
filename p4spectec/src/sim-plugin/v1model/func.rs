@@ -14,7 +14,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{ValueFlat, make},
+        value::{Value, make},
     },
 };
 
@@ -53,9 +53,9 @@ use super::{V1Model, packet::CloneInfo, pipe};
 /// `extern void digest<T>(in bit<32> receiver, in T data);`
 pub fn digest<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -90,9 +90,9 @@ where
 /// `extern void mark_to_drop(inout standard_metadata_t standard_metadata);`
 pub fn mark_to_drop<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -153,9 +153,9 @@ where
 ///                              `in T base, in D data, in M max);`
 pub fn hash<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -209,7 +209,7 @@ pub fn adjust(base: &BigInt, rmax: &BigInt, int: &BigInt) -> Result<BigInt, Exte
 /// Hashes the `data` tuple, plus the unparsed payload if given, with `algo`.
 fn compute_checksum<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
+    value_ctx: Value,
     payload: Option<&PacketIn>,
 ) -> Result<BigInt, ExternError>
 where
@@ -240,10 +240,10 @@ where
 /// Shared body of `verify_checksum` and its `_with_payload` variant.
 fn do_verify_checksum<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
+    value_ctx: Value,
+    value_arch: Value,
     payload: Option<&PacketIn>,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -336,9 +336,9 @@ where
 /// `    in bool condition, in T data, in O checksum, HashAlgorithm algo);`
 pub fn verify_checksum<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -352,10 +352,10 @@ where
 /// Only supported in the VerifyChecksum control.
 pub fn verify_checksum_with_payload<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
+    value_ctx: Value,
+    value_arch: Value,
     packet_in: &PacketIn,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -367,10 +367,10 @@ where
 /// Shared body of `update_checksum` and its `_with_payload` variant.
 fn do_update_checksum<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
+    value_ctx: Value,
+    value_arch: Value,
     payload: Option<&PacketIn>,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -450,9 +450,9 @@ where
 /// `    in bool condition, in T data, inout O checksum, HashAlgorithm algo);`
 pub fn update_checksum<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -466,10 +466,10 @@ where
 /// Only supported in the ComputeChecksum control.
 pub fn update_checksum_with_payload<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
+    value_ctx: Value,
+    value_arch: Value,
     packet_in: &PacketIn,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -516,9 +516,9 @@ where
 /// `extern void resubmit_preserving_field_list(bit<8> index);`
 pub fn resubmit_preserving_field_list<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -569,9 +569,9 @@ where
 /// `extern void recirculate_preserving_field_list(bit<8> index);`
 pub fn recirculate_preserving_field_list<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -635,9 +635,9 @@ where
 ///                                         `in bit<32> session, bit<8> index);`
 pub fn clone_preserving_field_list<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -674,9 +674,9 @@ where
 /// `extern void log_msg<T>(string msg, in T data);`
 pub fn log_msg<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
@@ -701,7 +701,7 @@ where
 }
 
 /// Expands `{}` holes in `fmt` with `args`; `{{` and `}}` are literal braces.
-pub fn format_braces(arena: &Arena, fmt: &str, args: &[ValueFlat]) -> Result<String, ExternError> {
+pub fn format_braces(arena: &Arena, fmt: &str, args: &[Value]) -> Result<String, ExternError> {
     let mut chars = fmt.chars().peekable();
     let mut args = args.iter();
     let mut text = String::with_capacity(fmt.len());
@@ -739,9 +739,9 @@ pub fn format_braces(arena: &Arena, fmt: &str, args: &[ValueFlat]) -> Result<Str
 /// Prints `msg` with each `{}` replaced by the next element of `data`.
 pub fn log_msg_format<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, V1Model>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-) -> Result<(ValueFlat, ValueFlat, ValueFlat), ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+) -> Result<(Value, Value, Value), ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,

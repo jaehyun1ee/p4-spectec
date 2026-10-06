@@ -9,7 +9,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        value::{ValueFlat, make},
+        value::{Value, make},
     },
 };
 
@@ -29,8 +29,8 @@ pub fn init() {
 pub fn fresh_type_id(
     arena: &mut Arena,
     targs: &[Typ],
-    values: &[ValueFlat],
-) -> Result<ValueFlat, BuiltinError> {
+    values: &[Value],
+) -> Result<Value, BuiltinError> {
     extract::zero(targs)?;
     extract::zero(values)?;
     let counter = COUNTER.fetch_add(1, Ordering::Relaxed);

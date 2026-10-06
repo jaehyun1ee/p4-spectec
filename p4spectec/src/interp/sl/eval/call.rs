@@ -12,7 +12,7 @@ use std::{borrow::Cow, rc::Rc};
 use crate::lang::{
     data::{
         arena::Arena,
-        value::{ValueFlat, ValueFlatKind},
+        value::{Value, ValueFlatKind},
     },
     hints::input,
 };
@@ -46,14 +46,14 @@ use super::{assign, instr};
 
 /// What a function body produced: a value, or a tail call to make.
 enum FuncResult {
-    Return(ValueFlat),
-    TailCall(ast::Id, Vec<ast::Typ>, Vec<ValueFlat>),
+    Return(Value),
+    TailCall(ast::Id, Vec<ast::Typ>, Vec<Value>),
 }
 
 /// What a relation body produced: outputs, or a tail call to make.
 enum RelResult {
-    Result(Vec<ValueFlat>),
-    TailCall(ast::Id, Vec<ValueFlat>),
+    Result(Vec<Value>),
+    TailCall(ast::Id, Vec<Value>),
 }
 
 // = Input and output checks
@@ -63,7 +63,7 @@ pub(in crate::interp::sl) fn check_rel_inputs(
     arena: &Arena,
     ctx: &Context<'_>,
     id: &ast::Id,
-    values: &[ValueFlat],
+    values: &[Value],
     guard: bool,
 ) -> Backtrack<()> {
     let rel = unwrap_from_result!(ctx.find_rel(id), &id.span);
@@ -97,7 +97,7 @@ pub(in crate::interp::sl) fn check_func_inputs(
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
-    values: &[ValueFlat],
+    values: &[Value],
     guard: bool,
 ) -> Backtrack<()> {
     let typ = unwrap_from_result!(ctx.find_func_typ(id), &id.span);
@@ -125,7 +125,7 @@ fn check_values(
     ctx: &Context<'_>,
     id: &ast::Id,
     typs: &[ast::Typ],
-    values: &[ValueFlat],
+    values: &[Value],
     diagnostic: impl FnOnce() -> Diagnostic,
 ) -> Backtrack<()> {
     // Subtyping resolves type names and function types through the context
@@ -150,7 +150,7 @@ fn check_func_output(
     tparams: &[ast::TParam],
     typ: &ast::Typ,
     targs: &[ast::Typ],
-    value: &ValueFlat,
+    value: &Value,
 ) -> Backtrack<()> {
     // Substitute the type arguments into the declared result type
     let theta = unwrap_from_result!(typ::Theta::from_lists(tparams, targs), &id.span);
@@ -181,7 +181,7 @@ pub(in crate::interp::sl) fn cache_func<Iface: Interface, Ext: Extern>(
     runner_ctx: &RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> bool {
     runner_ctx.interp().config.cache
         && matches!(ctx.find_func_with_scope(id), Ok((Scope::Global, func))
@@ -198,8 +198,8 @@ pub fn invoke_rel<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     id: &ast::Id,
-    values: &[ValueFlat],
-) -> Backtrack<Vec<ValueFlat>> {
+    values: &[Value],
+) -> Backtrack<Vec<Value>> {
     let mut id = Cow::Borrowed(id);
     let mut values = Cow::Borrowed(values);
     let mut ids_pending: Vec<ast::Id> = Vec::new();
@@ -273,8 +273,8 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     id: &ast::Id,
     rel: &ast::ExternRel,
-    values: &[ValueFlat],
-) -> Backtrack<Vec<ValueFlat>> {
+    values: &[Value],
+) -> Backtrack<Vec<Value>> {
     // The host reports whether the call had a side effect
     let result = runner_ctx.call_extern_rel(&id.node, values);
     runner_ctx
@@ -309,7 +309,7 @@ fn invoke_defined_rel<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     layout: &Rc<FrameLayout>,
     rel: &ast::DefinedRel,
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<RelResult> {
     // Inputs bind into a fresh frame
     let ctx = unwrap!(assign::assign_exps(
@@ -348,8 +348,8 @@ pub fn invoke_func<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     id: &ast::Id,
     targs: &[ast::Typ],
-    values: &[ValueFlat],
-) -> Backtrack<ValueFlat> {
+    values: &[Value],
+) -> Backtrack<Value> {
     let mut id = Cow::Borrowed(id);
     let mut targs = Cow::Borrowed(targs);
     let mut values = Cow::Borrowed(values);
@@ -428,8 +428,8 @@ fn invoke_extern_func<Iface: Interface, Ext: Extern>(
     id: &ast::Id,
     extern_func: &ast::ExternFunc,
     targs: &[ast::Typ],
-    values: &[ValueFlat],
-) -> Backtrack<ValueFlat> {
+    values: &[Value],
+) -> Backtrack<Value> {
     // The host reports whether the call had a side effect
     let result = runner_ctx.call_extern_func(&id.node, &[], values);
     runner_ctx
@@ -462,8 +462,8 @@ fn invoke_builtin_func<Iface: Interface, Ext: Extern>(
     id: &ast::Id,
     builtin_func: &ast::BuiltinFunc,
     targs: &[ast::Typ],
-    values: &[ValueFlat],
-) -> Backtrack<ValueFlat> {
+    values: &[Value],
+) -> Backtrack<Value> {
     // Builtins report effects like host calls
     let result = runner_ctx.call_builtin(id, targs, values);
     runner_ctx
@@ -499,7 +499,7 @@ fn invoke_table_func<Iface: Interface, Ext: Extern>(
     ctx: &Context<'_>,
     layout: &Rc<FrameLayout>,
     func: &ast::TableFunc,
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<FuncResult> {
     // Parameters bind into a fresh frame
     let ctx_local = unwrap!(assign::assign_params(
@@ -538,7 +538,7 @@ fn invoke_defined_func<Iface: Interface, Ext: Extern>(
     id: &ast::Id,
     func: &ast::DefinedFunc,
     targs: &[ast::Typ],
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<FuncResult> {
     // Bind type arguments in the callee frame
     let ctx_local =

@@ -9,7 +9,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{ValueFlat, make},
+        value::{Value, make},
     },
 };
 
@@ -41,11 +41,7 @@ impl CounterArray {
     /// ```p4
     /// CounterArray(bit<32> max_index, bool sparse);
     /// ```
-    pub fn init(
-        arena: &Arena,
-        value_ids: ValueFlat,
-        value_args: ValueFlat,
-    ) -> Result<Self, ExternError> {
+    pub fn init(arena: &Arena, value_ids: Value, value_args: Value) -> Result<Self, ExternError> {
         let args = args::assoc(arena, value_ids, value_args)?;
         let value_max = args::find(&args, "max_index")?;
         let value_sparse = args::find(&args, "sparse")?;
@@ -65,9 +61,9 @@ impl CounterArray {
     pub fn increment<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -87,9 +83,9 @@ impl CounterArray {
     pub fn add<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -111,11 +107,11 @@ impl CounterArray {
     fn update<Interp, Iface, Ext>(
         mut self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
+        value_ctx: Value,
+        value_arch: Value,
         idx: usize,
         int: u32,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,

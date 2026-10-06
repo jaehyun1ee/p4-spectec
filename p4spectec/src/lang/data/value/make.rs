@@ -17,7 +17,7 @@ use crate::lang::{
     },
 };
 
-use super::{ValueCase, ValueError, ValueField, ValueFlat, ValueFlatKind};
+use super::{Value, ValueCase, ValueError, ValueField, ValueFlatKind};
 
 // - General
 
@@ -27,14 +27,14 @@ pub fn new(
     kind: ValueFlatKind,
     typ: Rc<TypKind>,
     span: Span,
-) -> Result<ValueFlat, ValueError> {
+) -> Result<Value, ValueError> {
     arena.alloc(kind, typ, span)
 }
 
 // - Primitives
 
 /// A boolean.
-pub fn bool(arena: &mut Arena, value: bool, span: Span) -> Result<ValueFlat, ValueError> {
+pub fn bool(arena: &mut Arena, value: bool, span: Span) -> Result<Value, ValueError> {
     thread_local! {
         static TYP: Rc<TypKind> = Rc::new(TypKind::Bool);
     }
@@ -42,7 +42,7 @@ pub fn bool(arena: &mut Arena, value: bool, span: Span) -> Result<ValueFlat, Val
 }
 
 /// A number, typed by its kind.
-pub fn num(arena: &mut Arena, value: Number, span: Span) -> Result<ValueFlat, ValueError> {
+pub fn num(arena: &mut Arena, value: Number, span: Span) -> Result<Value, ValueError> {
     thread_local! {
         static TYP_NAT: Rc<TypKind> = Rc::new(TypKind::Num(num::Typ::Nat));
         static TYP_INT: Rc<TypKind> = Rc::new(TypKind::Num(num::Typ::Int));
@@ -55,21 +55,17 @@ pub fn num(arena: &mut Arena, value: Number, span: Span) -> Result<ValueFlat, Va
 }
 
 /// A natural number.
-pub fn nat(arena: &mut Arena, value: num::Natural, span: Span) -> Result<ValueFlat, ValueError> {
+pub fn nat(arena: &mut Arena, value: num::Natural, span: Span) -> Result<Value, ValueError> {
     num(arena, Number::Nat(value), span)
 }
 
 /// An integer.
-pub fn int(
-    arena: &mut Arena,
-    value: num_bigint::BigInt,
-    span: Span,
-) -> Result<ValueFlat, ValueError> {
+pub fn int(arena: &mut Arena, value: num_bigint::BigInt, span: Span) -> Result<Value, ValueError> {
     num(arena, Number::Int(value), span)
 }
 
 /// A text.
-pub fn text(arena: &mut Arena, value: String, span: Span) -> Result<ValueFlat, ValueError> {
+pub fn text(arena: &mut Arena, value: String, span: Span) -> Result<Value, ValueError> {
     thread_local! {
         static TYP: Rc<TypKind> = Rc::new(TypKind::Text);
     }
@@ -84,7 +80,7 @@ pub fn structure(
     typ: Rc<TypKind>,
     value_fields: Vec<ValueField>,
     span: Span,
-) -> Result<ValueFlat, ValueError> {
+) -> Result<Value, ValueError> {
     new(arena, ValueFlatKind::Struct(value_fields), typ, span)
 }
 
@@ -96,9 +92,9 @@ pub fn structure(
 pub fn case(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    mixfix: Mixfix<Rc<MixopTree>, ValueFlat>,
+    mixfix: Mixfix<Rc<MixopTree>, Value>,
     span: Span,
-) -> Result<ValueFlat, ValueError> {
+) -> Result<Value, ValueError> {
     let (mixop, values) = mixfix.into_parts();
     let arena_mixop = arena.arena_mixop_mut();
     let shape = arena_mixop.intern_shared(&mixop)?;
@@ -140,9 +136,9 @@ pub(crate) use case_shaped;
 pub fn tuple(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    values: Vec<ValueFlat>,
+    values: Vec<Value>,
     span: Span,
-) -> Result<ValueFlat, ValueError> {
+) -> Result<Value, ValueError> {
     new(arena, ValueFlatKind::Tuple(values), typ, span)
 }
 
@@ -150,9 +146,9 @@ pub fn tuple(
 pub fn opt(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    value: Option<ValueFlat>,
+    value: Option<Value>,
     span: Span,
-) -> Result<ValueFlat, ValueError> {
+) -> Result<Value, ValueError> {
     new(arena, ValueFlatKind::Opt(value), typ, span)
 }
 
@@ -160,9 +156,9 @@ pub fn opt(
 pub fn list(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    values: Vec<ValueFlat>,
+    values: Vec<Value>,
     span: Span,
-) -> Result<ValueFlat, ValueError> {
+) -> Result<Value, ValueError> {
     new(arena, ValueFlatKind::List(values), typ, span)
 }
 
@@ -176,7 +172,7 @@ pub fn func(
     typs_params: Vec<Typ>,
     typ_ret: Typ,
     span: Span,
-) -> Result<ValueFlat, ValueError> {
+) -> Result<Value, ValueError> {
     let typ = typ::make::func(tparams, typs_params, typ_ret).node;
     new(arena, ValueFlatKind::Func(id), Rc::new(typ), span)
 }
@@ -189,6 +185,6 @@ pub fn external(
     typ: Rc<TypKind>,
     json: Rc<json>,
     span: Span,
-) -> Result<ValueFlat, ValueError> {
+) -> Result<Value, ValueError> {
     new(arena, ValueFlatKind::Extern(json), typ, span)
 }

@@ -5,7 +5,7 @@
 //! so extern calls can reenter without a second mutable interpreter borrow.
 //! Mismatches allow another candidate; host failures always abort.
 
-use crate::lang::{common::source::Span, data::value::ValueFlat};
+use crate::lang::{common::source::Span, data::value::Value};
 
 use crate::lang::il::ast::Typ;
 
@@ -115,8 +115,8 @@ where
     fn eval_program(
         ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
-        program: ValueFlat,
-    ) -> Result<Vec<ValueFlat>, InterpreterError>;
+        program: Value,
+    ) -> Result<Vec<Value>, InterpreterError>;
 
     /// Calls a relation by name.
     ///
@@ -125,8 +125,8 @@ where
     fn eval_rel(
         ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
-        values: &[ValueFlat],
-    ) -> Result<Vec<ValueFlat>, InterpreterError>;
+        values: &[Value],
+    ) -> Result<Vec<Value>, InterpreterError>;
 
     /// Calls a function by name with type arguments.
     ///
@@ -137,6 +137,6 @@ where
         ctx: &mut RunnerContext<'_, Self, Iface, Ext>,
         name: &str,
         targs: &[Typ],
-        values: &[ValueFlat],
-    ) -> Result<ValueFlat, InterpreterError>;
+        values: &[Value],
+    ) -> Result<Value, InterpreterError>;
 }

@@ -62,7 +62,7 @@ pub type TypCase = sl::ast::TypCase;
 
 // Values
 
-pub type ValueFlat = sl::ast::ValueFlat;
+pub type Value = sl::ast::Value;
 
 // Operators
 

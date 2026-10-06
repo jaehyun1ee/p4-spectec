@@ -11,7 +11,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{ValueFlat, make},
+        value::{Value, make},
     },
 };
 
@@ -36,9 +36,9 @@ impl HashExtern {
     /// ```
     pub fn init(
         arena: &Arena,
-        _value_targs: ValueFlat,
-        value_ids: ValueFlat,
-        value_args: ValueFlat,
+        _value_targs: Value,
+        value_ids: Value,
+        value_args: Value,
     ) -> Result<Self, ExternError> {
         let args = args::assoc(arena, value_ids, value_args)?;
         let value_algo = args::find(&args, "algo")?;
@@ -68,9 +68,9 @@ impl HashExtern {
     pub fn get_hash<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -95,9 +95,9 @@ impl HashExtern {
     pub fn get_hash_adjust<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,
@@ -123,10 +123,10 @@ impl HashExtern {
     fn return_hash<Interp, Iface, Ext>(
         self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
+        value_ctx: Value,
+        value_arch: Value,
         int_hash: BigInt,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,

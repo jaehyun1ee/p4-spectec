@@ -12,7 +12,7 @@ use hashbrown::{Equivalent, HashMap};
 use crate::lang::data::{
     arena::Arena,
     intern::CanonId,
-    value::{ValueFlat, ValueFlatKind},
+    value::{Value, ValueFlatKind},
 };
 
 // = Call identity
@@ -26,7 +26,7 @@ pub(crate) struct CallKey {
 
 impl CallKey {
     /// Builds the key; type arguments and annotations never distinguish calls.
-    pub(crate) fn new(arena: &Arena, name: &str, values: &[ValueFlat]) -> Self {
+    pub(crate) fn new(arena: &Arena, name: &str, values: &[Value]) -> Self {
         Self {
             name: name.to_owned(),
             values: values.iter().map(|value| arena.canon_id(value)).collect(),
@@ -38,7 +38,7 @@ impl CallKey {
 struct CallQuery<'a> {
     arena: &'a Arena,
     name: &'a str,
-    values: &'a [ValueFlat],
+    values: &'a [Value],
 }
 
 impl Hash for CallQuery<'_> {
@@ -70,21 +70,16 @@ impl Equivalent<CallKey> for CallQuery<'_> {
 #[derive(Default)]
 pub struct Cache {
     /// Function results by call.
-    pub(crate) funcs: HashMap<CallKey, ValueFlat, RandomState>,
+    pub(crate) funcs: HashMap<CallKey, Value, RandomState>,
     /// Relation outputs by call.
-    pub(crate) rels: HashMap<CallKey, Vec<ValueFlat>, RandomState>,
+    pub(crate) rels: HashMap<CallKey, Vec<Value>, RandomState>,
     /// One flag per active invocation: whether it had a side effect so far.
     effects: Vec<bool>,
 }
 
 impl Cache {
     /// Looks up a function without allocating an owned call key.
-    pub(crate) fn find_func(
-        &self,
-        arena: &Arena,
-        name: &str,
-        values: &[ValueFlat],
-    ) -> Option<&ValueFlat> {
+    pub(crate) fn find_func(&self, arena: &Arena, name: &str, values: &[Value]) -> Option<&Value> {
         self.funcs.get(&CallQuery { arena, name, values })
     }
 
@@ -93,8 +88,8 @@ impl Cache {
         &self,
         arena: &Arena,
         name: &str,
-        values: &[ValueFlat],
-    ) -> Option<&Vec<ValueFlat>> {
+        values: &[Value],
+    ) -> Option<&Vec<Value>> {
         self.rels.get(&CallQuery { arena, name, values })
     }
 

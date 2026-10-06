@@ -5,7 +5,7 @@
 
 use crate::lang::data::{
     arena::Arena,
-    value::{ValueError, ValueFlat, get},
+    value::{Value, ValueError, get},
 };
 
 use crate::runner::ExternError;
@@ -17,9 +17,9 @@ use crate::sim_plugin::error;
 /// Pairs parameter names with argument values; the counts must match.
 pub fn assoc(
     arena: &Arena,
-    value_ids: ValueFlat,
-    value_args: ValueFlat,
-) -> Result<Vec<(String, ValueFlat)>, ExternError> {
+    value_ids: Value,
+    value_args: Value,
+) -> Result<Vec<(String, Value)>, ExternError> {
     // Names are texts, arguments any values
     let names = get::list(arena, &value_ids)?
         .iter()
@@ -36,7 +36,7 @@ pub fn assoc(
 }
 
 /// Finds the first argument with the requested name.
-pub fn find(args: &[(String, ValueFlat)], name: &str) -> Result<ValueFlat, ExternError> {
+pub fn find(args: &[(String, Value)], name: &str) -> Result<Value, ExternError> {
     args.iter()
         .find(|(name_arg, _)| name_arg == name)
         .map(|(_, value)| *value)

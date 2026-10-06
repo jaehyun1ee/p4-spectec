@@ -16,7 +16,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         notation::MixopMatch,
-        value::{ValueFlat, ValueFlatKind},
+        value::{Value, ValueFlatKind},
     },
 };
 
@@ -63,7 +63,7 @@ pub fn sub<'env, P: Stage, F>(
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
     typ: &Typ,
-    value: &ValueFlat,
+    value: &Value,
 ) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncTyp>,
@@ -217,7 +217,7 @@ pub fn subs<'env, P: Stage, F>(
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
     typs: &[Typ],
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncTyp>,
@@ -236,7 +236,7 @@ fn subs_inner<'env, 'typ, 'value, P: Stage, F, T, V>(
 where
     F: Fn(&str) -> Option<FuncTyp>,
     T: ExactSizeIterator<Item = &'typ Typ>,
-    V: ExactSizeIterator<Item = &'value ValueFlat>,
+    V: ExactSizeIterator<Item = &'value Value>,
 {
     if typs.len() != values.len() {
         return Ok(false);
@@ -257,7 +257,7 @@ pub fn check<'env, P: Stage, F>(
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
     subcheck: &Subcheck<P>,
-    value: &ValueFlat,
+    value: &Value,
 ) -> Result<bool, MatchError>
 where
     F: Fn(&str) -> Option<FuncTyp>,

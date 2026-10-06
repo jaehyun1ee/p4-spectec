@@ -6,7 +6,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{ValueFlat, external::encode, make},
+        value::{Value, external::encode, make},
     },
 };
 
@@ -24,7 +24,7 @@ pub struct Dummy;
 /// The initial architecture state: an encoded unit value.
 pub(super) fn init_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Dummy>,
@@ -44,8 +44,8 @@ where
 /// Every object starts as an encoded unit value.
 pub(super) fn eval_extern_init<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
-    _values: &[ValueFlat],
-) -> Result<ValueFlat, ExternError>
+    _values: &[Value],
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Dummy>,
@@ -63,8 +63,8 @@ where
 /// Extern function calls are unsupported.
 pub(super) fn eval_extern_func_call<Interp, Iface>(
     _ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
-    _values: &[ValueFlat],
-) -> Result<Vec<ValueFlat>, ExternError>
+    _values: &[Value],
+) -> Result<Vec<Value>, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Dummy>,
@@ -80,8 +80,8 @@ where
 /// Extern method calls are unsupported.
 pub(super) fn eval_extern_method_call<Interp, Iface>(
     _ctx: &mut RunnerContext<'_, Interp, Iface, Dummy>,
-    _values: &[ValueFlat],
-) -> Result<Vec<ValueFlat>, ExternError>
+    _values: &[Value],
+) -> Result<Vec<Value>, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Dummy>,

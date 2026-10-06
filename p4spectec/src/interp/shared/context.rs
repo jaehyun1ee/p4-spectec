@@ -13,7 +13,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{ValueFlat, get, make},
+        value::{Value, get, make},
         var::{SlotIdx, VarSlot},
     },
 };
@@ -49,7 +49,7 @@ pub trait ReadContext {
     // == Values
 
     /// Finds the value bound at `slot`, if any.
-    fn find_value_at_slot(&self, slot: SlotIdx) -> Option<&ValueFlat>;
+    fn find_value_at_slot(&self, slot: SlotIdx) -> Option<&Value>;
     /// Finds the slot of `var` under one more iteration `iter`.
     fn find_var_iterated(&self, var: &VarSlot, iter: ast::Iter) -> VarSlot;
 
@@ -88,7 +88,7 @@ pub trait WriteContext: ReadContext + Clone {
     // == Values
 
     /// Binds a value to a slot.
-    fn add_value_at_slot(&mut self, slot: SlotIdx, value: ValueFlat);
+    fn add_value_at_slot(&mut self, slot: SlotIdx, value: Value);
     /// Drops every value binding.
     fn clear_value_bindings(&mut self);
 
@@ -107,14 +107,14 @@ pub trait IterContext: WriteContext {
         &self,
         arena: &'arena Arena,
         vars: &[ast::Var],
-    ) -> Result<Vec<&'arena [ValueFlat]>, Error>;
+    ) -> Result<Vec<&'arena [Value]>, Error>;
 
     /// Finds the option values bound to `vars`, all present or all absent.
     fn find_opt_values_by_var(
         &self,
         arena: &Arena,
         vars: &[ast::Var],
-    ) -> Result<Option<Vec<ValueFlat>>, Error>;
+    ) -> Result<Option<Vec<Value>>, Error>;
 
     // == Output bindings
 
@@ -122,7 +122,7 @@ pub trait IterContext: WriteContext {
     fn collect_values_by_var(
         &self,
         vars: &[ast::Var],
-        values_by_var: &mut [Vec<ValueFlat>],
+        values_by_var: &mut [Vec<Value>],
     ) -> Backtrack<()>;
 
     /// Binds each variable to the list of its column.
@@ -130,7 +130,7 @@ pub trait IterContext: WriteContext {
         &mut self,
         arena: &mut Arena,
         vars: &[ast::Var],
-        values_by_var: Vec<Vec<ValueFlat>>,
+        values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()>;
 
     /// Binds each variable to the option built from its column.
@@ -138,7 +138,7 @@ pub trait IterContext: WriteContext {
         &mut self,
         arena: &mut Arena,
         vars: &[ast::Var],
-        values_by_var: Vec<Vec<ValueFlat>>,
+        values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()>;
 }
 
@@ -225,7 +225,7 @@ struct Local<F> {
     tdenv: TDEnv,
     /// Function arguments bound to their prepared definitions.
     fenv: IdMap<Rc<Callable<F>>>,
-    /// ValueFlat slots of the current callable.
+    /// Value slots of the current callable.
     frame: Frame,
 }
 
@@ -360,7 +360,7 @@ impl<R, F: FuncSignature> ReadContext for Context<'_, R, F> {
 
     // - Values
 
-    fn find_value_at_slot(&self, slot: SlotIdx) -> Option<&ValueFlat> {
+    fn find_value_at_slot(&self, slot: SlotIdx) -> Option<&Value> {
         self.local.frame.get(slot)
     }
 
@@ -430,7 +430,7 @@ impl<R, F: FuncSignature> WriteContext for Context<'_, R, F> {
 
     // - Values
 
-    fn add_value_at_slot(&mut self, slot: SlotIdx, value: ValueFlat) {
+    fn add_value_at_slot(&mut self, slot: SlotIdx, value: Value) {
         self.local.frame.set(slot, value);
     }
 
@@ -465,7 +465,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
         &self,
         arena: &'a Arena,
         vars: &[ast::Var],
-    ) -> Result<Vec<&'a [ValueFlat]>, Error> {
+    ) -> Result<Vec<&'a [Value]>, Error> {
         let mut values_by_var = Vec::with_capacity(vars.len());
         for var in vars {
             // Every variable must be bound
@@ -496,7 +496,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
         &self,
         arena: &Arena,
         vars: &[ast::Var],
-    ) -> Result<Option<Vec<ValueFlat>>, Error> {
+    ) -> Result<Option<Vec<Value>>, Error> {
         let mut values = Vec::with_capacity(vars.len());
         for var in vars {
             // Every variable must be bound
@@ -524,7 +524,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
     fn collect_values_by_var(
         &self,
         vars: &[ast::Var],
-        values_by_var: &mut [Vec<ValueFlat>],
+        values_by_var: &mut [Vec<Value>],
     ) -> Backtrack<()> {
         // Append this row's value of each variable
         for (var, values) in vars.iter().zip(values_by_var) {
@@ -545,7 +545,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
         &mut self,
         arena: &mut Arena,
         vars: &[ast::Var],
-        values_by_var: Vec<Vec<ValueFlat>>,
+        values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(values_by_var) {
             let typ = typ::make::iterate(var.var.typ.clone(), &var.var.iters);
@@ -561,7 +561,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
         &mut self,
         arena: &mut Arena,
         vars: &[ast::Var],
-        values_by_var: Vec<Vec<ValueFlat>>,
+        values_by_var: Vec<Vec<Value>>,
     ) -> Backtrack<()> {
         for (var, values) in vars.iter().zip(values_by_var) {
             let typ = typ::make::iterate(var.var.typ.clone(), &var.var.iters);

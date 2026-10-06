@@ -29,7 +29,7 @@ use crate::lang::{
         arena::Arena,
         typ,
         value::{
-            ValueError, ValueFlat,
+            Value, ValueError,
             external::{DecodeContext, EncodeContext, decode_with, encode_with},
             get, make,
         },
@@ -101,11 +101,7 @@ impl ObjectState {
     // - Encoding
 
     /// Encodes the object as the specification's `objectState` external value.
-    pub fn to_value(
-        &self,
-        arena: &mut Arena,
-        encoding: Encoding,
-    ) -> Result<ValueFlat, ExternError> {
+    pub fn to_value(&self, arena: &mut Arena, encoding: Encoding) -> Result<Value, ExternError> {
         let payload = encode_with(arena, encoding, self)?;
         let typ = typ::make::var(
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
@@ -120,7 +116,7 @@ impl ObjectState {
     pub fn from_value(
         arena: &mut Arena,
         encoding: Encoding,
-        value: &ValueFlat,
+        value: &Value,
     ) -> Result<Self, ExternError> {
         let json = get::external(arena, value)?.clone();
         decode_with(arena, encoding, json.as_ref()).map_err(ExternError::from)
@@ -147,7 +143,7 @@ pub fn transform_stf_stmt(mut stmt: Statement) -> Statement {
 /// The initial architecture state: empty queue, tables, and groups.
 pub(super) fn init_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -159,7 +155,7 @@ where
 /// Decodes the architecture state stored in `value_arch`.
 pub fn find_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
 ) -> Result<Arch, ExternError>
 where
     Iface: Interface,
@@ -173,9 +169,9 @@ where
 /// Encodes `arch` back into `value_arch`.
 pub fn update_arch_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
     arch: &Arch,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -190,8 +186,8 @@ where
 /// Decodes the object named `value_id` from `value_arch`.
 pub fn find_object_state<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
-    value_id: ValueFlat,
+    value_arch: Value,
+    value_id: Value,
 ) -> Result<ObjectState, ExternError>
 where
     Iface: Interface,
@@ -205,7 +201,7 @@ where
 /// The ingress `packet_in` object.
 fn find_ingress_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
 ) -> Result<PacketIn, ExternError>
 where
     Iface: Interface,
@@ -230,7 +226,7 @@ where
 /// The ingress `packet_out` object.
 fn find_ingress_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
 ) -> Result<PacketOut, ExternError>
 where
     Iface: Interface,
@@ -255,7 +251,7 @@ where
 /// The egress `packet_in` object.
 fn find_egress_packet_in<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
 ) -> Result<PacketIn, ExternError>
 where
     Iface: Interface,
@@ -280,7 +276,7 @@ where
 /// The egress `packet_out` object.
 fn find_egress_packet_out<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
 ) -> Result<PacketOut, ExternError>
 where
     Iface: Interface,
@@ -305,7 +301,7 @@ where
 /// The `Register` object named `name`, whose id is the dotted path.
 fn find_register<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
     name: &str,
 ) -> Result<Register, ExternError>
 where
@@ -332,10 +328,10 @@ where
 /// Writes the `Register` object named `name` back.
 fn update_register<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
     name: &str,
     reg: Register,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -363,8 +359,8 @@ where
 /// Core objects and unknown names get an empty state.
 pub(super) fn eval_extern_init<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    values: &[ValueFlat],
-) -> Result<ValueFlat, ExternError>
+    values: &[Value],
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -417,8 +413,8 @@ where
 /// Dispatches an extern function call; only `verify` is supported.
 pub(super) fn eval_extern_func_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    values: &[ValueFlat],
-) -> Result<Vec<ValueFlat>, ExternError>
+    values: &[Value],
+) -> Result<Vec<Value>, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -449,8 +445,8 @@ where
 /// The object is decoded, updated by its method, and written back.
 pub(super) fn eval_extern_method_call<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    values: &[ValueFlat],
-) -> Result<Vec<ValueFlat>, ExternError>
+    values: &[Value],
+) -> Result<Vec<Value>, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -597,10 +593,10 @@ where
 /// Maps clone session `session` to multicast group `group`.
 pub fn add_mirror_session_mc<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
     session: usize,
     group: usize,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -615,9 +611,9 @@ where
 /// Creates multicast group `group`.
 pub fn mc_mgrp_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
     group: usize,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -630,10 +626,10 @@ where
 /// Creates a multicast node with instance id `instance` on `ports`.
 pub fn mc_node_create<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
     instance: usize,
     ports: &[usize],
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -646,10 +642,10 @@ where
 /// Adds node `handle` to multicast group `group`.
 pub fn mc_node_associate<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
     group: usize,
     handle: usize,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -664,10 +660,10 @@ where
 /// Reads register `name` at `idx`; the source simulator prints nothing.
 pub fn register_read<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
     name: &str,
     idx: usize,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -684,11 +680,11 @@ where
 /// Writes `int` to register `name` at `idx`; out of range is ignored.
 pub fn register_write<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
     name: &str,
     idx: usize,
     int: BigInt,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -706,9 +702,9 @@ where
 /// Resets every element of register `name` to the default.
 pub fn register_reset<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    value_arch: ValueFlat,
+    value_arch: Value,
     name: &str,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -1014,7 +1010,7 @@ where
 /// Instantiates the program and returns the initial simulator state.
 pub fn init_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
-    program: ValueFlat,
+    program: Value,
 ) -> Result<SimState, ExternError>
 where
     Iface: Interface,
@@ -1593,7 +1589,7 @@ where
 fn drive_ig<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -1608,7 +1604,7 @@ where
 fn drive_id<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -1623,7 +1619,7 @@ where
 pub fn drive_ingress_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -1704,7 +1700,7 @@ where
 fn drive_eg<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -1719,7 +1715,7 @@ where
 fn drive_ed<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,
@@ -1734,7 +1730,7 @@ where
 pub fn drive_egress_pipe<Interp, Iface>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Psa>,
     state: &mut SimState,
-) -> Result<ValueFlat, ExternError>
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Interp: Interpreter<Iface, Psa>,

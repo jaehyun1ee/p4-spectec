@@ -6,7 +6,7 @@
 
 use std::borrow::Borrow;
 
-use crate::lang::data::value::ValueFlat;
+use crate::lang::data::value::Value;
 
 use crate::runtime::envs::interp::pl::ast_prepared as ast;
 
@@ -25,7 +25,7 @@ pub(super) fn eval_exp<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, PlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     exp: &ast::Exp,
-) -> Backtrack<ValueFlat> {
+) -> Backtrack<Value> {
     let exp_shared = strip_exp(exp);
     shared::eval_exp(runner_ctx, ctx, &exp_shared)
 }
@@ -35,7 +35,7 @@ pub(super) fn eval_exps<Iface: Interface, Ext: Extern, T: Borrow<ast::Exp>>(
     runner_ctx: &mut RunnerContext<'_, PlInterp, Iface, Ext>,
     ctx: &Context<'_>,
     exps: &[T],
-) -> Backtrack<Vec<ValueFlat>> {
+) -> Backtrack<Vec<Value>> {
     let exps_shared = exps
         .iter()
         .map(|exp| strip_exp(exp.borrow()))

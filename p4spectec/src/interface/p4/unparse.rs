@@ -18,7 +18,7 @@ use crate::lang::{
             MixopTree,
             walk::{self, Piece},
         },
-        value::{ValueCase, ValueFlat, ValueFlatKind},
+        value::{Value, ValueCase, ValueFlatKind},
     },
     hints::alter::{self, AlterHint, Renderer},
     traits::print::Print,
@@ -116,7 +116,7 @@ impl P4Unparser {
     // - Rendering
 
     /// Renders a value as P4 text.
-    pub fn render(&self, arena: &Arena, value: &ValueFlat) -> Result<String, P4UnparseError> {
+    pub fn render(&self, arena: &Arena, value: &Value) -> Result<String, P4UnparseError> {
         match arena.kind(value) {
             // Primitives print as themselves
             ValueFlatKind::Bool(value) => Ok(value.to_string()),
@@ -169,7 +169,7 @@ impl P4Unparser {
         &self,
         arena: &Arena,
         hint: &AlterHint,
-        values: &[&ValueFlat],
+        values: &[&Value],
     ) -> Result<String, P4UnparseError> {
         let rendered = alter::alternate(hint, values, &ValueRenderer(self, arena));
         match rendered {
@@ -182,7 +182,7 @@ impl P4Unparser {
     fn render_values(
         &self,
         arena: &Arena,
-        values: &[ValueFlat],
+        values: &[Value],
         separator: &str,
     ) -> Result<String, P4UnparseError> {
         let rendered = values
@@ -245,7 +245,7 @@ impl P4Unparser {
 /// The print-hint renderer producing P4 text.
 struct ValueRenderer<'a>(&'a P4Unparser, &'a Arena);
 
-impl Renderer<&ValueFlat> for ValueRenderer<'_> {
+impl Renderer<&Value> for ValueRenderer<'_> {
     type Output = Result<String, P4UnparseError>;
 
     fn empty(&self) -> Self::Output {
@@ -280,7 +280,7 @@ impl Renderer<&ValueFlat> for ValueRenderer<'_> {
         Ok(Print::to_string(exp))
     }
 
-    fn item(&self, item: &&ValueFlat) -> Self::Output {
+    fn item(&self, item: &&Value) -> Self::Output {
         self.0.render(self.1, item)
     }
 }

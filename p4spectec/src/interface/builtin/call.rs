@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use crate::lang::data::{arena::Arena, value::ValueFlat};
+use crate::lang::data::{arena::Arena, value::Value};
 
 use crate::lang::il::ast::{Id, Typ};
 
@@ -18,8 +18,7 @@ use super::{BuiltinError, fresh, ints, lists, maps, nats, numerics, sets, texts}
 // == Extensibility point: extra or override builtins per interface
 
 /// A builtin body: arena, type arguments, values in; a value out.
-pub type BuiltinImpl =
-    Box<dyn FnMut(&mut Arena, &[Typ], &[ValueFlat]) -> Result<ValueFlat, BuiltinError>>;
+pub type BuiltinImpl = Box<dyn FnMut(&mut Arena, &[Typ], &[Value]) -> Result<Value, BuiltinError>>;
 
 /// A registered builtin and whether calling it has effects.
 enum BuiltinEntry {
@@ -146,8 +145,8 @@ impl Builtins {
         arena: &mut Arena,
         id: &Id,
         targs: &[Typ],
-        values: &[ValueFlat],
-    ) -> Result<(ValueFlat, bool), BuiltinError> {
+        values: &[Value],
+    ) -> Result<(Value, bool), BuiltinError> {
         // An undeclared builtin is a hard error, not a mismatch
         let entry = self
             .funcs

@@ -14,7 +14,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{ValueFlat, ValueFlatKind, get, make},
+        value::{Value, ValueFlatKind, get, make},
         var::IdSlot,
     },
     traits::at::At,
@@ -61,7 +61,7 @@ pub fn assign_exp<Ctx: WriteContext>(
     arena: &mut Arena,
     ctx: Ctx,
     exp: &ast::Exp,
-    value: ValueFlat,
+    value: Value,
 ) -> Backtrack<Ctx> {
     match (&exp.node, arena.kind(&value)) {
         // A variable binds directly
@@ -113,7 +113,7 @@ pub fn assign_exps<Ctx: WriteContext, T: Borrow<ast::Exp> + At>(
     arena: &mut Arena,
     mut ctx: Ctx,
     exps: &[T],
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<Ctx> {
     // Counts must match
     assert_eq!(exps.len(), values.len(), "assignment arity mismatch");
@@ -129,7 +129,7 @@ fn assign_id_exp<Ctx: WriteContext>(
     _arena: &mut Arena,
     mut ctx: Ctx,
     id: &IdSlot,
-    value: ValueFlat,
+    value: Value,
 ) -> Backtrack<Ctx> {
     ctx.add_value_at_slot(id.slot, value);
     ok!(ctx)
@@ -141,7 +141,7 @@ fn assign_tuple_exp<Ctx: WriteContext>(
     arena: &mut Arena,
     ctx: Ctx,
     exps: &[ast::Exp],
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<Ctx> {
     assign_exps(arena, ctx, exps, values)
 }
@@ -152,7 +152,7 @@ fn assign_case_exp<Ctx: WriteContext>(
     arena: &mut Arena,
     ctx: Ctx,
     not_exp: &ast::NotExp,
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<Ctx> {
     assign_exps(arena, ctx, not_exp.args(), values)
 }
@@ -163,7 +163,7 @@ fn assign_str_exp<Ctx: WriteContext>(
     arena: &mut Arena,
     ctx: Ctx,
     exp_fields: &[ast::ExpField],
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<Ctx> {
     let exps = exp_fields
         .iter()
@@ -179,7 +179,7 @@ fn assign_opt_exp<Ctx: WriteContext>(
     arena: &mut Arena,
     ctx: Ctx,
     exp_opt: &Option<Box<ast::Exp>>,
-    value_opt: &Option<ValueFlat>,
+    value_opt: &Option<Value>,
 ) -> Backtrack<Ctx> {
     match (exp_opt, value_opt) {
         // Both present: assign the payload
@@ -197,7 +197,7 @@ fn assign_list_exp<Ctx: WriteContext>(
     arena: &mut Arena,
     ctx: Ctx,
     exps: &[ast::Exp],
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<Ctx> {
     assign_exps(arena, ctx, exps, values)
 }
@@ -211,8 +211,8 @@ fn assign_cons_exp<Ctx: WriteContext>(
     exp: &ast::Exp,
     exp_head: &ast::Exp,
     exp_tail: &ast::Exp,
-    value: &ValueFlat,
-    values: &[ValueFlat],
+    value: &Value,
+    values: &[Value],
 ) -> Backtrack<Ctx> {
     let (value_head, values_tail) = values
         .split_first()
@@ -236,7 +236,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
     exp: &ast::Exp,
     exp_inner: &ast::Exp,
     exp_iter: &ast::ExpIter,
-    value: ValueFlat,
+    value: Value,
 ) -> Backtrack<Ctx> {
     // A bare iterated variable binds as a whole
     if let Some(slot) = find_slot_of_exp(&ctx, exp) {
@@ -310,7 +310,7 @@ pub fn assign_arg<Ctx: WriteContext>(
     ctx_caller: &impl ReadContext<Func = Ctx::Func>,
     ctx_callee: Ctx,
     arg: &ast::Arg,
-    value: ValueFlat,
+    value: Value,
 ) -> Backtrack<Ctx> {
     match &arg.node {
         ast::ArgKind::Exp(exp) => assign_exp_arg(arena, ctx_callee, exp, value),
@@ -324,7 +324,7 @@ pub fn assign_args<Ctx: WriteContext>(
     ctx_caller: &impl ReadContext<Func = Ctx::Func>,
     ctx_callee: Ctx,
     args: &[ast::Arg],
-    values: &[ValueFlat],
+    values: &[Value],
 ) -> Backtrack<Ctx> {
     // Counts must match
     assert_eq!(args.len(), values.len(), "validated argument assignment arity");
@@ -341,7 +341,7 @@ fn assign_exp_arg<Ctx: WriteContext>(
     arena: &mut Arena,
     ctx: Ctx,
     exp: &ast::Exp,
-    value: ValueFlat,
+    value: Value,
 ) -> Backtrack<Ctx> {
     assign_exp(arena, ctx, exp, value)
 }
@@ -354,7 +354,7 @@ pub fn assign_def<Ctx: WriteContext>(
     ctx_caller: &impl ReadContext<Func = Ctx::Func>,
     mut ctx_callee: Ctx,
     id: &ast::Id,
-    value: ValueFlat,
+    value: Value,
 ) -> Backtrack<Ctx> {
     // The value must be a function reference
     let ValueFlatKind::Func(id_func) = arena.kind(&value) else {

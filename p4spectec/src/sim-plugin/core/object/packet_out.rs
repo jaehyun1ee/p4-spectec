@@ -9,7 +9,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{ValueFlat, get, make},
+        value::{Value, get, make},
     },
 };
 
@@ -34,9 +34,9 @@ impl PacketOut {
     pub fn emit<Interp, Iface, Ext>(
         &self,
         ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-        value_ctx: ValueFlat,
-        value_arch: ValueFlat,
-    ) -> Result<(Self, ValueFlat, ValueFlat, ValueFlat), ExternError>
+        value_ctx: Value,
+        value_arch: Value,
+    ) -> Result<(Self, Value, Value, Value), ExternError>
     where
         Iface: Interface,
         Ext: Extern,

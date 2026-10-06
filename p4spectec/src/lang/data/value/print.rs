@@ -1,6 +1,6 @@
 //! Rendering shared values through their arena
 
-use super::{ValueCase, ValueFlat, ValueFlatKind};
+use super::{Value, ValueCase, ValueFlatKind};
 use crate::{
     lang::{
         data::arena::Arena,
@@ -13,7 +13,7 @@ use std::fmt::{self, Write};
 // - Values
 
 /// Prints a value in full, resolving handles through the arena.
-pub fn print_value(arena: &Arena, value: &ValueFlat, printer: &mut Printer<'_>) -> fmt::Result {
+pub fn print_value(arena: &Arena, value: &Value, printer: &mut Printer<'_>) -> fmt::Result {
     write_value_with(arena, printer, value, 0)
 }
 
@@ -21,7 +21,7 @@ pub fn print_value(arena: &Arena, value: &ValueFlat, printer: &mut Printer<'_>) 
 fn write_value_with(
     arena: &Arena,
     output: &mut Printer<'_>,
-    value: &ValueFlat,
+    value: &Value,
     level: usize,
 ) -> fmt::Result {
     match arena.kind(value) {

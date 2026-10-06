@@ -10,7 +10,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{ValueError, ValueFlat, get, make},
+        value::{Value, ValueError, get, make},
     },
 };
 
@@ -23,10 +23,7 @@ use super::spec::func;
 // == Table names
 
 /// Splits a dotted name into its last segment and, if dotted, its full path.
-fn table_name(
-    arena: &mut Arena,
-    value_name: ValueFlat,
-) -> Result<(ValueFlat, Option<ValueFlat>), ExternError> {
+fn table_name(arena: &mut Arena, value_name: Value) -> Result<(Value, Option<Value>), ExternError> {
     // The last segment is the bare name
     let name = get::text(arena, &value_name)?.to_owned();
     let names: Vec<_> = name.split('.').collect();
@@ -60,9 +57,9 @@ fn table_name(
 /// Finds a table object by qualified name, falling back to the bare name.
 pub fn find_table<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_arch: ValueFlat,
-    value_name: ValueFlat,
-) -> Result<ValueFlat, ExternError>
+    value_arch: Value,
+    value_name: Value,
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -81,10 +78,10 @@ where
 /// Stores a table object back under the name it was found by.
 pub fn update_table<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_arch: ValueFlat,
-    value_name: ValueFlat,
-    value_table: ValueFlat,
-) -> Result<ValueFlat, ExternError>
+    value_arch: Value,
+    value_name: Value,
+    value_table: Value,
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -106,13 +103,13 @@ where
 /// Adds an entry to a table and writes the table back into the architecture.
 pub fn add_entry<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-    value_name: ValueFlat,
-    value_priority: ValueFlat,
-    value_keys: ValueFlat,
-    value_action: ValueFlat,
-) -> Result<ValueFlat, ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+    value_name: Value,
+    value_priority: Value,
+    value_keys: Value,
+    value_action: Value,
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Ext: Extern,
@@ -196,11 +193,11 @@ where
 /// Sets a table's default action and writes the table back.
 pub fn add_default_action<Interp, Iface, Ext>(
     ctx: &mut RunnerContext<'_, Interp, Iface, Ext>,
-    value_ctx: ValueFlat,
-    value_arch: ValueFlat,
-    value_name: ValueFlat,
-    value_action: ValueFlat,
-) -> Result<ValueFlat, ExternError>
+    value_ctx: Value,
+    value_arch: Value,
+    value_name: Value,
+    value_action: Value,
+) -> Result<Value, ExternError>
 where
     Iface: Interface,
     Ext: Extern,
