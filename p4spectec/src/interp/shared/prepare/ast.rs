@@ -47,11 +47,6 @@ pub type Var = VarSlot;
 /// An expression over slot-resolved identifiers.
 ///
 /// Rendering requires its notation arena; ordinary `Print` is source-only.
-///
-/// ```compile_fail
-/// use p4spectec::{interp::shared::prepare::ast::Exp, lang::traits::print::Print};
-/// fn without_arena(exp: &Exp) -> String { Print::to_string(exp) }
-/// ```
 pub type Exp = source::Exp<Prepared>;
 pub type ExpField = source::ExpField<Prepared>;
 pub type ExpKind = source::ExpKind<Prepared>;

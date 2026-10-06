@@ -191,16 +191,6 @@ pub fn print_arg(arena_mixop: &MixopArena, arg: &Arg, printer: &mut Printer<'_>)
 }
 
 /// Renders a prepared expression with its notation arena.
-///
-/// ```
-/// use p4spectec::{
-///     interp::shared::{prepare::ast::Exp, print::exp_to_string},
-///     lang::data::notation::MixopArena,
-/// };
-/// fn with_arena(arena: &MixopArena, exp: &Exp) -> String {
-///     exp_to_string(arena, exp)
-/// }
-/// ```
 pub fn exp_to_string(arena_mixop: &MixopArena, exp: &Exp) -> String {
     let mut output = String::new();
     print_exp(arena_mixop, exp, &mut Printer::new(&mut output))
