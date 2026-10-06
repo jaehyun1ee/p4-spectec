@@ -4,7 +4,7 @@
 //! per argument position: `C |- e : t` is the mixop `% |- % : %`
 //! with the arguments `[C, e, t]`.
 //! Specification syntax shares a tree, `Rc<MixopTree>`;
-//! case values hold a `MixopId` handle; payload trees own a `MixopTree`.
+//! case values hold a `MixopId` handle.
 //! Fields are private so every mixfix keeps one argument per position:
 //! a tree mixfix is built from parts (`arg`, `atom`, `brack`, `infix`,
 //! `seq`), by filling a mixop (`fill_with`), or checked (`new`),
@@ -12,7 +12,7 @@
 //! Equality compares mixops, then arguments; ordering walks the mixop
 //! and compares arguments where their positions occur.
 
-use std::{borrow::Borrow, cmp::Ordering, fmt, rc::Rc};
+use std::{cmp::Ordering, fmt, rc::Rc};
 
 use crate::lang::{
     common::{ds::set::IdSet, source::Span},
@@ -90,37 +90,18 @@ impl<M, T> Mixfix<M, T> {
         let args = self.args.iter().map(map_arg).collect::<Result<_, _>>()?;
         Ok(Mixfix { mixop: self.mixop.clone(), args })
     }
-
-    /// Moves each argument through `map_arg` in order, keeping the mixop.
-    pub fn map_into<U>(self, map_arg: impl FnMut(T) -> U) -> Mixfix<M, U> {
-        Mixfix { mixop: self.mixop, args: self.args.into_iter().map(map_arg).collect() }
-    }
-
-    /// Moves each argument through `map_arg` in order,
-    /// stopping at the first error.
-    pub fn try_map_into<U, E>(
-        self,
-        map_arg: impl FnMut(T) -> Result<U, E>,
-    ) -> Result<Mixfix<M, U>, E> {
-        let args = self
-            .args
-            .into_iter()
-            .map(map_arg)
-            .collect::<Result<_, _>>()?;
-        Ok(Mixfix { mixop: self.mixop, args })
-    }
 }
 
 // = Tree mixops
 
-impl<M: Borrow<MixopTree>, T> Mixfix<M, T> {
+impl<T> Mixfix<Rc<MixopTree>, T> {
     // - Construction
 
     /// Pairs a mixop with its arguments.
     ///
     /// Fails unless there is exactly one argument per position.
-    pub fn new(mixop: M, args: Vec<T>) -> Result<Self, ArityMismatch> {
-        let arity = walk::arity_tree(mixop.borrow());
+    pub fn new(mixop: Rc<MixopTree>, args: Vec<T>) -> Result<Self, ArityMismatch> {
+        let arity = walk::arity_tree(mixop.as_ref());
         match args.len().cmp(&arity) {
             Ordering::Less => Err(ArityMismatch::ArgumentCountTooFew),
             Ordering::Greater => Err(ArityMismatch::ArgumentCountTooMany),
@@ -129,8 +110,8 @@ impl<M: Borrow<MixopTree>, T> Mixfix<M, T> {
     }
 
     /// Fills each position of a mixop, calling `fill` once per position.
-    pub fn fill_with(mixop: M, fill: impl FnMut(usize) -> T) -> Self {
-        let arity = walk::arity_tree(mixop.borrow());
+    pub fn fill_with(mixop: Rc<MixopTree>, fill: impl FnMut(usize) -> T) -> Self {
+        let arity = walk::arity_tree(mixop.as_ref());
         Self { args: (0..arity).map(fill).collect(), mixop }
     }
 
@@ -143,7 +124,7 @@ impl<M: Borrow<MixopTree>, T> Mixfix<M, T> {
 
     /// Borrows the mixfix, for viewing its parts.
     pub fn as_ref(&self) -> MixfixRef<'_, T> {
-        MixfixRef { mixop: self.mixop.borrow(), args: &self.args }
+        MixfixRef { mixop: self.mixop.as_ref(), args: &self.args }
     }
 
     // - Comparison
@@ -151,20 +132,20 @@ impl<M: Borrow<MixopTree>, T> Mixfix<M, T> {
     /// Whether two mixfixes have the same structure and atom names.
     ///
     /// Atom spans and arguments are not compared.
-    pub fn eq_mixop<N: Borrow<MixopTree>, U>(&self, mixfix_other: &Mixfix<N, U>) -> bool {
-        self.mixop.borrow() == mixfix_other.mixop.borrow()
+    pub fn eq_mixop<U>(&self, mixfix_other: &Mixfix<Rc<MixopTree>, U>) -> bool {
+        self.mixop.as_ref() == mixfix_other.mixop.as_ref()
     }
 
     /// Orders two mixfixes as the walk of their mixops meets atoms and arguments.
     ///
     /// Atoms compare by name; `compare_arg` orders the arguments
     /// at each position both mixops reach.
-    pub fn cmp_by<N: Borrow<MixopTree>, U>(
+    pub fn cmp_by<U>(
         &self,
-        mixfix_other: &Mixfix<N, U>,
+        mixfix_other: &Mixfix<Rc<MixopTree>, U>,
         mut compare_arg: impl FnMut(&T, &U) -> Ordering,
     ) -> Ordering {
-        walk::cmp_trees_by(self.mixop.borrow(), mixfix_other.mixop.borrow(), |pos| {
+        walk::cmp_trees_by(self.mixop.as_ref(), mixfix_other.mixop.as_ref(), |pos| {
             compare_arg(&self.args[pos], &mixfix_other.args[pos])
         })
     }
@@ -228,7 +209,7 @@ impl<T> Mixfix<Rc<MixopTree>, T> {
 
 // - Syntax operations
 
-impl<M: Borrow<MixopTree>, T: SyntaxEq> SyntaxEq for Mixfix<M, T> {
+impl<T: SyntaxEq> SyntaxEq for Mixfix<Rc<MixopTree>, T> {
     fn syntax_eq(&self, mixfix_other: &Self) -> bool {
         self.eq_mixop(mixfix_other)
             && self
@@ -239,7 +220,7 @@ impl<M: Borrow<MixopTree>, T: SyntaxEq> SyntaxEq for Mixfix<M, T> {
     }
 }
 
-impl<M: Borrow<MixopTree>, T: SyntaxCmp> SyntaxCmp for Mixfix<M, T> {
+impl<T: SyntaxCmp> SyntaxCmp for Mixfix<Rc<MixopTree>, T> {
     fn syntax_cmp(&self, mixfix_other: &Self) -> Ordering {
         self.cmp_by(mixfix_other, SyntaxCmp::syntax_cmp)
     }
@@ -253,11 +234,11 @@ impl<M, T: FreeIds> FreeIds for Mixfix<M, T> {
 
 // - Source locations
 
-impl<M: Borrow<MixopTree>, T: At> At for Mixfix<M, T> {
+impl<T: At> At for Mixfix<Rc<MixopTree>, T> {
     fn at(&self) -> Span {
         // Cover atoms and arguments, so empty sequences add no default span
         let mut spans = Vec::new();
-        walk::visit_tree(self.mixop.borrow(), |piece| match piece {
+        walk::visit_tree(self.mixop.as_ref(), |piece| match piece {
             Piece::Atom(atom) => spans.push(atom.at()),
             Piece::Arg(pos) => spans.push(self.args[pos].at()),
         });
@@ -351,16 +332,6 @@ impl<T> Mixfix<MixopId, T> {
             Ordering::Greater => Err(ArityMismatch::ArgumentCountTooMany),
             Ordering::Equal => Ok(Self { mixop: mixop_id, args }),
         }
-    }
-
-    // - Expansion
-
-    /// Expands the mixop into a tree, keeping the arguments.
-    pub fn to_tree(&self, arena_mixop: &MixopArena) -> Mixfix<MixopTree, T>
-    where
-        T: Clone,
-    {
-        Mixfix { mixop: arena_mixop.to_tree(self.mixop), args: self.args.clone() }
     }
 
     // - Comparison
