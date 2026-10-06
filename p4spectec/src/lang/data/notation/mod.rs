@@ -1,7 +1,7 @@
 //! Notation of IL and later stages, as trees and interned nodes
 //!
 //! `tree::Mixop` owns an argument-free notation such as `% |- % : %`.
-//! `flat::Mixop` stores one node with child handles in a `MixopArena`.
+//! `flat::Mixop` refers to a `flat::MixopKind` in a `MixopArena`.
 //! `Mixfix` pairs either form with its arguments in notation order.
 //! `walk` provides concrete traversals for both representations.
 //! EL uses only atoms, which stay in `common::notation`.
@@ -17,7 +17,6 @@ pub mod walk;
 
 pub use arena::MixopArena;
 pub use error::{ArityMismatch, MixopError};
-pub use flat::MixopId;
 pub use mixfix::{Mixfix, MixfixRef, View};
 /// An atom with its source location.
 pub type AtomPhrase =

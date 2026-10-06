@@ -6,7 +6,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_state::{DeserializeState, SerializeState};
 
-use super::{MixopArena, MixopId, tree};
+use super::{MixopArena, flat, tree};
 use crate::{lang::data::encoding::Encoding, util::json::json};
 
 /// The source arena and the representation of handles in JSON.
@@ -89,7 +89,7 @@ where
     }
 }
 
-impl SerializeState<EncodeContext<'_>> for MixopId {
+impl SerializeState<EncodeContext<'_>> for flat::Mixop {
     fn serialize_state<S: Serializer>(
         &self,
         serializer: S,
@@ -104,7 +104,7 @@ impl SerializeState<EncodeContext<'_>> for MixopId {
     }
 }
 
-impl<'de> DeserializeState<'de, DecodeContext<'_>> for MixopId {
+impl<'de> DeserializeState<'de, DecodeContext<'_>> for flat::Mixop {
     fn deserialize_state<D: Deserializer<'de>>(
         ctx: &mut DecodeContext<'_>,
         deserializer: D,

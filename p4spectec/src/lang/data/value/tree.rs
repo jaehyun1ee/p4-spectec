@@ -20,7 +20,7 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::{self, AtomPhrase, MixopId},
+        notation::{self, AtomPhrase},
         typ::TypKind,
     },
 };
@@ -165,26 +165,26 @@ pub enum CaseTree<T> {
 /// Expands a runtime case directly, resolving each argument in notation order.
 fn case_from_flat(
     arena: &Arena,
-    mixop_id: MixopId,
+    mixop_id: notation::flat::Mixop,
     values: &mut slice::Iter<'_, flat::Value>,
 ) -> CaseTree<Box<Value>> {
     match arena.arena_mixop().kind(mixop_id) {
-        notation::flat::Mixop::Arg => CaseTree::Arg(Box::new(from_flat(
+        notation::flat::MixopKind::Arg => CaseTree::Arg(Box::new(from_flat(
             arena,
             values.next().expect("a case fills every position"),
         ))),
-        notation::flat::Mixop::Atom(atom) => CaseTree::Atom(atom.clone()),
-        notation::flat::Mixop::Brack(atom_l, mixop_id, atom_r) => CaseTree::Brack(
+        notation::flat::MixopKind::Atom(atom) => CaseTree::Atom(atom.clone()),
+        notation::flat::MixopKind::Brack(atom_l, mixop_id, atom_r) => CaseTree::Brack(
             atom_l.clone(),
             Box::new(case_from_flat(arena, *mixop_id, values)),
             atom_r.clone(),
         ),
-        notation::flat::Mixop::Infix(mixop_l, atom, mixop_r) => {
+        notation::flat::MixopKind::Infix(mixop_l, atom, mixop_r) => {
             let tree_l = case_from_flat(arena, *mixop_l, values);
             let tree_r = case_from_flat(arena, *mixop_r, values);
             CaseTree::Infix(Box::new(tree_l), atom.clone(), Box::new(tree_r))
         }
-        notation::flat::Mixop::Seq(mixops) => CaseTree::Seq(
+        notation::flat::MixopKind::Seq(mixops) => CaseTree::Seq(
             mixops
                 .iter()
                 .map(|mixop| case_from_flat(arena, *mixop, values))

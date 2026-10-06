@@ -1,6 +1,6 @@
-//! Flat representation of notation: `Mixop` and `MixopId`
+//! Flat notation handles and their stored bodies
 //!
-//! `Mixop` stores each node once, with its children as handles
+//! `Mixop` is a handle to a `MixopKind`, whose children are handles
 //! into a `MixopArena` rather than nested inside it:
 //! `Brack(atom_l, mixop, atom_r)` refers to its inner mixop by handle,
 //! and equal subtrees are stored once.
@@ -18,22 +18,23 @@ use crate::lang::data::intern::{CanonEq, CanonHash, CanonInterner, Interned};
 
 use super::AtomPhrase;
 
+/// A notation handle valid only in its issuing arena.
+pub type Mixop = Interned<MixopKind>;
+
 /// One interned notation node, with child handles in the same arena.
 #[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
+#[serde(rename = "Mixop")]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
-pub enum Mixop {
+pub enum MixopKind {
     Arg,
     Atom(#[serde(state)] AtomPhrase),
-    Brack(#[serde(state)] AtomPhrase, #[serde(state)] MixopId, #[serde(state)] AtomPhrase),
-    Infix(#[serde(state)] MixopId, #[serde(state)] AtomPhrase, #[serde(state)] MixopId),
-    Seq(#[serde(state)] Vec<MixopId>),
+    Brack(#[serde(state)] AtomPhrase, #[serde(state)] Mixop, #[serde(state)] AtomPhrase),
+    Infix(#[serde(state)] Mixop, #[serde(state)] AtomPhrase, #[serde(state)] Mixop),
+    Seq(#[serde(state)] Vec<Mixop>),
 }
 
-/// A notation handle valid only in its issuing arena.
-pub type MixopId = Interned<Mixop>;
-
-impl Mixop {
+impl MixopKind {
     /// Orders the variants for comparison across forms.
     pub(crate) fn tag(&self) -> u8 {
         match self {
@@ -51,10 +52,10 @@ impl Mixop {
 // Canonical identity: atom names and children's canonical ids, so spans
 // are ignored as a tree ignores them
 
-impl CanonEq for Mixop {
+impl CanonEq for MixopKind {
     fn canon_eq(&self, interner: &CanonInterner<Self>, _: &(), kind_r: &Self) -> bool {
         // Children compare by canonical id, computed when they were interned
-        let eq_mixop = |mixop_id_l: &MixopId, mixop_id_r: &MixopId| {
+        let eq_mixop = |mixop_id_l: &Mixop, mixop_id_r: &Mixop| {
             interner.canon_id(*mixop_id_l) == interner.canon_id(*mixop_id_r)
         };
         match (self, kind_r) {
@@ -88,7 +89,7 @@ impl CanonEq for Mixop {
     }
 }
 
-impl CanonHash for Mixop {
+impl CanonHash for MixopKind {
     fn canon_hash<H: Hasher>(&self, interner: &CanonInterner<Self>, _: &(), hasher: &mut H) {
         self.tag().hash(hasher);
         match self {

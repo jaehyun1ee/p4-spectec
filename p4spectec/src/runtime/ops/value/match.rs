@@ -15,7 +15,7 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::MixopId,
+        notation::flat::Mixop,
         value::flat::{Value, ValueKind},
     },
 };
@@ -58,7 +58,7 @@ pub enum MatchError {
 // == Type membership
 
 /// Tests whether `value` inhabits `typ`.
-pub fn sub<'env, P: Stage<Mixop = MixopId>, F>(
+pub fn sub<'env, P: Stage<Mixop = Mixop>, F>(
     arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
@@ -209,7 +209,7 @@ where
 }
 
 /// Tests values against types pairwise.
-pub fn subs<'env, P: Stage<Mixop = MixopId>, F>(
+pub fn subs<'env, P: Stage<Mixop = Mixop>, F>(
     arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
@@ -223,7 +223,7 @@ where
 }
 
 /// Pairwise membership; differing counts fail.
-fn subs_inner<'env, 'typ, 'value, P: Stage<Mixop = MixopId>, F, T, V>(
+fn subs_inner<'env, 'typ, 'value, P: Stage<Mixop = Mixop>, F, T, V>(
     arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,
@@ -249,7 +249,7 @@ where
 // == Subtype-check execution
 
 /// Runs a precomputed subtype check on a value.
-pub fn check<'env, P: Stage<Mixop = MixopId>, F>(
+pub fn check<'env, P: Stage<Mixop = Mixop>, F>(
     arena: &Arena,
     find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
     find_func: &F,

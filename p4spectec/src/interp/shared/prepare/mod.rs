@@ -13,7 +13,7 @@ use std::rc::Rc;
 use crate::lang::{
     common::{Id, source::NotePhrase},
     data::{
-        notation::{Mixfix, MixopArena, MixopId, tree::Mixop},
+        notation::{Mixfix, MixopArena, flat, tree},
         var::{IdSlot, Var, VarSlot},
     },
 };
@@ -96,8 +96,8 @@ impl<T: Prepare, N, S> Prepare for NotePhrase<T, N, S> {
 
 // - Notation
 
-impl<T: Prepare> Prepare for Mixfix<Rc<Mixop>, T> {
-    type Output = Mixfix<MixopId, T::Output>;
+impl<T: Prepare> Prepare for Mixfix<Rc<tree::Mixop>, T> {
+    type Output = Mixfix<flat::Mixop, T::Output>;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         let (mixop, args) = self.into_parts();
@@ -108,7 +108,7 @@ impl<T: Prepare> Prepare for Mixfix<Rc<Mixop>, T> {
 }
 
 /// Interns a shared mixop as a shape, walking it once per specification.
-pub(crate) fn prepare_mixop(mixop: &Rc<Mixop>, ctx: &mut PrepareContext<'_>) -> MixopId {
+pub(crate) fn prepare_mixop(mixop: &Rc<tree::Mixop>, ctx: &mut PrepareContext<'_>) -> flat::Mixop {
     ctx.arena_mixop
         .intern_shared(mixop)
         .expect("specification mixops fit in 32-bit shape handles")

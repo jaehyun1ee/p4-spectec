@@ -298,24 +298,24 @@ enum CaseTreeOwned {
 /// Fills a shape with arguments in notation order, borrowing its atoms.
 fn case_tree<'a>(
     arena_mixop: &'a MixopArena,
-    kind: &'a notation::flat::Mixop,
+    kind: &'a notation::flat::MixopKind,
     values: &mut slice::Iter<'a, flat::Value>,
 ) -> CaseTree<'a> {
     match kind {
-        notation::flat::Mixop::Arg => {
+        notation::flat::MixopKind::Arg => {
             CaseTree::Arg(values.next().expect("a case fills every position"))
         }
-        notation::flat::Mixop::Atom(atom) => CaseTree::Atom(atom),
-        notation::flat::Mixop::Brack(atom_l, shape, atom_r) => {
+        notation::flat::MixopKind::Atom(atom) => CaseTree::Atom(atom),
+        notation::flat::MixopKind::Brack(atom_l, shape, atom_r) => {
             let tree = case_tree(arena_mixop, arena_mixop.kind(*shape), values);
             CaseTree::Brack(atom_l, Box::new(tree), atom_r)
         }
-        notation::flat::Mixop::Infix(shape_l, atom, shape_r) => {
+        notation::flat::MixopKind::Infix(shape_l, atom, shape_r) => {
             let tree_l = case_tree(arena_mixop, arena_mixop.kind(*shape_l), values);
             let tree_r = case_tree(arena_mixop, arena_mixop.kind(*shape_r), values);
             CaseTree::Infix(Box::new(tree_l), atom, Box::new(tree_r))
         }
-        notation::flat::Mixop::Seq(shapes) => CaseTree::Seq(
+        notation::flat::MixopKind::Seq(shapes) => CaseTree::Seq(
             shapes
                 .iter()
                 .map(|shape| case_tree(arena_mixop, arena_mixop.kind(*shape), values))

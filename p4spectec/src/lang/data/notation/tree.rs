@@ -20,7 +20,7 @@ use crate::lang::{
     },
 };
 
-use super::{AtomPhrase, MixopArena, MixopError, MixopId, walk};
+use super::{AtomPhrase, MixopArena, MixopError, flat, walk};
 use serde::{Deserialize, Serialize};
 
 /// An owned notation with an argument hole at each position.
@@ -117,11 +117,14 @@ impl Print for Mixop {
 }
 
 /// Expands a handle into an owned notation, preserving atom spans.
-pub fn from_flat(arena_mixop: &MixopArena, mixop_id: MixopId) -> Mixop {
+pub fn from_flat(arena_mixop: &MixopArena, mixop_id: flat::Mixop) -> Mixop {
     arena_mixop.to_tree(mixop_id)
 }
 
 /// Interns an owned notation in the target arena.
-pub fn into_flat(arena_mixop: &mut MixopArena, mixop_tree: Mixop) -> Result<MixopId, MixopError> {
+pub fn into_flat(
+    arena_mixop: &mut MixopArena,
+    mixop_tree: Mixop,
+) -> Result<flat::Mixop, MixopError> {
     arena_mixop.intern(&mixop_tree)
 }

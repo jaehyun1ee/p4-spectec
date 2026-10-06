@@ -6,17 +6,18 @@
 //! so `eval::iter` can find its slot.
 
 use crate::lang::data::{
-    notation::{Mixfix, MixopArena, MixopId},
+    notation::{Mixfix, MixopArena},
     var::{IdSlot, VarSlot},
 };
 
 use crate::lang::il::ast::{self as source, Stage};
 
+pub use crate::lang::data::notation::flat::Mixop;
+
 pub use crate::lang::il::ast::{
-    Atom, BinOp, CmpOp, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter, ListPattern, Mixop, Num,
-    NumOp, OpTyp, OptPattern, Param, ParamKind, TParam, Targ, TargKind, Text, Typ, TypDef,
-    TypField, TypKind, TypOrigin, TypOriginKind, UnOp, Value, ValueCase, ValueField, ValueKind,
-    VarDef,
+    Atom, BinOp, CmpOp, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter, ListPattern, Num, NumOp,
+    OpTyp, OptPattern, Param, ParamKind, TParam, Targ, TargKind, Text, Typ, TypDef, TypField,
+    TypKind, TypOrigin, TypOriginKind, UnOp, Value, ValueCase, ValueField, ValueKind, VarDef,
 };
 
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
@@ -34,7 +35,7 @@ pub struct Prepared;
 impl Stage for Prepared {
     type Id = IdSlot;
     type Var = VarSlot;
-    type Mixop = MixopId;
+    type Mixop = Mixop;
 }
 
 // - Variables
