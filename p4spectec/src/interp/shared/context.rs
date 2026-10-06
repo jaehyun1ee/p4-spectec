@@ -16,22 +16,20 @@ use crate::lang::{
         value::{flat::Value, get, make},
         var::{SlotIdx, VarSlot},
     },
+    il::prepared as ast,
 };
 
 use crate::diagnostic::{Label, Report};
 
 use crate::runtime::envs::interp::shared::{
-    TDEnv,
+    TDEnv, TypeDef,
     callable::Callable,
     frame::{Frame, FrameLayout},
 };
 
-use crate::interp::shared::prepare::ast::TypeDef;
-
 use crate::interp::shared::{
     backtrack::{Backtrack, ok, unwrap_from_result},
     error::{self, EntityKind, Error},
-    prepare::ast,
 };
 
 // = Function signatures

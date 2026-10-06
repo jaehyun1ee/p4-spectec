@@ -3,7 +3,7 @@
 //! The caller supplies the arena for every interned notation.
 
 use crate::interp::shared::print::print_pattern;
-use crate::runtime::envs::interp::pl::ast_prepared::*;
+use crate::lang::pl::prepared::*;
 use crate::{
     lang::{
         data::notation::MixopArena,

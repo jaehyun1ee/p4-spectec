@@ -11,12 +11,11 @@ use crate::lang::{
     common::source::Span,
     data::value::{flat::Value, get},
     hints::input,
+    pl::prepared as ast,
     traits::print::Print,
 };
 
 use crate::diagnostic::Report;
-
-use crate::runtime::envs::interp::pl::ast_prepared as ast;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 

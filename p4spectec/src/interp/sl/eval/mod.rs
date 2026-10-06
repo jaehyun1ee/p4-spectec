@@ -11,7 +11,7 @@ pub mod instr;
 
 use crate::lang::data::value::flat::Value;
 
-use crate::runtime::envs::interp::sl::ast_prepared as ast;
+use crate::lang::sl::prepared as ast;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 

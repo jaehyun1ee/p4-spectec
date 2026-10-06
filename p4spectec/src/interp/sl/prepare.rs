@@ -8,13 +8,11 @@
 use std::rc::Rc;
 
 use crate::lang::{
-    data::notation::MixopArena, hints::input, sl::ast as source, traits::eq::SyntaxEq,
+    data::notation::MixopArena, hints::input, sl::ast as source, sl::prepared as ast,
+    traits::eq::SyntaxEq,
 };
 
-use crate::runtime::envs::interp::{
-    shared::{callable::Callable, frame::FrameLayout},
-    sl::ast_prepared as ast,
-};
+use crate::runtime::envs::interp::shared::{callable::Callable, frame::FrameLayout};
 
 use crate::interp::shared::prepare::{Prepare, PrepareContext};
 

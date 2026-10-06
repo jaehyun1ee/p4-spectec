@@ -8,7 +8,7 @@
 
 use crate::lang::pl::{annot::Annotated, ast as pl};
 
-use crate::runtime::envs::interp::pl::ast_prepared as ast;
+use crate::lang::pl::prepared as ast;
 
 use crate::interp::shared::prepare::{Prepare, PrepareContext};
 

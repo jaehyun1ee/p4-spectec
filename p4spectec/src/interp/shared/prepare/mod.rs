@@ -6,7 +6,9 @@
 //! notations' mixops are interned as shapes in the specification's
 //! `MixopArena` on the way, and containers and phrases recurse structurally.
 
-pub mod ast;
+mod il;
+
+pub use il::prepare_def_typ;
 
 use std::rc::Rc;
 

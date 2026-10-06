@@ -8,14 +8,12 @@
 use crate::lang::{
     common::source::Span,
     data::value::{flat::Value, get, make},
+    il::prepared as ast,
 };
 
 use crate::runner::{Extern, Interface, RunnerContext};
 
-use crate::interp::shared::{
-    backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
-    prepare::ast,
-};
+use crate::interp::shared::backtrack::{Backtrack, ok, unwrap, unwrap_from_result};
 
 use super::{Invoker, expr::eval_exp, ops};
 

@@ -24,7 +24,7 @@ use crate::lang::{
 
 use crate::lang::il::ast;
 
-use crate::interp::shared::prepare::ast::Prepared;
+use crate::lang::il::prepared::Prepared;
 
 use crate::runtime::ops::{
     typ::{Theta, subst_typ},

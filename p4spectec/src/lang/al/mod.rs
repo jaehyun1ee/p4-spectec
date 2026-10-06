@@ -13,6 +13,7 @@ pub mod ast;
 pub mod eq;
 pub mod free;
 pub mod fresh;
+pub mod prepared;
 pub mod print;
 pub mod stage;
 pub mod var;

@@ -17,11 +17,10 @@ use crate::lang::{
         get,
     },
     hints::input,
+    sl::prepared as ast,
 };
 
 use crate::diagnostic::Report;
-
-use crate::runtime::envs::interp::sl::ast_prepared as ast;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 

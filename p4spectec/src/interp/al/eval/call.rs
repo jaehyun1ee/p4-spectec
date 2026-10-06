@@ -10,6 +10,7 @@
 use std::rc::Rc;
 
 use crate::lang::{
+    al::prepared as ast,
     data::{
         arena::Arena,
         value::flat::{Value, ValueKind},
@@ -20,7 +21,7 @@ use crate::lang::{
 use crate::diagnostic::{Diagnostic, Label, Report};
 
 use crate::runtime::{
-    envs::interp::{al::ast_prepared as ast, shared::frame::FrameLayout},
+    envs::interp::shared::frame::FrameLayout,
     ops::{typ, value},
 };
 

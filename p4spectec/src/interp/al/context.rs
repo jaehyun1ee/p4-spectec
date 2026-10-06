@@ -9,16 +9,14 @@ use crate::lang::data::{
     typ::{FuncTyp, make},
 };
 
-use crate::lang::al::ast as source;
+use crate::lang::al::{ast as source, prepared as ast};
 
-use crate::runtime::envs::interp::{
-    al::ast_prepared::{self as ast, TypeDef},
-    shared::callable::Callable,
-};
+use crate::runtime::envs::interp::shared::{TypeDef, callable::Callable};
 
 use crate::interp::shared::{
     context::{self as shared, FuncSignature},
     error::Error,
+    prepare::prepare_def_typ,
 };
 
 // = Context aliases
@@ -53,7 +51,7 @@ impl Global {
                                 id,
                                 TypeDef::Defined(
                                     tparams,
-                                    Box::new(ast::prepare_def_typ(def_typ, arena_mixop)),
+                                    Box::new(prepare_def_typ(def_typ, arena_mixop)),
                                 ),
                             )
                         }

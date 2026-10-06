@@ -14,12 +14,13 @@ use crate::lang::{
         value::flat::{Value, ValueKind},
     },
     hints::input,
+    pl::prepared as ast,
 };
 
 use crate::diagnostic::Diagnostic;
 
 use crate::runtime::{
-    envs::interp::{pl::ast_prepared as ast, shared::frame::FrameLayout},
+    envs::interp::shared::frame::FrameLayout,
     ops::{typ, value},
 };
 

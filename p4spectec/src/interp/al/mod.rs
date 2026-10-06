@@ -8,6 +8,7 @@
 
 pub mod backtrack;
 pub mod context;
+mod prepare;
 
 pub mod eval;
 

@@ -2,7 +2,7 @@
 //!
 //! The caller supplies the arena for every interned notation.
 
-use super::prepare::ast::*;
+use crate::lang::il::prepared::*;
 use crate::{
     lang::{
         data::notation::MixopArena,

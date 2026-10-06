@@ -1,86 +1,21 @@
-//! Slot instantiation of shared IL syntax
+//! Resolve IL syntax to slots and interned mixops
 //!
-//! `Prepared` is the IL stage with frame slots for identifiers and variables;
-//! the type aliases name its forms, and the `Prepare` impls rewrite each node.
-//! Iterations also register the outer variable `x*` for every iterated `x`,
-//! so `eval::iter` can find its slot.
+//! The `Prepare` implementations rebuild source nodes as prepared syntax.
+//! Iterations register the outer variable `x*` for every iterated `x`,
+//! so evaluation can find its slot.
+//! Type definitions prepare their mixops without allocating frame slots.
 
-use crate::lang::data::{
-    notation::{Mixfix, MixopArena},
-    var::VarSlot,
-};
-
-use crate::lang::il::ast as source;
-
-pub use crate::lang::il::stage::Prepared;
-
-pub use crate::lang::data::notation::flat::Mixop;
-
-pub use crate::lang::il::ast::{
-    Atom, BinOp, CmpOp, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter, ListPattern, Num, NumOp,
-    OpTyp, OptPattern, Param, ParamKind, TParam, Targ, TargKind, Text, Typ, TypDef, TypField,
-    TypKind, TypOrigin, TypOriginKind, UnOp, Value, ValueCase, ValueField, ValueKind, VarDef,
+use crate::lang::{
+    data::{
+        notation::{Mixfix, MixopArena},
+        var::VarSlot,
+    },
+    il::{ast as source, prepared::*},
 };
 
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
 
 use super::{Prepare, PrepareContext, prepare_mixop};
-
-// == Prepared syntax
-
-// - Variables
-
-/// A variable with its frame slot.
-pub type Var = VarSlot;
-
-// - Expressions
-
-/// An expression over slot-resolved identifiers.
-///
-/// Rendering requires its notation arena; ordinary `Print` is source-only.
-pub type Exp = source::Exp<Prepared>;
-pub type ExpField = source::ExpField<Prepared>;
-pub type ExpKind = source::ExpKind<Prepared>;
-pub type NotExp = source::NotExp<Prepared>;
-pub type ExpIter = source::ExpIter<VarSlot>;
-
-// - Paths
-
-/// A path over slot-resolved identifiers.
-pub type Path = source::Path<Prepared>;
-pub type PathKind = source::PathKind<Prepared>;
-
-// - Arguments
-
-/// An argument over slot-resolved identifiers.
-pub type Arg = source::Arg<Prepared>;
-pub type ArgKind = source::ArgKind<Prepared>;
-
-// - Type definitions
-
-/// A notation type over a prepared shape.
-pub type NotTyp = source::NotTyp<Prepared>;
-pub type NotTypKind = source::NotTypKind<Prepared>;
-/// A type definition body whose case notations are shapes.
-pub type DefTyp = source::DefTyp<Prepared>;
-pub type DefTypKind = source::DefTypKind<Prepared>;
-pub type TypCase = source::TypCase<Prepared>;
-/// What a type name resolves to while interpreting.
-pub type TypeDef = crate::runtime::typdef::TypeDef<Prepared>;
-
-// - Patterns and subtype checks
-
-/// A pattern over prepared mixops.
-pub type Pattern = source::Pattern<Prepared>;
-/// A runtime subtype check over prepared mixops.
-pub type Subcheck = source::Subcheck<Prepared>;
-
-// - Premises
-
-/// A premise iterator over slot-resolved variables.
-pub type PremIter = source::PremIter<VarSlot>;
-
-// == Preparation
 
 // - Type definitions
 

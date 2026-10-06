@@ -5,7 +5,7 @@
 
 use crate::lang::data::{arena::Arena, value::flat::Value};
 
-use crate::runtime::envs::interp::sl::ast_prepared as ast;
+use crate::lang::sl::prepared as ast;
 
 use crate::interp::shared::backtrack::{Backtrack, ok, unwrap};
 

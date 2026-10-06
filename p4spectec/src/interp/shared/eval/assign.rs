@@ -20,14 +20,14 @@ use crate::lang::{
         },
         var::IdSlot,
     },
+    il::prepared as ast,
     traits::at::At,
 };
 
-use crate::interp::shared::prepare::ast::TypeDef;
+use crate::runtime::envs::interp::shared::TypeDef;
 
 use crate::interp::shared::{
     backtrack::{Backtrack, ok, unwrap, unwrap_from_result},
-    prepare::ast,
     util::{find_slot_of_exp, iterate_vars},
 };
 

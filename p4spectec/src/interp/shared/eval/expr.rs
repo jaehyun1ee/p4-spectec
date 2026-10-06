@@ -16,15 +16,17 @@ use crate::lang::{
         },
         var::IdSlot,
     },
+    il::prepared as ast,
 };
 
 use crate::runtime::ops::typ::{TypeError, subst_typ};
+
+use crate::runtime::envs::interp::shared::TypeDef;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 
 use crate::interp::shared::{
     backtrack::{Backtrack, WithFrame, fatal, ok, unmatch, unwrap, unwrap_from_result},
-    prepare::ast,
     util::find_slot_of_exp,
 };
 
@@ -523,7 +525,7 @@ pub(crate) fn resolve_targs(
 ) -> Result<Vec<ast::Typ>, TypeError> {
     // Only unparameterized plain aliases in local scope are substituted
     let find_subst = |id: &ast::Id| match ctx.find_typdef_local_opt(id)? {
-        ast::TypeDef::Defined(tparams, def_typ) if tparams.is_empty() => match &def_typ.node {
+        TypeDef::Defined(tparams, def_typ) if tparams.is_empty() => match &def_typ.node {
             ast::DefTypKind::Plain(typ) => Some(typ),
             _ => None,
         },

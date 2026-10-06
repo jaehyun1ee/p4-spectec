@@ -4,9 +4,9 @@
 //! Identifiers and iterations resolve to the same slots as AL and SL;
 //! evaluation removes expression hints at the shared evaluator boundary.
 
-use crate::lang::pl::ast as source;
+use super::ast as source;
 
-pub use crate::interp::shared::prepare::ast::*;
+pub use crate::lang::il::prepared::*;
 
 pub use source::{Fallthrough, RelSignature, TierInstr};
 

@@ -9,14 +9,12 @@ use crate::lang::{
         arena::Arena,
         value::{flat::Value, make},
     },
+    il::prepared as ast,
 };
 
 use crate::runner::{Extern, Interface, RunnerContext};
 
-use crate::interp::shared::{
-    backtrack::{Backtrack, WithFrame, ok, unwrap, unwrap_from_result},
-    prepare::ast,
-};
+use crate::interp::shared::backtrack::{Backtrack, WithFrame, ok, unwrap, unwrap_from_result};
 
 use super::super::context::ReadContext;
 
