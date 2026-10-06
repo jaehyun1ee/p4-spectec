@@ -14,6 +14,9 @@ pub enum ValueError {
     /// The arena ran out of 32-bit handles.
     #[error("value arena index overflow")]
     IndexOverflow,
+    /// Interning the case notation failed.
+    #[error(transparent)]
+    Mixop(#[from] MixopError),
     /// A projection met a value of another kind.
     #[error("expected {expected:?} value, got {actual:?}")]
     KindMismatch { expected: ValueTag, actual: ValueTag },
@@ -30,13 +33,5 @@ pub enum ValueError {
 impl From<TryFromIntError> for ValueError {
     fn from(_: TryFromIntError) -> Self {
         Self::IndexOverflow
-    }
-}
-
-impl From<MixopError> for ValueError {
-    fn from(error: MixopError) -> Self {
-        match error {
-            MixopError::IndexOverflow => Self::IndexOverflow,
-        }
     }
 }

@@ -16,19 +16,19 @@ pub enum ArityMismatch {
 impl fmt::Display for ArityMismatch {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ArgumentCountTooFew => fmt.write_str("Mixop.fill: too few arguments"),
-            Self::ArgumentCountTooMany => fmt.write_str("Mixop.fill: too many arguments"),
+            Self::ArgumentCountTooFew => fmt.write_str("too few arguments for mixop"),
+            Self::ArgumentCountTooMany => fmt.write_str("too many arguments for mixop"),
         }
     }
 }
 
 impl Error for ArityMismatch {}
 
-/// A failure interning a shape.
+/// A failure interning a mixop.
 #[derive(Clone, Copy, Debug, ThisError, Eq, PartialEq)]
 pub enum MixopError {
     /// The arena ran out of 32-bit handles.
-    #[error("shape arena index overflow")]
+    #[error("mixop arena index overflow")]
     IndexOverflow,
 }
 
