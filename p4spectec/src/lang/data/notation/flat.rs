@@ -22,7 +22,6 @@ use super::{AtomPhrase, arena::MixopArena, mixop::MixopMatch};
 #[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
-
 pub enum MixopFlat {
     Arg,
     Atom(#[serde(state)] AtomPhrase),
