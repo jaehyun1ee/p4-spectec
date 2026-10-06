@@ -39,11 +39,11 @@ pub fn prepare_def_typ(def_typ: source::DefTyp, arena_mixop: &mut MixopArena) ->
 fn prepare_typ_case(typ_case: source::TypCase, arena_mixop: &mut MixopArena) -> TypCase {
     let source::TypCase { not_typ, typ_origin, hints } = typ_case;
     let (mixop, typs) = not_typ.node.into_parts();
-    let shape = arena_mixop
+    let mixop = arena_mixop
         .intern_shared(&mixop)
         .expect("specification mixops fit in 32-bit shape handles");
     let not_typ_kind =
-        Mixfix::new_in(arena_mixop, shape, typs).expect("a notation type fills every position");
+        Mixfix::new_in(arena_mixop, mixop, typs).expect("a notation type fills every position");
     TypCase { not_typ: crate::phrase!(node: not_typ_kind, span: not_typ.span), typ_origin, hints }
 }
 

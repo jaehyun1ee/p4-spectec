@@ -103,9 +103,9 @@ impl<T: Prepare> Prepare for Mixfix<Rc<tree::Mixop>, T> {
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         let (mixop, args) = self.into_parts();
-        let shape = prepare_mixop(&mixop, ctx);
+        let mixop = prepare_mixop(&mixop, ctx);
         let args = args.prepare(ctx);
-        Mixfix::new_in(ctx.arena_mixop, shape, args).expect("a mixfix fills every position")
+        Mixfix::new_in(ctx.arena_mixop, mixop, args).expect("a mixfix fills every position")
     }
 }
 

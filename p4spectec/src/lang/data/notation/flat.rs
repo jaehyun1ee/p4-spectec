@@ -61,34 +61,34 @@ impl MixopKind {
 impl CanonEq for MixopKind {
     fn canon_eq(&self, interner: &CanonInterner<Self>, _: &(), kind_r: &Self) -> bool {
         // Children compare by canonical id, computed when they were interned
-        let eq_mixop = |mixop_id_l: &Mixop, mixop_id_r: &Mixop| {
-            interner.canon_id(*mixop_id_l) == interner.canon_id(*mixop_id_r)
+        let eq_mixop = |mixop_l: &Mixop, mixop_r: &Mixop| {
+            interner.canon_id(*mixop_l) == interner.canon_id(*mixop_r)
         };
         match (self, kind_r) {
             (Self::Arg, Self::Arg) => true,
             (Self::Atom(atom_l), Self::Atom(atom_r)) => atom_l.node == atom_r.node,
             (
-                Self::Brack(atom_l_l, mixop_id_l, atom_l_r),
-                Self::Brack(atom_r_l, mixop_id_r, atom_r_r),
+                Self::Brack(atom_l_l, mixop_l, atom_l_r),
+                Self::Brack(atom_r_l, mixop_r, atom_r_r),
             ) => {
                 atom_l_l.node == atom_r_l.node
-                    && eq_mixop(mixop_id_l, mixop_id_r)
+                    && eq_mixop(mixop_l, mixop_r)
                     && atom_l_r.node == atom_r_r.node
             }
             (
-                Self::Infix(mixop_id_l_l, atom_l, mixop_id_l_r),
-                Self::Infix(mixop_id_r_l, atom_r, mixop_id_r_r),
+                Self::Infix(mixop_l_l, atom_l, mixop_l_r),
+                Self::Infix(mixop_r_l, atom_r, mixop_r_r),
             ) => {
-                eq_mixop(mixop_id_l_l, mixop_id_r_l)
+                eq_mixop(mixop_l_l, mixop_r_l)
                     && atom_l.node == atom_r.node
-                    && eq_mixop(mixop_id_l_r, mixop_id_r_r)
+                    && eq_mixop(mixop_l_r, mixop_r_r)
             }
             (Self::Seq(mixops_l), Self::Seq(mixops_r)) => {
                 mixops_l.len() == mixops_r.len()
                     && mixops_l
                         .iter()
                         .zip(mixops_r)
-                        .all(|(mixop_id_l, mixop_id_r)| eq_mixop(mixop_id_l, mixop_id_r))
+                        .all(|(mixop_l, mixop_r)| eq_mixop(mixop_l, mixop_r))
             }
             _ => false,
         }
@@ -101,20 +101,20 @@ impl CanonHash for MixopKind {
         match self {
             Self::Arg => {}
             Self::Atom(atom) => atom.node.hash(hasher),
-            Self::Brack(atom_l, mixop_id, atom_r) => {
+            Self::Brack(atom_l, mixop, atom_r) => {
                 atom_l.node.hash(hasher);
-                interner.canon_id(*mixop_id).hash(hasher);
+                interner.canon_id(*mixop).hash(hasher);
                 atom_r.node.hash(hasher);
             }
-            Self::Infix(mixop_id_l, atom, mixop_id_r) => {
-                interner.canon_id(*mixop_id_l).hash(hasher);
+            Self::Infix(mixop_l, atom, mixop_r) => {
+                interner.canon_id(*mixop_l).hash(hasher);
                 atom.node.hash(hasher);
-                interner.canon_id(*mixop_id_r).hash(hasher);
+                interner.canon_id(*mixop_r).hash(hasher);
             }
             Self::Seq(mixops) => {
                 mixops.len().hash(hasher);
-                for mixop_id in mixops {
-                    interner.canon_id(*mixop_id).hash(hasher);
+                for mixop in mixops {
+                    interner.canon_id(*mixop).hash(hasher);
                 }
             }
         }

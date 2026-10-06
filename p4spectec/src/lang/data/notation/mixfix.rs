@@ -301,13 +301,13 @@ impl<T> Mixfix<flat::Mixop, T> {
     /// `mixop` must belong to `arena_mixop`.
     pub fn new_in(
         arena_mixop: &MixopArena,
-        mixop_id: flat::Mixop,
+        mixop: flat::Mixop,
         args: Vec<T>,
     ) -> Result<Self, ArityMismatch> {
-        match args.len().cmp(&arena_mixop.arity(mixop_id)) {
+        match args.len().cmp(&arena_mixop.arity(mixop)) {
             Ordering::Less => Err(ArityMismatch::ArgumentCountTooFew),
             Ordering::Greater => Err(ArityMismatch::ArgumentCountTooMany),
-            Ordering::Equal => Ok(Self { mixop: mixop_id, args }),
+            Ordering::Equal => Ok(Self { mixop, args }),
         }
     }
 

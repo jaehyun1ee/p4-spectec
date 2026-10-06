@@ -48,26 +48,29 @@ impl MixopArena {
     /// Interns a node whose children already belong to this arena.
     pub(super) fn intern_kind(&mut self, kind: flat::MixopKind) -> Result<flat::Mixop, MixopError> {
         // Child canonical identities are available when the parent is hashed
-        let mixop_id = self.mixops.intern(kind, &())?;
+        let mixop = self.mixops.intern(kind, &())?;
         // A new mixop sums its children's positions, which are recorded
-        if mixop_id.index() as usize == self.arities.len() {
-            let arity = self.arity_kind(self.kind(mixop_id));
+        if mixop.index() as usize == self.arities.len() {
+            let arity = self.arity_kind(self.kind(mixop));
             self.arities.push(u32::try_from(arity)?);
         }
-        Ok(mixop_id)
+        Ok(mixop)
     }
 
     /// Interns a shared tree, walking it only the first time.
-    pub fn intern_shared(&mut self, mixop: &Rc<tree::Mixop>) -> Result<flat::Mixop, MixopError> {
+    pub fn intern_shared(
+        &mut self,
+        mixop_tree: &Rc<tree::Mixop>,
+    ) -> Result<flat::Mixop, MixopError> {
         // Seen before: the same allocation has the same mixop
-        if let Some((_, mixop_id)) = self.shared.get(&Rc::as_ptr(mixop)) {
-            return Ok(*mixop_id);
+        if let Some((_, mixop)) = self.shared.get(&Rc::as_ptr(mixop_tree)) {
+            return Ok(*mixop);
         }
         // First sight: intern and keep the tree alive with its mixop
-        let mixop_id = self.intern(mixop)?;
+        let mixop = self.intern(mixop_tree)?;
         self.shared
-            .insert(Rc::as_ptr(mixop), (Rc::clone(mixop), mixop_id));
-        Ok(mixop_id)
+            .insert(Rc::as_ptr(mixop_tree), (Rc::clone(mixop_tree), mixop));
+        Ok(mixop)
     }
 
     /// Counts a node's positions from its children's recorded counts.
@@ -75,35 +78,33 @@ impl MixopArena {
         match kind {
             flat::MixopKind::Arg => 1,
             flat::MixopKind::Atom(_) => 0,
-            flat::MixopKind::Brack(_, mixop_id, _) => self.arity(*mixop_id),
-            flat::MixopKind::Infix(mixop_id_l, _, mixop_id_r) => {
-                self.arity(*mixop_id_l) + self.arity(*mixop_id_r)
+            flat::MixopKind::Brack(_, mixop, _) => self.arity(*mixop),
+            flat::MixopKind::Infix(mixop_l, _, mixop_r) => {
+                self.arity(*mixop_l) + self.arity(*mixop_r)
             }
-            flat::MixopKind::Seq(mixops) => {
-                mixops.iter().map(|mixop_id| self.arity(*mixop_id)).sum()
-            }
+            flat::MixopKind::Seq(mixops) => mixops.iter().map(|mixop| self.arity(*mixop)).sum(),
         }
     }
 
     // - Lookup
 
     /// The node behind a mixop handle.
-    pub fn kind(&self, mixop_id: flat::Mixop) -> &flat::MixopKind {
-        self.mixops.get(mixop_id)
+    pub fn kind(&self, mixop: flat::Mixop) -> &flat::MixopKind {
+        self.mixops.get(mixop)
     }
 
     /// The number of argument positions of a mixop.
-    pub fn arity(&self, mixop_id: flat::Mixop) -> usize {
-        self.arities[mixop_id.index() as usize] as usize
+    pub fn arity(&self, mixop: flat::Mixop) -> usize {
+        self.arities[mixop.index() as usize] as usize
     }
 
     /// The canonical identity of a mixop, ignoring atom spans.
-    pub fn canon_id(&self, mixop_id: flat::Mixop) -> CanonId<flat::MixopKind> {
-        self.mixops.canon_id(mixop_id)
+    pub fn canon_id(&self, mixop: flat::Mixop) -> CanonId<flat::MixopKind> {
+        self.mixops.canon_id(mixop)
     }
 
     /// Whether two mixops have the same structure and atom names.
-    pub fn canon_eq(&self, mixop_id_l: flat::Mixop, mixop_id_r: flat::Mixop) -> bool {
-        self.canon_id(mixop_id_l) == self.canon_id(mixop_id_r)
+    pub fn canon_eq(&self, mixop_l: flat::Mixop, mixop_r: flat::Mixop) -> bool {
+        self.canon_id(mixop_l) == self.canon_id(mixop_r)
     }
 }

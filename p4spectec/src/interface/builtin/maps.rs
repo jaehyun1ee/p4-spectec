@@ -11,7 +11,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::{Mixfix, flat, mixop::shape, tree::Mixop},
+        notation::{Mixfix, flat, parse, tree::Mixop},
         typ,
         value::{flat::Value, get, make},
     },
@@ -29,12 +29,12 @@ type ValueMap = Vec<Value>;
 
 /// The `k : v` shape of a pair value.
 fn pair_mixop() -> Rc<Mixop> {
-    shape("k ':' v")
+    parse::mixop("k ':' v")
 }
 
 /// The `{ ... }` shape of a map value.
 fn map_mixop() -> Rc<Mixop> {
-    shape("`{ k `}")
+    parse::mixop("`{ k `}")
 }
 
 /// The value under `key`, from the first matching pair.

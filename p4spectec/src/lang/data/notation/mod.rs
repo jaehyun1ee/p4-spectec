@@ -12,7 +12,7 @@ mod error;
 pub mod external;
 pub mod flat;
 mod mixfix;
-pub mod mixop;
+pub mod parse;
 pub(crate) mod print;
 pub mod tree;
 

@@ -100,9 +100,9 @@ pub fn case(
 ) -> Result<Value, ValueError> {
     let (mixop, values) = mixfix.into_parts();
     let arena_mixop = arena.arena_mixop_mut();
-    let shape = arena_mixop.intern_shared(&mixop)?;
+    let mixop = arena_mixop.intern_shared(&mixop)?;
     let value_case =
-        ValueCase::new_in(arena_mixop, shape, values).expect("a mixfix fills every position");
+        ValueCase::new_in(arena_mixop, mixop, values).expect("a mixfix fills every position");
     new(arena, ValueKind::Case(value_case), typ, span)
 }
 
@@ -115,8 +115,8 @@ macro_rules! case_shaped {
         typ: $typ:expr,
         span: $span:expr $(,)?
     ) => {{
-        let (shape_text, args, typ_name, span) = ($shape, $args, $typ, $span);
-        let mixop = $crate::lang::data::notation::mixop::shape(shape_text);
+        let (mixop_text, args, typ_name, span) = ($shape, $args, $typ, $span);
+        let mixop = $crate::lang::data::notation::parse::mixop(mixop_text);
         let mixfix = $crate::lang::data::notation::Mixfix::new(
             mixop,
             std::iter::IntoIterator::into_iter(args).collect(),
