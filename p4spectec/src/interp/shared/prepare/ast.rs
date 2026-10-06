@@ -7,10 +7,12 @@
 
 use crate::lang::data::{
     notation::{Mixfix, MixopArena},
-    var::{IdSlot, VarSlot},
+    var::VarSlot,
 };
 
-use crate::lang::il::ast::{self as source, Stage};
+use crate::lang::il::ast as source;
+
+pub use crate::lang::il::stage::Prepared;
 
 pub use crate::lang::data::notation::flat::Mixop;
 
@@ -25,18 +27,6 @@ use crate::runtime::envs::interp::shared::frame::FrameLayout;
 use super::{Prepare, PrepareContext, prepare_mixop};
 
 // == Prepared syntax
-
-// - Stage
-
-/// IL syntax whose identifiers and variables are resolved to frame slots.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Prepared;
-
-impl Stage for Prepared {
-    type Id = IdSlot;
-    type Var = VarSlot;
-    type Mixop = Mixop;
-}
 
 // - Variables
 

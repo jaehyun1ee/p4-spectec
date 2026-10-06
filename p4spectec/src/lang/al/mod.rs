@@ -14,4 +14,5 @@ pub mod eq;
 pub mod free;
 pub mod fresh;
 pub mod print;
+pub mod stage;
 pub mod var;

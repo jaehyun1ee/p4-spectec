@@ -2,7 +2,7 @@
 //!
 //! Types, values, and expressions are re-exported from IL;
 //! SL adds parameters with patterns, guards, and the instruction forms.
-//! The stage parameter `P` (`il::stage::Stage`) lets the interpreter
+//! The stage parameter `P` (`stage::Stage`) lets the interpreter
 //! instantiate names with slots.
 
 use crate::lang::{common::source::Phrase, hints::input::InputHint};
@@ -11,7 +11,7 @@ use crate::lang::el;
 
 use crate::lang::il;
 
-pub use crate::lang::il::stage::{Source, Stage};
+pub use super::stage::{Source, Stage};
 
 // Numbers
 

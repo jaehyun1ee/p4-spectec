@@ -6,7 +6,7 @@
 //! when they do not conclude.
 //! Instructions are generic over a `Tier`, the instruction kind it alone has:
 //! `DispatchInstr` selects a rule group, `GroupInstr` runs its body.
-//! The stage parameter `P` (`il::stage::Stage`) resolves identifiers,
+//! The stage parameter `P` (`stage::Stage`) resolves identifiers,
 //! variables, and mixops for the interpreter;
 //! instruction parameter `E` selects the expression representation.
 
@@ -17,7 +17,7 @@ use crate::lang::{
 
 use crate::lang::sl;
 
-pub use crate::lang::il::stage::{Source, Stage};
+pub use super::stage::{Source, Stage};
 
 use crate::lang::pl::annot;
 

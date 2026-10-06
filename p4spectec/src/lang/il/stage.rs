@@ -9,17 +9,21 @@
 
 use std::{fmt, rc::Rc};
 
-use crate::lang::data::notation::tree::Mixop;
-
-use super::ast::{Id, Var};
+use crate::lang::{
+    common::Id,
+    data::{
+        notation::{flat, tree},
+        var::{IdSlot, Var, VarSlot},
+    },
+};
 
 /// The parts of syntax that differ between source and prepared forms.
 pub trait Stage: Clone + fmt::Debug + PartialEq + 'static {
-    /// Identifier occurrences
+    /// Identifier occurrences.
     type Id: Clone + fmt::Debug + PartialEq;
-    /// Variable occurrences
+    /// Variable occurrences.
     type Var: Clone + fmt::Debug + PartialEq;
-    /// How a notation's mixop is held
+    /// How a notation's mixop is held.
     type Mixop: Clone + fmt::Debug + PartialEq;
 }
 
@@ -30,5 +34,15 @@ pub struct Source;
 impl Stage for Source {
     type Id = Id;
     type Var = Var;
-    type Mixop = Rc<Mixop>;
+    type Mixop = Rc<tree::Mixop>;
+}
+
+/// Syntax whose names are resolved to slots and mixops to arena handles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Prepared;
+
+impl Stage for Prepared {
+    type Id = IdSlot;
+    type Var = VarSlot;
+    type Mixop = flat::Mixop;
 }

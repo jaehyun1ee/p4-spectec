@@ -3,7 +3,7 @@
 //! Everything below the premises is re-exported from IL;
 //! AL adds `let` premises, rule matches and paths, and clause and table forms
 //! whose arguments are patterns.
-//! The stage parameter `P` (`il::stage::Stage`) lets the interpreter
+//! The stage parameter `P` (`stage::Stage`) lets the interpreter
 //! instantiate names with slots.
 
 use crate::lang::{common::source::Phrase, hints::input::InputHint};
@@ -12,7 +12,7 @@ use crate::lang::el;
 
 use crate::lang::il;
 
-pub use crate::lang::il::stage::{Source, Stage};
+pub use super::stage::{Source, Stage};
 
 // Numbers
 
