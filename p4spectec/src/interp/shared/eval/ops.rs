@@ -157,7 +157,7 @@ pub(crate) fn r#match<P: ast::Stage>(
     match (pattern, arena.kind(&value)) {
         // Case: same constructor shape
         (ast::Pattern::Case(mixop), ValueFlatKind::Case(value_case)) => {
-            mixop.matches_shape(arena.arena_shape(), *value_case.mixop())
+            mixop.matches_mixop(arena.arena_mixop(), *value_case.mixop())
         }
         // List: non-empty, fixed length, or empty
         (ast::Pattern::List(pattern), ValueFlatKind::List(values)) => match pattern {

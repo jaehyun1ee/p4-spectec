@@ -11,7 +11,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::{Mixfix, Mixop, mixop::shape},
+        notation::{Mixfix, MixopTree, mixop::shape},
         typ,
         value::{ValueFlat, get, make},
     },
@@ -28,12 +28,12 @@ use super::{BuiltinError, extract};
 type ValueMap = Vec<ValueFlat>;
 
 /// The `k : v` shape of a pair value.
-fn pair_mixop() -> Rc<Mixop> {
+fn pair_mixop() -> Rc<MixopTree> {
     shape("k ':' v")
 }
 
 /// The `{ ... }` shape of a map value.
-fn map_mixop() -> Rc<Mixop> {
+fn map_mixop() -> Rc<MixopTree> {
     shape("`{ k `}")
 }
 
@@ -46,8 +46,8 @@ fn map_find_opt(arena: &Arena, key: &ValueFlat, map: &[ValueFlat]) -> Option<Val
             continue;
         };
         if !arena
-            .arena_shape()
-            .eq_mixop(*value_case.mixop(), &pair_mixop)
+            .arena_mixop()
+            .matches_tree(*value_case.mixop(), &pair_mixop)
         {
             continue;
         }
@@ -89,7 +89,7 @@ fn map_update(
     let pair_mixop = pair_mixop();
     for pair in map {
         let matching = get::case(arena, pair).ok().is_some_and(|value_case| {
-            if !arena.arena_shape().eq_mixop(*value_case.mixop(), &pair_mixop) {
+            if !arena.arena_mixop().matches_tree(*value_case.mixop(), &pair_mixop) {
                 return false;
             }
             matches!(value_case.args(), [value_key, _] if arena.view(*value_key).syntax_eq(&arena.view(*key)))
@@ -118,8 +118,8 @@ fn map_of_value(arena: &Arena, value: &ValueFlat) -> Result<ValueMap, BuiltinErr
     let map_mixop = map_mixop();
     // The value must be a map case wrapping one list
     if !arena
-        .arena_shape()
-        .eq_mixop(*value_case.mixop(), &map_mixop)
+        .arena_mixop()
+        .matches_tree(*value_case.mixop(), &map_mixop)
     {
         return Err(BuiltinError::argument_invalid("expected a map"));
     }

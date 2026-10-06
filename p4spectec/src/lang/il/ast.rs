@@ -46,7 +46,7 @@ pub type Atom = Phrase<atom::Atom>;
 // Mixfix operators
 
 /// The atom skeleton of a notation form, without its arguments.
-pub type Mixop = data::notation::Mixop;
+pub type MixopTree = data::notation::MixopTree;
 
 // Iterators
 

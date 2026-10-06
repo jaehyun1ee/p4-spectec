@@ -1,8 +1,8 @@
-//! Flat representation of notation: `ShapeKind` and `Shape`
+//! Flat representation of notation: `MixopFlat` and `MixopId`
 //!
-//! `Flat` stores each node once, with its children as handles
-//! into a `ShapeArena` rather than nested inside it:
-//! `Brack(atom_l, shape, atom_r)` refers to its inner shape by handle,
+//! `MixopFlat` stores each node once, with its children as handles
+//! into a `MixopArena` rather than nested inside it:
+//! `Brack(atom_l, mixop, atom_r)` refers to its inner mixop by handle,
 //! and equal subtrees are stored once.
 //! The forms themselves are unchanged; a sequence keeps its elements.
 //! Exact equality and hashing include atom spans and compare children
@@ -19,126 +19,52 @@ use crate::lang::{
     traits::print::Printer,
 };
 
-use super::{
-    arena::ShapeArena,
-    mixop::MixopRepr,
-    node::{Node, Repr},
-    walk,
-};
+use super::{AtomPhrase, arena::MixopArena, mixop::MixopRepr, walk};
 
-// = Representation
+/// One interned notation node, with child handles in the same arena.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum MixopFlat {
+    Arg,
+    Atom(AtomPhrase),
+    Brack(AtomPhrase, MixopId, AtomPhrase),
+    Infix(MixopId, AtomPhrase, MixopId),
+    Seq(Vec<MixopId>),
+}
 
-/// Children held as handles into a `ShapeArena`.
-#[derive(Clone, Copy, Debug)]
-pub struct Flat;
+/// A notation handle valid only in its issuing arena.
+pub type MixopId = Interned<MixopFlat>;
 
-impl Repr for Flat {
-    type Child = Shape;
-    type Elem = Shape;
-    type ShapeArena = ShapeArena;
-
-    fn node<'a>(arena_shape: &'a ShapeArena, shape: &'a Shape) -> &'a ShapeKind {
-        arena_shape.kind(*shape)
+impl MixopFlat {
+    /// Orders the variants for comparison across forms.
+    pub(crate) fn tag(&self) -> u8 {
+        match self {
+            Self::Arg => 0,
+            Self::Atom(_) => 1,
+            Self::Brack(..) => 2,
+            Self::Infix(..) => 3,
+            Self::Seq(_) => 4,
+        }
     }
 }
 
-// = Shapes
+// - Mixops in prepared syntax
 
-/// A notation node whose children are handles.
-pub type ShapeKind = Node<Flat>;
-
-/// A notation handle valid only in the `ShapeArena` that issued it.
-pub type Shape = Interned<ShapeKind>;
-
-// - Shapes as a stage holds them
-
-// Prepared syntax holds shapes; they print through a printer that has
-// their arena, and match a value's shape by canonical identity
-impl MixopRepr for Shape {
+// Prepared syntax holds mixops; they print through a printer that has
+// their arena, and match a value's mixop by canonical identity
+impl MixopRepr for MixopId {
     fn print_with(
         &self,
         printer: &mut Printer<'_>,
         print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
     ) -> fmt::Result {
-        let arena_shape = printer
-            .arena_shape()
+        let arena_mixop = printer
+            .arena_mixop()
             .expect("printing prepared syntax needs the shape arena");
-        walk::print_with(arena_shape, arena_shape.kind(*self), printer, print_arg)
+        walk::print_flat_with(arena_mixop, arena_mixop.kind(*self), printer, print_arg)
     }
 
-    fn matches_shape(&self, arena_shape: &ShapeArena, shape: Shape) -> bool {
-        arena_shape.canon_eq(shape, *self)
-    }
-}
-
-// = Exact equality and hashing
-
-// Exact identity: atoms with their spans, children by handle number
-
-impl PartialEq for ShapeKind {
-    fn eq(&self, kind_other: &Self) -> bool {
-        match (self, kind_other) {
-            (Self::Arg, Self::Arg) => true,
-            (Self::Atom(atom_l), Self::Atom(atom_r)) => atom_l == atom_r,
-            (
-                Self::Brack(atom_l_l, shape_l, atom_l_r),
-                Self::Brack(atom_r_l, shape_r, atom_r_r),
-            ) => atom_l_l == atom_r_l && shape_l == shape_r && atom_l_r == atom_r_r,
-            (
-                Self::Infix(shape_l_l, atom_l, shape_l_r),
-                Self::Infix(shape_r_l, atom_r, shape_r_r),
-            ) => shape_l_l == shape_r_l && atom_l == atom_r && shape_l_r == shape_r_r,
-            (Self::Seq(shapes_l), Self::Seq(shapes_r)) => shapes_l == shapes_r,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for ShapeKind {}
-
-impl Hash for ShapeKind {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.tag().hash(hasher);
-        match self {
-            Self::Arg => {}
-            Self::Atom(atom) => atom.hash(hasher),
-            Self::Brack(atom_l, shape, atom_r) => {
-                atom_l.hash(hasher);
-                shape.hash(hasher);
-                atom_r.hash(hasher);
-            }
-            Self::Infix(shape_l, atom, shape_r) => {
-                shape_l.hash(hasher);
-                atom.hash(hasher);
-                shape_r.hash(hasher);
-            }
-            Self::Seq(shapes) => shapes.hash(hasher),
-        }
-    }
-}
-
-// - Debugging
-
-// The same text a derive prints: variant names and fields, no type name
-impl fmt::Debug for ShapeKind {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Arg => fmt.write_str("Arg"),
-            Self::Atom(atom) => fmt.debug_tuple("Atom").field(atom).finish(),
-            Self::Brack(atom_l, shape, atom_r) => fmt
-                .debug_tuple("Brack")
-                .field(atom_l)
-                .field(shape)
-                .field(atom_r)
-                .finish(),
-            Self::Infix(shape_l, atom, shape_r) => fmt
-                .debug_tuple("Infix")
-                .field(shape_l)
-                .field(atom)
-                .field(shape_r)
-                .finish(),
-            Self::Seq(shapes) => fmt.debug_tuple("Seq").field(shapes).finish(),
-        }
+    fn matches_mixop(&self, arena_mixop: &MixopArena, mixop_id: MixopId) -> bool {
+        arena_mixop.canon_eq(mixop_id, *self)
     }
 }
 
@@ -147,63 +73,63 @@ impl fmt::Debug for ShapeKind {
 // Canonical identity: atom names and children's canonical ids, so spans
 // are ignored as a tree ignores them
 
-impl CanonEq for ShapeKind {
+impl CanonEq for MixopFlat {
     fn canon_eq(&self, interner: &CanonInterner<Self>, _: &(), kind_r: &Self) -> bool {
         // Children compare by canonical id, computed when they were interned
-        let eq_shape = |shape_l: &Shape, shape_r: &Shape| {
-            interner.canon_id(*shape_l) == interner.canon_id(*shape_r)
+        let eq_mixop = |mixop_id_l: &MixopId, mixop_id_r: &MixopId| {
+            interner.canon_id(*mixop_id_l) == interner.canon_id(*mixop_id_r)
         };
         match (self, kind_r) {
             (Self::Arg, Self::Arg) => true,
             (Self::Atom(atom_l), Self::Atom(atom_r)) => atom_l.node == atom_r.node,
             (
-                Self::Brack(atom_l_l, shape_l, atom_l_r),
-                Self::Brack(atom_r_l, shape_r, atom_r_r),
+                Self::Brack(atom_l_l, mixop_id_l, atom_l_r),
+                Self::Brack(atom_r_l, mixop_id_r, atom_r_r),
             ) => {
                 atom_l_l.node == atom_r_l.node
-                    && eq_shape(shape_l, shape_r)
+                    && eq_mixop(mixop_id_l, mixop_id_r)
                     && atom_l_r.node == atom_r_r.node
             }
             (
-                Self::Infix(shape_l_l, atom_l, shape_l_r),
-                Self::Infix(shape_r_l, atom_r, shape_r_r),
+                Self::Infix(mixop_id_l_l, atom_l, mixop_id_l_r),
+                Self::Infix(mixop_id_r_l, atom_r, mixop_id_r_r),
             ) => {
-                eq_shape(shape_l_l, shape_r_l)
+                eq_mixop(mixop_id_l_l, mixop_id_r_l)
                     && atom_l.node == atom_r.node
-                    && eq_shape(shape_l_r, shape_r_r)
+                    && eq_mixop(mixop_id_l_r, mixop_id_r_r)
             }
-            (Self::Seq(shapes_l), Self::Seq(shapes_r)) => {
-                shapes_l.len() == shapes_r.len()
-                    && shapes_l
+            (Self::Seq(mixops_l), Self::Seq(mixops_r)) => {
+                mixops_l.len() == mixops_r.len()
+                    && mixops_l
                         .iter()
-                        .zip(shapes_r)
-                        .all(|(shape_l, shape_r)| eq_shape(shape_l, shape_r))
+                        .zip(mixops_r)
+                        .all(|(mixop_id_l, mixop_id_r)| eq_mixop(mixop_id_l, mixop_id_r))
             }
             _ => false,
         }
     }
 }
 
-impl CanonHash for ShapeKind {
+impl CanonHash for MixopFlat {
     fn canon_hash<H: Hasher>(&self, interner: &CanonInterner<Self>, _: &(), hasher: &mut H) {
         self.tag().hash(hasher);
         match self {
             Self::Arg => {}
             Self::Atom(atom) => atom.node.hash(hasher),
-            Self::Brack(atom_l, shape, atom_r) => {
+            Self::Brack(atom_l, mixop_id, atom_r) => {
                 atom_l.node.hash(hasher);
-                interner.canon_id(*shape).hash(hasher);
+                interner.canon_id(*mixop_id).hash(hasher);
                 atom_r.node.hash(hasher);
             }
-            Self::Infix(shape_l, atom, shape_r) => {
-                interner.canon_id(*shape_l).hash(hasher);
+            Self::Infix(mixop_id_l, atom, mixop_id_r) => {
+                interner.canon_id(*mixop_id_l).hash(hasher);
                 atom.node.hash(hasher);
-                interner.canon_id(*shape_r).hash(hasher);
+                interner.canon_id(*mixop_id_r).hash(hasher);
             }
-            Self::Seq(shapes) => {
-                shapes.len().hash(hasher);
-                for shape in shapes {
-                    interner.canon_id(*shape).hash(hasher);
+            Self::Seq(mixops) => {
+                mixops.len().hash(hasher);
+                for mixop_id in mixops {
+                    interner.canon_id(*mixop_id).hash(hasher);
                 }
             }
         }

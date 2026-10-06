@@ -239,7 +239,7 @@ fn eval_if_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp.node.span.clone(),
                 error::prem::condition_unmet(Print::to_string_in(
                     &instr.exp,
-                    runner_ctx.arena().arena_shape()
+                    runner_ctx.arena().arena_mixop()
                 ))
             )
         ))
@@ -334,7 +334,7 @@ fn eval_case_instr<'global, Tier, Iface: Interface, Ext: Extern>(
             instr.exp.node.span.clone(),
             error::prem::condition_unmet(Print::to_string_in(
                 &instr.exp,
-                runner_ctx.arena().arena_shape()
+                runner_ctx.arena().arena_mixop()
             ))
         )
     ))
@@ -530,8 +530,8 @@ fn eval_check_let_sub_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} is not a subtype of {}",
-                    Print::to_string_in(&instr.exp_r, runner_ctx.arena().arena_shape()),
-                    Print::to_string_in(&instr.typ, runner_ctx.arena().arena_shape())
+                    Print::to_string_in(&instr.exp_r, runner_ctx.arena().arena_mixop()),
+                    Print::to_string_in(&instr.typ, runner_ctx.arena().arena_mixop())
                 ))
             )
         ))
@@ -566,7 +566,7 @@ fn eval_check_let_match_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} does not match the expected pattern",
-                    Print::to_string_in(&instr.exp_r, runner_ctx.arena().arena_shape())
+                    Print::to_string_in(&instr.exp_r, runner_ctx.arena().arena_mixop())
                 ))
             )
         ))
@@ -603,7 +603,7 @@ fn eval_option_get_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} evaluated to an empty option",
-                    Print::to_string_in(&instr.exp_r, runner_ctx.arena().arena_shape())
+                    Print::to_string_in(&instr.exp_r, runner_ctx.arena().arena_mixop())
                 ))
             )
         ))

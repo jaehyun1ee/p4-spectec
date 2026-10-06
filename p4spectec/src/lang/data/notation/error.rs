@@ -26,7 +26,7 @@ impl Error for ArityMismatch {}
 
 /// A failure interning a shape.
 #[derive(Clone, Copy, Debug, ThisError, Eq, PartialEq)]
-pub enum ShapeError {
+pub enum MixopError {
     /// The arena ran out of 32-bit handles.
     #[error("shape arena index overflow")]
     IndexOverflow,
@@ -34,7 +34,7 @@ pub enum ShapeError {
 
 // - Index overflow
 
-impl From<TryFromIntError> for ShapeError {
+impl From<TryFromIntError> for MixopError {
     fn from(_: TryFromIntError) -> Self {
         Self::IndexOverflow
     }

@@ -32,7 +32,7 @@ pub type Atom = il::ast::Atom;
 
 // Mixfix operators
 
-pub type Mixop = il::ast::Mixop;
+pub type MixopTree = il::ast::MixopTree;
 
 // Iterators
 

@@ -189,7 +189,7 @@ fn eval_if_instr<Iface: Interface, Ext: Extern>(
             instr.exp.span.clone(),
             error::prem::condition_unmet(Print::to_string_in(
                 &instr.exp,
-                runner_ctx.arena().arena_shape()
+                runner_ctx.arena().arena_mixop()
             )),
         ))
     }
@@ -272,7 +272,7 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
         instr.exp.span.clone(),
         error::prem::condition_unmet(format!(
             "case {}",
-            Print::to_string_in(&instr.exp, runner_ctx.arena().arena_shape())
+            Print::to_string_in(&instr.exp, runner_ctx.arena().arena_mixop())
         )),
     ))
 }
@@ -450,7 +450,7 @@ fn eval_debug_instr<Iface: Interface, Ext: Extern>(
     println!(
         "{}: {}",
         instr.exp.span,
-        Print::to_string_in(&instr.exp, runner_ctx.arena().arena_shape())
+        Print::to_string_in(&instr.exp, runner_ctx.arena().arena_mixop())
     );
     // Print the value's source span when it has one
     let span = runner_ctx.arena().span(&value).to_string();

@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 
-use crate::lang::data::notation::ShapeArena;
+use crate::lang::data::notation::MixopArena;
 
 use crate::interp::shared::prepare::{Prepare, PrepareContext};
 
@@ -24,12 +24,12 @@ pub struct Callable<T> {
 impl<T> Callable<T> {
     /// Prepares a definition, collecting its slot layout.
     ///
-    /// Notations are interned into `arena_shape`,
+    /// Notations are interned into `arena_mixop`,
     /// which must stay with the prepared definition for evaluation.
-    pub fn prepare<S: Prepare<Output = T>>(source: S, arena_shape: &mut ShapeArena) -> Self {
+    pub fn prepare<S: Prepare<Output = T>>(source: S, arena_mixop: &mut MixopArena) -> Self {
         // The traversal fills the layout as it resolves names
         let mut layout = FrameLayout::default();
-        let def = source.prepare(&mut PrepareContext { layout: &mut layout, arena_shape });
+        let def = source.prepare(&mut PrepareContext { layout: &mut layout, arena_mixop });
         Self { def, layout: Rc::new(layout) }
     }
 }

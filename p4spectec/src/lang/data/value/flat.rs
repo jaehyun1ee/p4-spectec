@@ -14,7 +14,7 @@ use crate::lang::{
     },
     data::{
         intern::{CanonEq, CanonHash, CanonInterner, Interned},
-        notation::{Mixfix, Shape, ShapeArena},
+        notation::{Mixfix, MixopArena, MixopId},
         typ::TypKind,
     },
 };
@@ -30,7 +30,7 @@ pub type ValueFlat = NotePhrase<Interned<ValueFlatKind>, Interned<TypKind>, Inte
 /// A named value field.
 pub type ValueField = (Phrase<Atom>, ValueFlat);
 /// A case with one value per argument position.
-pub type ValueCase = Mixfix<Shape, ValueFlat>;
+pub type ValueCase = Mixfix<MixopId, ValueFlat>;
 
 /// A stored value body whose children belong to the same arena.
 #[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
@@ -86,11 +86,11 @@ impl ValueFlatKind {
 }
 // = Canonical equality and hashing
 
-impl CanonEq<ShapeArena> for ValueFlatKind {
+impl CanonEq<MixopArena> for ValueFlatKind {
     fn canon_eq(
         &self,
         interner: &CanonInterner<Self>,
-        arena_shape: &ShapeArena,
+        arena_mixop: &MixopArena,
         kind_r: &Self,
     ) -> bool {
         // Children compare by canonical id, computed when they were interned
@@ -110,7 +110,7 @@ impl CanonEq<ShapeArena> for ValueFlatKind {
                     )
             }
             (ValueFlatKind::Case(value_case_l), ValueFlatKind::Case(value_case_r)) => {
-                arena_shape.canon_eq(*value_case_l.mixop(), *value_case_r.mixop())
+                arena_mixop.canon_eq(*value_case_l.mixop(), *value_case_r.mixop())
                     && value_case_l.args().len() == value_case_r.args().len()
                     && value_case_l
                         .args()
@@ -140,11 +140,11 @@ impl CanonEq<ShapeArena> for ValueFlatKind {
     }
 }
 
-impl CanonHash<ShapeArena> for ValueFlatKind {
+impl CanonHash<MixopArena> for ValueFlatKind {
     fn canon_hash<H: Hasher>(
         &self,
         interner: &CanonInterner<Self>,
-        arena_shape: &ShapeArena,
+        arena_mixop: &MixopArena,
         hasher: &mut H,
     ) {
         std::mem::discriminant(self).hash(hasher);
@@ -160,7 +160,7 @@ impl CanonHash<ShapeArena> for ValueFlatKind {
                 }
             }
             ValueFlatKind::Case(value_case) => {
-                arena_shape.canon_id(*value_case.mixop()).hash(hasher);
+                arena_mixop.canon_id(*value_case.mixop()).hash(hasher);
                 value_case.args().len().hash(hasher);
                 for value in value_case.args() {
                     interner.canon_id(value.node).hash(hasher);

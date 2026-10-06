@@ -1,38 +1,15 @@
-//! Traversals shared by every notation representation
+//! Concrete tree and flat notation traversals
 //!
-//! Each function takes a node with the shape arena its representation
-//! reads children from (`()` for trees),
-//! so nodes of two representations can be compared with each other.
-//! Atoms compare by name only.
-//! Argument positions are numbered left to right from 0,
-//! and callers look up the argument at a position themselves;
-//! `cmp_by` and `print_with` hand positions to a closure in notation order.
+//! Comparisons visit atoms and argument positions in notation order.
+//! Tree operations read owned children; flat operations resolve child IDs
+//! through each operand's arena. Atom comparisons ignore source spans.
 
-use std::{cmp::Ordering, fmt};
-
+use super::{AtomPhrase, MixopArena, MixopFlat, MixopTree};
 use crate::lang::{
     common::notation::atom::Atom,
     traits::print::{Print, Printer},
 };
-
-use super::{
-    node::{AtomPhrase, Node, Repr},
-    tree::Tree,
-};
-
-// = Comparison
-
-/// Whether two nodes have the same structure and atom names.
-///
-/// Atom spans are not compared.
-pub fn eq<R: Repr, S: Repr>(
-    arena_shape_l: &R::ShapeArena,
-    node_l: &Node<R>,
-    arena_shape_r: &S::ShapeArena,
-    node_r: &Node<S>,
-) -> bool {
-    cmp_by(arena_shape_l, node_l, arena_shape_r, node_r, |_| Ordering::Equal) == Ordering::Equal
-}
+use std::{cmp::Ordering, fmt};
 
 /// Orders two nodes by structure and atom names, lexicographically.
 ///
@@ -42,81 +19,53 @@ pub fn eq<R: Repr, S: Repr>(
 /// different forms order by variant.
 /// Both walks visit equal prefixes, so they reach argument positions in step,
 /// and `compare_arg` orders the arguments at each position.
-pub fn cmp_by<R: Repr, S: Repr>(
-    arena_shape_l: &R::ShapeArena,
-    node_l: &Node<R>,
-    arena_shape_r: &S::ShapeArena,
-    node_r: &Node<S>,
+pub fn cmp_trees_by(
+    node_l: &MixopTree,
+    node_r: &MixopTree,
     mut compare_arg: impl FnMut(usize) -> Ordering,
 ) -> Ordering {
     let mut pos = 0;
-    cmp_by_inner(arena_shape_l, node_l, arena_shape_r, node_r, &mut pos, &mut compare_arg)
+    cmp_trees_by_inner(node_l, node_r, &mut pos, &mut compare_arg)
 }
 
 /// Structural comparison, threading the position and the argument comparator.
-fn cmp_by_inner<R: Repr, S: Repr>(
-    arena_shape_l: &R::ShapeArena,
-    node_l: &Node<R>,
-    arena_shape_r: &S::ShapeArena,
-    node_r: &Node<S>,
+fn cmp_trees_by_inner(
+    node_l: &MixopTree,
+    node_r: &MixopTree,
     pos: &mut usize,
     compare_arg: &mut impl FnMut(usize) -> Ordering,
 ) -> Ordering {
     match (node_l, node_r) {
         // Arguments by the caller's comparator
-        (Node::Arg, Node::Arg) => {
+        (MixopTree::Arg, MixopTree::Arg) => {
             let order = compare_arg(*pos);
             *pos += 1;
             order
         }
         // Atoms by name
-        (Node::Atom(atom_l), Node::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
+        (MixopTree::Atom(atom_l), MixopTree::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
         // Brackets: opening atom, inner form, closing atom
-        (Node::Brack(atom_l_l, child_l, atom_l_r), Node::Brack(atom_r_l, child_r, atom_r_r)) => {
-            atom_l_l
-                .node
-                .cmp(&atom_r_l.node)
-                .then_with(|| {
-                    cmp_by_inner(
-                        arena_shape_l,
-                        Node::<R>::child(arena_shape_l, child_l),
-                        arena_shape_r,
-                        Node::<S>::child(arena_shape_r, child_r),
-                        pos,
-                        compare_arg,
-                    )
-                })
-                .then_with(|| atom_l_r.node.cmp(&atom_r_r.node))
-        }
+        (
+            MixopTree::Brack(atom_l_l, child_l, atom_l_r),
+            MixopTree::Brack(atom_r_l, child_r, atom_r_r),
+        ) => atom_l_l
+            .node
+            .cmp(&atom_r_l.node)
+            .then_with(|| cmp_trees_by_inner(child_l, child_r, pos, compare_arg))
+            .then_with(|| atom_l_r.node.cmp(&atom_r_r.node)),
         // Infix: left form, operator, right form
-        (Node::Infix(child_l_l, atom_l, child_l_r), Node::Infix(child_r_l, atom_r, child_r_r)) => {
-            cmp_by_inner(
-                arena_shape_l,
-                Node::<R>::child(arena_shape_l, child_l_l),
-                arena_shape_r,
-                Node::<S>::child(arena_shape_r, child_r_l),
-                pos,
-                compare_arg,
-            )
+        (
+            MixopTree::Infix(child_l_l, atom_l, child_l_r),
+            MixopTree::Infix(child_r_l, atom_r, child_r_r),
+        ) => cmp_trees_by_inner(child_l_l, child_r_l, pos, compare_arg)
             .then_with(|| atom_l.node.cmp(&atom_r.node))
-            .then_with(|| {
-                cmp_by_inner(
-                    arena_shape_l,
-                    Node::<R>::child(arena_shape_l, child_l_r),
-                    arena_shape_r,
-                    Node::<S>::child(arena_shape_r, child_r_r),
-                    pos,
-                    compare_arg,
-                )
-            })
-        }
+            .then_with(|| cmp_trees_by_inner(child_l_r, child_r_r, pos, compare_arg)),
         // Sequences: common prefix first, then length
-        (Node::Seq(elems_l), Node::Seq(elems_r)) => {
-            let nodes_l = elems_l.iter().map(|elem| R::node(arena_shape_l, elem));
-            let nodes_r = elems_r.iter().map(|elem| S::node(arena_shape_r, elem));
+        (MixopTree::Seq(elems_l), MixopTree::Seq(elems_r)) => {
+            let nodes_l = elems_l.iter();
+            let nodes_r = elems_r.iter();
             for (node_l, node_r) in nodes_l.zip(nodes_r) {
-                let order =
-                    cmp_by_inner(arena_shape_l, node_l, arena_shape_r, node_r, pos, compare_arg);
+                let order = cmp_trees_by_inner(node_l, node_r, pos, compare_arg);
                 if order != Ordering::Equal {
                     return order;
                 }
@@ -128,7 +77,107 @@ fn cmp_by_inner<R: Repr, S: Repr>(
     }
 }
 
-// = Visiting
+/// Orders two nodes by structure and atom names, lexicographically.
+///
+/// Brackets compare the opening atom, the inner form, then the closing atom;
+/// infix compares the left form, the operator, then the right form;
+/// sequences compare the common prefix, then the length;
+/// different forms order by variant.
+/// Both walks visit equal prefixes, so they reach argument positions in step,
+/// and `compare_arg` orders the arguments at each position.
+pub fn cmp_flats_by(
+    arena_mixop_l: &MixopArena,
+    node_l: &MixopFlat,
+    arena_mixop_r: &MixopArena,
+    node_r: &MixopFlat,
+    mut compare_arg: impl FnMut(usize) -> Ordering,
+) -> Ordering {
+    let mut pos = 0;
+    cmp_flats_by_inner(arena_mixop_l, node_l, arena_mixop_r, node_r, &mut pos, &mut compare_arg)
+}
+
+/// Structural comparison, threading the position and the argument comparator.
+fn cmp_flats_by_inner(
+    arena_mixop_l: &MixopArena,
+    node_l: &MixopFlat,
+    arena_mixop_r: &MixopArena,
+    node_r: &MixopFlat,
+    pos: &mut usize,
+    compare_arg: &mut impl FnMut(usize) -> Ordering,
+) -> Ordering {
+    match (node_l, node_r) {
+        // Arguments by the caller's comparator
+        (MixopFlat::Arg, MixopFlat::Arg) => {
+            let order = compare_arg(*pos);
+            *pos += 1;
+            order
+        }
+        // Atoms by name
+        (MixopFlat::Atom(atom_l), MixopFlat::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
+        // Brackets: opening atom, inner form, closing atom
+        (
+            MixopFlat::Brack(atom_l_l, child_l, atom_l_r),
+            MixopFlat::Brack(atom_r_l, child_r, atom_r_r),
+        ) => atom_l_l
+            .node
+            .cmp(&atom_r_l.node)
+            .then_with(|| {
+                cmp_flats_by_inner(
+                    arena_mixop_l,
+                    arena_mixop_l.kind(*child_l),
+                    arena_mixop_r,
+                    arena_mixop_r.kind(*child_r),
+                    pos,
+                    compare_arg,
+                )
+            })
+            .then_with(|| atom_l_r.node.cmp(&atom_r_r.node)),
+        // Infix: left form, operator, right form
+        (
+            MixopFlat::Infix(child_l_l, atom_l, child_l_r),
+            MixopFlat::Infix(child_r_l, atom_r, child_r_r),
+        ) => cmp_flats_by_inner(
+            arena_mixop_l,
+            arena_mixop_l.kind(*child_l_l),
+            arena_mixop_r,
+            arena_mixop_r.kind(*child_r_l),
+            pos,
+            compare_arg,
+        )
+        .then_with(|| atom_l.node.cmp(&atom_r.node))
+        .then_with(|| {
+            cmp_flats_by_inner(
+                arena_mixop_l,
+                arena_mixop_l.kind(*child_l_r),
+                arena_mixop_r,
+                arena_mixop_r.kind(*child_r_r),
+                pos,
+                compare_arg,
+            )
+        }),
+        // Sequences: common prefix first, then length
+        (MixopFlat::Seq(elems_l), MixopFlat::Seq(elems_r)) => {
+            let nodes_l = elems_l.iter().map(|elem| arena_mixop_l.kind(*elem));
+            let nodes_r = elems_r.iter().map(|elem| arena_mixop_r.kind(*elem));
+            for (node_l, node_r) in nodes_l.zip(nodes_r) {
+                let order = cmp_flats_by_inner(
+                    arena_mixop_l,
+                    node_l,
+                    arena_mixop_r,
+                    node_r,
+                    pos,
+                    compare_arg,
+                );
+                if order != Ordering::Equal {
+                    return order;
+                }
+            }
+            elems_l.len().cmp(&elems_r.len())
+        }
+        // Different forms order by variant
+        _ => node_l.tag().cmp(&node_r.tag()),
+    }
+}
 
 /// A piece of a notation in reading order.
 #[derive(Clone, Copy, Debug)]
@@ -140,80 +189,135 @@ pub enum Piece<'a> {
 }
 
 /// Visits atoms and argument positions in reading order.
-pub fn visit<'a, R: Repr>(
-    arena_shape: &'a R::ShapeArena,
-    node: &'a Node<R>,
-    mut visit_piece: impl FnMut(Piece<'a>),
-) {
+pub fn visit_tree<'a>(node: &'a MixopTree, mut visit_piece: impl FnMut(Piece<'a>)) {
     let mut pos = 0;
-    visit_inner(arena_shape, node, &mut pos, &mut visit_piece);
+    visit_tree_inner(node, &mut pos, &mut visit_piece);
 }
 
 /// Visits one node, threading the position.
-fn visit_inner<'a, R: Repr>(
-    arena_shape: &'a R::ShapeArena,
-    node: &'a Node<R>,
+fn visit_tree_inner<'a>(
+    node: &'a MixopTree,
     pos: &mut usize,
     visit_piece: &mut impl FnMut(Piece<'a>),
 ) {
     match node {
-        Node::Arg => {
+        MixopTree::Arg => {
             visit_piece(Piece::Arg(*pos));
             *pos += 1;
         }
-        Node::Atom(atom) => visit_piece(Piece::Atom(atom)),
-        Node::Brack(atom_l, child, atom_r) => {
+        MixopTree::Atom(atom) => visit_piece(Piece::Atom(atom)),
+        MixopTree::Brack(atom_l, child, atom_r) => {
             visit_piece(Piece::Atom(atom_l));
-            visit_inner(arena_shape, Node::<R>::child(arena_shape, child), pos, visit_piece);
+            visit_tree_inner(child, pos, visit_piece);
             visit_piece(Piece::Atom(atom_r));
         }
-        Node::Infix(child_l, atom, child_r) => {
-            visit_inner(arena_shape, Node::<R>::child(arena_shape, child_l), pos, visit_piece);
+        MixopTree::Infix(child_l, atom, child_r) => {
+            visit_tree_inner(child_l, pos, visit_piece);
             visit_piece(Piece::Atom(atom));
-            visit_inner(arena_shape, Node::<R>::child(arena_shape, child_r), pos, visit_piece);
+            visit_tree_inner(child_r, pos, visit_piece);
         }
-        Node::Seq(elems) => {
+        MixopTree::Seq(elems) => {
             for elem in elems {
-                visit_inner(arena_shape, R::node(arena_shape, elem), pos, visit_piece);
+                visit_tree_inner(elem, pos, visit_piece);
             }
         }
     }
 }
 
-// = Printing
+/// Visits atoms and argument positions in reading order.
+pub fn visit_flat<'a>(
+    arena_mixop: &'a MixopArena,
+    node: &'a MixopFlat,
+    mut visit_piece: impl FnMut(Piece<'a>),
+) {
+    let mut pos = 0;
+    visit_flat_inner(arena_mixop, node, &mut pos, &mut visit_piece);
+}
+
+/// Visits one node, threading the position.
+fn visit_flat_inner<'a>(
+    arena_mixop: &'a MixopArena,
+    node: &'a MixopFlat,
+    pos: &mut usize,
+    visit_piece: &mut impl FnMut(Piece<'a>),
+) {
+    match node {
+        MixopFlat::Arg => {
+            visit_piece(Piece::Arg(*pos));
+            *pos += 1;
+        }
+        MixopFlat::Atom(atom) => visit_piece(Piece::Atom(atom)),
+        MixopFlat::Brack(atom_l, child, atom_r) => {
+            visit_piece(Piece::Atom(atom_l));
+            visit_flat_inner(arena_mixop, arena_mixop.kind(*child), pos, visit_piece);
+            visit_piece(Piece::Atom(atom_r));
+        }
+        MixopFlat::Infix(child_l, atom, child_r) => {
+            visit_flat_inner(arena_mixop, arena_mixop.kind(*child_l), pos, visit_piece);
+            visit_piece(Piece::Atom(atom));
+            visit_flat_inner(arena_mixop, arena_mixop.kind(*child_r), pos, visit_piece);
+        }
+        MixopFlat::Seq(elems) => {
+            for elem in elems {
+                visit_flat_inner(arena_mixop, arena_mixop.kind(*elem), pos, visit_piece);
+            }
+        }
+    }
+}
 
 /// Writes atoms and arguments, separating non-empty pieces with spaces.
 ///
 /// Empty keyword atoms print nothing, not even a space;
 /// `print_arg` writes the argument at a position.
-pub fn print_with<R: Repr>(
-    arena_shape: &R::ShapeArena,
-    node: &Node<R>,
+pub fn print_tree_with(
+    node: &MixopTree,
     printer: &mut Printer<'_>,
     mut print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
 ) -> fmt::Result {
     let mut is_first = true;
     let mut result = Ok(());
-    visit(arena_shape, node, |piece| {
-        // Stop writing after the first failure
-        if result.is_err() {
-            return;
+    visit_tree(node, |piece| {
+        if result.is_ok() {
+            result = print_piece(piece, printer, &mut is_first, &mut print_arg);
         }
-        result = match piece {
-            // Empty keyword atoms print nothing, not even a space
-            Piece::Atom(atom) if matches!(&atom.node, Atom::Keyword(keyword) if keyword.is_empty()) => {
-                Ok(())
-            }
-            // A space before every piece but the first
-            Piece::Atom(atom) => {
-                print_sep(printer, &mut is_first).and_then(|()| atom.print(printer))
-            }
-            Piece::Arg(pos) => {
-                print_sep(printer, &mut is_first).and_then(|()| print_arg(pos, printer))
-            }
-        };
     });
     result
+}
+
+/// Writes atoms and arguments, separating non-empty pieces with spaces.
+///
+/// Empty keyword atoms print nothing, not even a space;
+/// `print_arg` writes the argument at a position.
+pub fn print_flat_with(
+    arena_mixop: &MixopArena,
+    node: &MixopFlat,
+    printer: &mut Printer<'_>,
+    mut print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
+) -> fmt::Result {
+    let mut is_first = true;
+    let mut result = Ok(());
+    visit_flat(arena_mixop, node, |piece| {
+        if result.is_ok() {
+            result = print_piece(piece, printer, &mut is_first, &mut print_arg);
+        }
+    });
+    result
+}
+
+/// Prints one piece using the same spacing rules for both representations.
+fn print_piece(
+    piece: Piece<'_>,
+    printer: &mut Printer<'_>,
+    is_first: &mut bool,
+    print_arg: &mut impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
+) -> fmt::Result {
+    match piece {
+        Piece::Atom(atom) if matches!(&atom.node, Atom::Keyword(keyword) if keyword.is_empty()) => {
+            Ok(())
+        }
+        Piece::Atom(atom) => print_sep(printer, is_first).and_then(|()| atom.print(printer)),
+        Piece::Arg(pos) => print_sep(printer, is_first).and_then(|()| print_arg(pos, printer)),
+    }
 }
 
 /// Writes a space before every piece but the first.
@@ -226,45 +330,72 @@ fn print_sep(printer: &mut Printer<'_>, is_first: &mut bool) -> fmt::Result {
     }
 }
 
-// = Expansion
-
 /// Rebuilds a node as a tree, copying atoms with their spans.
-pub fn to_tree<R: Repr>(arena_shape: &R::ShapeArena, node: &Node<R>) -> Node<Tree> {
+pub fn to_tree(arena_mixop: &MixopArena, node: &MixopFlat) -> MixopTree {
     match node {
-        Node::Arg => Node::Arg,
-        Node::Atom(atom) => Node::Atom(atom.clone()),
-        Node::Brack(atom_l, child, atom_r) => Node::Brack(
+        MixopFlat::Arg => MixopTree::Arg,
+        MixopFlat::Atom(atom) => MixopTree::Atom(atom.clone()),
+        MixopFlat::Brack(atom_l, child, atom_r) => MixopTree::Brack(
             atom_l.clone(),
-            Box::new(to_tree(arena_shape, Node::<R>::child(arena_shape, child))),
+            Box::new(to_tree(arena_mixop, arena_mixop.kind(*child))),
             atom_r.clone(),
         ),
-        Node::Infix(child_l, atom, child_r) => Node::Infix(
-            Box::new(to_tree(arena_shape, Node::<R>::child(arena_shape, child_l))),
+        MixopFlat::Infix(child_l, atom, child_r) => MixopTree::Infix(
+            Box::new(to_tree(arena_mixop, arena_mixop.kind(*child_l))),
             atom.clone(),
-            Box::new(to_tree(arena_shape, Node::<R>::child(arena_shape, child_r))),
+            Box::new(to_tree(arena_mixop, arena_mixop.kind(*child_r))),
         ),
-        Node::Seq(elems) => Node::Seq(
+        MixopFlat::Seq(elems) => MixopTree::Seq(
             elems
                 .iter()
-                .map(|elem| to_tree(arena_shape, R::node(arena_shape, elem)))
+                .map(|elem| to_tree(arena_mixop, arena_mixop.kind(*elem)))
                 .collect(),
         ),
     }
 }
 
 /// The number of argument positions.
-pub fn arity<R: Repr>(arena_shape: &R::ShapeArena, node: &Node<R>) -> usize {
+pub fn arity_tree(node: &MixopTree) -> usize {
     match node {
-        Node::Arg => 1,
-        Node::Atom(_) => 0,
-        Node::Brack(_, child, _) => arity(arena_shape, Node::<R>::child(arena_shape, child)),
-        Node::Infix(child_l, _, child_r) => {
-            arity(arena_shape, Node::<R>::child(arena_shape, child_l))
-                + arity(arena_shape, Node::<R>::child(arena_shape, child_r))
+        MixopTree::Arg => 1,
+        MixopTree::Atom(_) => 0,
+        MixopTree::Brack(_, child, _) => arity_tree(child),
+        MixopTree::Infix(child_l, _, child_r) => arity_tree(child_l) + arity_tree(child_r),
+        MixopTree::Seq(elems) => elems.iter().map(arity_tree).sum(),
+    }
+}
+
+/// Compares a stored form with an owned tree, ignoring atom spans.
+pub fn matches_tree(
+    arena_mixop: &MixopArena,
+    mixop_flat: &MixopFlat,
+    mixop_tree: &MixopTree,
+) -> bool {
+    match (mixop_flat, mixop_tree) {
+        (MixopFlat::Arg, MixopTree::Arg) => true,
+        (MixopFlat::Atom(atom_l), MixopTree::Atom(atom_r)) => atom_l.node == atom_r.node,
+        (
+            MixopFlat::Brack(atom_l_l, child_l, atom_l_r),
+            MixopTree::Brack(atom_r_l, child_r, atom_r_r),
+        ) => {
+            atom_l_l.node == atom_r_l.node
+                && atom_l_r.node == atom_r_r.node
+                && matches_tree(arena_mixop, arena_mixop.kind(*child_l), child_r)
         }
-        Node::Seq(elems) => elems
-            .iter()
-            .map(|elem| arity(arena_shape, R::node(arena_shape, elem)))
-            .sum(),
+        (
+            MixopFlat::Infix(child_l_l, atom_l, child_l_r),
+            MixopTree::Infix(child_r_l, atom_r, child_r_r),
+        ) => {
+            atom_l.node == atom_r.node
+                && matches_tree(arena_mixop, arena_mixop.kind(*child_l_l), child_r_l)
+                && matches_tree(arena_mixop, arena_mixop.kind(*child_l_r), child_r_r)
+        }
+        (MixopFlat::Seq(children_l), MixopTree::Seq(children_r)) => {
+            children_l.len() == children_r.len()
+                && children_l.iter().zip(children_r).all(|(child_l, child_r)| {
+                    matches_tree(arena_mixop, arena_mixop.kind(*child_l), child_r)
+                })
+        }
+        _ => false,
     }
 }

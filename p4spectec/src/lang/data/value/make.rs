@@ -12,7 +12,7 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::{Mixfix, Mixop},
+        notation::{Mixfix, MixopTree},
         typ::{self, Typ, TypKind},
     },
 };
@@ -96,14 +96,14 @@ pub fn structure(
 pub fn case(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    mixfix: Mixfix<Rc<Mixop>, ValueFlat>,
+    mixfix: Mixfix<Rc<MixopTree>, ValueFlat>,
     span: Span,
 ) -> Result<ValueFlat, ValueError> {
     let (mixop, values) = mixfix.into_parts();
-    let arena_shape = arena.arena_shape_mut();
-    let shape = arena_shape.intern_shared(&mixop)?;
+    let arena_mixop = arena.arena_mixop_mut();
+    let shape = arena_mixop.intern_shared(&mixop)?;
     let value_case =
-        ValueCase::new_in(arena_shape, shape, values).expect("a mixfix fills every position");
+        ValueCase::new_in(arena_mixop, shape, values).expect("a mixfix fills every position");
     new(arena, ValueFlatKind::Case(value_case), typ, span)
 }
 

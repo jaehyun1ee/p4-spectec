@@ -3,11 +3,11 @@
 //! `Print::print` writes to a `Printer`, which tracks indentation;
 //! `to_string` renders into a fresh string.
 //! Prepared syntax holds notation shapes, so it prints only through a printer
-//! that has their shape arena (`Printer::with_arena_shape`, `Print::to_string_in`).
+//! that has their shape arena (`Printer::with_arena_mixop`, `Print::to_string_in`).
 
 use std::fmt;
 
-use crate::lang::data::notation::ShapeArena;
+use crate::lang::data::notation::MixopArena;
 
 // == Printing
 
@@ -28,10 +28,10 @@ pub trait Print {
     }
 
     /// Renders this value with the shape arena its notations belong to.
-    fn to_string_in(&self, arena_shape: &ShapeArena) -> String {
+    fn to_string_in(&self, arena_mixop: &MixopArena) -> String {
         let mut output = String::new();
         {
-            let mut printer = Printer::with_arena_shape(&mut output, arena_shape);
+            let mut printer = Printer::with_arena_mixop(&mut output, arena_mixop);
             self.print(&mut printer)
                 .expect("writing to a String cannot fail");
         }
@@ -48,23 +48,23 @@ pub struct Printer<'a> {
     /// Current indentation depth, two spaces per level.
     level: usize,
     /// The shapes notation handles refer to, when printing prepared syntax.
-    arena_shape: Option<&'a ShapeArena>,
+    arena_mixop: Option<&'a MixopArena>,
 }
 
 impl<'a> Printer<'a> {
     /// Creates a printer at the outermost indentation level.
     pub fn new(output: &'a mut dyn fmt::Write) -> Self {
-        Self { output, level: 0, arena_shape: None }
+        Self { output, level: 0, arena_mixop: None }
     }
 
-    /// Creates a printer that can print notation shapes of `arena_shape`.
-    pub fn with_arena_shape(output: &'a mut dyn fmt::Write, arena_shape: &'a ShapeArena) -> Self {
-        Self { output, level: 0, arena_shape: Some(arena_shape) }
+    /// Creates a printer that can print notation shapes of `arena_mixop`.
+    pub fn with_arena_mixop(output: &'a mut dyn fmt::Write, arena_mixop: &'a MixopArena) -> Self {
+        Self { output, level: 0, arena_mixop: Some(arena_mixop) }
     }
 
     /// The shape arena, when the printer has one.
-    pub fn arena_shape(&self) -> Option<&'a ShapeArena> {
-        self.arena_shape
+    pub fn arena_mixop(&self) -> Option<&'a MixopArena> {
+        self.arena_mixop
     }
 
     /// Writes text without changing layout state.

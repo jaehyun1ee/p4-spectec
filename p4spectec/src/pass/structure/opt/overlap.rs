@@ -278,7 +278,7 @@ pub(crate) fn overlap_exp(
 pub(crate) fn typ_as_variant(
     tdenv: &TDEnv,
     typ: &Typ,
-) -> Result<Option<Vec<Rc<Mixop>>>, StructureError> {
+) -> Result<Option<Vec<Rc<MixopTree>>>, StructureError> {
     // Only a defined variant type has constructors
     let typ_unrolled = expand_typ(tdenv, typ).map_err(error::type_operation_invalid)?;
     let TypKind::Var(id, _) = &typ_unrolled.node else {
@@ -315,7 +315,7 @@ fn overlap_sub_exp(
         // x <: bool vs x <: int -> Fuzzy: neither type is a variant
         return Ok(Overlap::Fuzzy);
     };
-    let contains = |mixops: &[Rc<Mixop>], mixop: &Rc<Mixop>| {
+    let contains = |mixops: &[Rc<MixopTree>], mixop: &Rc<MixopTree>| {
         mixops
             .iter()
             .any(|mixop_other| mixop.syntax_eq(mixop_other))

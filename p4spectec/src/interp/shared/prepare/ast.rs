@@ -6,15 +6,15 @@
 //! so `eval::iter` can find its slot.
 
 use crate::lang::data::{
-    notation::{Mixfix, Shape, ShapeArena},
+    notation::{Mixfix, MixopArena, MixopId},
     var::{IdSlot, VarSlot},
 };
 
 use crate::lang::il::ast::{self as source, Stage};
 
 pub use crate::lang::il::ast::{
-    Atom, BinOp, CmpOp, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter, ListPattern, Mixop, Num,
-    NumOp, OpTyp, OptPattern, Param, ParamKind, TParam, Targ, TargKind, Text, Typ, TypDef,
+    Atom, BinOp, CmpOp, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter, ListPattern, MixopTree,
+    Num, NumOp, OpTyp, OptPattern, Param, ParamKind, TParam, Targ, TargKind, Text, Typ, TypDef,
     TypField, TypKind, TypOrigin, TypOriginKind, UnOp, ValueCase, ValueField, ValueFlat,
     ValueFlatKind, VarDef,
 };
@@ -34,7 +34,7 @@ pub struct Prepared;
 impl Stage for Prepared {
     type Id = IdSlot;
     type Var = VarSlot;
-    type Mixop = Shape;
+    type Mixop = MixopId;
 }
 
 // - Variables
@@ -93,15 +93,15 @@ pub type PremIter = source::PremIter<VarSlot>;
 
 /// Prepares a type definition body, interning its case notations as shapes.
 ///
-/// Type definitions have no frame of their own, so only `arena_shape` is filled.
-pub fn prepare_def_typ(def_typ: source::DefTyp, arena_shape: &mut ShapeArena) -> DefTyp {
+/// Type definitions have no frame of their own, so only `arena_mixop` is filled.
+pub fn prepare_def_typ(def_typ: source::DefTyp, arena_mixop: &mut MixopArena) -> DefTyp {
     let def_typ_kind = match def_typ.node {
         source::DefTypKind::Plain(typ) => DefTypKind::Plain(typ),
         source::DefTypKind::Struct(typ_fields) => DefTypKind::Struct(typ_fields),
         source::DefTypKind::Variant(typ_cases) => DefTypKind::Variant(
             typ_cases
                 .into_iter()
-                .map(|typ_case| prepare_typ_case(typ_case, arena_shape))
+                .map(|typ_case| prepare_typ_case(typ_case, arena_mixop))
                 .collect(),
         ),
     };
@@ -109,14 +109,14 @@ pub fn prepare_def_typ(def_typ: source::DefTyp, arena_shape: &mut ShapeArena) ->
 }
 
 /// Prepares one variant case, interning its notation as a shape.
-fn prepare_typ_case(typ_case: source::TypCase, arena_shape: &mut ShapeArena) -> TypCase {
+fn prepare_typ_case(typ_case: source::TypCase, arena_mixop: &mut MixopArena) -> TypCase {
     let source::TypCase { not_typ, typ_origin, hints } = typ_case;
     let (mixop, typs) = not_typ.node.into_parts();
-    let shape = arena_shape
+    let shape = arena_mixop
         .intern_shared(&mixop)
         .expect("specification mixops fit in 32-bit shape handles");
     let not_typ_kind =
-        Mixfix::new_in(arena_shape, shape, typs).expect("a notation type fills every position");
+        Mixfix::new_in(arena_mixop, shape, typs).expect("a notation type fills every position");
     TypCase { not_typ: crate::phrase!(node: not_typ_kind, span: not_typ.span), typ_origin, hints }
 }
 

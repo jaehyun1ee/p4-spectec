@@ -1,6 +1,6 @@
 //! Mixops, notation forms without arguments
 //!
-//! A `Mixop` is a `Node<Tree>`:
+//! A `MixopTree` owns a notation:
 //! the atoms of a notation form and where its arguments go.
 //! `MixopRepr` is how a syntax stage holds one, so code generic
 //! over the stage prints notations without knowing which;
@@ -15,10 +15,7 @@ use crate::lang::{
 
 use crate::frontend;
 
-use super::{arena::ShapeArena, flat::Shape, node::Node, tree::Tree, walk};
-
-/// A notation form with argument positions and no arguments.
-pub type Mixop = Node<Tree>;
+use super::{MixopTree, arena::MixopArena, flat::MixopId, walk};
 
 // == Mixops as a stage holds them
 
@@ -32,46 +29,46 @@ pub trait MixopRepr: Clone + fmt::Debug + PartialEq {
     ) -> fmt::Result;
 
     /// Whether a shape has this mixop's structure and atom names.
-    fn matches_shape(&self, arena_shape: &ShapeArena, shape: Shape) -> bool;
+    fn matches_mixop(&self, arena_mixop: &MixopArena, shape: MixopId) -> bool;
 }
 
-impl MixopRepr for Rc<Mixop> {
+impl MixopRepr for Rc<MixopTree> {
     fn print_with(
         &self,
         printer: &mut Printer<'_>,
         print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
     ) -> fmt::Result {
-        walk::print_with(&(), self.as_ref(), printer, print_arg)
+        walk::print_tree_with(self.as_ref(), printer, print_arg)
     }
 
-    fn matches_shape(&self, arena_shape: &ShapeArena, shape: Shape) -> bool {
-        arena_shape.eq_mixop(shape, self)
+    fn matches_mixop(&self, arena_mixop: &MixopArena, shape: MixopId) -> bool {
+        arena_mixop.matches_tree(shape, self)
     }
 }
 
 // == Syntax operations
 
-impl SyntaxEq for Mixop {
+impl SyntaxEq for MixopTree {
     fn syntax_eq(&self, mixop_other: &Self) -> bool {
         self == mixop_other
     }
 }
 
-impl FreeIds for Mixop {
+impl FreeIds for MixopTree {
     fn free_ids(&self) -> IdSet {
         IdSet::new()
     }
 }
 
-// = Shape parsing
+// = Mixop parsing
 
 thread_local! {
     /// Parsed mixops by their source text.
-    static SHAPE_CACHE: RefCell<HashMap<Rc<str>, Rc<Mixop>>> = RefCell::new(HashMap::new());
+    static SHAPE_CACHE: RefCell<HashMap<Rc<str>, Rc<MixopTree>>> = RefCell::new(HashMap::new());
 }
 
 /// Parses a mixop from its text, reusing an earlier parse of the same text.
-pub(crate) fn shape(shape_text: &str) -> Rc<Mixop> {
+pub(crate) fn shape(shape_text: &str) -> Rc<MixopTree> {
     SHAPE_CACHE.with(|cache| {
         // Cached: share it
         if let Some(mixop) = cache.borrow().get(shape_text).cloned() {

@@ -75,9 +75,9 @@ impl SyntaxCmp for ValueRef<'_> {
             }
             (ValueFlatKind::Case(value_case_l), ValueFlatKind::Case(value_case_r)) => value_case_l
                 .cmp_in_by(
-                    self.arena.arena_shape(),
+                    self.arena.arena_mixop(),
                     value_case_r,
-                    value_other.arena.arena_shape(),
+                    value_other.arena.arena_mixop(),
                     compare_value,
                 ),
             (ValueFlatKind::Tuple(values_l), ValueFlatKind::Tuple(values_r))

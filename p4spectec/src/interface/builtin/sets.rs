@@ -10,7 +10,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::{Mixfix, Mixop, mixop::shape},
+        notation::{Mixfix, MixopTree, mixop::shape},
         typ,
         value::{ValueFlat, get, make},
     },
@@ -41,7 +41,7 @@ fn contains(arena: &Arena, set: &[ValueFlat], value: &ValueFlat) -> bool {
 // == Conversion between meta-sets and runtime lists
 
 /// The `{ ... }` shape of a set value.
-fn set_mixop() -> Rc<Mixop> {
+fn set_mixop() -> Rc<MixopTree> {
     shape("`{ k `}")
 }
 
@@ -52,8 +52,8 @@ fn set_of_value(arena: &Arena, value: &ValueFlat) -> Result<ValueSet, BuiltinErr
     let set_mixop = set_mixop();
     // The value must be a set case wrapping one list
     if !arena
-        .arena_shape()
-        .eq_mixop(*value_case.mixop(), &set_mixop)
+        .arena_mixop()
+        .matches_tree(*value_case.mixop(), &set_mixop)
     {
         return Err(BuiltinError::argument_invalid("expected a set"));
     }

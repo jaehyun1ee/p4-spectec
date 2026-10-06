@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::lang::data::notation::Mixop;
+use crate::lang::data::notation::MixopTree;
 
 use crate::lang::sl::ast::Id;
 
@@ -15,7 +15,7 @@ use crate::lang::pl::annot::Hints;
 /// What a hint set belongs to.
 enum HintKey {
     /// A variant case: type name and mixfix operator.
-    Case(String, Mixop),
+    Case(String, MixopTree),
     /// A meta-function.
     Func(String),
     /// A relation.
@@ -28,7 +28,7 @@ pub struct HEnv(BTreeMap<HintKey, Hints>);
 
 impl HEnv {
     /// Records the hints of a variant case.
-    pub fn insert_case(&mut self, id_typ: &Id, mixop: &Mixop, hints: Hints) {
+    pub fn insert_case(&mut self, id_typ: &Id, mixop: &MixopTree, hints: Hints) {
         let key = HintKey::Case(id_typ.node.clone(), mixop.clone());
         self.0.insert(key, hints);
     }
@@ -46,7 +46,7 @@ impl HEnv {
     }
 
     /// The located hints of a variant case, if any.
-    pub fn get_case(&self, id_typ: &Id, mixop: &Mixop) -> Option<&Hints> {
+    pub fn get_case(&self, id_typ: &Id, mixop: &MixopTree) -> Option<&Hints> {
         let key = HintKey::Case(id_typ.node.clone(), mixop.clone());
         self.0.get(&key)
     }

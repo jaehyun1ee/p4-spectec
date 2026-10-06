@@ -1,11 +1,11 @@
 //! Storage for a specification's notation shapes and a run's values
 //!
-//! An `Arena` holds a `ShapeArena` beside the value storage.
+//! An `Arena` holds a `MixopArena` beside the value storage.
 //! The shapes are the specification's, shared with its prepared syntax,
 //! and outlive `reset_values`; a case body's notation is one of them.
 //! `value` allocates values into the arena and reads them back.
 
-use super::{notation::ShapeArena, value::ValueArena};
+use super::{notation::MixopArena, value::ValueArena};
 
 // = Arena storage
 
@@ -15,7 +15,7 @@ use super::{notation::ShapeArena, value::ValueArena};
 #[derive(Debug, Default)]
 pub struct Arena {
     /// Notation shapes of prepared syntax and case bodies.
-    pub(super) shape: ShapeArena,
+    pub(super) mixop: MixopArena,
     /// ValueFlat bodies, types, and spans.
     pub(super) value: ValueArena,
 }
@@ -29,8 +29,8 @@ impl Arena {
     }
 
     /// An empty value store over shapes interned earlier.
-    pub fn with_arena_shape(arena_shape: ShapeArena) -> Self {
-        Self { shape: arena_shape, value: ValueArena::default() }
+    pub fn with_arena_mixop(arena_mixop: MixopArena) -> Self {
+        Self { mixop: arena_mixop, value: ValueArena::default() }
     }
 
     /// Drops every value, type, and span, keeping the shapes.
@@ -44,12 +44,12 @@ impl Arena {
     // - Lookup
 
     /// The notation shapes of prepared syntax and case bodies.
-    pub fn arena_shape(&self) -> &ShapeArena {
-        &self.shape
+    pub fn arena_mixop(&self) -> &MixopArena {
+        &self.mixop
     }
 
     /// The notation shapes, for interning notations during a run.
-    pub fn arena_shape_mut(&mut self) -> &mut ShapeArena {
-        &mut self.shape
+    pub fn arena_mixop_mut(&mut self) -> &mut MixopArena {
+        &mut self.mixop
     }
 }

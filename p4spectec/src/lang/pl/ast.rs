@@ -39,7 +39,7 @@ pub type Atom = sl::ast::Atom;
 
 // Mixfix operators
 
-pub type Mixop = sl::ast::Mixop;
+pub type MixopTree = sl::ast::MixopTree;
 
 // Iterators
 

@@ -100,7 +100,7 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
     result.with_frame(exp.span.clone(), || {
         format!(
             "while evaluating expression {}",
-            Print::to_string_in(exp, runner_ctx.arena().arena_shape())
+            Print::to_string_in(exp, runner_ctx.arena().arena_mixop())
         )
     })
 }

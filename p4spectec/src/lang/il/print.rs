@@ -179,7 +179,7 @@ fn write_value_with(
         }
         // Short form: the case skeleton without arguments
         ValueFlatKind::Case(case) if short => {
-            arena.arena_shape().to_mixop(*case.mixop()).print(output)
+            arena.arena_mixop().to_tree(*case.mixop()).print(output)
         }
         ValueFlatKind::Case(case) => write_notval_with(arena, output, case, level),
         ValueFlatKind::Tuple(values) => {
@@ -231,7 +231,7 @@ fn write_notval_with(
     not_val: &ValueCase,
     level: usize,
 ) -> fmt::Result {
-    not_val.print_in_with(arena.arena_shape(), output, |value, output| {
+    not_val.print_in_with(arena.arena_mixop(), output, |value, output| {
         write_value_with(arena, output, value, false, level + 1)
     })
 }

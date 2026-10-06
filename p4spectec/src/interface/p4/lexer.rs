@@ -46,7 +46,7 @@ use crate::lang::{
         source::{Phrase, Position, Span},
     },
     data::{
-        notation::Mixop,
+        notation::MixopTree,
         typ,
         value::{ValueCase, ValueError, ValueFlat, ValueFlatKind, make},
     },
@@ -725,12 +725,13 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                     span: span.clone()
                 );
                 // Each literal's atom has its own span, so its shape is not shared
-                let mixop = Mixop::Seq(vec![Mixop::Arg, Mixop::Atom(atom), Mixop::Arg]);
+                let mixop =
+                    MixopTree::Seq(vec![MixopTree::Arg, MixopTree::Atom(atom), MixopTree::Arg]);
                 let mut arena = self.ctx.arena_mut();
-                let arena_shape = arena.arena_shape_mut();
-                let shape = arena_shape.intern(&mixop).map_err(ValueError::from)?;
+                let arena_mixop = arena.arena_mixop_mut();
+                let shape = arena_mixop.intern(&mixop).map_err(ValueError::from)?;
                 let value_case =
-                    ValueCase::new_in(arena_shape, shape, vec![value_width, value_int])
+                    ValueCase::new_in(arena_mixop, shape, vec![value_width, value_int])
                         .expect("the literal shape has two positions");
                 let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
                 let value = make::new(

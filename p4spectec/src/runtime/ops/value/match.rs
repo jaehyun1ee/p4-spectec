@@ -138,7 +138,7 @@ where
                                 if !not_typ
                                     .node
                                     .mixop()
-                                    .matches_shape(arena.arena_shape(), *value_case.mixop())
+                                    .matches_mixop(arena.arena_mixop(), *value_case.mixop())
                                 {
                                     continue;
                                 }
@@ -268,7 +268,7 @@ where
         // Variant case: the tag must be one of the accepted
         (Subcheck::Mixop(mixops), ValueFlatKind::Case(value_case)) => Ok(mixops
             .iter()
-            .any(|mixop| mixop.matches_shape(arena.arena_shape(), *value_case.mixop()))),
+            .any(|mixop| mixop.matches_mixop(arena.arena_mixop(), *value_case.mixop()))),
         // Componentwise
         (Subcheck::Tuple(subchecks), ValueFlatKind::Tuple(values)) => {
             if subchecks.len() != values.len() {

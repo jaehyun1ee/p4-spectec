@@ -1,7 +1,7 @@
 //! Tree representation of notation: children kept in place
 //!
-//! `Tree` boxes a lone child and keeps sequence elements inline,
-//! so a `Node<Tree>` owns its whole form.
+//! `MixopTree` boxes lone children and keeps sequence elements inline,
+//! owning its whole form.
 //! Equality, ordering, and hashing read atom names, never atom spans,
 //! and printing writes `%` at each argument position.
 
@@ -13,98 +13,58 @@ use std::{
 
 use crate::lang::traits::print::{Print, Printer};
 
-use super::{
-    node::{Node, Repr},
-    walk,
-};
+use super::{AtomPhrase, walk};
 
-// = Representation
-
-/// Children kept in place: lone children boxed, sequence elements inline.
-#[derive(Clone, Copy, Debug)]
-pub struct Tree;
-
-impl Repr for Tree {
-    type Child = Box<Node<Tree>>;
-    type Elem = Node<Tree>;
-    type ShapeArena = ();
-
-    fn node<'a>((): &'a (), elem: &'a Node<Tree>) -> &'a Node<Tree> {
-        elem
-    }
+/// An owned notation with an argument hole at each position.
+#[derive(Clone, Debug)]
+pub enum MixopTree {
+    Arg,
+    Atom(AtomPhrase),
+    Brack(AtomPhrase, Box<MixopTree>, AtomPhrase),
+    Infix(Box<MixopTree>, AtomPhrase, Box<MixopTree>),
+    Seq(Vec<MixopTree>),
 }
 
-impl Node<Tree> {
-    /// The number of argument positions.
+impl MixopTree {
+    /// Counts argument positions in notation order.
     pub fn arity(&self) -> usize {
-        walk::arity(&(), self)
+        walk::arity_tree(self)
     }
-}
-
-// = Cloning and debugging
-
-impl Clone for Node<Tree> {
-    fn clone(&self) -> Self {
+    /// Orders the variants for comparison across forms.
+    pub(crate) fn tag(&self) -> u8 {
         match self {
-            Self::Arg => Self::Arg,
-            Self::Atom(atom) => Self::Atom(atom.clone()),
-            Self::Brack(atom_l, child, atom_r) => {
-                Self::Brack(atom_l.clone(), child.clone(), atom_r.clone())
-            }
-            Self::Infix(child_l, atom, child_r) => {
-                Self::Infix(child_l.clone(), atom.clone(), child_r.clone())
-            }
-            Self::Seq(elems) => Self::Seq(elems.clone()),
-        }
-    }
-}
-
-// The same text a derive prints: variant names and fields, no type name
-impl fmt::Debug for Node<Tree> {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Arg => fmt.write_str("Arg"),
-            Self::Atom(atom) => fmt.debug_tuple("Atom").field(atom).finish(),
-            Self::Brack(atom_l, child, atom_r) => fmt
-                .debug_tuple("Brack")
-                .field(atom_l)
-                .field(child)
-                .field(atom_r)
-                .finish(),
-            Self::Infix(child_l, atom, child_r) => fmt
-                .debug_tuple("Infix")
-                .field(child_l)
-                .field(atom)
-                .field(child_r)
-                .finish(),
-            Self::Seq(elems) => fmt.debug_tuple("Seq").field(elems).finish(),
+            Self::Arg => 0,
+            Self::Atom(_) => 1,
+            Self::Brack(..) => 2,
+            Self::Infix(..) => 3,
+            Self::Seq(_) => 4,
         }
     }
 }
 
 // = Equality, ordering, and hashing
 
-impl PartialEq for Node<Tree> {
+impl PartialEq for MixopTree {
     fn eq(&self, node_other: &Self) -> bool {
-        walk::eq(&(), self, &(), node_other)
+        self.cmp(node_other).is_eq()
     }
 }
 
-impl Eq for Node<Tree> {}
+impl Eq for MixopTree {}
 
-impl Ord for Node<Tree> {
+impl Ord for MixopTree {
     fn cmp(&self, node_other: &Self) -> Ordering {
-        walk::cmp_by(&(), self, &(), node_other, |_| Ordering::Equal)
+        walk::cmp_trees_by(self, node_other, |_| Ordering::Equal)
     }
 }
 
-impl PartialOrd for Node<Tree> {
+impl PartialOrd for MixopTree {
     fn partial_cmp(&self, node_other: &Self) -> Option<Ordering> {
         Some(self.cmp(node_other))
     }
 }
 
-impl Hash for Node<Tree> {
+impl Hash for MixopTree {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         // Hash the form first so different variants rarely collide
         self.tag().hash(hasher);
@@ -128,8 +88,8 @@ impl Hash for Node<Tree> {
 
 // = Printing
 
-impl Print for Node<Tree> {
+impl Print for MixopTree {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        walk::print_with(&(), self, printer, |_, printer| printer.write("%"))
+        walk::print_tree_with(self, printer, |_, printer| printer.write("%"))
     }
 }

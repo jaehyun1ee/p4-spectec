@@ -20,7 +20,7 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::{AtomPhrase, Mixfix, Mixop, Node},
+        notation::{AtomPhrase, Mixfix, MixopTree},
         typ::TypKind,
     },
 };
@@ -41,7 +41,7 @@ pub enum ValueTreeKind {
     Num(Number),
     Text(String),
     Struct(Vec<(Phrase<Atom>, ValueTree)>),
-    Case(Mixfix<Mixop, ValueTree>),
+    Case(Mixfix<MixopTree, ValueTree>),
     Tuple(Vec<ValueTree>),
     Opt(Option<Box<ValueTree>>),
     List(Vec<ValueTree>),
@@ -81,7 +81,7 @@ impl ValueTreeKind {
             ),
             ValueFlatKind::Case(value_case) => Self::Case(
                 value_case
-                    .to_tree(arena.arena_shape())
+                    .to_tree(arena.arena_mixop())
                     .map_into(|value| from_flat(arena, &value)),
             ),
             ValueFlatKind::Tuple(values) => {
@@ -137,17 +137,17 @@ impl ValueTreeKind {
 /// Interns a case's arguments in notation order, then its mixop.
 fn into_flat_case(
     arena: &mut Arena,
-    mixfix: Mixfix<Mixop, ValueTree>,
+    mixfix: Mixfix<MixopTree, ValueTree>,
 ) -> Result<ValueCase, ValueError> {
     let (mixop, values) = mixfix.into_parts();
     let values = values
         .into_iter()
         .map(|value| into_flat(arena, value))
         .collect::<Result<_, _>>()?;
-    let arena_shape = arena.arena_shape_mut();
-    let shape = arena_shape.intern(&mixop)?;
+    let arena_mixop = arena.arena_mixop_mut();
+    let shape = arena_mixop.intern(&mixop)?;
     let value_case =
-        ValueCase::new_in(arena_shape, shape, values).expect("a tree case fills every position");
+        ValueCase::new_in(arena_mixop, shape, values).expect("a tree case fills every position");
     Ok(value_case)
 }
 
@@ -179,41 +179,41 @@ enum CaseTreeOwned<T> {
 }
 
 /// Fills a mixop with arguments in notation order, borrowing its atoms.
-fn case_tree<'a, T>(mixop: &'a Mixop, args: &mut slice::Iter<'a, T>) -> CaseTree<'a, T> {
+fn case_tree<'a, T>(mixop: &'a MixopTree, args: &mut slice::Iter<'a, T>) -> CaseTree<'a, T> {
     match mixop {
-        Node::Arg => CaseTree::Arg(args.next().expect("a case fills every position")),
-        Node::Atom(atom) => CaseTree::Atom(atom),
-        Node::Brack(atom_l, mixop_inner, atom_r) => {
+        MixopTree::Arg => CaseTree::Arg(args.next().expect("a case fills every position")),
+        MixopTree::Atom(atom) => CaseTree::Atom(atom),
+        MixopTree::Brack(atom_l, mixop_inner, atom_r) => {
             CaseTree::Brack(atom_l, Box::new(case_tree(mixop_inner, args)), atom_r)
         }
-        Node::Infix(mixop_l, atom, mixop_r) => {
+        MixopTree::Infix(mixop_l, atom, mixop_r) => {
             let tree_l = case_tree(mixop_l, args);
             let tree_r = case_tree(mixop_r, args);
             CaseTree::Infix(Box::new(tree_l), atom, Box::new(tree_r))
         }
-        Node::Seq(mixops) => {
+        MixopTree::Seq(mixops) => {
             CaseTree::Seq(mixops.iter().map(|mixop| case_tree(mixop, args)).collect())
         }
     }
 }
 
 /// Splits a read tree into its mixop, moving arguments out in notation order.
-fn split_case_tree<T>(tree: CaseTreeOwned<T>, args: &mut Vec<T>) -> Mixop {
+fn split_case_tree<T>(tree: CaseTreeOwned<T>, args: &mut Vec<T>) -> MixopTree {
     match tree {
         CaseTreeOwned::Arg(arg) => {
             args.push(arg);
-            Node::Arg
+            MixopTree::Arg
         }
-        CaseTreeOwned::Atom(atom) => Node::Atom(atom),
+        CaseTreeOwned::Atom(atom) => MixopTree::Atom(atom),
         CaseTreeOwned::Brack(atom_l, tree, atom_r) => {
-            Node::Brack(atom_l, Box::new(split_case_tree(*tree, args)), atom_r)
+            MixopTree::Brack(atom_l, Box::new(split_case_tree(*tree, args)), atom_r)
         }
         CaseTreeOwned::Infix(tree_l, atom, tree_r) => {
             let mixop_l = split_case_tree(*tree_l, args);
             let mixop_r = split_case_tree(*tree_r, args);
-            Node::Infix(Box::new(mixop_l), atom, Box::new(mixop_r))
+            MixopTree::Infix(Box::new(mixop_l), atom, Box::new(mixop_r))
         }
-        CaseTreeOwned::Seq(trees) => Node::Seq(
+        CaseTreeOwned::Seq(trees) => MixopTree::Seq(
             trees
                 .into_iter()
                 .map(|tree| split_case_tree(tree, args))
@@ -222,13 +222,13 @@ fn split_case_tree<T>(tree: CaseTreeOwned<T>, args: &mut Vec<T>) -> Mixop {
     }
 }
 
-impl<T: Serialize> Serialize for Mixfix<Mixop, T> {
+impl<T: Serialize> Serialize for Mixfix<MixopTree, T> {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         case_tree(self.mixop(), &mut self.args().iter()).serialize(serializer)
     }
 }
 
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for Mixfix<Mixop, T> {
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Mixfix<MixopTree, T> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let mut args = Vec::new();
         let mixop = split_case_tree(CaseTreeOwned::deserialize(deserializer)?, &mut args);

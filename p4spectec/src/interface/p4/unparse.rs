@@ -15,7 +15,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         notation::{
-            Mixop,
+            MixopTree,
             walk::{self, Piece},
         },
         value::{ValueCase, ValueFlat, ValueFlatKind},
@@ -40,12 +40,12 @@ use super::error::P4UnparseError;
 #[derive(Clone, Debug, Default)]
 pub struct P4Unparser {
     /// Print hints by type name and case shape.
-    hints: HashMap<(String, Mixop), AlterHint>,
+    hints: HashMap<(String, MixopTree), AlterHint>,
 }
 
 /// Records the print hint of each case of a variant type.
 fn insert_case_hints(
-    hints: &mut HashMap<(String, Mixop), AlterHint>,
+    hints: &mut HashMap<(String, MixopTree), AlterHint>,
     type_id: &str,
     def_typ: &crate::lang::il::ast::DefTyp,
 ) {
@@ -152,7 +152,7 @@ impl P4Unparser {
         typ: &TypKind,
         value_case: &ValueCase,
     ) -> Result<String, P4UnparseError> {
-        let mixop = arena.arena_shape().to_mixop(*value_case.mixop());
+        let mixop = arena.arena_mixop().to_tree(*value_case.mixop());
         if let TypKind::Var(type_id, _) = typ
             && let Some(hint) = self.hints.get(&(type_id.node.clone(), mixop))
         {
@@ -218,9 +218,9 @@ impl P4Unparser {
         rendered: &mut Vec<String>,
     ) -> Result<(), P4UnparseError> {
         // Pieces in reading order: atoms, and arguments by position
-        let arena_shape = arena.arena_shape();
+        let arena_mixop = arena.arena_mixop();
         let mut pieces = Vec::new();
-        walk::visit(arena_shape, arena_shape.kind(*value_case.mixop()), |piece| {
+        walk::visit_flat(arena_mixop, arena_mixop.kind(*value_case.mixop()), |piece| {
             pieces.push(piece);
         });
         for piece in pieces {

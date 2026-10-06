@@ -4,7 +4,7 @@
 //! and replaces identifiers and variables by frame slots (`IdSlot`, `VarSlot`),
 //! so evaluation indexes a frame instead of looking names up;
 //! notations' mixops are interned as shapes in the specification's
-//! `ShapeArena` on the way, and containers and phrases recurse structurally.
+//! `MixopArena` on the way, and containers and phrases recurse structurally.
 
 pub mod ast;
 
@@ -13,7 +13,7 @@ use std::rc::Rc;
 use crate::lang::{
     common::{Id, source::NotePhrase},
     data::{
-        notation::{Mixfix, Mixop, Shape, ShapeArena},
+        notation::{Mixfix, MixopArena, MixopId, MixopTree},
         var::{IdSlot, Var, VarSlot},
     },
 };
@@ -25,7 +25,7 @@ pub struct PrepareContext<'a> {
     /// The callable's frame layout, filled as names resolve.
     pub layout: &'a mut FrameLayout,
     /// The specification's shapes, filled as mixops are interned.
-    pub arena_shape: &'a mut ShapeArena,
+    pub arena_mixop: &'a mut MixopArena,
 }
 
 /// Slot resolution of one syntax node.
@@ -96,20 +96,20 @@ impl<T: Prepare, N, S> Prepare for NotePhrase<T, N, S> {
 
 // - Notation
 
-impl<T: Prepare> Prepare for Mixfix<Rc<Mixop>, T> {
-    type Output = Mixfix<Shape, T::Output>;
+impl<T: Prepare> Prepare for Mixfix<Rc<MixopTree>, T> {
+    type Output = Mixfix<MixopId, T::Output>;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         let (mixop, args) = self.into_parts();
         let shape = prepare_mixop(&mixop, ctx);
         let args = args.prepare(ctx);
-        Mixfix::new_in(ctx.arena_shape, shape, args).expect("a mixfix fills every position")
+        Mixfix::new_in(ctx.arena_mixop, shape, args).expect("a mixfix fills every position")
     }
 }
 
 /// Interns a shared mixop as a shape, walking it once per specification.
-pub(crate) fn prepare_mixop(mixop: &Rc<Mixop>, ctx: &mut PrepareContext<'_>) -> Shape {
-    ctx.arena_shape
+pub(crate) fn prepare_mixop(mixop: &Rc<MixopTree>, ctx: &mut PrepareContext<'_>) -> MixopId {
+    ctx.arena_mixop
         .intern_shared(mixop)
         .expect("specification mixops fit in 32-bit shape handles")
 }

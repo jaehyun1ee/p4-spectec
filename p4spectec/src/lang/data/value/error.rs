@@ -4,7 +4,7 @@ use std::num::TryFromIntError;
 
 use thiserror::Error;
 
-use crate::lang::data::notation::ShapeError;
+use crate::lang::data::notation::MixopError;
 
 use super::flat::ValueTag;
 
@@ -33,10 +33,10 @@ impl From<TryFromIntError> for ValueError {
     }
 }
 
-impl From<ShapeError> for ValueError {
-    fn from(error: ShapeError) -> Self {
+impl From<MixopError> for ValueError {
+    fn from(error: MixopError) -> Self {
         match error {
-            ShapeError::IndexOverflow => Self::IndexOverflow,
+            MixopError::IndexOverflow => Self::IndexOverflow,
         }
     }
 }

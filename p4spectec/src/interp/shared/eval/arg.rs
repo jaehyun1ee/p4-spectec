@@ -36,7 +36,7 @@ fn eval_arg<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>
     result.with_frame(arg.span.clone(), || {
         format!(
             "while evaluating argument {}",
-            Print::to_string_in(arg, runner_ctx.arena().arena_shape())
+            Print::to_string_in(arg, runner_ctx.arena().arena_mixop())
         )
     })
 }

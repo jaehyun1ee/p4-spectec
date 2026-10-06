@@ -55,7 +55,7 @@ impl Arena {
         typ: Rc<TypKind>,
         span: Span,
     ) -> Result<ValueFlat, ValueError> {
-        let node = self.value.values.intern(kind, &self.shape)?;
+        let node = self.value.values.intern(kind, &self.mixop)?;
         let note = self.value.types.intern(typ)?;
         let span = self.value.spans.intern(span)?;
         Ok(ValueFlat { node, note, span })
