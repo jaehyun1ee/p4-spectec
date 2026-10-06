@@ -3,15 +3,12 @@
 //! Prints IL in a readable source-like syntax:
 //! binary operators are parenthesized, premises print on `--` lines,
 //! iterations show their bound (`<-`) and binding (`->`) variables.
-//! Values print through `print_value`,
-//! with a short form that elides large aggregates.
 
 use std::fmt::{self, Write};
 
 use crate::util::text::escape_text;
 
 use crate::lang::{
-    common::prim::num,
     data::notation::MixopRepr,
     traits::print::{Print, Printer},
 };
@@ -21,46 +18,6 @@ use super::ast::*;
 // == Printing
 
 // - Types
-
-impl Print for Typ {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        match &self.node {
-            TypKind::Bool => printer.write_str("bool"),
-            TypKind::Num(num::Typ::Nat) => printer.write_str("nat"),
-            TypKind::Num(num::Typ::Int) => printer.write_str("int"),
-            TypKind::Text => printer.write_str("text"),
-            TypKind::Var(id, targs) => {
-                id.print(printer)?;
-                if !targs.is_empty() {
-                    printer.write_char('<')?;
-                    printer.separated(targs, ", ")?;
-                    printer.write_char('>')?;
-                }
-                Ok(())
-            }
-            TypKind::Tuple(typs) => {
-                printer.write_char('(')?;
-                printer.separated(typs, ", ")?;
-                printer.write_char(')')
-            }
-            TypKind::Iter(typ, iter) => {
-                typ.print(printer)?;
-                iter.print(printer)
-            }
-            TypKind::Func(func_typ) => {
-                if !func_typ.tparams.is_empty() {
-                    printer.write_char('<')?;
-                    printer.separated(&func_typ.tparams, ", ")?;
-                    printer.write_char('>')?;
-                }
-                printer.write_char('(')?;
-                printer.separated(&func_typ.typs_params, ", ")?;
-                printer.write_str(") : ")?;
-                func_typ.typ_ret.print(printer)
-            }
-        }
-    }
-}
 
 // - Notation types
 
@@ -132,108 +89,6 @@ impl Print for [TypCase] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.separated(self, ", ")
     }
-}
-
-// - Values
-
-/// Prints a value in full, resolving handles through the arena.
-pub fn print_value(
-    arena: &crate::lang::data::arena::Arena,
-    value: &ValueFlat,
-    printer: &mut Printer<'_>,
-) -> fmt::Result {
-    write_value_with(arena, printer, value, false, 0)
-}
-
-/// Prints a value; `short` elides struct and list contents to a count.
-fn write_value_with(
-    arena: &crate::lang::data::arena::Arena,
-    output: &mut Printer<'_>,
-    value: &ValueFlat,
-    short: bool,
-    level: usize,
-) -> fmt::Result {
-    match arena.kind(value) {
-        ValueFlatKind::Bool(value) => write!(output, "{value}"),
-        ValueFlatKind::Num(value) => value.print(output),
-        ValueFlatKind::Text(text) => output.write_str(&escape_text(text)),
-        // Empty structs stay on one line
-        ValueFlatKind::Struct(fields) if fields.is_empty() => output.write_str("{}"),
-        // Short form: field count only
-        ValueFlatKind::Struct(fields) if short => write!(output, "{{ .../{} }}", fields.len()),
-        // One field per line, indented one level deeper
-        ValueFlatKind::Struct(fields) => {
-            output.write_str("{\n")?;
-            for (index, (atom, value)) in fields.iter().enumerate() {
-                if index != 0 {
-                    output.write_str(";\n")?;
-                }
-                output.write_str(&indent(level + 1))?;
-                atom.print(output)?;
-                output.write_char(' ')?;
-                write_value_with(arena, output, value, short, level + 1)?;
-            }
-            output.write_char('\n')?;
-            output.write_str(&indent(level))?;
-            output.write_char('}')
-        }
-        // Short form: the case skeleton without arguments
-        ValueFlatKind::Case(case) if short => {
-            arena.arena_mixop().to_tree(*case.mixop()).print(output)
-        }
-        ValueFlatKind::Case(case) => write_notval_with(arena, output, case, level),
-        ValueFlatKind::Tuple(values) => {
-            output.write_char('(')?;
-            for (index, value) in values.iter().enumerate() {
-                if index != 0 {
-                    output.write_str(", ")?;
-                }
-                write_value_with(arena, output, value, short, level + 1)?;
-            }
-            output.write_char(')')
-        }
-        ValueFlatKind::Opt(Some(value)) => {
-            output.write_str("Some(")?;
-            write_value_with(arena, output, value, short, level + 1)?;
-            output.write_char(')')
-        }
-        ValueFlatKind::Opt(None) => output.write_str("None"),
-        // Empty lists stay on one line
-        ValueFlatKind::List(values) if values.is_empty() => output.write_str("[]"),
-        // Short form: element count only
-        ValueFlatKind::List(values) if short => write!(output, "[ .../{} ]", values.len()),
-        // One element per line, indented one level deeper
-        ValueFlatKind::List(values) => {
-            output.write_str("[\n")?;
-            for (index, value) in values.iter().enumerate() {
-                if index != 0 {
-                    output.write_str(",\n")?;
-                }
-                output.write_str(&indent(level + 1))?;
-                write_value_with(arena, output, value, short, level + 1)?;
-            }
-            output.write_char('\n')?;
-            output.write_str(&indent(level))?;
-            output.write_char(']')
-        }
-        ValueFlatKind::Func(id) => {
-            output.write_char('$')?;
-            output.write_str(&id.node)
-        }
-        ValueFlatKind::Extern(_) => output.write_str("extern"),
-    }
-}
-
-/// Prints a variant value with its arguments filled into the skeleton.
-fn write_notval_with(
-    arena: &crate::lang::data::arena::Arena,
-    output: &mut Printer<'_>,
-    not_val: &ValueCase,
-    level: usize,
-) -> fmt::Result {
-    not_val.print_in_with(arena.arena_mixop(), output, |value, output| {
-        write_value_with(arena, output, value, false, level + 1)
-    })
 }
 
 // - Expressions

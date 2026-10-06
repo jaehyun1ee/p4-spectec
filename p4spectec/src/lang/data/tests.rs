@@ -305,3 +305,30 @@ fn mixop_independent_encoding_handles_deep_trees() {
     assert_eq!(arena_b.arity(mixop_b), 1);
     assert_eq!(external::encode(&arena_b, &mixop_b).unwrap(), json);
 }
+
+#[test]
+fn shared_data_rendering_preserves_layout() {
+    use crate::lang::traits::print::Print;
+    let mut arena = Arena::new();
+    let value_case = sample(&mut arena);
+    let value = make::structure(
+        &mut arena,
+        Rc::new(typ::TypKind::Bool),
+        vec![(
+            crate::phrase!(node: Atom::Keyword("payload".to_owned()), span: span(12)),
+            value_case,
+        )],
+        span(13),
+    )
+    .unwrap();
+    assert_eq!(
+        arena.to_string(&value),
+        "{\n  payload `( INNER true argument Some(true) [\n      argument\n    ]  `)\n}"
+    );
+    let typ = typ::make::func(
+        vec![],
+        vec![typ::make::list(typ::make::bool()), typ::make::text()],
+        typ::make::opt(typ::make::int()),
+    );
+    assert_eq!(Print::to_string(&typ), "(bool*, text) : int?");
+}

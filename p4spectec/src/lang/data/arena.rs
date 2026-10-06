@@ -100,11 +100,11 @@ impl Arena {
 
     // - Printing
 
-    /// Prints a value in full through the IL printer.
+    /// Prints a value in full, resolving its stored contents.
     pub fn to_string(&self, value: &ValueFlat) -> String {
         let mut output = String::new();
         let mut printer = crate::lang::traits::print::Printer::new(&mut output);
-        crate::lang::il::print::print_value(self, value, &mut printer)
+        super::value::print::print_value(self, value, &mut printer)
             .expect("writing to a String cannot fail");
         output
     }

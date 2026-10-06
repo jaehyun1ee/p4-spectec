@@ -12,6 +12,7 @@ pub mod external;
 mod flat;
 pub mod get;
 pub mod make;
+pub mod print;
 pub mod tree;
 mod view;
 
