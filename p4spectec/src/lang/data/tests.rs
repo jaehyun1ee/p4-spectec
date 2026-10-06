@@ -173,3 +173,23 @@ fn notation_comparison_interleaves_arguments_across_arenas() {
     assert!(Mixfix::<_, usize>::new_in(&arena_l, mixop_l, vec![]).is_err());
     assert!(Mixfix::new_in(&arena_l, mixop_l, vec![0, 1]).is_err());
 }
+
+#[test]
+fn resetting_values_preserves_prepared_mixops() {
+    use super::notation::MixopTree;
+    let mut arena = Arena::new();
+    let mixop_tree = MixopTree::Seq(vec![
+        MixopTree::Atom(crate::phrase!(node: Atom::Keyword("CASE".to_owned()), span: span(1))),
+        MixopTree::Arg,
+    ]);
+    let mixop_id = arena.arena_mixop_mut().intern(&mixop_tree).unwrap();
+    let value = make::bool(&mut arena, true, span(2)).unwrap();
+    assert!(get::bool(&arena, &value).unwrap());
+    arena.reset_values();
+    assert_eq!(arena.arena_mixop().arity(mixop_id), 1);
+    assert_eq!(arena.arena_mixop().to_tree(mixop_id), mixop_tree);
+    let value = make::bool(&mut arena, false, Span::default()).unwrap();
+    assert!(!get::bool(&arena, &value).unwrap());
+    assert_eq!(arena.span(&value), &Span::default());
+    assert_eq!(value.span.index(), 0);
+}

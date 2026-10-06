@@ -19,8 +19,8 @@ use super::flat::{ValueFlat, ValueFlatKind};
 /// A value together with its arena, for comparisons that must read bodies.
 #[derive(Clone, Copy, Debug)]
 pub struct ValueRef<'a> {
-    pub(super) arena: &'a Arena,
-    pub(super) value: ValueFlat,
+    pub(in crate::lang::data) arena: &'a Arena,
+    pub(in crate::lang::data) value: ValueFlat,
 }
 
 // = Syntax comparison

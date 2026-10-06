@@ -10,8 +10,8 @@ use std::rc::Rc;
 use crate::lang::{
     common::source::Span,
     data::{
-        arena::Arena,
-        intern::{CanonId, CanonInterner, Interner, RcInterner},
+        intern::{CanonId, CanonInterner, Interned, Interner, RcInterner},
+        notation::MixopArena,
         typ::TypKind,
     },
 };
@@ -19,7 +19,6 @@ use crate::lang::{
 use super::{
     error::ValueError,
     flat::{ValueFlat, ValueFlatKind},
-    view::ValueRef,
 };
 
 // = ValueFlat storage
@@ -28,11 +27,11 @@ use super::{
 #[derive(Debug)]
 pub(in crate::lang::data) struct ValueArena {
     /// Bodies, with canonical identities; a case reads its shape's.
-    pub(super) values: CanonInterner<ValueFlatKind>,
+    values: CanonInterner<ValueFlatKind>,
     /// Types, shared by allocation.
-    pub(super) types: RcInterner<TypKind>,
+    types: RcInterner<TypKind>,
     /// Spans, shared by equality.
-    pub(super) spans: Interner<Span>,
+    spans: Interner<Span>,
 }
 
 impl Default for ValueArena {
@@ -45,57 +44,66 @@ impl Default for ValueArena {
     }
 }
 
-impl Arena {
-    // - Interning
-
-    /// Interns the three parts and returns their handles as a value.
-    pub(super) fn alloc(
+impl ValueArena {
+    /// Interns a value body and its annotations in allocation order.
+    pub(in crate::lang::data) fn alloc(
         &mut self,
-        kind: ValueFlatKind,
+        arena_mixop: &MixopArena,
+        value_kind: ValueFlatKind,
         typ: Rc<TypKind>,
         span: Span,
     ) -> Result<ValueFlat, ValueError> {
-        let node = self.value.values.intern(kind, &self.mixop)?;
-        let note = self.value.types.intern(typ)?;
-        let span = self.value.spans.intern(span)?;
+        let node = self.intern_kind(value_kind, arena_mixop)?;
+        let note = self.intern_typ(typ)?;
+        let span = self.intern_span(span)?;
         Ok(ValueFlat { node, note, span })
     }
 
-    // - Lookup
-
-    /// The body of a value.
-    pub fn kind(&self, value: &ValueFlat) -> &ValueFlatKind {
-        self.value.values.get(value.node)
+    /// Interns a body using the canonical identities of its mixops.
+    pub(in crate::lang::data) fn intern_kind(
+        &mut self,
+        value_kind: ValueFlatKind,
+        arena_mixop: &MixopArena,
+    ) -> Result<Interned<ValueFlatKind>, std::num::TryFromIntError> {
+        self.values.intern(value_kind, arena_mixop)
     }
 
-    /// The canonical identity of a value's body.
-    pub fn canon_id(&self, value: &ValueFlat) -> CanonId<ValueFlatKind> {
-        self.value.values.canon_id(value.node)
+    /// Interns a shared type annotation by allocation identity.
+    pub(in crate::lang::data) fn intern_typ(
+        &mut self,
+        typ: Rc<TypKind>,
+    ) -> Result<Interned<TypKind>, std::num::TryFromIntError> {
+        self.types.intern(typ)
     }
 
-    /// The type of a value.
-    pub fn typ(&self, value: &ValueFlat) -> &Rc<TypKind> {
-        self.value.types.get(value.note)
+    /// Interns an exact source location.
+    pub(in crate::lang::data) fn intern_span(
+        &mut self,
+        span: Span,
+    ) -> Result<Interned<Span>, std::num::TryFromIntError> {
+        self.spans.intern(span)
     }
 
-    /// The span of a value.
-    pub fn span(&self, value: &ValueFlat) -> &Span {
-        self.value.spans.get(value.span)
+    /// Reads the body behind its handle.
+    pub(in crate::lang::data) fn kind(&self, value: Interned<ValueFlatKind>) -> &ValueFlatKind {
+        self.values.get(value)
     }
 
-    /// Borrows a value issued by this arena for syntax comparisons.
-    pub fn view(&self, value: ValueFlat) -> ValueRef<'_> {
-        ValueRef { arena: self, value }
+    /// Reads a type annotation.
+    pub(in crate::lang::data) fn typ(&self, typ: Interned<TypKind>) -> &Rc<TypKind> {
+        self.types.get(typ)
     }
 
-    // - Printing
+    /// Reads a source location.
+    pub(in crate::lang::data) fn span(&self, span: Interned<Span>) -> &Span {
+        self.spans.get(span)
+    }
 
-    /// Prints a value in full through the IL printer.
-    pub fn to_string(&self, value: &ValueFlat) -> String {
-        let mut output = String::new();
-        let mut printer = crate::lang::traits::print::Printer::new(&mut output);
-        crate::lang::il::print::print_value(self, value, &mut printer)
-            .expect("writing to a String cannot fail");
-        output
+    /// Returns the canonical identity of a body.
+    pub(in crate::lang::data) fn canon_id(
+        &self,
+        value: Interned<ValueFlatKind>,
+    ) -> CanonId<ValueFlatKind> {
+        self.values.canon_id(value)
     }
 }

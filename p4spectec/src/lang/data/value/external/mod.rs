@@ -163,8 +163,7 @@ impl SerializeState<EncodeContext<'_>> for Interned<ValueFlatKind> {
             // Relative: the index; independent: the body as a tree
             EncodeContext::ArenaRelative(_) => self.index().serialize(serializer),
             EncodeContext::ArenaIndependent(arena) => {
-                tree::ValueTreeKind::from_flat(arena, arena.value.values.get(*self))
-                    .serialize(serializer)
+                tree::ValueTreeKind::from_flat(arena, arena.value.kind(*self)).serialize(serializer)
             }
         }
     }
@@ -178,9 +177,7 @@ impl SerializeState<EncodeContext<'_>> for Interned<TypKind> {
     ) -> Result<S::Ok, S::Error> {
         match ctx {
             EncodeContext::ArenaRelative(_) => self.index().serialize(serializer),
-            EncodeContext::ArenaIndependent(arena) => {
-                arena.value.types.get(*self).serialize(serializer)
-            }
+            EncodeContext::ArenaIndependent(arena) => arena.value.typ(*self).serialize(serializer),
         }
     }
 }
@@ -193,9 +190,7 @@ impl SerializeState<EncodeContext<'_>> for Interned<Span> {
     ) -> Result<S::Ok, S::Error> {
         match ctx {
             EncodeContext::ArenaRelative(_) => self.index().serialize(serializer),
-            EncodeContext::ArenaIndependent(arena) => {
-                arena.value.spans.get(*self).serialize(serializer)
-            }
+            EncodeContext::ArenaIndependent(arena) => arena.value.span(*self).serialize(serializer),
         }
     }
 }
@@ -242,8 +237,7 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<ValueFlatKind> {
                     .map_err(::serde::de::Error::custom)?;
                 arena
                     .value
-                    .values
-                    .intern(kind, &arena.mixop)
+                    .intern_kind(kind, &arena.mixop)
                     .map_err(::serde::de::Error::custom)
             }
         }
@@ -261,8 +255,7 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<TypKind> {
                 let typ = TypKind::deserialize(deserializer)?.into();
                 arena
                     .value
-                    .types
-                    .intern(typ)
+                    .intern_typ(typ)
                     .map_err(::serde::de::Error::custom)
             }
         }
@@ -280,8 +273,7 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<Span> {
                 let span = Span::deserialize(deserializer)?;
                 arena
                     .value
-                    .spans
-                    .intern(span)
+                    .intern_span(span)
                     .map_err(::serde::de::Error::custom)
             }
         }

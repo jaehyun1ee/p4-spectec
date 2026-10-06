@@ -5,7 +5,14 @@
 //! and outlive `reset_values`; a case body's notation is one of them.
 //! `value` allocates values into the arena and reads them back.
 
-use super::{notation::MixopArena, value::ValueArena};
+use super::{
+    intern::CanonId,
+    notation::MixopArena,
+    typ::TypKind,
+    value::{ValueArena, ValueError, ValueFlat, ValueFlatKind, ValueRef},
+};
+use crate::lang::common::source::Span;
+use std::rc::Rc;
 
 // = Arena storage
 
@@ -51,5 +58,54 @@ impl Arena {
     /// The notation shapes, for interning notations during a run.
     pub fn arena_mixop_mut(&mut self) -> &mut MixopArena {
         &mut self.mixop
+    }
+    // - Interning
+
+    /// Interns the three parts and returns their handles as a value.
+    pub(super) fn alloc(
+        &mut self,
+        kind: ValueFlatKind,
+        typ: Rc<TypKind>,
+        span: Span,
+    ) -> Result<ValueFlat, ValueError> {
+        self.value.alloc(&self.mixop, kind, typ, span)
+    }
+
+    // - Lookup
+
+    /// The body of a value.
+    pub fn kind(&self, value: &ValueFlat) -> &ValueFlatKind {
+        self.value.kind(value.node)
+    }
+
+    /// The canonical identity of a value's body.
+    pub fn canon_id(&self, value: &ValueFlat) -> CanonId<ValueFlatKind> {
+        self.value.canon_id(value.node)
+    }
+
+    /// The type of a value.
+    pub fn typ(&self, value: &ValueFlat) -> &Rc<TypKind> {
+        self.value.typ(value.note)
+    }
+
+    /// The span of a value.
+    pub fn span(&self, value: &ValueFlat) -> &Span {
+        self.value.span(value.span)
+    }
+
+    /// Borrows a value issued by this arena for syntax comparisons.
+    pub fn view(&self, value: ValueFlat) -> ValueRef<'_> {
+        ValueRef { arena: self, value }
+    }
+
+    // - Printing
+
+    /// Prints a value in full through the IL printer.
+    pub fn to_string(&self, value: &ValueFlat) -> String {
+        let mut output = String::new();
+        let mut printer = crate::lang::traits::print::Printer::new(&mut output);
+        crate::lang::il::print::print_value(self, value, &mut printer)
+            .expect("writing to a String cannot fail");
+        output
     }
 }
