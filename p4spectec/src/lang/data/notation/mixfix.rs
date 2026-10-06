@@ -19,13 +19,7 @@ use crate::lang::{
     traits::{at::At, cmp::SyntaxCmp, eq::SyntaxEq, free::FreeIds, print::Printer},
 };
 
-use super::{
-    AtomPhrase,
-    arena::MixopArena,
-    error::ArityMismatch,
-    flat, tree,
-    walk::{self, Piece},
-};
+use super::{AtomPhrase, Piece, arena::MixopArena, error::ArityMismatch, flat, print, tree};
 
 // = Mixfix forms
 
@@ -100,7 +94,7 @@ impl<T> Mixfix<Rc<tree::Mixop>, T> {
     ///
     /// Fails unless there is exactly one argument per position.
     pub fn new(mixop: Rc<tree::Mixop>, args: Vec<T>) -> Result<Self, ArityMismatch> {
-        let arity = walk::arity_tree(mixop.as_ref());
+        let arity = mixop.arity();
         match args.len().cmp(&arity) {
             Ordering::Less => Err(ArityMismatch::ArgumentCountTooFew),
             Ordering::Greater => Err(ArityMismatch::ArgumentCountTooMany),
@@ -110,7 +104,7 @@ impl<T> Mixfix<Rc<tree::Mixop>, T> {
 
     /// Fills each position of a mixop, calling `fill` once per position.
     pub fn fill_with(mixop: Rc<tree::Mixop>, fill: impl FnMut(usize) -> T) -> Self {
-        let arity = walk::arity_tree(mixop.as_ref());
+        let arity = mixop.arity();
         Self { args: (0..arity).map(fill).collect(), mixop }
     }
 
@@ -144,7 +138,7 @@ impl<T> Mixfix<Rc<tree::Mixop>, T> {
         mixfix_other: &Mixfix<Rc<tree::Mixop>, U>,
         mut compare_arg: impl FnMut(&T, &U) -> Ordering,
     ) -> Ordering {
-        walk::cmp_trees_by(self.mixop.as_ref(), mixfix_other.mixop.as_ref(), |pos| {
+        self.mixop.cmp_by(mixfix_other.mixop.as_ref(), |pos| {
             compare_arg(&self.args[pos], &mixfix_other.args[pos])
         })
     }
@@ -159,9 +153,7 @@ impl<T> Mixfix<Rc<tree::Mixop>, T> {
         printer: &mut Printer<'_>,
         mut print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
     ) -> fmt::Result {
-        walk::print_tree_with(&self.mixop, printer, |pos, printer| {
-            print_arg(&self.args[pos], printer)
-        })
+        print::tree_with(&self.mixop, printer, |pos, printer| print_arg(&self.args[pos], printer))
     }
 }
 
@@ -238,7 +230,7 @@ impl<T: At> At for Mixfix<Rc<tree::Mixop>, T> {
     fn at(&self) -> Span {
         // Cover atoms and arguments, so empty sequences add no default span
         let mut spans = Vec::new();
-        walk::visit_tree(self.mixop.as_ref(), |piece| match piece {
+        self.mixop.visit(|piece| match piece {
             Piece::Atom(atom) => spans.push(atom.at()),
             Piece::Arg(pos) => spans.push(self.args[pos].at()),
         });
@@ -294,7 +286,7 @@ impl<'a, T> MixfixRef<'a, T> {
         // Each child takes as many arguments as it has positions
         let mut args = self.args;
         let mut take = |mixop: &'a tree::Mixop| {
-            let (args_child, args_rest) = args.split_at(walk::arity_tree(mixop));
+            let (args_child, args_rest) = args.split_at(mixop.arity());
             args = args_rest;
             MixfixRef { mixop, args: args_child }
         };
@@ -347,13 +339,9 @@ impl<T> Mixfix<flat::Mixop, T> {
         arena_mixop_other: &MixopArena,
         mut compare_arg: impl FnMut(&T, &U) -> Ordering,
     ) -> Ordering {
-        walk::cmp_flats_by(
-            arena_mixop,
-            arena_mixop.kind(self.mixop),
-            arena_mixop_other,
-            arena_mixop_other.kind(mixfix_other.mixop),
-            |pos| compare_arg(&self.args[pos], &mixfix_other.args[pos]),
-        )
+        flat::cmp_by(arena_mixop, self.mixop, arena_mixop_other, mixfix_other.mixop, |pos| {
+            compare_arg(&self.args[pos], &mixfix_other.args[pos])
+        })
     }
 
     // - Printing
@@ -365,7 +353,7 @@ impl<T> Mixfix<flat::Mixop, T> {
         printer: &mut Printer<'_>,
         mut print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
     ) -> fmt::Result {
-        walk::print_flat_with(arena_mixop, arena_mixop.kind(self.mixop), printer, |pos, printer| {
+        print::flat_with(arena_mixop, self.mixop, printer, |pos, printer| {
             print_arg(&self.args[pos], printer)
         })
     }

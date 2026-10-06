@@ -10,7 +10,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::{Mixfix, mixop::shape, tree::Mixop},
+        notation::{Mixfix, flat, mixop::shape, tree::Mixop},
         typ,
         value::{flat::Value, get, make},
     },
@@ -51,10 +51,7 @@ fn set_of_value(arena: &Arena, value: &Value) -> Result<ValueSet, BuiltinError> 
         get::case(arena, value).map_err(|_| BuiltinError::argument_invalid("expected a set"))?;
     let set_mixop = set_mixop();
     // The value must be a set case wrapping one list
-    if !arena
-        .arena_mixop()
-        .matches_tree(*value_case.mixop(), &set_mixop)
-    {
+    if !flat::matches_tree(arena.arena_mixop(), *value_case.mixop(), &set_mixop) {
         return Err(BuiltinError::argument_invalid("expected a set"));
     }
     let value_set = extract::one(value_case.args())?;

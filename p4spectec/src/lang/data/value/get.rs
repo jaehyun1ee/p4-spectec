@@ -72,7 +72,7 @@ macro_rules! matches {
             Some(value_case)
                 if [$shape, $($shape_alt),*].into_iter().any(|shape_text| {
                     let expected = $crate::lang::data::notation::mixop::shape(shape_text);
-                    $arena.arena_mixop().matches_tree(*value_case.mixop(), expected.as_ref())
+                    $crate::lang::data::notation::flat::matches_tree($arena.arena_mixop(), *value_case.mixop(), expected.as_ref())
                 }) =>
             {
                 let $values = value_case.args().iter().collect::<Vec<_>>();

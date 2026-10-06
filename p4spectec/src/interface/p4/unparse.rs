@@ -15,8 +15,8 @@ use crate::lang::{
     data::{
         arena::Arena,
         notation::{
-            tree::Mixop,
-            walk::{self, Piece},
+            Piece, flat,
+            tree::{self, Mixop},
         },
         value::{
             ValueCase,
@@ -153,7 +153,7 @@ impl P4Unparser {
         typ: &TypKind,
         value_case: &ValueCase,
     ) -> Result<String, P4UnparseError> {
-        let mixop = arena.arena_mixop().to_tree(*value_case.mixop());
+        let mixop = tree::from_flat(arena.arena_mixop(), *value_case.mixop());
         if let TypKind::Var(type_id, _) = typ
             && let Some(hint) = self.hints.get(&(type_id.node.clone(), mixop))
         {
@@ -221,7 +221,7 @@ impl P4Unparser {
         // Pieces in reading order: atoms, and arguments by position
         let arena_mixop = arena.arena_mixop();
         let mut pieces = Vec::new();
-        walk::visit_flat(arena_mixop, arena_mixop.kind(*value_case.mixop()), |piece| {
+        flat::visit(arena_mixop, *value_case.mixop(), |piece| {
             pieces.push(piece);
         });
         for piece in pieces {

@@ -236,9 +236,9 @@ pub fn print_pattern(
     printer: &mut Printer<'_>,
 ) -> fmt::Result {
     match pattern {
-        Pattern::Case(mixop) => crate::lang::data::notation::walk::print_flat_with(
+        Pattern::Case(mixop) => crate::lang::data::notation::print::flat_with(
             arena_mixop,
-            arena_mixop.kind(*mixop),
+            *mixop,
             printer,
             |_, printer| printer.write("%"),
         ),

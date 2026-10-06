@@ -5,7 +5,6 @@
 //! and records each new mixop's number of argument positions;
 //! `intern_shared` remembers a shared tree by its address,
 //! so a mixop shared by many expressions is walked once.
-//! Comparison with trees and expansion go through `walk`.
 
 use std::{collections::HashMap, rc::Rc};
 
@@ -13,7 +12,7 @@ use foldhash::fast::RandomState;
 
 use crate::lang::data::intern::{CanonId, CanonInterner};
 
-use super::{error::MixopError, flat, tree, walk};
+use super::{error::MixopError, flat, tree};
 
 // = Arena storage
 
@@ -120,17 +119,5 @@ impl MixopArena {
     /// Whether two mixops have the same structure and atom names.
     pub fn canon_eq(&self, mixop_id_l: flat::Mixop, mixop_id_r: flat::Mixop) -> bool {
         self.canon_id(mixop_id_l) == self.canon_id(mixop_id_r)
-    }
-
-    // - Trees
-
-    /// Whether a mixop has a tree's structure and atom names.
-    pub fn matches_tree(&self, mixop_id: flat::Mixop, mixop: &tree::Mixop) -> bool {
-        walk::matches_tree(self, self.kind(mixop_id), mixop)
-    }
-
-    /// Expands a mixop into a tree, copying atoms with their spans.
-    pub fn to_tree(&self, mixop_id: flat::Mixop) -> tree::Mixop {
-        walk::to_tree(self, self.kind(mixop_id))
     }
 }
