@@ -6,7 +6,7 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_state::{DeserializeState, SerializeState};
 
-use super::{MixopArena, MixopId, MixopTree, tree};
+use super::{MixopArena, MixopId, tree};
 use crate::{lang::data::encoding::Encoding, util::json::json};
 
 /// The source arena and the representation of handles in JSON.
@@ -112,7 +112,7 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for MixopId {
         match ctx {
             DecodeContext::ArenaRelative(_) => u32::deserialize(deserializer).map(Self::from_index),
             DecodeContext::ArenaIndependent(arena_mixop) => {
-                let mixop_tree = MixopTree::deserialize(deserializer)?;
+                let mixop_tree = tree::Mixop::deserialize(deserializer)?;
                 tree::into_flat(arena_mixop, mixop_tree).map_err(serde::de::Error::custom)
             }
         }

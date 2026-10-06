@@ -9,7 +9,10 @@ use super::{
     intern::CanonId,
     notation::MixopArena,
     typ::TypKind,
-    value::{ValueArena, ValueError, ValueFlatKind, ValueRef, flat::Value},
+    value::{
+        ValueArena, ValueError, ValueRef,
+        flat::{Value, ValueKind},
+    },
 };
 use crate::lang::common::source::Span;
 use std::rc::Rc;
@@ -64,7 +67,7 @@ impl Arena {
     /// Interns the three parts and returns their handles as a value.
     pub(super) fn alloc(
         &mut self,
-        kind: ValueFlatKind,
+        kind: ValueKind,
         typ: Rc<TypKind>,
         span: Span,
     ) -> Result<Value, ValueError> {
@@ -74,12 +77,12 @@ impl Arena {
     // - Lookup
 
     /// The body of a value.
-    pub fn kind(&self, value: &Value) -> &ValueFlatKind {
+    pub fn kind(&self, value: &Value) -> &ValueKind {
         self.value.kind(value.node)
     }
 
     /// The canonical identity of a value's body.
-    pub fn canon_id(&self, value: &Value) -> CanonId<ValueFlatKind> {
+    pub fn canon_id(&self, value: &Value) -> CanonId<ValueKind> {
         self.value.canon_id(value.node)
     }
 

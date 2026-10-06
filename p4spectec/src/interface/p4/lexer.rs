@@ -46,9 +46,13 @@ use crate::lang::{
         source::{Phrase, Position, Span},
     },
     data::{
-        notation::MixopTree,
+        notation::tree::Mixop,
         typ,
-        value::{ValueCase, ValueError, ValueFlatKind, flat::Value, make},
+        value::{
+            ValueCase, ValueError,
+            flat::{Value, ValueKind},
+            make,
+        },
     },
 };
 
@@ -442,7 +446,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
     fn classify_name(&mut self, value: &Value, span: &Span, next: LexerState) -> Phrase<Token> {
         let arena = self.ctx.arena();
         let name = match arena.kind(value) {
-            crate::lang::data::value::ValueFlatKind::Text(name) => name,
+            ValueKind::Text(name) => name,
             _ => return phrase!(node: Token::Identifier, span: span.clone()),
         };
         // Type names may start an expression; either kind may take `<...>`
@@ -725,8 +729,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                     span: span.clone()
                 );
                 // Each literal's atom has its own span, so its shape is not shared
-                let mixop =
-                    MixopTree::Seq(vec![MixopTree::Arg, MixopTree::Atom(atom), MixopTree::Arg]);
+                let mixop = Mixop::Seq(vec![Mixop::Arg, Mixop::Atom(atom), Mixop::Arg]);
                 let mut arena = self.ctx.arena_mut();
                 let arena_mixop = arena.arena_mixop_mut();
                 let shape = arena_mixop.intern(&mixop).map_err(ValueError::from)?;
@@ -736,7 +739,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
                 let value = make::new(
                     &mut arena,
-                    ValueFlatKind::Case(value_case),
+                    ValueKind::Case(value_case),
                     (typ::make::var(id_typ, vec![])).node.into(),
                     span,
                 )?;

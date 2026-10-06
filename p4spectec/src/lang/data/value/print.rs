@@ -1,6 +1,9 @@
 //! Rendering shared values through their arena
 
-use super::{ValueCase, ValueFlatKind, flat::Value};
+use super::{
+    ValueCase,
+    flat::{Value, ValueKind},
+};
 use crate::{
     lang::{
         data::arena::Arena,
@@ -25,13 +28,13 @@ fn write_value_with(
     level: usize,
 ) -> fmt::Result {
     match arena.kind(value) {
-        ValueFlatKind::Bool(value) => write!(output, "{value}"),
-        ValueFlatKind::Num(value) => value.print(output),
-        ValueFlatKind::Text(text) => output.write_str(&escape_text(text)),
+        ValueKind::Bool(value) => write!(output, "{value}"),
+        ValueKind::Num(value) => value.print(output),
+        ValueKind::Text(text) => output.write_str(&escape_text(text)),
         // Empty structs stay on one line
-        ValueFlatKind::Struct(fields) if fields.is_empty() => output.write_str("{}"),
+        ValueKind::Struct(fields) if fields.is_empty() => output.write_str("{}"),
         // One field per line, indented one level deeper
-        ValueFlatKind::Struct(fields) => {
+        ValueKind::Struct(fields) => {
             output.write_str("{\n")?;
             for (index, (atom, value)) in fields.iter().enumerate() {
                 if index != 0 {
@@ -46,8 +49,8 @@ fn write_value_with(
             output.write_str(&indent(level))?;
             output.write_char('}')
         }
-        ValueFlatKind::Case(case) => write_case_with(arena, output, case, level),
-        ValueFlatKind::Tuple(values) => {
+        ValueKind::Case(case) => write_case_with(arena, output, case, level),
+        ValueKind::Tuple(values) => {
             output.write_char('(')?;
             for (index, value) in values.iter().enumerate() {
                 if index != 0 {
@@ -57,16 +60,16 @@ fn write_value_with(
             }
             output.write_char(')')
         }
-        ValueFlatKind::Opt(Some(value)) => {
+        ValueKind::Opt(Some(value)) => {
             output.write_str("Some(")?;
             write_value_with(arena, output, value, level + 1)?;
             output.write_char(')')
         }
-        ValueFlatKind::Opt(None) => output.write_str("None"),
+        ValueKind::Opt(None) => output.write_str("None"),
         // Empty lists stay on one line
-        ValueFlatKind::List(values) if values.is_empty() => output.write_str("[]"),
+        ValueKind::List(values) if values.is_empty() => output.write_str("[]"),
         // One element per line, indented one level deeper
-        ValueFlatKind::List(values) => {
+        ValueKind::List(values) => {
             output.write_str("[\n")?;
             for (index, value) in values.iter().enumerate() {
                 if index != 0 {
@@ -79,11 +82,11 @@ fn write_value_with(
             output.write_str(&indent(level))?;
             output.write_char(']')
         }
-        ValueFlatKind::Func(id) => {
+        ValueKind::Func(id) => {
             output.write_char('$')?;
             output.write_str(&id.node)
         }
-        ValueFlatKind::Extern(_) => output.write_str("extern"),
+        ValueKind::Extern(_) => output.write_str("extern"),
     }
 }
 

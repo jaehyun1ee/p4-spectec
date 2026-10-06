@@ -14,26 +14,25 @@ use foldhash::fast::RandomState;
 use crate::lang::data::intern::{CanonId, CanonInterner};
 
 use super::{
-    MixopTree,
     error::MixopError,
-    flat::{MixopFlat, MixopId},
-    walk,
+    flat::{self, MixopId},
+    tree, walk,
 };
 
 // = Arena storage
 
 /// A shared tree with its mixop, kept so the tree's address is not reused.
-type SharedMixop = (Rc<MixopTree>, MixopId);
+type SharedMixop = (Rc<tree::Mixop>, MixopId);
 
 /// Storage for notation mixops, shared by every value built from them.
 #[derive(Debug, Default)]
 pub struct MixopArena {
     /// Mixops, with canonical identities that ignore atom spans.
-    mixops: CanonInterner<MixopFlat>,
+    mixops: CanonInterner<flat::Mixop>,
     /// Argument positions of each mixop, by handle index.
     arities: Vec<u32>,
     /// Handles of shared trees, by address.
-    shared: HashMap<*const MixopTree, SharedMixop, RandomState>,
+    shared: HashMap<*const tree::Mixop, SharedMixop, RandomState>,
 }
 
 impl MixopArena {
@@ -47,21 +46,21 @@ impl MixopArena {
     // - Interning
 
     /// Interns a tree node by node, children first, copying atoms.
-    pub fn intern(&mut self, mixop: &MixopTree) -> Result<MixopId, MixopError> {
+    pub fn intern(&mut self, mixop: &tree::Mixop) -> Result<MixopId, MixopError> {
         // Children get their canonical identities before the parent is hashed
         let kind = match mixop {
-            MixopTree::Arg => MixopFlat::Arg,
-            MixopTree::Atom(atom) => MixopFlat::Atom(atom.clone()),
-            MixopTree::Brack(atom_l, mixop_inner, atom_r) => {
+            tree::Mixop::Arg => flat::Mixop::Arg,
+            tree::Mixop::Atom(atom) => flat::Mixop::Atom(atom.clone()),
+            tree::Mixop::Brack(atom_l, mixop_inner, atom_r) => {
                 let mixop_id_inner = self.intern(mixop_inner)?;
-                MixopFlat::Brack(atom_l.clone(), mixop_id_inner, atom_r.clone())
+                flat::Mixop::Brack(atom_l.clone(), mixop_id_inner, atom_r.clone())
             }
-            MixopTree::Infix(mixop_l, atom, mixop_r) => {
+            tree::Mixop::Infix(mixop_l, atom, mixop_r) => {
                 let mixop_id_l = self.intern(mixop_l)?;
                 let mixop_id_r = self.intern(mixop_r)?;
-                MixopFlat::Infix(mixop_id_l, atom.clone(), mixop_id_r)
+                flat::Mixop::Infix(mixop_id_l, atom.clone(), mixop_id_r)
             }
-            MixopTree::Seq(mixops) => MixopFlat::Seq(
+            tree::Mixop::Seq(mixops) => flat::Mixop::Seq(
                 mixops
                     .iter()
                     .map(|mixop| self.intern(mixop))
@@ -78,7 +77,7 @@ impl MixopArena {
     }
 
     /// Interns a shared tree, walking it only the first time.
-    pub fn intern_shared(&mut self, mixop: &Rc<MixopTree>) -> Result<MixopId, MixopError> {
+    pub fn intern_shared(&mut self, mixop: &Rc<tree::Mixop>) -> Result<MixopId, MixopError> {
         // Seen before: the same allocation has the same mixop
         if let Some((_, mixop_id)) = self.shared.get(&Rc::as_ptr(mixop)) {
             return Ok(*mixop_id);
@@ -91,22 +90,22 @@ impl MixopArena {
     }
 
     /// Counts a node's positions from its children's recorded counts.
-    fn arity_kind(&self, kind: &MixopFlat) -> usize {
+    fn arity_kind(&self, kind: &flat::Mixop) -> usize {
         match kind {
-            MixopFlat::Arg => 1,
-            MixopFlat::Atom(_) => 0,
-            MixopFlat::Brack(_, mixop_id, _) => self.arity(*mixop_id),
-            MixopFlat::Infix(mixop_id_l, _, mixop_id_r) => {
+            flat::Mixop::Arg => 1,
+            flat::Mixop::Atom(_) => 0,
+            flat::Mixop::Brack(_, mixop_id, _) => self.arity(*mixop_id),
+            flat::Mixop::Infix(mixop_id_l, _, mixop_id_r) => {
                 self.arity(*mixop_id_l) + self.arity(*mixop_id_r)
             }
-            MixopFlat::Seq(mixops) => mixops.iter().map(|mixop_id| self.arity(*mixop_id)).sum(),
+            flat::Mixop::Seq(mixops) => mixops.iter().map(|mixop_id| self.arity(*mixop_id)).sum(),
         }
     }
 
     // - Lookup
 
     /// The node behind a mixop handle.
-    pub fn kind(&self, mixop_id: MixopId) -> &MixopFlat {
+    pub fn kind(&self, mixop_id: MixopId) -> &flat::Mixop {
         self.mixops.get(mixop_id)
     }
 
@@ -116,7 +115,7 @@ impl MixopArena {
     }
 
     /// The canonical identity of a mixop, ignoring atom spans.
-    pub fn canon_id(&self, mixop_id: MixopId) -> CanonId<MixopFlat> {
+    pub fn canon_id(&self, mixop_id: MixopId) -> CanonId<flat::Mixop> {
         self.mixops.canon_id(mixop_id)
     }
 
@@ -128,12 +127,12 @@ impl MixopArena {
     // - Trees
 
     /// Whether a mixop has a tree's structure and atom names.
-    pub fn matches_tree(&self, mixop_id: MixopId, mixop: &MixopTree) -> bool {
+    pub fn matches_tree(&self, mixop_id: MixopId, mixop: &tree::Mixop) -> bool {
         walk::matches_tree(self, self.kind(mixop_id), mixop)
     }
 
     /// Expands a mixop into a tree, copying atoms with their spans.
-    pub fn to_tree(&self, mixop_id: MixopId) -> MixopTree {
+    pub fn to_tree(&self, mixop_id: MixopId) -> tree::Mixop {
         walk::to_tree(self, self.kind(mixop_id))
     }
 }

@@ -13,9 +13,9 @@ use crate::lang::data::{
 use crate::lang::il::ast::{self as source, Stage};
 
 pub use crate::lang::il::ast::{
-    Atom, BinOp, CmpOp, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter, ListPattern, MixopTree,
-    Num, NumOp, OpTyp, OptPattern, Param, ParamKind, TParam, Targ, TargKind, Text, Typ, TypDef,
-    TypField, TypKind, TypOrigin, TypOriginKind, UnOp, Value, ValueCase, ValueField, ValueFlatKind,
+    Atom, BinOp, CmpOp, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter, ListPattern, Mixop, Num,
+    NumOp, OpTyp, OptPattern, Param, ParamKind, TParam, Targ, TargKind, Text, Typ, TypDef,
+    TypField, TypKind, TypOrigin, TypOriginKind, UnOp, Value, ValueCase, ValueField, ValueKind,
     VarDef,
 };
 

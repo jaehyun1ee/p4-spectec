@@ -1,6 +1,6 @@
-//! Flat representation of notation: `MixopFlat` and `MixopId`
+//! Flat representation of notation: `Mixop` and `MixopId`
 //!
-//! `MixopFlat` stores each node once, with its children as handles
+//! `Mixop` stores each node once, with its children as handles
 //! into a `MixopArena` rather than nested inside it:
 //! `Brack(atom_l, mixop, atom_r)` refers to its inner mixop by handle,
 //! and equal subtrees are stored once.
@@ -22,7 +22,7 @@ use super::{AtomPhrase, arena::MixopArena, mixop::MixopMatch};
 #[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
-pub enum MixopFlat {
+pub enum Mixop {
     Arg,
     Atom(#[serde(state)] AtomPhrase),
     Brack(#[serde(state)] AtomPhrase, #[serde(state)] MixopId, #[serde(state)] AtomPhrase),
@@ -31,9 +31,9 @@ pub enum MixopFlat {
 }
 
 /// A notation handle valid only in its issuing arena.
-pub type MixopId = Interned<MixopFlat>;
+pub type MixopId = Interned<Mixop>;
 
-impl MixopFlat {
+impl Mixop {
     /// Orders the variants for comparison across forms.
     pub(crate) fn tag(&self) -> u8 {
         match self {
@@ -60,7 +60,7 @@ impl MixopMatch for MixopId {
 // Canonical identity: atom names and children's canonical ids, so spans
 // are ignored as a tree ignores them
 
-impl CanonEq for MixopFlat {
+impl CanonEq for Mixop {
     fn canon_eq(&self, interner: &CanonInterner<Self>, _: &(), kind_r: &Self) -> bool {
         // Children compare by canonical id, computed when they were interned
         let eq_mixop = |mixop_id_l: &MixopId, mixop_id_r: &MixopId| {
@@ -97,7 +97,7 @@ impl CanonEq for MixopFlat {
     }
 }
 
-impl CanonHash for MixopFlat {
+impl CanonHash for Mixop {
     fn canon_hash<H: Hasher>(&self, interner: &CanonInterner<Self>, _: &(), hasher: &mut H) {
         self.tag().hash(hasher);
         match self {

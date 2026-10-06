@@ -1,6 +1,6 @@
 //! Tree representation of notation: children kept in place
 //!
-//! `MixopTree` boxes lone children and keeps sequence elements inline,
+//! `Mixop` boxes lone children and keeps sequence elements inline,
 //! owning its whole form.
 //! Equality, ordering, and hashing read atom names, never atom spans,
 //! and printing writes `%` at each argument position.
@@ -18,15 +18,15 @@ use serde::{Deserialize, Serialize};
 
 /// An owned notation with an argument hole at each position.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum MixopTree {
+pub enum Mixop {
     Arg,
     Atom(AtomPhrase),
-    Brack(AtomPhrase, Box<MixopTree>, AtomPhrase),
-    Infix(Box<MixopTree>, AtomPhrase, Box<MixopTree>),
-    Seq(Vec<MixopTree>),
+    Brack(AtomPhrase, Box<Mixop>, AtomPhrase),
+    Infix(Box<Mixop>, AtomPhrase, Box<Mixop>),
+    Seq(Vec<Mixop>),
 }
 
-impl MixopTree {
+impl Mixop {
     /// Counts argument positions in notation order.
     pub fn arity(&self) -> usize {
         walk::arity_tree(self)
@@ -45,27 +45,27 @@ impl MixopTree {
 
 // = Equality, ordering, and hashing
 
-impl PartialEq for MixopTree {
+impl PartialEq for Mixop {
     fn eq(&self, node_other: &Self) -> bool {
         self.cmp(node_other).is_eq()
     }
 }
 
-impl Eq for MixopTree {}
+impl Eq for Mixop {}
 
-impl Ord for MixopTree {
+impl Ord for Mixop {
     fn cmp(&self, node_other: &Self) -> Ordering {
         walk::cmp_trees_by(self, node_other, |_| Ordering::Equal)
     }
 }
 
-impl PartialOrd for MixopTree {
+impl PartialOrd for Mixop {
     fn partial_cmp(&self, node_other: &Self) -> Option<Ordering> {
         Some(self.cmp(node_other))
     }
 }
 
-impl Hash for MixopTree {
+impl Hash for Mixop {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         // Hash the form first so different variants rarely collide
         self.tag().hash(hasher);
@@ -89,21 +89,18 @@ impl Hash for MixopTree {
 
 // = Printing
 
-impl Print for MixopTree {
+impl Print for Mixop {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         walk::print_tree_with(self, printer, |_, printer| printer.write("%"))
     }
 }
 
 /// Expands a handle into an owned notation, preserving atom spans.
-pub fn from_flat(arena_mixop: &MixopArena, mixop_id: MixopId) -> MixopTree {
+pub fn from_flat(arena_mixop: &MixopArena, mixop_id: MixopId) -> Mixop {
     arena_mixop.to_tree(mixop_id)
 }
 
 /// Interns an owned notation in the target arena.
-pub fn into_flat(
-    arena_mixop: &mut MixopArena,
-    mixop_tree: MixopTree,
-) -> Result<MixopId, MixopError> {
+pub fn into_flat(arena_mixop: &mut MixopArena, mixop_tree: Mixop) -> Result<MixopId, MixopError> {
     arena_mixop.intern(&mixop_tree)
 }

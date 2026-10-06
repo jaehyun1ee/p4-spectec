@@ -12,19 +12,22 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::{Mixfix, MixopTree},
+        notation::{Mixfix, tree::Mixop},
         typ::{self, Typ, TypKind},
     },
 };
 
-use super::{ValueCase, ValueError, ValueField, ValueFlatKind, flat::Value};
+use super::{
+    ValueCase, ValueError, ValueField,
+    flat::{Value, ValueKind},
+};
 
 // - General
 
 /// Allocates a value of the given kind, type, and span.
 pub fn new(
     arena: &mut Arena,
-    kind: ValueFlatKind,
+    kind: ValueKind,
     typ: Rc<TypKind>,
     span: Span,
 ) -> Result<Value, ValueError> {
@@ -38,7 +41,7 @@ pub fn bool(arena: &mut Arena, value: bool, span: Span) -> Result<Value, ValueEr
     thread_local! {
         static TYP: Rc<TypKind> = Rc::new(TypKind::Bool);
     }
-    TYP.with(|typ| new(arena, ValueFlatKind::Bool(value), typ.clone(), span))
+    TYP.with(|typ| new(arena, ValueKind::Bool(value), typ.clone(), span))
 }
 
 /// A number, typed by its kind.
@@ -51,7 +54,7 @@ pub fn num(arena: &mut Arena, value: Number, span: Span) -> Result<Value, ValueE
         num::Typ::Nat => TYP_NAT.with(Rc::clone),
         num::Typ::Int => TYP_INT.with(Rc::clone),
     };
-    new(arena, ValueFlatKind::Num(value), typ, span)
+    new(arena, ValueKind::Num(value), typ, span)
 }
 
 /// A natural number.
@@ -69,7 +72,7 @@ pub fn text(arena: &mut Arena, value: String, span: Span) -> Result<Value, Value
     thread_local! {
         static TYP: Rc<TypKind> = Rc::new(TypKind::Text);
     }
-    TYP.with(|typ| new(arena, ValueFlatKind::Text(value), typ.clone(), span))
+    TYP.with(|typ| new(arena, ValueKind::Text(value), typ.clone(), span))
 }
 
 // - Structures
@@ -81,7 +84,7 @@ pub fn structure(
     value_fields: Vec<ValueField>,
     span: Span,
 ) -> Result<Value, ValueError> {
-    new(arena, ValueFlatKind::Struct(value_fields), typ, span)
+    new(arena, ValueKind::Struct(value_fields), typ, span)
 }
 
 // - Cases
@@ -92,7 +95,7 @@ pub fn structure(
 pub fn case(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    mixfix: Mixfix<Rc<MixopTree>, Value>,
+    mixfix: Mixfix<Rc<Mixop>, Value>,
     span: Span,
 ) -> Result<Value, ValueError> {
     let (mixop, values) = mixfix.into_parts();
@@ -100,7 +103,7 @@ pub fn case(
     let shape = arena_mixop.intern_shared(&mixop)?;
     let value_case =
         ValueCase::new_in(arena_mixop, shape, values).expect("a mixfix fills every position");
-    new(arena, ValueFlatKind::Case(value_case), typ, span)
+    new(arena, ValueKind::Case(value_case), typ, span)
 }
 
 /// A variant case from a mixop text, its arguments, and its type name.
@@ -139,7 +142,7 @@ pub fn tuple(
     values: Vec<Value>,
     span: Span,
 ) -> Result<Value, ValueError> {
-    new(arena, ValueFlatKind::Tuple(values), typ, span)
+    new(arena, ValueKind::Tuple(values), typ, span)
 }
 
 /// An option.
@@ -149,7 +152,7 @@ pub fn opt(
     value: Option<Value>,
     span: Span,
 ) -> Result<Value, ValueError> {
-    new(arena, ValueFlatKind::Opt(value), typ, span)
+    new(arena, ValueKind::Opt(value), typ, span)
 }
 
 /// A list.
@@ -159,7 +162,7 @@ pub fn list(
     values: Vec<Value>,
     span: Span,
 ) -> Result<Value, ValueError> {
-    new(arena, ValueFlatKind::List(values), typ, span)
+    new(arena, ValueKind::List(values), typ, span)
 }
 
 // - Functions
@@ -174,7 +177,7 @@ pub fn func(
     span: Span,
 ) -> Result<Value, ValueError> {
     let typ = typ::make::func(tparams, typs_params, typ_ret).node;
-    new(arena, ValueFlatKind::Func(id), Rc::new(typ), span)
+    new(arena, ValueKind::Func(id), Rc::new(typ), span)
 }
 
 // - Externals
@@ -186,5 +189,5 @@ pub fn external(
     json: Rc<json>,
     span: Span,
 ) -> Result<Value, ValueError> {
-    new(arena, ValueFlatKind::Extern(json), typ, span)
+    new(arena, ValueKind::Extern(json), typ, span)
 }

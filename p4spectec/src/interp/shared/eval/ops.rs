@@ -15,7 +15,10 @@ use crate::lang::{
     data::{
         arena::Arena,
         notation::MixopMatch,
-        value::{ValueFlatKind, flat::Value, get, make},
+        value::{
+            flat::{Value, ValueKind},
+            get, make,
+        },
     },
     traits::eq::SyntaxEq,
 };
@@ -156,18 +159,18 @@ pub(crate) fn r#match<P: ast::Stage>(
 ) -> bool {
     match (pattern, arena.kind(&value)) {
         // Case: same constructor shape
-        (ast::Pattern::Case(mixop), ValueFlatKind::Case(value_case)) => {
+        (ast::Pattern::Case(mixop), ValueKind::Case(value_case)) => {
             mixop.matches_mixop(arena.arena_mixop(), *value_case.mixop())
         }
         // List: non-empty, fixed length, or empty
-        (ast::Pattern::List(pattern), ValueFlatKind::List(values)) => match pattern {
+        (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
             ast::ListPattern::Cons => !values.is_empty(),
             ast::ListPattern::Fixed(len) => values.len() == *len,
             ast::ListPattern::Nil => values.is_empty(),
         },
         // Option: present or absent
-        (ast::Pattern::Opt(ast::OptPattern::Some), ValueFlatKind::Opt(Some(_)))
-        | (ast::Pattern::Opt(ast::OptPattern::None), ValueFlatKind::Opt(None)) => true,
+        (ast::Pattern::Opt(ast::OptPattern::Some), ValueKind::Opt(Some(_)))
+        | (ast::Pattern::Opt(ast::OptPattern::None), ValueKind::Opt(None)) => true,
         // Other combinations never match
         _ => false,
     }
@@ -392,8 +395,8 @@ pub(crate) fn access_index(
     // The operand must be a text or list and the index in bounds
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let len = match arena.kind(value_base) {
-        ValueFlatKind::Text(text) => text.len(),
-        ValueFlatKind::List(values) => values.len(),
+        ValueKind::Text(text) => text.len(),
+        ValueKind::List(values) => values.len(),
         _ => unreachable!("index operand must be a text or list"),
     };
     let Some(idx) = usize::try_from(&int_idx).ok().filter(|idx| *idx < len) else {
@@ -401,7 +404,7 @@ pub(crate) fn access_index(
     };
     match arena.kind(value_base) {
         // Text: a one-character slice
-        ValueFlatKind::Text(_) => {
+        ValueKind::Text(_) => {
             let typ = crate::phrase!(node: arena.typ(value_base).clone(), span: arena.span(value_base).clone());
             let value_len =
                 unwrap_from_result!(make::nat(arena, 1u64.into(), Span::default()), span_idx);
@@ -411,7 +414,7 @@ pub(crate) fn access_index(
             )
         }
         // List: the element
-        ValueFlatKind::List(values) => ok!(values[idx]),
+        ValueKind::List(values) => ok!(values[idx]),
         _ => unreachable!(),
     }
 }
@@ -436,8 +439,8 @@ pub(crate) fn access_slice(
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let int_len = unwrap!(get_int(arena, value_len, span_len));
     let size = match arena.kind(value_base) {
-        ValueFlatKind::Text(text) => text.len(),
-        ValueFlatKind::List(values) => values.len(),
+        ValueKind::Text(text) => text.len(),
+        ValueKind::List(values) => values.len(),
         _ => unreachable!("slice operand must be a text or list"),
     };
     let Some((idx, idx_end)) = usize::try_from(&int_idx)
@@ -454,7 +457,7 @@ pub(crate) fn access_slice(
     };
     match arena.kind(value_base) {
         // Text: the byte range must fall on character boundaries
-        ValueFlatKind::Text(text) => match text.get(idx..idx_end) {
+        ValueKind::Text(text) => match text.get(idx..idx_end) {
             Some(text) => {
                 let text = text.to_owned();
                 backtrack::from_result(make::text(arena, text, Span::default()), span_typ)
@@ -464,7 +467,7 @@ pub(crate) fn access_slice(
             }
         },
         // List: copy the range
-        ValueFlatKind::List(values) => {
+        ValueKind::List(values) => {
             let values = values[idx..idx_end].to_vec();
             ok!(unwrap_from_result!(
                 make::list(arena, typ.clone(), values, Span::default()),
@@ -492,8 +495,8 @@ pub(crate) fn update_index(
     // Operand and index checks as for access
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let len = match arena.kind(value_base) {
-        ValueFlatKind::Text(text) => text.len(),
-        ValueFlatKind::List(values) => values.len(),
+        ValueKind::Text(text) => text.len(),
+        ValueKind::List(values) => values.len(),
         _ => unreachable!("index operand must be a text or list"),
     };
     let Some(idx) = usize::try_from(&int_idx).ok().filter(|idx| *idx < len) else {
@@ -501,7 +504,7 @@ pub(crate) fn update_index(
     };
     let value = match arena.kind(value_base) {
         // Text: the replacement must be a single character
-        ValueFlatKind::Text(text) => {
+        ValueKind::Text(text) => {
             let size = text.len();
             let text_upd = get::text(arena, &value_upd).expect("operand must be a text");
             if text_upd.len() != 1 {
@@ -551,7 +554,7 @@ pub(crate) fn update_index(
             }
         }
         // List: replace in a copy
-        ValueFlatKind::List(values) => {
+        ValueKind::List(values) => {
             let mut values = values.clone();
             values[idx] = value_upd;
             unwrap_from_result!(
@@ -583,8 +586,8 @@ pub(crate) fn update_slice(
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let int_len = unwrap!(get_int(arena, value_len, span_len));
     let size = match arena.kind(value_base) {
-        ValueFlatKind::Text(text) => text.len(),
-        ValueFlatKind::List(values) => values.len(),
+        ValueKind::Text(text) => text.len(),
+        ValueKind::List(values) => values.len(),
         _ => unreachable!("slice operand must be a text or list"),
     };
     let Some((idx, idx_end)) = usize::try_from(&int_idx)
@@ -598,7 +601,7 @@ pub(crate) fn update_slice(
     };
     let value = match arena.kind(value_base) {
         // Text: the replacement must have the range's length
-        ValueFlatKind::Text(text) => {
+        ValueKind::Text(text) => {
             let size = text.len();
             let text_upd = get::text(arena, &value_upd).expect("operand must be a text");
             if text_upd.len() != idx_end - idx {
@@ -651,7 +654,7 @@ pub(crate) fn update_slice(
             }
         }
         // List: the replacement must have the range's length
-        ValueFlatKind::List(values) => {
+        ValueKind::List(values) => {
             let values_upd = get::list(arena, &value_upd).expect("operand must be a list");
             if values_upd.len() != idx_end - idx {
                 return fatal!(

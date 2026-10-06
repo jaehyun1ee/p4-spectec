@@ -10,7 +10,10 @@ use std::{borrow::Borrow, rc::Rc};
 use crate::lang::{
     common::source::Span,
     data::{
-        value::{ValueFlatKind, flat::Value, get, make},
+        value::{
+            flat::{Value, ValueKind},
+            get, make,
+        },
         var::IdSlot,
     },
 };
@@ -273,7 +276,7 @@ fn eval_case_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
         Err(result) => return result,
     };
     // The prepared shape already belongs to the arena
-    let kind = ValueFlatKind::Case(case);
+    let kind = ValueKind::Case(case);
     let value = unwrap_from_result!(
         make::new(runner_ctx.arena_mut(), kind, typ.clone(), Span::default()),
         span
@@ -377,12 +380,12 @@ fn eval_cat_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
     let value_r = unwrap!(eval_exp(runner_ctx, ctx, exp_r));
     let value = match (runner_ctx.arena().kind(&value_l), runner_ctx.arena().kind(&value_r)) {
         // Texts concatenate
-        (ValueFlatKind::Text(text_l), ValueFlatKind::Text(text_r)) => {
+        (ValueKind::Text(text_l), ValueKind::Text(text_r)) => {
             let text = format!("{text_l}{text_r}");
             unwrap_from_result!(make::text(runner_ctx.arena_mut(), text, Span::default()), span)
         }
         // Lists concatenate
-        (ValueFlatKind::List(values_l), ValueFlatKind::List(values_r)) => {
+        (ValueKind::List(values_l), ValueKind::List(values_r)) => {
             let mut values = values_l.clone();
             values.extend_from_slice(values_r);
             unwrap_from_result!(
@@ -424,8 +427,8 @@ fn eval_len_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
     let value = unwrap!(eval_exp(runner_ctx, ctx, exp_inner));
     let len = match runner_ctx.arena().kind(&value) {
         // Texts count bytes, lists count elements; anything else is an error
-        ValueFlatKind::Text(text) => text.len(),
-        ValueFlatKind::List(values) => values.len(),
+        ValueKind::Text(text) => text.len(),
+        ValueKind::List(values) => values.len(),
         _ => {
             unreachable!("length operand must be a text or list")
         }
@@ -478,7 +481,7 @@ fn eval_slice_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: E
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
     let value_len = unwrap!(eval_exp(runner_ctx, ctx, exp_len));
     // Text slices report bounds errors at the index, lists at the length
-    let span_bounds = if matches!(runner_ctx.arena().kind(&value), ValueFlatKind::Text(_)) {
+    let span_bounds = if matches!(runner_ctx.arena().kind(&value), ValueKind::Text(_)) {
         &exp_idx.span
     } else {
         &exp_len.span

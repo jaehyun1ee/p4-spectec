@@ -11,7 +11,10 @@ use std::borrow::Cow;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{ValueFlatKind, flat::Value, get},
+    data::value::{
+        flat::{Value, ValueKind},
+        get,
+    },
     hints::input,
 };
 
@@ -423,7 +426,7 @@ fn eval_return_instr<Iface: Interface, Ext: Extern>(
         if scope == Scope::Local
             || values
                 .iter()
-                .any(|value| matches!(runner_ctx.arena().kind(value), ValueFlatKind::Func(_)))
+                .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
         {
             let value =
                 unwrap!(SlInterp::invoke_func(runner_ctx, ctx.as_ref(), id, &targs, &values));

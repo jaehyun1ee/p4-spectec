@@ -4,7 +4,7 @@
 
 use std::{collections::BTreeSet, rc::Rc};
 
-use crate::lang::il::ast::{MixopTree, Pattern};
+use crate::lang::il::ast::{Mixop, Pattern};
 
 use crate::runtime::envs::algo::TDEnv;
 
@@ -16,7 +16,7 @@ use super::{error::StructureError, ol::ast::*, opt::overlap::typ_as_variant};
 fn find_variant_case_analysis(
     tdenv: &TDEnv,
     cases: &[Case],
-) -> Result<Option<Vec<Rc<MixopTree>>>, StructureError> {
+) -> Result<Option<Vec<Rc<Mixop>>>, StructureError> {
     let mut mixops = Vec::new();
     for case in cases {
         match &case.guard {

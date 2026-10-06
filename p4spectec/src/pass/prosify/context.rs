@@ -6,7 +6,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::{notation::MixopTree, typ},
+    data::{notation::tree::Mixop, typ},
     hints::{alter, fields},
 };
 
@@ -78,7 +78,7 @@ impl Context {
     }
 
     /// The hints of a variant case.
-    pub(super) fn hints_case(&self, id_typ: &Id, mixop: &MixopTree) -> Option<&Hints> {
+    pub(super) fn hints_case(&self, id_typ: &Id, mixop: &Mixop) -> Option<&Hints> {
         self.henv.get_case(id_typ, mixop)
     }
 

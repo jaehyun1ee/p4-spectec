@@ -10,7 +10,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::{Mixfix, MixopTree, mixop::shape},
+        notation::{Mixfix, mixop::shape, tree::Mixop},
         typ,
         value::{flat::Value, get, make},
     },
@@ -41,7 +41,7 @@ fn contains(arena: &Arena, set: &[Value], value: &Value) -> bool {
 // == Conversion between meta-sets and runtime lists
 
 /// The `{ ... }` shape of a set value.
-fn set_mixop() -> Rc<MixopTree> {
+fn set_mixop() -> Rc<Mixop> {
     shape("`{ k `}")
 }
 

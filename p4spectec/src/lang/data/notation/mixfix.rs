@@ -3,7 +3,7 @@
 //! `Mixfix<M, T>` pairs a mixop `M` with one argument of type `T`
 //! per argument position: `C |- e : t` is the mixop `% |- % : %`
 //! with the arguments `[C, e, t]`.
-//! Specification syntax shares a tree, `Rc<MixopTree>`;
+//! Specification syntax shares a tree, `Rc<Mixop>`;
 //! case values hold a `MixopId` handle.
 //! Fields are private so every mixfix keeps one argument per position:
 //! a tree mixfix is built from parts (`arg`, `atom`, `brack`, `infix`,
@@ -20,10 +20,11 @@ use crate::lang::{
 };
 
 use super::{
-    AtomPhrase, MixopTree,
+    AtomPhrase,
     arena::MixopArena,
     error::ArityMismatch,
     flat::MixopId,
+    tree::Mixop,
     walk::{self, Piece},
 };
 
@@ -93,13 +94,13 @@ impl<M, T> Mixfix<M, T> {
 
 // = Tree mixops
 
-impl<T> Mixfix<Rc<MixopTree>, T> {
+impl<T> Mixfix<Rc<Mixop>, T> {
     // - Construction
 
     /// Pairs a mixop with its arguments.
     ///
     /// Fails unless there is exactly one argument per position.
-    pub fn new(mixop: Rc<MixopTree>, args: Vec<T>) -> Result<Self, ArityMismatch> {
+    pub fn new(mixop: Rc<Mixop>, args: Vec<T>) -> Result<Self, ArityMismatch> {
         let arity = walk::arity_tree(mixop.as_ref());
         match args.len().cmp(&arity) {
             Ordering::Less => Err(ArityMismatch::ArgumentCountTooFew),
@@ -109,7 +110,7 @@ impl<T> Mixfix<Rc<MixopTree>, T> {
     }
 
     /// Fills each position of a mixop, calling `fill` once per position.
-    pub fn fill_with(mixop: Rc<MixopTree>, fill: impl FnMut(usize) -> T) -> Self {
+    pub fn fill_with(mixop: Rc<Mixop>, fill: impl FnMut(usize) -> T) -> Self {
         let arity = walk::arity_tree(mixop.as_ref());
         Self { args: (0..arity).map(fill).collect(), mixop }
     }
@@ -131,7 +132,7 @@ impl<T> Mixfix<Rc<MixopTree>, T> {
     /// Whether two mixfixes have the same structure and atom names.
     ///
     /// Atom spans and arguments are not compared.
-    pub fn eq_mixop<U>(&self, mixfix_other: &Mixfix<Rc<MixopTree>, U>) -> bool {
+    pub fn eq_mixop<U>(&self, mixfix_other: &Mixfix<Rc<Mixop>, U>) -> bool {
         self.mixop.as_ref() == mixfix_other.mixop.as_ref()
     }
 
@@ -141,7 +142,7 @@ impl<T> Mixfix<Rc<MixopTree>, T> {
     /// at each position both mixops reach.
     pub fn cmp_by<U>(
         &self,
-        mixfix_other: &Mixfix<Rc<MixopTree>, U>,
+        mixfix_other: &Mixfix<Rc<Mixop>, U>,
         mut compare_arg: impl FnMut(&T, &U) -> Ordering,
     ) -> Ordering {
         walk::cmp_trees_by(self.mixop.as_ref(), mixfix_other.mixop.as_ref(), |pos| {
@@ -152,7 +153,7 @@ impl<T> Mixfix<Rc<MixopTree>, T> {
 
 // - Printing
 
-impl<T> Mixfix<Rc<MixopTree>, T> {
+impl<T> Mixfix<Rc<Mixop>, T> {
     /// Writes atoms and arguments, separating non-empty pieces with spaces.
     pub fn print_with(
         &self,
@@ -167,21 +168,21 @@ impl<T> Mixfix<Rc<MixopTree>, T> {
 
 // - Parts of shared trees
 
-impl<T> Mixfix<Rc<MixopTree>, T> {
+impl<T> Mixfix<Rc<Mixop>, T> {
     /// A lone argument.
     pub fn arg(arg: T) -> Self {
-        Self { mixop: Rc::new(MixopTree::Arg), args: vec![arg] }
+        Self { mixop: Rc::new(Mixop::Arg), args: vec![arg] }
     }
 
     /// A lone atom.
     pub fn atom(atom: AtomPhrase) -> Self {
-        Self { mixop: Rc::new(MixopTree::Atom(atom)), args: Vec::new() }
+        Self { mixop: Rc::new(Mixop::Atom(atom)), args: Vec::new() }
     }
 
     /// A form between two atoms.
     pub fn brack(atom_l: AtomPhrase, mixfix_inner: Self, atom_r: AtomPhrase) -> Self {
         let mixop_inner = Rc::unwrap_or_clone(mixfix_inner.mixop);
-        let mixop = MixopTree::Brack(atom_l, Box::new(mixop_inner), atom_r);
+        let mixop = Mixop::Brack(atom_l, Box::new(mixop_inner), atom_r);
         Self { mixop: Rc::new(mixop), args: mixfix_inner.args }
     }
 
@@ -189,7 +190,7 @@ impl<T> Mixfix<Rc<MixopTree>, T> {
     pub fn infix(mixfix_l: Self, atom: AtomPhrase, mixfix_r: Self) -> Self {
         let mixop_l = Rc::unwrap_or_clone(mixfix_l.mixop);
         let mixop_r = Rc::unwrap_or_clone(mixfix_r.mixop);
-        let mixop = MixopTree::Infix(Box::new(mixop_l), atom, Box::new(mixop_r));
+        let mixop = Mixop::Infix(Box::new(mixop_l), atom, Box::new(mixop_r));
         let mut args = mixfix_l.args;
         args.extend(mixfix_r.args);
         Self { mixop: Rc::new(mixop), args }
@@ -203,13 +204,13 @@ impl<T> Mixfix<Rc<MixopTree>, T> {
             mixops.push(Rc::unwrap_or_clone(mixfix.mixop));
             args.extend(mixfix.args);
         }
-        Self { mixop: Rc::new(MixopTree::Seq(mixops)), args }
+        Self { mixop: Rc::new(Mixop::Seq(mixops)), args }
     }
 }
 
 // - Syntax operations
 
-impl<T: SyntaxEq> SyntaxEq for Mixfix<Rc<MixopTree>, T> {
+impl<T: SyntaxEq> SyntaxEq for Mixfix<Rc<Mixop>, T> {
     fn syntax_eq(&self, mixfix_other: &Self) -> bool {
         self.eq_mixop(mixfix_other)
             && self
@@ -220,7 +221,7 @@ impl<T: SyntaxEq> SyntaxEq for Mixfix<Rc<MixopTree>, T> {
     }
 }
 
-impl<T: SyntaxCmp> SyntaxCmp for Mixfix<Rc<MixopTree>, T> {
+impl<T: SyntaxCmp> SyntaxCmp for Mixfix<Rc<Mixop>, T> {
     fn syntax_cmp(&self, mixfix_other: &Self) -> Ordering {
         self.cmp_by(mixfix_other, SyntaxCmp::syntax_cmp)
     }
@@ -234,7 +235,7 @@ impl<M, T: FreeIds> FreeIds for Mixfix<M, T> {
 
 // - Source locations
 
-impl<T: At> At for Mixfix<Rc<MixopTree>, T> {
+impl<T: At> At for Mixfix<Rc<Mixop>, T> {
     fn at(&self) -> Span {
         // Cover atoms and arguments, so empty sequences add no default span
         let mut spans = Vec::new();
@@ -251,7 +252,7 @@ impl<T: At> At for Mixfix<Rc<MixopTree>, T> {
 /// A borrowed mixfix: a tree mixop and the arguments of its positions.
 #[derive(Debug)]
 pub struct MixfixRef<'a, T> {
-    mixop: &'a MixopTree,
+    mixop: &'a Mixop,
     args: &'a [T],
 }
 
@@ -280,7 +281,7 @@ pub enum View<'a, T> {
 
 impl<'a, T> MixfixRef<'a, T> {
     /// The form, with argument positions.
-    pub fn mixop(&self) -> &'a MixopTree {
+    pub fn mixop(&self) -> &'a Mixop {
         self.mixop
     }
 
@@ -293,22 +294,22 @@ impl<'a, T> MixfixRef<'a, T> {
     pub fn view(&self) -> View<'a, T> {
         // Each child takes as many arguments as it has positions
         let mut args = self.args;
-        let mut take = |mixop: &'a MixopTree| {
+        let mut take = |mixop: &'a Mixop| {
             let (args_child, args_rest) = args.split_at(walk::arity_tree(mixop));
             args = args_rest;
             MixfixRef { mixop, args: args_child }
         };
         match self.mixop {
-            MixopTree::Arg => View::Arg(&self.args[0]),
-            MixopTree::Atom(atom) => View::Atom(atom),
-            MixopTree::Brack(atom_l, mixop_inner, atom_r) => {
+            Mixop::Arg => View::Arg(&self.args[0]),
+            Mixop::Atom(atom) => View::Atom(atom),
+            Mixop::Brack(atom_l, mixop_inner, atom_r) => {
                 View::Brack(atom_l, take(mixop_inner), atom_r)
             }
-            MixopTree::Infix(mixop_l, atom, mixop_r) => {
+            Mixop::Infix(mixop_l, atom, mixop_r) => {
                 let mixfix_l = take(mixop_l);
                 View::Infix(mixfix_l, atom, take(mixop_r))
             }
-            MixopTree::Seq(mixops) => View::Seq(mixops.iter().map(take).collect()),
+            Mixop::Seq(mixops) => View::Seq(mixops.iter().map(take).collect()),
         }
     }
 }

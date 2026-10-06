@@ -12,7 +12,7 @@ use hashbrown::{Equivalent, HashMap};
 use crate::lang::data::{
     arena::Arena,
     intern::CanonId,
-    value::{ValueFlatKind, flat::Value},
+    value::flat::{Value, ValueKind},
 };
 
 // = Call identity
@@ -21,7 +21,7 @@ use crate::lang::data::{
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub(crate) struct CallKey {
     name: String,
-    values: Vec<CanonId<ValueFlatKind>>,
+    values: Vec<CanonId<ValueKind>>,
 }
 
 impl CallKey {

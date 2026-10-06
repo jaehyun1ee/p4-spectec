@@ -12,7 +12,7 @@ use crate::lang::{
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
 
-use super::{ValueFlatKind, flat::Value};
+use super::flat::{Value, ValueKind};
 
 // = Borrowed views
 
@@ -55,12 +55,10 @@ impl SyntaxCmp for ValueRef<'_> {
         let kind_l = self.arena.kind(&self.value);
         let kind_r = value_other.arena.kind(&value_other.value);
         match (kind_l, kind_r) {
-            (ValueFlatKind::Bool(value_l), ValueFlatKind::Bool(value_r)) => value_l.cmp(value_r),
-            (ValueFlatKind::Num(value_l), ValueFlatKind::Num(value_r)) => {
-                num::compare(value_l, value_r)
-            }
-            (ValueFlatKind::Text(value_l), ValueFlatKind::Text(value_r)) => value_l.cmp(value_r),
-            (ValueFlatKind::Struct(value_fields_l), ValueFlatKind::Struct(value_fields_r)) => {
+            (ValueKind::Bool(value_l), ValueKind::Bool(value_r)) => value_l.cmp(value_r),
+            (ValueKind::Num(value_l), ValueKind::Num(value_r)) => num::compare(value_l, value_r),
+            (ValueKind::Text(value_l), ValueKind::Text(value_r)) => value_l.cmp(value_r),
+            (ValueKind::Struct(value_fields_l), ValueKind::Struct(value_fields_r)) => {
                 value_fields_l
                     .iter()
                     .zip(value_fields_r)
@@ -73,27 +71,25 @@ impl SyntaxCmp for ValueRef<'_> {
                     .find(|order| !order.is_eq())
                     .unwrap_or_else(|| value_fields_l.len().cmp(&value_fields_r.len()))
             }
-            (ValueFlatKind::Case(value_case_l), ValueFlatKind::Case(value_case_r)) => value_case_l
+            (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => value_case_l
                 .cmp_in_by(
                     self.arena.arena_mixop(),
                     value_case_r,
                     value_other.arena.arena_mixop(),
                     compare_value,
                 ),
-            (ValueFlatKind::Tuple(values_l), ValueFlatKind::Tuple(values_r))
-            | (ValueFlatKind::List(values_l), ValueFlatKind::List(values_r)) => {
+            (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
+            | (ValueKind::List(values_l), ValueKind::List(values_r)) => {
                 compare_values(values_l, values_r)
             }
-            (ValueFlatKind::Opt(value_l), ValueFlatKind::Opt(value_r)) => {
-                match (value_l, value_r) {
-                    (Some(value_l), Some(value_r)) => compare_value(value_l, value_r),
-                    (None, Some(_)) => Ordering::Less,
-                    (Some(_), None) => Ordering::Greater,
-                    (None, None) => Ordering::Equal,
-                }
-            }
-            (ValueFlatKind::Func(id_l), ValueFlatKind::Func(id_r)) => id_l.node.cmp(&id_r.node),
-            (ValueFlatKind::Extern(json_l), ValueFlatKind::Extern(json_r)) => {
+            (ValueKind::Opt(value_l), ValueKind::Opt(value_r)) => match (value_l, value_r) {
+                (Some(value_l), Some(value_r)) => compare_value(value_l, value_r),
+                (None, Some(_)) => Ordering::Less,
+                (Some(_), None) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            },
+            (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l.node.cmp(&id_r.node),
+            (ValueKind::Extern(json_l), ValueKind::Extern(json_r)) => {
                 crate::util::json::compare(json_l, json_r)
             }
             // Different kinds order by tag

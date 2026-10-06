@@ -14,7 +14,10 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{ValueFlatKind, flat::Value, get, make},
+        value::{
+            flat::{Value, ValueKind},
+            get, make,
+        },
         var::IdSlot,
     },
     traits::at::At,
@@ -67,17 +70,17 @@ pub fn assign_exp<Ctx: WriteContext>(
         // A variable binds directly
         (ast::ExpKind::Id(id), _) => assign_id_exp(arena, ctx, id, value),
         // Tuple: componentwise
-        (ast::ExpKind::Tuple(exps), ValueFlatKind::Tuple(values)) => {
+        (ast::ExpKind::Tuple(exps), ValueKind::Tuple(values)) => {
             let values = values.to_vec();
             assign_tuple_exp(arena, ctx, exps, &values)
         }
         // Case: the arguments
-        (ast::ExpKind::Case(not_exp), ValueFlatKind::Case(value_case)) => {
+        (ast::ExpKind::Case(not_exp), ValueKind::Case(value_case)) => {
             let values = value_case.args().to_vec();
             assign_case_exp(arena, ctx, not_exp, &values)
         }
         // Struct: the fields in order
-        (ast::ExpKind::Str(exp_fields), ValueFlatKind::Struct(value_fields)) => {
+        (ast::ExpKind::Str(exp_fields), ValueKind::Struct(value_fields)) => {
             let values = value_fields
                 .iter()
                 .map(|(_, value)| *value)
@@ -85,17 +88,17 @@ pub fn assign_exp<Ctx: WriteContext>(
             assign_str_exp(arena, ctx, exp_fields, &values)
         }
         // Option: both present or both absent
-        (ast::ExpKind::Opt(exp_opt), ValueFlatKind::Opt(value_opt)) => {
+        (ast::ExpKind::Opt(exp_opt), ValueKind::Opt(value_opt)) => {
             let value_opt = *value_opt;
             assign_opt_exp(arena, ctx, exp_opt, &value_opt)
         }
         // List literal: elementwise
-        (ast::ExpKind::List(exps), ValueFlatKind::List(values)) => {
+        (ast::ExpKind::List(exps), ValueKind::List(values)) => {
             let values = values.to_vec();
             assign_list_exp(arena, ctx, exps, &values)
         }
         // Cons: the first element, then the rest
-        (ast::ExpKind::Cons(exp_head, exp_tail), ValueFlatKind::List(values)) => {
+        (ast::ExpKind::Cons(exp_head, exp_tail), ValueKind::List(values)) => {
             let values = values.to_vec();
             assign_cons_exp(arena, ctx, exp, exp_head, exp_tail, &value, &values)
         }
@@ -357,7 +360,7 @@ pub fn assign_def<Ctx: WriteContext>(
     value: Value,
 ) -> Backtrack<Ctx> {
     // The value must be a function reference
-    let ValueFlatKind::Func(id_func) = arena.kind(&value) else {
+    let ValueKind::Func(id_func) = arena.kind(&value) else {
         unreachable!("function parameter must receive a function reference");
     };
     // Look the definition up in the caller, bind it in the callee

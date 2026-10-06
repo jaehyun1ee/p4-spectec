@@ -26,30 +26,27 @@ use std::{
 };
 
 /// A value's body, type, and span handles in one arena.
-pub type ValueFlat = NotePhrase<Interned<ValueFlatKind>, Interned<TypKind>, Interned<Span>>;
-
-/// The flat representation under its module-local name.
-pub use self::ValueFlat as Value;
+pub type Value = NotePhrase<Interned<ValueKind>, Interned<TypKind>, Interned<Span>>;
 
 /// A named value field.
-pub type ValueField = (Phrase<Atom>, ValueFlat);
+pub type ValueField = (Phrase<Atom>, Value);
 /// A case with one value per argument position.
-pub type ValueCase = Mixfix<MixopId, ValueFlat>;
+pub type ValueCase = Mixfix<MixopId, Value>;
 
 /// A stored value body whose children belong to the same arena.
 #[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
 #[serde(rename = "ValueKind")]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 #[serde(deserialize_state = "DecodeContext<'de>")]
-pub enum ValueFlatKind {
+pub enum ValueKind {
     Bool(bool),
     Num(Number),
     Text(String),
     Struct(#[serde(state)] Vec<ValueField>),
     Case(#[serde(state)] ValueCase),
-    Tuple(#[serde(state)] Vec<ValueFlat>),
-    Opt(#[serde(state)] Option<ValueFlat>),
-    List(#[serde(state)] Vec<ValueFlat>),
+    Tuple(#[serde(state)] Vec<Value>),
+    Opt(#[serde(state)] Option<Value>),
+    List(#[serde(state)] Vec<Value>),
     Func(#[serde(state)] Id),
     Extern(Rc<json>),
 }
@@ -71,7 +68,7 @@ pub enum ValueTag {
     Extern,
 }
 
-impl ValueFlatKind {
+impl ValueKind {
     /// The kind of this body.
     pub(crate) fn tag(&self) -> ValueTag {
         match self {
@@ -90,7 +87,7 @@ impl ValueFlatKind {
 }
 // = Canonical equality and hashing
 
-impl CanonEq<MixopArena> for ValueFlatKind {
+impl CanonEq<MixopArena> for ValueKind {
     fn canon_eq(
         &self,
         interner: &CanonInterner<Self>,
@@ -98,14 +95,14 @@ impl CanonEq<MixopArena> for ValueFlatKind {
         kind_r: &Self,
     ) -> bool {
         // Children compare by canonical id, computed when they were interned
-        let eq_value = |value_l: &ValueFlat, value_r: &ValueFlat| {
+        let eq_value = |value_l: &Value, value_r: &Value| {
             interner.canon_id(value_l.node) == interner.canon_id(value_r.node)
         };
         match (self, kind_r) {
-            (ValueFlatKind::Bool(value_l), ValueFlatKind::Bool(value_r)) => value_l == value_r,
-            (ValueFlatKind::Num(value_l), ValueFlatKind::Num(value_r)) => value_l == value_r,
-            (ValueFlatKind::Text(value_l), ValueFlatKind::Text(value_r)) => value_l == value_r,
-            (ValueFlatKind::Struct(value_fields_l), ValueFlatKind::Struct(value_fields_r)) => {
+            (ValueKind::Bool(value_l), ValueKind::Bool(value_r)) => value_l == value_r,
+            (ValueKind::Num(value_l), ValueKind::Num(value_r)) => value_l == value_r,
+            (ValueKind::Text(value_l), ValueKind::Text(value_r)) => value_l == value_r,
+            (ValueKind::Struct(value_fields_l), ValueKind::Struct(value_fields_r)) => {
                 value_fields_l.len() == value_fields_r.len()
                     && value_fields_l.iter().zip(value_fields_r).all(
                         |((atom_l, value_l), (atom_r, value_r))| {
@@ -113,7 +110,7 @@ impl CanonEq<MixopArena> for ValueFlatKind {
                         },
                     )
             }
-            (ValueFlatKind::Case(value_case_l), ValueFlatKind::Case(value_case_r)) => {
+            (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => {
                 arena_mixop.canon_eq(*value_case_l.mixop(), *value_case_r.mixop())
                     && value_case_l.args().len() == value_case_r.args().len()
                     && value_case_l
@@ -122,29 +119,27 @@ impl CanonEq<MixopArena> for ValueFlatKind {
                         .zip(value_case_r.args())
                         .all(|(value_l, value_r)| eq_value(value_l, value_r))
             }
-            (ValueFlatKind::Tuple(values_l), ValueFlatKind::Tuple(values_r))
-            | (ValueFlatKind::List(values_l), ValueFlatKind::List(values_r)) => {
+            (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
+            | (ValueKind::List(values_l), ValueKind::List(values_r)) => {
                 values_l.len() == values_r.len()
                     && values_l
                         .iter()
                         .zip(values_r)
                         .all(|(value_l, value_r)| eq_value(value_l, value_r))
             }
-            (ValueFlatKind::Opt(value_l), ValueFlatKind::Opt(value_r)) => {
-                match (value_l, value_r) {
-                    (Some(value_l), Some(value_r)) => eq_value(value_l, value_r),
-                    (None, None) => true,
-                    _ => false,
-                }
-            }
-            (ValueFlatKind::Func(id_l), ValueFlatKind::Func(id_r)) => id_l.node == id_r.node,
-            (ValueFlatKind::Extern(json_l), ValueFlatKind::Extern(json_r)) => json_l == json_r,
+            (ValueKind::Opt(value_l), ValueKind::Opt(value_r)) => match (value_l, value_r) {
+                (Some(value_l), Some(value_r)) => eq_value(value_l, value_r),
+                (None, None) => true,
+                _ => false,
+            },
+            (ValueKind::Func(id_l), ValueKind::Func(id_r)) => id_l.node == id_r.node,
+            (ValueKind::Extern(json_l), ValueKind::Extern(json_r)) => json_l == json_r,
             _ => false,
         }
     }
 }
 
-impl CanonHash<MixopArena> for ValueFlatKind {
+impl CanonHash<MixopArena> for ValueKind {
     fn canon_hash<H: Hasher>(
         &self,
         interner: &CanonInterner<Self>,
@@ -153,34 +148,34 @@ impl CanonHash<MixopArena> for ValueFlatKind {
     ) {
         std::mem::discriminant(self).hash(hasher);
         match self {
-            ValueFlatKind::Bool(value) => value.hash(hasher),
-            ValueFlatKind::Num(value) => value.hash(hasher),
-            ValueFlatKind::Text(value) => value.hash(hasher),
-            ValueFlatKind::Struct(value_fields) => {
+            ValueKind::Bool(value) => value.hash(hasher),
+            ValueKind::Num(value) => value.hash(hasher),
+            ValueKind::Text(value) => value.hash(hasher),
+            ValueKind::Struct(value_fields) => {
                 value_fields.len().hash(hasher);
                 for (atom, value) in value_fields {
                     atom.node.hash(hasher);
                     interner.canon_id(value.node).hash(hasher);
                 }
             }
-            ValueFlatKind::Case(value_case) => {
+            ValueKind::Case(value_case) => {
                 arena_mixop.canon_id(*value_case.mixop()).hash(hasher);
                 value_case.args().len().hash(hasher);
                 for value in value_case.args() {
                     interner.canon_id(value.node).hash(hasher);
                 }
             }
-            ValueFlatKind::Tuple(values) | ValueFlatKind::List(values) => {
+            ValueKind::Tuple(values) | ValueKind::List(values) => {
                 values.len().hash(hasher);
                 for value in values {
                     interner.canon_id(value.node).hash(hasher);
                 }
             }
-            ValueFlatKind::Opt(value) => value
+            ValueKind::Opt(value) => value
                 .map(|value| interner.canon_id(value.node))
                 .hash(hasher),
-            ValueFlatKind::Func(id) => id.node.hash(hasher),
-            ValueFlatKind::Extern(json) => json.hash(hasher),
+            ValueKind::Func(id) => id.node.hash(hasher),
+            ValueKind::Extern(json) => json.hash(hasher),
         }
     }
 }

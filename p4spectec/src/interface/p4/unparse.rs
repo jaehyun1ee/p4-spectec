@@ -15,10 +15,13 @@ use crate::lang::{
     data::{
         arena::Arena,
         notation::{
-            MixopTree,
+            tree::Mixop,
             walk::{self, Piece},
         },
-        value::{ValueCase, ValueFlatKind, flat::Value},
+        value::{
+            ValueCase,
+            flat::{Value, ValueKind},
+        },
     },
     hints::alter::{self, AlterHint, Renderer},
     traits::print::Print,
@@ -40,12 +43,12 @@ use super::error::P4UnparseError;
 #[derive(Clone, Debug, Default)]
 pub struct P4Unparser {
     /// Print hints by type name and case shape.
-    hints: HashMap<(String, MixopTree), AlterHint>,
+    hints: HashMap<(String, Mixop), AlterHint>,
 }
 
 /// Records the print hint of each case of a variant type.
 fn insert_case_hints(
-    hints: &mut HashMap<(String, MixopTree), AlterHint>,
+    hints: &mut HashMap<(String, Mixop), AlterHint>,
     type_id: &str,
     def_typ: &crate::lang::il::ast::DefTyp,
 ) {
@@ -119,29 +122,27 @@ impl P4Unparser {
     pub fn render(&self, arena: &Arena, value: &Value) -> Result<String, P4UnparseError> {
         match arena.kind(value) {
             // Primitives print as themselves
-            ValueFlatKind::Bool(value) => Ok(value.to_string()),
-            ValueFlatKind::Num(Number::Nat(value)) => Ok(value.to_string()),
-            ValueFlatKind::Num(Number::Int(value)) => Ok(value.to_string()),
-            ValueFlatKind::Text(value) => Ok(escape_text(value)),
+            ValueKind::Bool(value) => Ok(value.to_string()),
+            ValueKind::Num(Number::Nat(value)) => Ok(value.to_string()),
+            ValueKind::Num(Number::Int(value)) => Ok(value.to_string()),
+            ValueKind::Text(value) => Ok(escape_text(value)),
             // Structs have no P4 spelling
-            ValueFlatKind::Struct(_) => Err(P4UnparseError::ValueUnsupported("Struct")),
+            ValueKind::Struct(_) => Err(P4UnparseError::ValueUnsupported("Struct")),
             // Cases go through their hint or shape
-            ValueFlatKind::Case(value_case) => {
-                self.render_case(arena, arena.typ(value), value_case)
-            }
+            ValueKind::Case(value_case) => self.render_case(arena, arena.typ(value), value_case),
             // Tuples in parentheses, comma separated
-            ValueFlatKind::Tuple(values) => {
+            ValueKind::Tuple(values) => {
                 let rendered = self.render_values(arena, values, ", ")?;
                 Ok(format!("({rendered})"))
             }
             // An option is its content or nothing
-            ValueFlatKind::Opt(Some(value)) => self.render(arena, value),
-            ValueFlatKind::Opt(None) => Ok(String::new()),
+            ValueKind::Opt(Some(value)) => self.render(arena, value),
+            ValueKind::Opt(None) => Ok(String::new()),
             // Lists are space separated
-            ValueFlatKind::List(values) => self.render_values(arena, values, " "),
+            ValueKind::List(values) => self.render_values(arena, values, " "),
             // Functions and externs have no P4 spelling
-            ValueFlatKind::Func(_) => Err(P4UnparseError::ValueUnsupported("Func")),
-            ValueFlatKind::Extern(_) => Err(P4UnparseError::ValueUnsupported("Extern")),
+            ValueKind::Func(_) => Err(P4UnparseError::ValueUnsupported("Func")),
+            ValueKind::Extern(_) => Err(P4UnparseError::ValueUnsupported("Extern")),
         }
     }
 

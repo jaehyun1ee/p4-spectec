@@ -21,12 +21,12 @@ use crate::lang::{
     data::{
         arena::Arena,
         intern::Interned,
-        notation::{AtomPhrase, MixopArena, MixopFlat, MixopTree},
+        notation::{self, AtomPhrase, MixopArena},
         typ::TypKind,
     },
 };
 
-use super::{ValueCase, ValueFlat, ValueFlatKind, tree};
+use super::{ValueCase, flat, tree};
 
 // = Configuration
 
@@ -123,7 +123,7 @@ where
 
 // - Interned values
 
-impl SerializeState<EncodeContext<'_>> for Interned<ValueFlatKind> {
+impl SerializeState<EncodeContext<'_>> for Interned<flat::ValueKind> {
     fn serialize_state<S: Serializer>(
         &self,
         serializer: S,
@@ -133,7 +133,7 @@ impl SerializeState<EncodeContext<'_>> for Interned<ValueFlatKind> {
             // Relative: the index; independent: the body as a tree
             EncodeContext::ArenaRelative(_) => self.index().serialize(serializer),
             EncodeContext::ArenaIndependent(arena) => {
-                tree::ValueTreeKind::from_flat(arena, arena.value.kind(*self)).serialize(serializer)
+                tree::ValueKind::from_flat(arena, arena.value.kind(*self)).serialize(serializer)
             }
         }
     }
@@ -193,7 +193,7 @@ where
 
 // - Interned values
 
-impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<ValueFlatKind> {
+impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<flat::ValueKind> {
     fn deserialize_state<D: Deserializer<'de>>(
         ctx: &mut DecodeContext<'_>,
         deserializer: D,
@@ -202,7 +202,7 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<ValueFlatKind> {
             // Relative: trust the index; independent: intern the tree
             DecodeContext::ArenaRelative(_) => u32::deserialize(deserializer).map(Self::from_index),
             DecodeContext::ArenaIndependent(arena) => {
-                let kind = tree::ValueTreeKind::deserialize(deserializer)?
+                let kind = tree::ValueKind::deserialize(deserializer)?
                     .into_flat(arena)
                     .map_err(::serde::de::Error::custom)?;
                 arena
@@ -260,7 +260,7 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<Span> {
 #[serde(rename = "Mixfix")]
 #[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
 enum CaseTree<'a> {
-    Arg(#[serde(state)] &'a ValueFlat),
+    Arg(#[serde(state)] &'a flat::Value),
     Atom(#[serde(state)] &'a AtomPhrase),
     Brack(
         #[serde(state)] &'a AtomPhrase,
@@ -280,7 +280,7 @@ enum CaseTree<'a> {
 #[serde(rename = "Mixfix")]
 #[serde(deserialize_state = "DecodeContext<'arena>", de_parameters = "'arena")]
 enum CaseTreeOwned {
-    Arg(#[serde(state)] ValueFlat),
+    Arg(#[serde(state)] flat::Value),
     Atom(#[serde(state)] AtomPhrase),
     Brack(
         #[serde(state)] AtomPhrase,
@@ -298,22 +298,24 @@ enum CaseTreeOwned {
 /// Fills a shape with arguments in notation order, borrowing its atoms.
 fn case_tree<'a>(
     arena_mixop: &'a MixopArena,
-    kind: &'a MixopFlat,
-    values: &mut slice::Iter<'a, ValueFlat>,
+    kind: &'a notation::flat::Mixop,
+    values: &mut slice::Iter<'a, flat::Value>,
 ) -> CaseTree<'a> {
     match kind {
-        MixopFlat::Arg => CaseTree::Arg(values.next().expect("a case fills every position")),
-        MixopFlat::Atom(atom) => CaseTree::Atom(atom),
-        MixopFlat::Brack(atom_l, shape, atom_r) => {
+        notation::flat::Mixop::Arg => {
+            CaseTree::Arg(values.next().expect("a case fills every position"))
+        }
+        notation::flat::Mixop::Atom(atom) => CaseTree::Atom(atom),
+        notation::flat::Mixop::Brack(atom_l, shape, atom_r) => {
             let tree = case_tree(arena_mixop, arena_mixop.kind(*shape), values);
             CaseTree::Brack(atom_l, Box::new(tree), atom_r)
         }
-        MixopFlat::Infix(shape_l, atom, shape_r) => {
+        notation::flat::Mixop::Infix(shape_l, atom, shape_r) => {
             let tree_l = case_tree(arena_mixop, arena_mixop.kind(*shape_l), values);
             let tree_r = case_tree(arena_mixop, arena_mixop.kind(*shape_r), values);
             CaseTree::Infix(Box::new(tree_l), atom, Box::new(tree_r))
         }
-        MixopFlat::Seq(shapes) => CaseTree::Seq(
+        notation::flat::Mixop::Seq(shapes) => CaseTree::Seq(
             shapes
                 .iter()
                 .map(|shape| case_tree(arena_mixop, arena_mixop.kind(*shape), values))
@@ -323,22 +325,22 @@ fn case_tree<'a>(
 }
 
 /// Splits a read tree into its mixop, moving arguments out in notation order.
-fn split_case_tree(tree: CaseTreeOwned, values: &mut Vec<ValueFlat>) -> MixopTree {
+fn split_case_tree(tree: CaseTreeOwned, values: &mut Vec<flat::Value>) -> notation::tree::Mixop {
     match tree {
         CaseTreeOwned::Arg(value) => {
             values.push(value);
-            MixopTree::Arg
+            notation::tree::Mixop::Arg
         }
-        CaseTreeOwned::Atom(atom) => MixopTree::Atom(atom),
+        CaseTreeOwned::Atom(atom) => notation::tree::Mixop::Atom(atom),
         CaseTreeOwned::Brack(atom_l, tree, atom_r) => {
-            MixopTree::Brack(atom_l, Box::new(split_case_tree(*tree, values)), atom_r)
+            notation::tree::Mixop::Brack(atom_l, Box::new(split_case_tree(*tree, values)), atom_r)
         }
         CaseTreeOwned::Infix(tree_l, atom, tree_r) => {
             let mixop_l = split_case_tree(*tree_l, values);
             let mixop_r = split_case_tree(*tree_r, values);
-            MixopTree::Infix(Box::new(mixop_l), atom, Box::new(mixop_r))
+            notation::tree::Mixop::Infix(Box::new(mixop_l), atom, Box::new(mixop_r))
         }
-        CaseTreeOwned::Seq(trees) => MixopTree::Seq(
+        CaseTreeOwned::Seq(trees) => notation::tree::Mixop::Seq(
             trees
                 .into_iter()
                 .map(|tree| split_case_tree(tree, values))

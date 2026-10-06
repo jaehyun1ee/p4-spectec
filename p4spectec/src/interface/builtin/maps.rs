@@ -11,7 +11,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::{Mixfix, MixopTree, mixop::shape},
+        notation::{Mixfix, mixop::shape, tree::Mixop},
         typ,
         value::{flat::Value, get, make},
     },
@@ -28,12 +28,12 @@ use super::{BuiltinError, extract};
 type ValueMap = Vec<Value>;
 
 /// The `k : v` shape of a pair value.
-fn pair_mixop() -> Rc<MixopTree> {
+fn pair_mixop() -> Rc<Mixop> {
     shape("k ':' v")
 }
 
 /// The `{ ... }` shape of a map value.
-fn map_mixop() -> Rc<MixopTree> {
+fn map_mixop() -> Rc<Mixop> {
     shape("`{ k `}")
 }
 

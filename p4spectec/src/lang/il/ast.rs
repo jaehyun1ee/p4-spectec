@@ -46,7 +46,7 @@ pub type Atom = Phrase<atom::Atom>;
 // Mixfix operators
 
 /// The atom skeleton of a notation form, without its arguments.
-pub type MixopTree = data::notation::MixopTree;
+pub type Mixop = data::notation::tree::Mixop;
 
 // Iterators
 
@@ -134,7 +134,7 @@ pub struct TypCase<P: Stage = Source> {
 /// A runtime value handle.
 pub type Value = data::value::flat::Value;
 /// The forms of a runtime value.
-pub type ValueFlatKind = data::value::ValueFlatKind;
+pub type ValueKind = data::value::flat::ValueKind;
 /// One field of a struct value.
 pub type ValueField = data::value::ValueField;
 /// A variant value: a mixfix skeleton with values as arguments.

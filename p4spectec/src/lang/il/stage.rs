@@ -9,7 +9,7 @@
 
 use std::{fmt, rc::Rc};
 
-use crate::lang::data::notation::{MixopMatch, MixopTree};
+use crate::lang::data::notation::{MixopMatch, tree::Mixop};
 
 use super::ast::{Id, Var};
 
@@ -30,5 +30,5 @@ pub struct Source;
 impl Stage for Source {
     type Id = Id;
     type Var = Var;
-    type Mixop = Rc<MixopTree>;
+    type Mixop = Rc<Mixop>;
 }

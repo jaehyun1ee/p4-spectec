@@ -18,16 +18,16 @@ use crate::lang::{
 
 use super::{
     error::ValueError,
-    flat::{ValueFlat, ValueFlatKind},
+    flat::{Value, ValueKind},
 };
 
-// = ValueFlat storage
+// = Value storage
 
 /// Storage for value bodies, types, and spans.
 #[derive(Debug)]
 pub(in crate::lang::data) struct ValueArena {
     /// Bodies, with canonical identities; a case reads its shape's.
-    values: CanonInterner<ValueFlatKind>,
+    values: CanonInterner<ValueKind>,
     /// Types, shared by allocation.
     types: RcInterner<TypKind>,
     /// Spans, shared by equality.
@@ -49,22 +49,22 @@ impl ValueArena {
     pub(in crate::lang::data) fn alloc(
         &mut self,
         arena_mixop: &MixopArena,
-        value_kind: ValueFlatKind,
+        value_kind: ValueKind,
         typ: Rc<TypKind>,
         span: Span,
-    ) -> Result<ValueFlat, ValueError> {
+    ) -> Result<Value, ValueError> {
         let node = self.intern_kind(value_kind, arena_mixop)?;
         let note = self.intern_typ(typ)?;
         let span = self.intern_span(span)?;
-        Ok(ValueFlat { node, note, span })
+        Ok(Value { node, note, span })
     }
 
     /// Interns a body using the canonical identities of its mixops.
     pub(in crate::lang::data) fn intern_kind(
         &mut self,
-        value_kind: ValueFlatKind,
+        value_kind: ValueKind,
         arena_mixop: &MixopArena,
-    ) -> Result<Interned<ValueFlatKind>, std::num::TryFromIntError> {
+    ) -> Result<Interned<ValueKind>, std::num::TryFromIntError> {
         self.values.intern(value_kind, arena_mixop)
     }
 
@@ -85,7 +85,7 @@ impl ValueArena {
     }
 
     /// Reads the body behind its handle.
-    pub(in crate::lang::data) fn kind(&self, value: Interned<ValueFlatKind>) -> &ValueFlatKind {
+    pub(in crate::lang::data) fn kind(&self, value: Interned<ValueKind>) -> &ValueKind {
         self.values.get(value)
     }
 
@@ -100,10 +100,7 @@ impl ValueArena {
     }
 
     /// Returns the canonical identity of a body.
-    pub(in crate::lang::data) fn canon_id(
-        &self,
-        value: Interned<ValueFlatKind>,
-    ) -> CanonId<ValueFlatKind> {
+    pub(in crate::lang::data) fn canon_id(&self, value: Interned<ValueKind>) -> CanonId<ValueKind> {
         self.values.canon_id(value)
     }
 }
