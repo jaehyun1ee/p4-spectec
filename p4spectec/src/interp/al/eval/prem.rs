@@ -8,9 +8,9 @@
 
 use crate::lang::{data::value::get, hints::input};
 
-use crate::diagnostic::Report;
-
 use crate::lang::al::prepared as ast;
+
+use crate::diagnostic::Report;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 

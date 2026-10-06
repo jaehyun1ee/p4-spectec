@@ -3,8 +3,6 @@
 //! The packet queue, mirror sessions, and multicast groups,
 //! stored in the specification's architecture state as an encoded value.
 
-use crate::lang::data::encoding::Encoding;
-
 use std::collections::VecDeque;
 
 use serde_derive_state::{DeserializeState, SerializeState};
@@ -13,6 +11,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
+        encoding::Encoding,
         typ,
         value::{
             external::{DecodeContext, EncodeContext, decode_with, encode_with},

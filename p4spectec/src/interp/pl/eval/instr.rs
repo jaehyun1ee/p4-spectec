@@ -11,9 +11,10 @@ use crate::lang::{
     common::source::Span,
     data::value::{flat::Value, get},
     hints::input,
-    pl::prepared as ast,
     traits::print::Print,
 };
+
+use crate::lang::pl::prepared as ast;
 
 use crate::diagnostic::Report;
 

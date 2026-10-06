@@ -20,9 +20,10 @@ use crate::lang::{
         },
         var::IdSlot,
     },
-    il::prepared as ast,
     traits::at::At,
 };
+
+use crate::lang::il::prepared as ast;
 
 use crate::runtime::envs::interp::shared::TypeDef;
 

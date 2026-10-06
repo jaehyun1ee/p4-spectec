@@ -6,8 +6,11 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_state::{DeserializeState, SerializeState};
 
+use crate::util::json::json;
+
+use crate::lang::data::encoding::Encoding;
+
 use super::{MixopArena, flat, tree};
-use crate::{lang::data::encoding::Encoding, util::json::json};
 
 /// The source arena and the representation of handles in JSON.
 pub enum EncodeContext<'arena> {

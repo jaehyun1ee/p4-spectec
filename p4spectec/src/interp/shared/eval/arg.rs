@@ -9,8 +9,9 @@ use crate::lang::{
         arena::Arena,
         value::{flat::Value, make},
     },
-    il::prepared as ast,
 };
+
+use crate::lang::il::prepared as ast;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 

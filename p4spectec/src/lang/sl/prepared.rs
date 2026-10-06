@@ -4,11 +4,11 @@
 //! Ordinary rules retain their continuation; tail rules carry only inputs.
 //! Preparation establishes tail position in `interp/sl/prepare.rs`.
 
+pub use crate::lang::il::prepared::*;
+
 use super::ast as source;
 
 pub use super::ast::{DefinedTyp, ExternTyp, RelSignature, TypDef, VarDef};
-
-pub use crate::lang::il::prepared::*;
 
 // == Prepared syntax
 

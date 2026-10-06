@@ -9,17 +9,20 @@
 //! by handle; `CanonEq` and `CanonHash` read atom names
 //! and children's canonical ids, so they ignore spans.
 
-use super::external::{DecodeContext, EncodeContext};
-use serde_derive_state::{DeserializeState, SerializeState};
-
 use std::{
     cmp::Ordering,
     hash::{Hash, Hasher},
 };
 
+use serde_derive_state::{DeserializeState, SerializeState};
+
 use crate::lang::data::intern::{CanonEq, CanonHash, CanonInterner, Interned};
 
-use super::{AtomPhrase, MixopArena, Piece, tree};
+use super::{
+    AtomPhrase, MixopArena, Piece,
+    external::{DecodeContext, EncodeContext},
+    tree,
+};
 
 /// A notation handle valid only in its issuing arena.
 pub type Mixop = Interned<MixopKind>;

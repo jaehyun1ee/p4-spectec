@@ -4,11 +4,11 @@
 //! Expressions and supporting syntax come from prepared IL;
 //! preparation operations live in `interp/al/prepare.rs`.
 
+pub use crate::lang::il::prepared::*;
+
 use super::ast as source;
 
 pub use super::ast::{BuiltinFunc, DefinedTyp, ExternFunc, ExternRel, ExternTyp, TypDef, VarDef};
-
-pub use crate::lang::il::prepared::*;
 
 // == Prepared syntax
 

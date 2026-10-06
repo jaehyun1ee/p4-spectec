@@ -20,6 +20,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
+        encoding::Encoding,
         intern::Interned,
         notation::{self, AtomPhrase, MixopArena},
         typ::TypKind,
@@ -29,8 +30,6 @@ use crate::lang::{
 use super::{ValueCase, flat, tree};
 
 // = Configuration
-
-use crate::lang::data::encoding::Encoding;
 
 /// What an encoder needs: the encoding and the arena.
 ///

@@ -16,8 +16,9 @@ use crate::lang::{
         value::{flat::Value, get, make},
         var::{SlotIdx, VarSlot},
     },
-    il::prepared as ast,
 };
+
+use crate::lang::il::prepared as ast;
 
 use crate::diagnostic::{Label, Report};
 

@@ -2,15 +2,16 @@
 //!
 //! The caller supplies the arena for every interned notation.
 
-use crate::lang::il::prepared::*;
-use crate::{
-    lang::{
-        data::notation::MixopArena,
-        traits::print::{Print, Printer},
-    },
-    util::text::escape_text,
-};
 use std::fmt::{self, Write};
+
+use crate::util::text::escape_text;
+
+use crate::lang::{
+    data::notation::MixopArena,
+    traits::print::{Print, Printer},
+};
+
+use crate::lang::il::prepared::*;
 
 /// Prints a prepared exp with its notation arena.
 pub fn print_exp(arena_mixop: &MixopArena, exp: &Exp, printer: &mut Printer<'_>) -> fmt::Result {

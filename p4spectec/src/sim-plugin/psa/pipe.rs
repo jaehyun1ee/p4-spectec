@@ -18,8 +18,6 @@
 //! Both engines can drop the current packet after scheduling its clones
 //! The scheduler runs queued packets until none remain
 
-use crate::lang::data::encoding::Encoding;
-
 use num_bigint::BigInt;
 use serde_derive_state::{DeserializeState, SerializeState};
 
@@ -27,6 +25,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
+        encoding::Encoding,
         typ,
         value::{
             ValueError,

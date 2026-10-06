@@ -13,9 +13,9 @@ pub(crate) mod path;
 
 use crate::lang::data::value::flat::Value;
 
-use crate::runner::{Extern, Interface, Interpreter, RunnerContext};
-
 use crate::lang::il::prepared as ast;
+
+use crate::runner::{Extern, Interface, Interpreter, RunnerContext};
 
 use super::{backtrack::Backtrack, context::IterContext};
 

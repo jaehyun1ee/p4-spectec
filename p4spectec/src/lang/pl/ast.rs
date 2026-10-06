@@ -17,9 +17,9 @@ use crate::lang::{
 
 use crate::lang::sl;
 
-pub use super::stage::{Source, Stage};
-
 use crate::lang::pl::annot;
+
+pub use super::stage::{Source, Stage};
 
 // Numbers
 

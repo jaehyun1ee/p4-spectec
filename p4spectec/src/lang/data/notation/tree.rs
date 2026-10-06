@@ -11,6 +11,8 @@ use std::{
     hash::{Hash, Hasher},
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::lang::{
     common::ds::set::IdSet,
     traits::{
@@ -21,7 +23,6 @@ use crate::lang::{
 };
 
 use super::{AtomPhrase, MixopArena, MixopError, Piece, flat, print};
-use serde::{Deserialize, Serialize};
 
 /// An owned notation with an argument hole at each position.
 #[derive(Clone, Debug, Serialize, Deserialize)]

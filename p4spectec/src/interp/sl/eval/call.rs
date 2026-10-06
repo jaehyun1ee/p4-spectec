@@ -15,8 +15,9 @@ use crate::lang::{
         value::flat::{Value, ValueKind},
     },
     hints::input,
-    sl::prepared as ast,
 };
+
+use crate::lang::sl::prepared as ast;
 
 use crate::diagnostic::Diagnostic;
 

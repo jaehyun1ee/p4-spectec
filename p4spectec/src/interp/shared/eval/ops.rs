@@ -22,9 +22,7 @@ use crate::lang::{
     traits::eq::SyntaxEq,
 };
 
-use crate::lang::il::ast;
-
-use crate::lang::il::prepared::Prepared;
+use crate::lang::il::{ast, prepared::Prepared};
 
 use crate::runtime::ops::{
     typ::{Theta, subst_typ},

@@ -12,14 +12,13 @@
 //! Accepted packets keep their original bytes and input port
 //! There is no deparser
 
-use crate::lang::data::encoding::Encoding;
-
 use serde_derive_state::{DeserializeState, SerializeState};
 
 use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
+        encoding::Encoding,
         typ,
         value::{
             external::{DecodeContext, EncodeContext, decode_with, encode_with},

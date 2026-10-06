@@ -6,16 +6,16 @@
 
 use crate::lang::data::var::VarSlot;
 
-use super::ast as source;
-
-pub use super::stage::Prepared;
 pub use crate::lang::data::notation::flat::Mixop;
+
+use super::ast as source;
 
 pub use super::ast::{
     Atom, BinOp, CmpOp, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter, ListPattern, Num, NumOp,
     OpTyp, OptPattern, Param, ParamKind, TParam, Targ, TargKind, Text, Typ, TypDef, TypField,
     TypKind, TypOrigin, TypOriginKind, UnOp, Value, ValueCase, ValueField, ValueKind, VarDef,
 };
+pub use super::stage::Prepared;
 
 // - Variables
 

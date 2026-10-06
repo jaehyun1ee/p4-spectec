@@ -8,8 +8,9 @@
 use crate::lang::{
     common::source::Span,
     data::value::{flat::Value, get, make},
-    il::prepared as ast,
 };
+
+use crate::lang::il::prepared as ast;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 

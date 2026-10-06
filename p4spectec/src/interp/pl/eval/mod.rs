@@ -11,9 +11,9 @@ mod expr;
 mod instr;
 mod strip;
 
-use crate::lang::il::prepared as ast;
-
 use crate::lang::data::value::flat::Value;
+
+use crate::lang::il::prepared as ast;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 

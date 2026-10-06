@@ -3,9 +3,9 @@
 //! `find_var_of_exp` maps `x*` used as an expression back to the slot of the iterated
 //! variable; `iterate_vars` computes the slots one iteration outward.
 
-use crate::lang::il::prepared as ast;
-
 use crate::lang::data::var::{SlotIdx, Var, VarSlot};
+
+use crate::lang::il::prepared as ast;
 
 use super::context::ReadContext;
 

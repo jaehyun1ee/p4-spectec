@@ -16,12 +16,14 @@ use crate::lang::{
         },
         var::IdSlot,
     },
-    il::prepared as ast,
 };
 
-use crate::runtime::ops::typ::{TypeError, subst_typ};
+use crate::lang::il::prepared as ast;
 
-use crate::runtime::envs::interp::shared::TypeDef;
+use crate::runtime::{
+    envs::interp::shared::TypeDef,
+    ops::typ::{TypeError, subst_typ},
+};
 
 use crate::runner::{Extern, Interface, RunnerContext};
 

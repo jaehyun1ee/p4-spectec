@@ -4,7 +4,15 @@
 //! Exact equality includes stored annotations, while canonical identity
 //! compares value contents independently of their source locations.
 
-use super::external::{DecodeContext, EncodeContext};
+use std::{
+    hash::{Hash, Hasher},
+    rc::Rc,
+};
+
+use serde_derive_state::{DeserializeState, SerializeState};
+
+use crate::util::json::json;
+
 use crate::lang::{
     common::{
         Id,
@@ -18,12 +26,8 @@ use crate::lang::{
         typ::TypKind,
     },
 };
-use crate::util::json::json;
-use serde_derive_state::{DeserializeState, SerializeState};
-use std::{
-    hash::{Hash, Hasher},
-    rc::Rc,
-};
+
+use super::external::{DecodeContext, EncodeContext};
 
 /// A value's body, type, and span handles in one arena.
 pub type Value = NotePhrase<Interned<ValueKind>, Interned<TypKind>, Interned<Span>>;

@@ -17,8 +17,9 @@ use crate::lang::{
         get,
     },
     hints::input,
-    sl::prepared as ast,
 };
+
+use crate::lang::sl::prepared as ast;
 
 use crate::diagnostic::Report;
 

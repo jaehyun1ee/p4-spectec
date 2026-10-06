@@ -5,6 +5,10 @@
 //! and outlive `reset_values`; a case body's notation is one of them.
 //! `value` allocates values into the arena and reads them back.
 
+use std::rc::Rc;
+
+use crate::lang::common::source::Span;
+
 use super::{
     intern::CanonId,
     notation::MixopArena,
@@ -14,8 +18,6 @@ use super::{
         flat::{Value, ValueKind},
     },
 };
-use crate::lang::common::source::Span;
-use std::rc::Rc;
 
 // = Arena storage
 

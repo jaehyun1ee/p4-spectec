@@ -5,13 +5,12 @@
 //! so evaluation can find its slot.
 //! Type definitions prepare their mixops without allocating frame slots.
 
-use crate::lang::{
-    data::{
-        notation::{Mixfix, MixopArena},
-        var::VarSlot,
-    },
-    il::{ast as source, prepared::*},
+use crate::lang::data::{
+    notation::{Mixfix, MixopArena},
+    var::VarSlot,
 };
+
+use crate::lang::il::{ast as source, prepared::*};
 
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
 

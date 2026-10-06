@@ -11,8 +11,9 @@ use std::rc::Rc;
 use crate::lang::{
     common::source::Span,
     data::value::{flat::Value, make},
-    il::prepared as ast,
 };
+
+use crate::lang::il::prepared as ast;
 
 use crate::runner::{Extern, Interface, Interpreter, RunnerContext};
 

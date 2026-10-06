@@ -4,9 +4,9 @@
 //! into the shared evaluator's AST, preserving slots, types, and spans.
 //! Recursive notation, path, and argument conversion leaves PL source intact.
 
-use crate::lang::pl::prepared as ast;
-
 use crate::lang::il::prepared as shared_ast;
+
+use crate::lang::pl::prepared as ast;
 
 // = Expressions
 

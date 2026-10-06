@@ -1,17 +1,18 @@
 //! Rendering shared values through their arena
 
+use std::fmt::{self, Write};
+
+use crate::util::text::escape_text;
+
+use crate::lang::{
+    data::arena::Arena,
+    traits::print::{Print, Printer},
+};
+
 use super::{
     ValueCase,
     flat::{Value, ValueKind},
 };
-use crate::{
-    lang::{
-        data::arena::Arena,
-        traits::print::{Print, Printer},
-    },
-    util::text::escape_text,
-};
-use std::fmt::{self, Write};
 
 // - Values
 

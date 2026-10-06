@@ -10,13 +10,14 @@
 use std::rc::Rc;
 
 use crate::lang::{
-    al::prepared as ast,
     data::{
         arena::Arena,
         value::flat::{Value, ValueKind},
     },
     hints::input,
 };
+
+use crate::lang::al::prepared as ast;
 
 use crate::diagnostic::{Diagnostic, Label, Report};
 

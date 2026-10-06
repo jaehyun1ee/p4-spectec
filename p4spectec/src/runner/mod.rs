@@ -14,11 +14,6 @@ mod interpreter;
 
 use std::path::{Path, PathBuf};
 
-use crate::{
-    interface::p4::{error::P4Error, parse::parse_file},
-    sim_plugin::dummy::Dummy,
-};
-
 use crate::lang::data::{arena::Arena, notation::MixopArena, value::flat::Value};
 
 use crate::lang::al;
@@ -35,7 +30,12 @@ use crate::interp::sl::{Config as SlConfig, SlInterp, context::Global as SlGloba
 
 use crate::interp::pl::{Config as PlConfig, PlInterp, context::Global as PlGlobal};
 
-use crate::interface as builtin;
+use crate::interface::{
+    self as builtin,
+    p4::{error::P4Error, parse::parse_file},
+};
+
+use crate::sim_plugin::dummy::Dummy;
 
 pub use context::RunnerContext;
 pub use externs::{Extern, ExternError, NullExtern};

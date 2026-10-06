@@ -10,8 +10,9 @@
 use crate::lang::{
     common::source::{Phrase, Span},
     data::value::flat::Value,
-    sl::prepared as ast,
 };
+
+use crate::lang::sl::prepared as ast;
 
 use crate::diagnostic::{Diagnostic, Label, Report};
 

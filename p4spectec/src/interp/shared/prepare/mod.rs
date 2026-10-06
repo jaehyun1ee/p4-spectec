@@ -8,8 +8,6 @@
 
 mod il;
 
-pub use il::prepare_def_typ;
-
 use std::rc::Rc;
 
 use crate::lang::{
@@ -21,6 +19,8 @@ use crate::lang::{
 };
 
 use crate::runtime::envs::interp::shared::frame::FrameLayout;
+
+pub use il::prepare_def_typ;
 
 /// Where preparation records slots and shapes.
 pub struct PrepareContext<'a> {
