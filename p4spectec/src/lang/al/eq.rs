@@ -1,10 +1,8 @@
-//! Syntax equality for algorithmic-language data
+//! Source syntax equality for the algorithmic language
 //!
 //! Reuses IL equality for the aliased items
 //! and compares the AL-specific premises, matches, paths, and clauses
 //! structurally, ignoring source regions.
-
-use std::rc::Rc;
 
 use crate::lang::traits::eq::SyntaxEq;
 
@@ -14,7 +12,7 @@ use super::ast::*;
 
 // - Premises
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for PremKind<P> {
+impl SyntaxEq for PremKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (PremKind::Rule(prem_l), PremKind::Rule(prem_r)) => prem_l.syntax_eq(prem_r),
@@ -29,7 +27,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Prem
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for RulePrem<P> {
+impl SyntaxEq for RulePrem {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.not_exp.syntax_eq(&other.not_exp)
@@ -37,37 +35,37 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Rule
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for IfPrem<P> {
+impl SyntaxEq for IfPrem {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exp.syntax_eq(&other.exp)
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for IfHoldPrem<P> {
+impl SyntaxEq for IfHoldPrem {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id) && self.not_exp.syntax_eq(&other.not_exp)
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for IfNotHoldPrem<P> {
+impl SyntaxEq for IfNotHoldPrem {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id) && self.not_exp.syntax_eq(&other.not_exp)
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for LetPrem<P> {
+impl SyntaxEq for LetPrem {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exp_l.syntax_eq(&other.exp_l) && self.exp_r.syntax_eq(&other.exp_r)
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for IterPrem<P> {
+impl SyntaxEq for IterPrem {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.prem.syntax_eq(&other.prem) && self.prem_iter.syntax_eq(&other.prem_iter)
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for DebugPrem<P> {
+impl SyntaxEq for DebugPrem {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exp.syntax_eq(&other.exp)
     }
@@ -75,7 +73,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Debu
 
 // - Rules
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for RuleGroupKind<P> {
+impl SyntaxEq for RuleGroupKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.rule_match.syntax_eq(&other.rule_match)
@@ -83,7 +81,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Rule
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for ElseGroupKind<P> {
+impl SyntaxEq for ElseGroupKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.rule_match.syntax_eq(&other.rule_match)
@@ -91,7 +89,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Else
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for RuleMatch<P> {
+impl SyntaxEq for RuleMatch {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exps_signature.syntax_eq(&other.exps_signature)
             && self.exps_input.syntax_eq(&other.exps_input)
@@ -99,7 +97,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Rule
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for RulePath<P> {
+impl SyntaxEq for RulePath {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.prems.syntax_eq(&other.prems)
@@ -109,7 +107,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Rule
 
 // - Clauses
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for ClauseKind<P> {
+impl SyntaxEq for ClauseKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.args.syntax_eq(&other.args)
             && self.exp.syntax_eq(&other.exp)
@@ -119,7 +117,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Clau
 
 // - Table rows
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for TableRowKind<P> {
+impl SyntaxEq for TableRowKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.exps_signature.syntax_eq(&other.exps_signature)
             && self.args.syntax_eq(&other.args)
@@ -171,7 +169,7 @@ impl SyntaxEq for VarDef {
 
 // == Relation definitions
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for RelDef<P> {
+impl SyntaxEq for RelDef {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Extern(extern_rel_l), Self::Extern(extern_rel_r)) => {
@@ -194,7 +192,7 @@ impl SyntaxEq for ExternRel {
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for DefinedRel<P> {
+impl SyntaxEq for DefinedRel {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.not_typ.syntax_eq(&other.not_typ)
@@ -211,7 +209,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Defi
 
 // == Meta-function definitions
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for MetaFuncDef<P> {
+impl SyntaxEq for MetaFuncDef {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Extern(extern_func_l), Self::Extern(extern_func_r)) => {
@@ -251,7 +249,7 @@ impl SyntaxEq for BuiltinFunc {
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for TableFunc<P> {
+impl SyntaxEq for TableFunc {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.params.syntax_eq(&other.params)
@@ -261,7 +259,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Tabl
     }
 }
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for DefinedFunc<P> {
+impl SyntaxEq for DefinedFunc {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.id.syntax_eq(&other.id)
             && self.tparams.syntax_eq(&other.tparams)
@@ -279,7 +277,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Defi
 
 // == Definitions
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for DefKind<P> {
+impl SyntaxEq for DefKind {
     fn syntax_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (DefKind::Typ(typ_def_l), DefKind::Typ(typ_def_r)) => typ_def_l.syntax_eq(typ_def_r),
@@ -295,7 +293,7 @@ impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for DefK
 
 // == Specifications
 
-impl<P: Stage<Id: SyntaxEq, Var: SyntaxEq, Mixop = Rc<Mixop>>> SyntaxEq for Spec<P> {
+impl SyntaxEq for Spec {
     fn syntax_eq(&self, other: &Self) -> bool {
         self.as_slice().syntax_eq(other.as_slice())
     }

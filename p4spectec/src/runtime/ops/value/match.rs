@@ -3,7 +3,8 @@
 //! `sub` tests whether a value inhabits a type,
 //! unfolding definitions through a lookup closure;
 //! `check` runs a `Subcheck` that static subtyping left for runtime.
-//! Both need a function lookup to type function values.
+//! Both use prepared type definitions and need a function lookup
+//! to type function values.
 
 use num_traits::Signed;
 use thiserror::Error;
@@ -15,18 +16,17 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::flat::Mixop,
         value::flat::{Value, ValueKind},
     },
 };
 
-use crate::lang::il::ast::{
-    DefTypKind, FuncTyp, Id, Iter, Stage, Subcheck, Typ, TypCase, TypField, TypKind,
+use crate::lang::il::prepared::{
+    DefTypKind, FuncTyp, Id, Iter, Subcheck, Typ, TypCase, TypField, TypKind,
 };
 
 use crate::runtime::{
+    envs::interp::shared::TypeDef,
     ops::typ::{Theta, TypeError, equiv_func_typ, subst_not_typ, subst_typ},
-    typdef::TypeDef,
 };
 
 // == Errors
@@ -58,9 +58,9 @@ pub enum MatchError {
 // == Type membership
 
 /// Tests whether `value` inhabits `typ`.
-pub fn sub<'env, P: Stage<Mixop = Mixop>, F>(
+pub fn sub<'env, F>(
     arena: &Arena,
-    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
+    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
     typ: &Typ,
     value: &Value,
@@ -209,9 +209,9 @@ where
 }
 
 /// Tests values against types pairwise.
-pub fn subs<'env, P: Stage<Mixop = Mixop>, F>(
+pub fn subs<'env, F>(
     arena: &Arena,
-    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
+    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
     typs: &[Typ],
     values: &[Value],
@@ -223,9 +223,9 @@ where
 }
 
 /// Pairwise membership; differing counts fail.
-fn subs_inner<'env, 'typ, 'value, P: Stage<Mixop = Mixop>, F, T, V>(
+fn subs_inner<'env, 'typ, 'value, F, T, V>(
     arena: &Arena,
-    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
+    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
     typs: T,
     values: V,
@@ -249,11 +249,11 @@ where
 // == Subtype-check execution
 
 /// Runs a precomputed subtype check on a value.
-pub fn check<'env, P: Stage<Mixop = Mixop>, F>(
+pub fn check<'env, F>(
     arena: &Arena,
-    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef<P>>,
+    find_typdef_opt: &impl Fn(&Id) -> Option<&'env TypeDef>,
     find_func: &F,
-    subcheck: &Subcheck<P>,
+    subcheck: &Subcheck,
     value: &Value,
 ) -> Result<bool, MatchError>
 where
