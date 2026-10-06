@@ -2,47 +2,32 @@
 //!
 //! A `MixopTree` owns a notation:
 //! the atoms of a notation form and where its arguments go.
-//! `MixopRepr` is how a syntax stage holds one, so code generic
-//! over the stage prints notations without knowing which;
+//! `MixopMatch` lets evaluation match source or prepared syntax
+//! against a stored value case;
 //! `shape` parses a mixop from its text once and caches it.
 
 use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 use crate::lang::{
     common::ds::set::IdSet,
-    traits::{eq::SyntaxEq, free::FreeIds, print::Printer},
+    traits::{eq::SyntaxEq, free::FreeIds},
 };
 
 use crate::frontend;
 
-use super::{MixopTree, arena::MixopArena, flat::MixopId, walk};
+use super::{MixopTree, arena::MixopArena, flat::MixopId};
 
 // == Mixops as a stage holds them
 
-/// A mixop as a syntax stage holds it: a shared tree or an interned shape.
-pub trait MixopRepr: Clone + fmt::Debug + PartialEq {
-    /// Writes the form, with `print_arg` writing the argument at each position.
-    fn print_with(
-        &self,
-        printer: &mut Printer<'_>,
-        print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
-    ) -> fmt::Result;
-
-    /// Whether a shape has this mixop's structure and atom names.
-    fn matches_mixop(&self, arena_mixop: &MixopArena, shape: MixopId) -> bool;
+/// Matches a stored value case against source or prepared notation.
+pub trait MixopMatch: Clone + fmt::Debug + PartialEq {
+    /// Compares notation structure and atom names, ignoring spans.
+    fn matches_mixop(&self, arena_mixop: &MixopArena, mixop_id: MixopId) -> bool;
 }
 
-impl MixopRepr for Rc<MixopTree> {
-    fn print_with(
-        &self,
-        printer: &mut Printer<'_>,
-        print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
-    ) -> fmt::Result {
-        walk::print_tree_with(self.as_ref(), printer, print_arg)
-    }
-
-    fn matches_mixop(&self, arena_mixop: &MixopArena, shape: MixopId) -> bool {
-        arena_mixop.matches_tree(shape, self)
+impl MixopMatch for Rc<MixopTree> {
+    fn matches_mixop(&self, arena_mixop: &MixopArena, mixop_id: MixopId) -> bool {
+        arena_mixop.matches_tree(mixop_id, self)
     }
 }
 

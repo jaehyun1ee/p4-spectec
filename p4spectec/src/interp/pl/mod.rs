@@ -106,3 +106,5 @@ impl<Iface: Interface, Ext: Extern> Interpreter<Iface, Ext> for PlInterp {
         Self::invoke_func(runner_ctx, &ctx, &id, targs, values)
     }
 }
+
+pub mod print;

@@ -9,7 +9,6 @@ use crate::lang::{
         arena::Arena,
         value::{ValueFlat, make},
     },
-    traits::print::Print,
 };
 
 use crate::runner::{Extern, Interface, RunnerContext};
@@ -36,7 +35,7 @@ fn eval_arg<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>
     result.with_frame(arg.span.clone(), || {
         format!(
             "while evaluating argument {}",
-            Print::to_string_in(arg, runner_ctx.arena().arena_mixop())
+            crate::interp::shared::print::arg_to_string(runner_ctx.arena().arena_mixop(), arg)
         )
     })
 }

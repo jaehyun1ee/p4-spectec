@@ -12,17 +12,11 @@
 use super::external::{DecodeContext, EncodeContext};
 use serde_derive_state::{DeserializeState, SerializeState};
 
-use std::{
-    fmt,
-    hash::{Hash, Hasher},
-};
+use std::hash::{Hash, Hasher};
 
-use crate::lang::{
-    data::intern::{CanonEq, CanonHash, CanonInterner, Interned},
-    traits::print::Printer,
-};
+use crate::lang::data::intern::{CanonEq, CanonHash, CanonInterner, Interned};
 
-use super::{AtomPhrase, arena::MixopArena, mixop::MixopRepr, walk};
+use super::{AtomPhrase, arena::MixopArena, mixop::MixopMatch};
 
 /// One interned notation node, with child handles in the same arena.
 #[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
@@ -55,20 +49,8 @@ impl MixopFlat {
 
 // - Mixops in prepared syntax
 
-// Prepared syntax holds mixops; they print through a printer that has
-// their arena, and match a value's mixop by canonical identity
-impl MixopRepr for MixopId {
-    fn print_with(
-        &self,
-        printer: &mut Printer<'_>,
-        print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
-    ) -> fmt::Result {
-        let arena_mixop = printer
-            .arena_mixop()
-            .expect("printing prepared syntax needs the shape arena");
-        walk::print_flat_with(arena_mixop, arena_mixop.kind(*self), printer, print_arg)
-    }
-
+// Prepared syntax matches a value's mixop by canonical identity
+impl MixopMatch for MixopId {
     fn matches_mixop(&self, arena_mixop: &MixopArena, mixop_id: MixopId) -> bool {
         arena_mixop.canon_eq(mixop_id, *self)
     }

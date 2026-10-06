@@ -24,7 +24,6 @@ use super::{
     arena::MixopArena,
     error::ArityMismatch,
     flat::MixopId,
-    mixop::MixopRepr,
     walk::{self, Piece},
 };
 
@@ -153,15 +152,16 @@ impl<T> Mixfix<Rc<MixopTree>, T> {
 
 // - Printing
 
-impl<M: MixopRepr, T> Mixfix<M, T> {
+impl<T> Mixfix<Rc<MixopTree>, T> {
     /// Writes atoms and arguments, separating non-empty pieces with spaces.
     pub fn print_with(
         &self,
         printer: &mut Printer<'_>,
         mut print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
     ) -> fmt::Result {
-        self.mixop
-            .print_with(printer, |pos, printer| print_arg(&self.args[pos], printer))
+        walk::print_tree_with(&self.mixop, printer, |pos, printer| {
+            print_arg(&self.args[pos], printer)
+        })
     }
 }
 

@@ -13,7 +13,6 @@ use crate::lang::{
     common::source::Span,
     data::value::{ValueFlat, ValueFlatKind, get},
     hints::input,
-    traits::print::Print,
 };
 
 use crate::diagnostic::Report;
@@ -187,9 +186,9 @@ fn eval_if_instr<Iface: Interface, Ext: Extern>(
     } else {
         ok!(Flow::cont(
             instr.exp.span.clone(),
-            error::prem::condition_unmet(Print::to_string_in(
-                &instr.exp,
-                runner_ctx.arena().arena_mixop()
+            error::prem::condition_unmet(crate::interp::shared::print::exp_to_string(
+                runner_ctx.arena().arena_mixop(),
+                &instr.exp
             )),
         ))
     }
@@ -272,7 +271,10 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
         instr.exp.span.clone(),
         error::prem::condition_unmet(format!(
             "case {}",
-            Print::to_string_in(&instr.exp, runner_ctx.arena().arena_mixop())
+            crate::interp::shared::print::exp_to_string(
+                runner_ctx.arena().arena_mixop(),
+                &instr.exp
+            )
         )),
     ))
 }
@@ -450,7 +452,7 @@ fn eval_debug_instr<Iface: Interface, Ext: Extern>(
     println!(
         "{}: {}",
         instr.exp.span,
-        Print::to_string_in(&instr.exp, runner_ctx.arena().arena_mixop())
+        crate::interp::shared::print::exp_to_string(runner_ctx.arena().arena_mixop(), &instr.exp)
     );
     // Print the value's source span when it has one
     let span = runner_ctx.arena().span(&value).to_string();

@@ -9,7 +9,7 @@
 
 use std::{fmt, rc::Rc};
 
-use crate::lang::data::notation::{MixopRepr, MixopTree};
+use crate::lang::data::notation::{MixopMatch, MixopTree};
 
 use super::ast::{Id, Var};
 
@@ -20,7 +20,7 @@ pub trait Stage: Clone + fmt::Debug + PartialEq + 'static {
     /// Variable occurrences
     type Var: Clone + fmt::Debug + PartialEq;
     /// How a notation's mixop is held
-    type Mixop: MixopRepr;
+    type Mixop: MixopMatch;
 }
 
 /// Syntax as elaboration and the passes produce it.

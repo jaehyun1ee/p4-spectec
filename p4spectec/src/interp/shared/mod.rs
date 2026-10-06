@@ -12,3 +12,8 @@ pub mod error;
 pub mod eval;
 pub mod prepare;
 pub mod util;
+
+#[cfg(test)]
+mod print_tests;
+
+pub mod print;
