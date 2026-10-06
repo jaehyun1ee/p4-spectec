@@ -15,7 +15,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{Value, ValueFlatKind, get, make},
+        value::{ValueFlatKind, flat::Value, get, make},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };

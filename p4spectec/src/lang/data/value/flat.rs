@@ -27,6 +27,10 @@ use std::{
 
 /// A value's body, type, and span handles in one arena.
 pub type ValueFlat = NotePhrase<Interned<ValueFlatKind>, Interned<TypKind>, Interned<Span>>;
+
+/// The flat representation under its module-local name.
+pub use self::ValueFlat as Value;
+
 /// A named value field.
 pub type ValueField = (Phrase<Atom>, ValueFlat);
 /// A case with one value per argument position.

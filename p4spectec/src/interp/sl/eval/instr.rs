@@ -11,7 +11,7 @@ use std::borrow::Cow;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, ValueFlatKind, get},
+    data::value::{ValueFlatKind, flat::Value, get},
     hints::input,
 };
 

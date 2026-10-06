@@ -13,7 +13,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{Value, get, make},
+        value::{flat::Value, get, make},
         var::{SlotIdx, VarSlot},
     },
 };

@@ -9,7 +9,7 @@ use super::{
     intern::CanonId,
     notation::MixopArena,
     typ::TypKind,
-    value::{Value, ValueArena, ValueError, ValueFlatKind, ValueRef},
+    value::{ValueArena, ValueError, ValueFlatKind, ValueRef, flat::Value},
 };
 use crate::lang::common::source::Span;
 use std::rc::Rc;

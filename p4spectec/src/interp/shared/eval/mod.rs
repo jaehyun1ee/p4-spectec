@@ -11,7 +11,7 @@ pub mod iter;
 pub(crate) mod ops;
 pub(crate) mod path;
 
-use crate::lang::data::value::Value;
+use crate::lang::data::value::flat::Value;
 
 use crate::runner::{Extern, Interface, Interpreter, RunnerContext};
 

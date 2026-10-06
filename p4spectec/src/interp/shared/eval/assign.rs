@@ -14,7 +14,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{Value, ValueFlatKind, get, make},
+        value::{ValueFlatKind, flat::Value, get, make},
         var::IdSlot,
     },
     traits::at::At,

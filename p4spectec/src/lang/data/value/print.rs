@@ -1,6 +1,6 @@
 //! Rendering shared values through their arena
 
-use super::{Value, ValueCase, ValueFlatKind};
+use super::{ValueCase, ValueFlatKind, flat::Value};
 use crate::{
     lang::{
         data::arena::Arena,

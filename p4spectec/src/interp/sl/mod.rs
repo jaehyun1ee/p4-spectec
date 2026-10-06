@@ -12,7 +12,7 @@ pub mod flow;
 
 pub mod eval;
 
-use crate::lang::{common::source::Span, data::value::Value};
+use crate::lang::{common::source::Span, data::value::flat::Value};
 
 use crate::lang::sl::ast;
 

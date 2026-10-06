@@ -9,7 +9,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        value::{Value, make},
+        value::{flat::Value, make},
     },
 };
 

@@ -11,7 +11,7 @@ use std::rc::Rc;
 use crate::lang::{
     data::{
         arena::Arena,
-        value::{Value, ValueFlatKind},
+        value::{ValueFlatKind, flat::Value},
     },
     hints::input,
 };

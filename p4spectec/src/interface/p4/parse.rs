@@ -15,7 +15,7 @@ use lalrpop_util::ParseError;
 
 use crate::lang::{
     common::source::{Phrase, Position, Span},
-    data::{arena::Arena, value::Value},
+    data::{arena::Arena, value::flat::Value},
 };
 
 use super::{

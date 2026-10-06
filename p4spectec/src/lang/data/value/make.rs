@@ -17,7 +17,7 @@ use crate::lang::{
     },
 };
 
-use super::{Value, ValueCase, ValueError, ValueField, ValueFlatKind};
+use super::{ValueCase, ValueError, ValueField, ValueFlatKind, flat::Value};
 
 // - General
 

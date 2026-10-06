@@ -11,8 +11,8 @@ use crate::lang::{
     data::{
         typ,
         value::{
-            Value,
             external::{DecodeContext, EncodeContext},
+            flat::Value,
             make,
         },
     },

@@ -3,7 +3,7 @@
 //! Each architecture's `_init` relation takes the parsed program
 //! and returns the initial context and architecture values.
 
-use crate::lang::data::value::{Value, get};
+use crate::lang::data::value::{flat::Value, get};
 
 use crate::runner::{Extern, ExternError, Interface, Interpreter, InterpreterError, RunnerContext};
 

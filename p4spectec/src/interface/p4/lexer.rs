@@ -48,7 +48,7 @@ use crate::lang::{
     data::{
         notation::MixopTree,
         typ,
-        value::{Value, ValueCase, ValueError, ValueFlatKind, make},
+        value::{ValueCase, ValueError, ValueFlatKind, flat::Value, make},
     },
 };
 

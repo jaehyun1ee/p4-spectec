@@ -19,7 +19,7 @@ use crate::{
     sim_plugin::dummy::Dummy,
 };
 
-use crate::lang::data::{arena::Arena, notation::MixopArena, value::Value};
+use crate::lang::data::{arena::Arena, notation::MixopArena, value::flat::Value};
 
 use crate::lang::al;
 

@@ -13,7 +13,7 @@ use crate::lang::{
         arena::Arena,
         notation::{Mixfix, MixopTree, mixop::shape},
         typ,
-        value::{Value, get, make},
+        value::{flat::Value, get, make},
     },
     traits::eq::SyntaxEq,
 };

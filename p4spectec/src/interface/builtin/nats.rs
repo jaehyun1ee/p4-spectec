@@ -10,7 +10,7 @@ use crate::lang::{
     common::{prim::num, source::Span},
     data::{
         arena::Arena,
-        value::{Value, get, make},
+        value::{flat::Value, get, make},
     },
 };
 

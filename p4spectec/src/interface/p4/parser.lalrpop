@@ -1,6 +1,6 @@
 use lalrpop_util::ParseError;
 
-use crate::lang::data::value::{make, Value};
+use crate::lang::data::value::{make, flat::Value};
 
 use crate::interface::p4::{
     binary::{self, BinaryExpressionPart, BinaryOperator},

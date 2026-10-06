@@ -12,7 +12,7 @@ use std::{borrow::Cow, rc::Rc};
 use crate::lang::{
     data::{
         arena::Arena,
-        value::{Value, ValueFlatKind},
+        value::{ValueFlatKind, flat::Value},
     },
     hints::input,
 };

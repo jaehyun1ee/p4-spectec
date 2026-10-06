@@ -16,7 +16,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         notation::MixopMatch,
-        value::{Value, ValueFlatKind},
+        value::{ValueFlatKind, flat::Value},
     },
 };
 

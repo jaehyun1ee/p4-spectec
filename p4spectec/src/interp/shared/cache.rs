@@ -12,7 +12,7 @@ use hashbrown::{Equivalent, HashMap};
 use crate::lang::data::{
     arena::Arena,
     intern::CanonId,
-    value::{Value, ValueFlatKind},
+    value::{ValueFlatKind, flat::Value},
 };
 
 // = Call identity

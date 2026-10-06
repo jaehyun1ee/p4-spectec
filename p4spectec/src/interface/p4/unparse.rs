@@ -18,7 +18,7 @@ use crate::lang::{
             MixopTree,
             walk::{self, Piece},
         },
-        value::{Value, ValueCase, ValueFlatKind},
+        value::{ValueCase, ValueFlatKind, flat::Value},
     },
     hints::alter::{self, AlterHint, Renderer},
     traits::print::Print,

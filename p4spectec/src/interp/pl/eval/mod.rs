@@ -11,7 +11,7 @@ mod expr;
 mod instr;
 mod strip;
 
-use crate::lang::data::value::Value;
+use crate::lang::data::value::flat::Value;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 

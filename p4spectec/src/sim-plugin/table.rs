@@ -10,7 +10,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{Value, ValueError, get, make},
+        value::{ValueError, flat::Value, get, make},
     },
 };
 

@@ -29,8 +29,9 @@ use crate::lang::{
         arena::Arena,
         typ,
         value::{
-            Value, ValueError,
+            ValueError,
             external::{DecodeContext, EncodeContext, decode_with, encode_with},
+            flat::Value,
             get, make,
         },
     },

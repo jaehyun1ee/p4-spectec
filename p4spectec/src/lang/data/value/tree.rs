@@ -33,6 +33,9 @@ use super::{
 /// An owned value with its type and source span.
 pub type ValueTree = NotePhrase<ValueTreeKind, TypKind>;
 
+/// The tree representation under its module-local name.
+pub use self::ValueTree as Value;
+
 /// A value body containing its children directly.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename = "ValueKind")]

@@ -7,7 +7,7 @@
 //! Compile-time known calls (`static_assert`) are handled here
 //! for all architectures.
 
-use crate::lang::data::value::Value;
+use crate::lang::data::value::flat::Value;
 
 use crate::lang::il::ast::Typ;
 

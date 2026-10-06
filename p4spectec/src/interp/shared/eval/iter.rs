@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{Value, make},
+    data::value::{flat::Value, make},
 };
 
 use crate::runner::{Extern, Interface, Interpreter, RunnerContext};

@@ -8,8 +8,8 @@ use serde_derive_state::{DeserializeState, SerializeState};
 use crate::lang::data::{
     arena::Arena,
     value::{
-        Value,
         external::{DecodeContext, EncodeContext},
+        flat::Value,
     },
 };
 
