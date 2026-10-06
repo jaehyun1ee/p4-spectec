@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::lang::data::notation::MixopError;
 
-use super::flat::ValueTag;
+use super::ValueTag;
 
 /// A failure building or projecting a value.
 #[derive(Clone, Debug, Error, Eq, PartialEq)]

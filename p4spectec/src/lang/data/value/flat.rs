@@ -27,7 +27,12 @@ use crate::lang::{
     },
 };
 
-use super::external::{DecodeContext, EncodeContext};
+use super::{
+    ValueTag,
+    external::{DecodeContext, EncodeContext},
+};
+
+pub use super::view::ValueRef;
 
 /// A value's body, type, and span handles in one arena.
 pub type Value = NotePhrase<Interned<ValueKind>, Interned<TypKind>, Interned<Span>>;
@@ -56,21 +61,6 @@ pub enum ValueKind {
 }
 
 // - Tags
-
-/// The kind of a value without its payload, for errors and ordering.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ValueTag {
-    Bool,
-    Num,
-    Text,
-    Struct,
-    Case,
-    Tuple,
-    Opt,
-    List,
-    Func,
-    Extern,
-}
 
 impl ValueKind {
     /// The kind of this body.

@@ -26,7 +26,10 @@ use crate::lang::{
         },
         source::Span,
     },
-    data::notation::{Mixfix, MixfixRef, View},
+    data::notation::{
+        Mixfix,
+        tree::{MixfixRef, View},
+    },
     hints::{alter, input},
     traits::{has_call::HasCall, print::Print},
 };

@@ -9,10 +9,7 @@ use crate::lang::{
     traits::print::{Print, Printer},
 };
 
-use super::{
-    ValueCase,
-    flat::{Value, ValueKind},
-};
+use super::flat::{Value, ValueCase, ValueKind};
 
 // - Values
 

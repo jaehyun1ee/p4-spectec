@@ -18,8 +18,8 @@ use crate::lang::{
 };
 
 use super::{
-    ValueCase, ValueError, ValueField,
-    flat::{Value, ValueKind},
+    ValueError,
+    flat::{Value, ValueCase, ValueField, ValueKind},
 };
 
 // - General

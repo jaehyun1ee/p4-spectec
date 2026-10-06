@@ -8,26 +8,19 @@
 //! A case body is written as its filled notation in both modes,
 //! so shape handles never appear in a payload.
 
-use std::slice;
-
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_derive_state::{DeserializeState, SerializeState};
 use serde_state::{DeserializeState, SerializeState};
 
 use crate::util::json::json;
 
 use crate::lang::{
     common::source::Span,
-    data::{
-        arena::Arena,
-        encoding::Encoding,
-        intern::Interned,
-        notation::{self, AtomPhrase, MixopArena},
-        typ::TypKind,
-    },
+    data::{arena::Arena, encoding::Encoding, intern::Interned, typ::TypKind},
 };
 
-use super::{ValueCase, flat, tree};
+use super::{flat, tree};
+
+mod case;
 
 // = Configuration
 
@@ -246,139 +239,5 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<Span> {
                     .map_err(::serde::de::Error::custom)
             }
         }
-    }
-}
-
-// = Case bodies
-
-// Both encodings write a case as its filled notation tree,
-// with the variant names and shapes of the former `Mixfix`
-
-/// A case written as its filled notation tree.
-#[derive(SerializeState)]
-#[serde(rename = "Mixfix")]
-#[serde(serialize_state = "EncodeContext<'arena>", ser_parameters = "'arena")]
-enum CaseTree<'a> {
-    Arg(#[serde(state)] &'a flat::Value),
-    Atom(#[serde(state)] &'a AtomPhrase),
-    Brack(
-        #[serde(state)] &'a AtomPhrase,
-        #[serde(state)] Box<CaseTree<'a>>,
-        #[serde(state)] &'a AtomPhrase,
-    ),
-    Infix(
-        #[serde(state)] Box<CaseTree<'a>>,
-        #[serde(state)] &'a AtomPhrase,
-        #[serde(state)] Box<CaseTree<'a>>,
-    ),
-    Seq(#[serde(state)] Vec<CaseTree<'a>>),
-}
-
-/// A case read as its filled notation tree.
-#[derive(DeserializeState)]
-#[serde(rename = "Mixfix")]
-#[serde(deserialize_state = "DecodeContext<'arena>", de_parameters = "'arena")]
-enum CaseTreeOwned {
-    Arg(#[serde(state)] flat::Value),
-    Atom(#[serde(state)] AtomPhrase),
-    Brack(
-        #[serde(state)] AtomPhrase,
-        #[serde(state)] Box<CaseTreeOwned>,
-        #[serde(state)] AtomPhrase,
-    ),
-    Infix(
-        #[serde(state)] Box<CaseTreeOwned>,
-        #[serde(state)] AtomPhrase,
-        #[serde(state)] Box<CaseTreeOwned>,
-    ),
-    Seq(#[serde(state)] Vec<CaseTreeOwned>),
-}
-
-/// Fills a shape with arguments in notation order, borrowing its atoms.
-fn case_tree<'a>(
-    arena_mixop: &'a MixopArena,
-    kind: &'a notation::flat::MixopKind,
-    values: &mut slice::Iter<'a, flat::Value>,
-) -> CaseTree<'a> {
-    match kind {
-        notation::flat::MixopKind::Arg => {
-            CaseTree::Arg(values.next().expect("a case fills every position"))
-        }
-        notation::flat::MixopKind::Atom(atom) => CaseTree::Atom(atom),
-        notation::flat::MixopKind::Brack(atom_l, shape, atom_r) => {
-            let tree = case_tree(arena_mixop, arena_mixop.kind(*shape), values);
-            CaseTree::Brack(atom_l, Box::new(tree), atom_r)
-        }
-        notation::flat::MixopKind::Infix(shape_l, atom, shape_r) => {
-            let tree_l = case_tree(arena_mixop, arena_mixop.kind(*shape_l), values);
-            let tree_r = case_tree(arena_mixop, arena_mixop.kind(*shape_r), values);
-            CaseTree::Infix(Box::new(tree_l), atom, Box::new(tree_r))
-        }
-        notation::flat::MixopKind::Seq(shapes) => CaseTree::Seq(
-            shapes
-                .iter()
-                .map(|shape| case_tree(arena_mixop, arena_mixop.kind(*shape), values))
-                .collect(),
-        ),
-    }
-}
-
-/// Splits a read tree into its mixop, moving arguments out in notation order.
-fn split_case_tree(tree: CaseTreeOwned, values: &mut Vec<flat::Value>) -> notation::tree::Mixop {
-    match tree {
-        CaseTreeOwned::Arg(value) => {
-            values.push(value);
-            notation::tree::Mixop::Arg
-        }
-        CaseTreeOwned::Atom(atom) => notation::tree::Mixop::Atom(atom),
-        CaseTreeOwned::Brack(atom_l, tree, atom_r) => {
-            notation::tree::Mixop::Brack(atom_l, Box::new(split_case_tree(*tree, values)), atom_r)
-        }
-        CaseTreeOwned::Infix(tree_l, atom, tree_r) => {
-            let mixop_l = split_case_tree(*tree_l, values);
-            let mixop_r = split_case_tree(*tree_r, values);
-            notation::tree::Mixop::Infix(Box::new(mixop_l), atom, Box::new(mixop_r))
-        }
-        CaseTreeOwned::Seq(trees) => notation::tree::Mixop::Seq(
-            trees
-                .into_iter()
-                .map(|tree| split_case_tree(tree, values))
-                .collect(),
-        ),
-    }
-}
-
-// - Encode
-
-impl SerializeState<EncodeContext<'_>> for ValueCase {
-    fn serialize_state<S: Serializer>(
-        &self,
-        serializer: S,
-        ctx: &EncodeContext<'_>,
-    ) -> Result<S::Ok, S::Error> {
-        // Write the filled notation, with arguments in the context's encoding
-        let arena_mixop = ctx.arena().arena_mixop();
-        let mut values = self.args().iter();
-        case_tree(arena_mixop, arena_mixop.kind(*self.mixop()), &mut values)
-            .serialize_state(serializer, ctx)
-    }
-}
-
-// - Decode
-
-impl<'de> DeserializeState<'de, DecodeContext<'_>> for ValueCase {
-    fn deserialize_state<D: Deserializer<'de>>(
-        ctx: &mut DecodeContext<'_>,
-        deserializer: D,
-    ) -> Result<Self, D::Error> {
-        // Read the filled notation, with arguments in the context's encoding
-        let tree = CaseTreeOwned::deserialize_state(ctx, deserializer)?;
-        let mut values = Vec::new();
-        let mixop = split_case_tree(tree, &mut values);
-        let arena_mixop = ctx.arena_mut().arena_mixop_mut();
-        let shape = arena_mixop
-            .intern(&mixop)
-            .map_err(::serde::de::Error::custom)?;
-        ValueCase::new_in(arena_mixop, shape, values).map_err(::serde::de::Error::custom)
     }
 }

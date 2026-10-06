@@ -24,6 +24,8 @@ use crate::lang::{
 
 use super::{AtomPhrase, MixopArena, MixopError, Piece, flat, print};
 
+pub use super::mixfix::{MixfixRef, View};
+
 /// An owned notation with an argument hole at each position.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Mixop {

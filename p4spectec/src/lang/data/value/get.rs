@@ -6,7 +6,10 @@ use crate::util::json::json;
 
 use crate::lang::{common::prim::num::Number, data::arena::Arena};
 
-use super::{ValueCase, ValueError, ValueField, ValueTag, flat::Value, flat::ValueKind};
+use super::{
+    ValueError, ValueTag,
+    flat::{Value, ValueCase, ValueField, ValueKind},
+};
 
 // - Errors
 

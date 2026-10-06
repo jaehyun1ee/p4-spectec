@@ -136,9 +136,9 @@ pub type Value = data::value::flat::Value;
 /// The forms of a runtime value.
 pub type ValueKind = data::value::flat::ValueKind;
 /// One field of a struct value.
-pub type ValueField = data::value::ValueField;
+pub type ValueField = data::value::flat::ValueField;
 /// A variant value: a mixfix skeleton with values as arguments.
-pub type ValueCase = data::value::ValueCase;
+pub type ValueCase = data::value::flat::ValueCase;
 
 // Operators
 

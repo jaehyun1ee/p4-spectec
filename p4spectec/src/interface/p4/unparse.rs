@@ -18,10 +18,7 @@ use crate::lang::{
             Piece, flat,
             tree::{self, Mixop},
         },
-        value::{
-            ValueCase,
-            flat::{Value, ValueKind},
-        },
+        value::flat::{Value, ValueCase, ValueKind},
     },
     hints::alter::{self, AlterHint, Renderer},
     traits::print::Print,

@@ -14,8 +14,8 @@ use super::{
     notation::MixopArena,
     typ::TypKind,
     value::{
-        ValueArena, ValueError, ValueRef,
-        flat::{Value, ValueKind},
+        ValueArena, ValueError,
+        flat::{Value, ValueKind, ValueRef},
     },
 };
 
