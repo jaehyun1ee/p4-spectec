@@ -9,11 +9,19 @@ use std::{
     cmp::Ordering,
     fmt,
     hash::{Hash, Hasher},
+    rc::Rc,
 };
 
-use crate::lang::traits::print::{Print, Printer};
+use crate::lang::{
+    common::ds::set::IdSet,
+    traits::{
+        eq::SyntaxEq,
+        free::FreeIds,
+        print::{Print, Printer},
+    },
+};
 
-use super::{AtomPhrase, MixopArena, MixopError, MixopId, walk};
+use super::{AtomPhrase, MixopArena, MixopError, MixopId, mixop::MixopMatch, walk};
 use serde::{Deserialize, Serialize};
 
 /// An owned notation with an argument hole at each position.
@@ -40,6 +48,14 @@ impl Mixop {
             Self::Infix(..) => 3,
             Self::Seq(_) => 4,
         }
+    }
+}
+
+// = Matching
+
+impl MixopMatch for Rc<Mixop> {
+    fn matches_mixop(&self, arena_mixop: &MixopArena, mixop_id: MixopId) -> bool {
+        arena_mixop.matches_tree(mixop_id, self)
     }
 }
 
@@ -84,6 +100,20 @@ impl Hash for Mixop {
             }
             Self::Seq(elems) => elems.hash(hasher),
         }
+    }
+}
+
+// = Syntax operations
+
+impl SyntaxEq for Mixop {
+    fn syntax_eq(&self, mixop_other: &Self) -> bool {
+        self == mixop_other
+    }
+}
+
+impl FreeIds for Mixop {
+    fn free_ids(&self) -> IdSet {
+        IdSet::new()
     }
 }
 

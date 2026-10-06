@@ -1,17 +1,10 @@
-//! Mixops, notation forms without arguments
+//! Mixop matching and cached parsing
 //!
-//! A `Mixop` owns a notation:
-//! the atoms of a notation form and where its arguments go.
 //! `MixopMatch` lets evaluation match source or prepared syntax
 //! against a stored value case;
 //! `shape` parses a mixop from its text once and caches it.
 
 use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
-
-use crate::lang::{
-    common::ds::set::IdSet,
-    traits::{eq::SyntaxEq, free::FreeIds},
-};
 
 use crate::frontend;
 
@@ -23,26 +16,6 @@ use super::{arena::MixopArena, flat::MixopId, tree::Mixop};
 pub trait MixopMatch: Clone + fmt::Debug + PartialEq {
     /// Compares notation structure and atom names, ignoring spans.
     fn matches_mixop(&self, arena_mixop: &MixopArena, mixop_id: MixopId) -> bool;
-}
-
-impl MixopMatch for Rc<Mixop> {
-    fn matches_mixop(&self, arena_mixop: &MixopArena, mixop_id: MixopId) -> bool {
-        arena_mixop.matches_tree(mixop_id, self)
-    }
-}
-
-// == Syntax operations
-
-impl SyntaxEq for Mixop {
-    fn syntax_eq(&self, mixop_other: &Self) -> bool {
-        self == mixop_other
-    }
-}
-
-impl FreeIds for Mixop {
-    fn free_ids(&self) -> IdSet {
-        IdSet::new()
-    }
 }
 
 // = Mixop parsing
