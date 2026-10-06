@@ -110,11 +110,6 @@ impl<T> Mixfix<Rc<tree::Mixop>, T> {
 
     // - Viewing
 
-    /// The mixfix as a tree with arguments in place.
-    pub fn view(&self) -> View<'_, T> {
-        self.as_ref().view()
-    }
-
     /// Borrows the mixfix, for viewing its parts.
     pub fn as_ref(&self) -> MixfixRef<'_, T> {
         MixfixRef { mixop: self.mixop.as_ref(), args: &self.args }
@@ -271,16 +266,6 @@ pub enum View<'a, T> {
 }
 
 impl<'a, T> MixfixRef<'a, T> {
-    /// The form, with argument positions.
-    pub fn mixop(&self) -> &'a tree::Mixop {
-        self.mixop
-    }
-
-    /// The arguments in notation order.
-    pub fn args(&self) -> &'a [T] {
-        self.args
-    }
-
     /// The top level of the tree, splitting arguments among the children.
     pub fn view(&self) -> View<'a, T> {
         // Each child takes as many arguments as it has positions
