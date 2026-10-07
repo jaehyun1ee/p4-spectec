@@ -28,7 +28,7 @@ use crate::lang::{
     },
     data::notation::{
         Mixfix,
-        tree::{MixfixRef, View},
+        tree::{MixfixRef, MixfixView},
     },
     hints::{alter, input},
     traits::{has_call::HasCall, print::Print},
@@ -187,12 +187,12 @@ impl Code {
     /// Renders a mixfix tree with caller-rendered arguments.
     fn of_mixfix<T>(mixfix: MixfixRef<'_, T>, render_arg: &dyn Fn(&T) -> Code) -> Code {
         match mixfix.view() {
-            View::Arg(arg) => render_arg(arg),
-            View::Atom(atom) => {
+            MixfixView::Arg(arg) => render_arg(arg),
+            MixfixView::Atom(atom) => {
                 let text_atom = string_of_atom(atom);
                 Code::token(text_atom)
             }
-            View::Brack(atom_l, mixfix_inner, atom_r) => {
+            MixfixView::Brack(atom_l, mixfix_inner, atom_r) => {
                 let text_l = string_of_atom(atom_l);
                 let code_inner = Code::of_mixfix(mixfix_inner, render_arg);
                 let text_r = string_of_atom(atom_r);
@@ -204,7 +204,7 @@ impl Code {
                     Code::token(text_r),
                 ])
             }
-            View::Infix(mixfix_l, atom, mixfix_r) => {
+            MixfixView::Infix(mixfix_l, atom, mixfix_r) => {
                 let code_l = Code::of_mixfix(mixfix_l, render_arg);
                 let text_atom = string_of_atom(atom);
                 let code_r = Code::of_mixfix(mixfix_r, render_arg);
@@ -216,7 +216,7 @@ impl Code {
                     code_r,
                 ])
             }
-            View::Seq(mixfixes) => {
+            MixfixView::Seq(mixfixes) => {
                 let codes = mixfixes
                     .into_iter()
                     .map(|mixfix| Code::of_mixfix(mixfix, render_arg));

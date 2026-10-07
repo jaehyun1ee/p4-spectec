@@ -51,7 +51,7 @@ impl MixopArena {
         let mixop = self.mixops.intern(kind, &())?;
         // A new mixop sums its children's positions, which are recorded
         if mixop.index() as usize == self.arities.len() {
-            let arity = self.arity_kind(self.kind(mixop));
+            let arity = self.kind(mixop).arity(self);
             self.arities.push(u32::try_from(arity)?);
         }
         Ok(mixop)
@@ -71,19 +71,6 @@ impl MixopArena {
         self.shared
             .insert(Rc::as_ptr(mixop_tree), (Rc::clone(mixop_tree), mixop));
         Ok(mixop)
-    }
-
-    /// Counts a node's positions from its children's recorded counts.
-    fn arity_kind(&self, kind: &flat::MixopKind) -> usize {
-        match kind {
-            flat::MixopKind::Arg => 1,
-            flat::MixopKind::Atom(_) => 0,
-            flat::MixopKind::Brack(_, mixop, _) => self.arity(*mixop),
-            flat::MixopKind::Infix(mixop_l, _, mixop_r) => {
-                self.arity(*mixop_l) + self.arity(*mixop_r)
-            }
-            flat::MixopKind::Seq(mixops) => mixops.iter().map(|mixop| self.arity(*mixop)).sum(),
-        }
     }
 
     // - Lookup

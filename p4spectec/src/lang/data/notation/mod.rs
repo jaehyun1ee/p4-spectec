@@ -11,17 +11,33 @@ mod arena;
 mod error;
 pub mod external;
 pub mod flat;
-mod mixfix;
+mod get;
+mod make;
 pub mod parse;
 pub(crate) mod print;
 pub mod tree;
+mod view;
 
 pub use arena::MixopArena;
 pub use error::{ArityMismatch, MixopError};
-pub use mixfix::Mixfix;
+
+// = Notation forms
+
 /// An atom with its source location.
 pub type AtomPhrase =
     crate::lang::common::source::Phrase<crate::lang::common::notation::atom::Atom>;
+
+/// A mixop with one argument per position, in notation order.
+///
+/// `% |- % : %` with arguments `[C, e, t]` represents `C |- e : t`.
+/// Private fields keep the argument count equal to the mixop's arity.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Mixfix<M, T> {
+    /// The form, with argument positions.
+    mixop: M,
+    /// Arguments in notation order, one per position.
+    args: Vec<T>,
+}
 
 /// A piece of a notation in reading order.
 #[derive(Clone, Copy, Debug)]

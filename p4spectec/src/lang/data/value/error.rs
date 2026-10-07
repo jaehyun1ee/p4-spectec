@@ -1,4 +1,7 @@
 //! Errors of building and projecting values
+//!
+//! Kind and count mismatches identify invalid projections.
+//! Interning failures distinguish value handles from case mixop handles.
 
 use std::num::TryFromIntError;
 

@@ -1,4 +1,4 @@
-//! Filled-case JSON encoding with arena-dependent arguments
+//! Filled-case JSON encoding through the value arena
 //!
 //! Both encodings retain the filled notation's variant layout.
 //! `CaseRef` borrows atoms and values for serialization;
@@ -18,7 +18,7 @@ use super::{
     DecodeContext, EncodeContext,
 };
 
-// = Filled notation
+// = Encode
 
 /// A case written as its filled notation tree.
 #[derive(SerializeState)]
@@ -38,18 +38,6 @@ enum CaseRef<'a> {
         #[serde(state)] Box<CaseRef<'a>>,
     ),
     Seq(#[serde(state)] Vec<CaseRef<'a>>),
-}
-
-/// A case read as its filled notation tree.
-#[derive(DeserializeState)]
-#[serde(rename = "Mixfix")]
-#[serde(deserialize_state = "DecodeContext<'arena>", de_parameters = "'arena")]
-enum Case {
-    Arg(#[serde(state)] Value),
-    Atom(#[serde(state)] AtomPhrase),
-    Brack(#[serde(state)] AtomPhrase, #[serde(state)] Box<Case>, #[serde(state)] AtomPhrase),
-    Infix(#[serde(state)] Box<Case>, #[serde(state)] AtomPhrase, #[serde(state)] Box<Case>),
-    Seq(#[serde(state)] Vec<Case>),
 }
 
 impl<'a> CaseRef<'a> {
@@ -88,6 +76,30 @@ impl<'a> CaseRef<'a> {
     }
 }
 
+impl SerializeState<EncodeContext<'_>> for ValueCase {
+    fn serialize_state<S: Serializer>(
+        &self,
+        serializer: S,
+        ctx: &EncodeContext<'_>,
+    ) -> Result<S::Ok, S::Error> {
+        CaseRef::from_flat(ctx.arena().arena_mixop(), self).serialize_state(serializer, ctx)
+    }
+}
+
+// = Decode
+
+/// A case read as its filled notation tree.
+#[derive(DeserializeState)]
+#[serde(rename = "Mixfix")]
+#[serde(deserialize_state = "DecodeContext<'arena>", de_parameters = "'arena")]
+enum Case {
+    Arg(#[serde(state)] Value),
+    Atom(#[serde(state)] AtomPhrase),
+    Brack(#[serde(state)] AtomPhrase, #[serde(state)] Box<Case>, #[serde(state)] AtomPhrase),
+    Infix(#[serde(state)] Box<Case>, #[serde(state)] AtomPhrase, #[serde(state)] Box<Case>),
+    Seq(#[serde(state)] Vec<Case>),
+}
+
 impl Case {
     /// Splits a decoded case into its mixop and arguments in notation order.
     fn into_parts(self) -> (notation::tree::Mixop, Vec<Value>) {
@@ -123,20 +135,6 @@ impl Case {
         }
     }
 }
-
-// = Encode
-
-impl SerializeState<EncodeContext<'_>> for ValueCase {
-    fn serialize_state<S: Serializer>(
-        &self,
-        serializer: S,
-        ctx: &EncodeContext<'_>,
-    ) -> Result<S::Ok, S::Error> {
-        CaseRef::from_flat(ctx.arena().arena_mixop(), self).serialize_state(serializer, ctx)
-    }
-}
-
-// = Decode
 
 impl<'de> DeserializeState<'de, DecodeContext<'_>> for ValueCase {
     fn deserialize_state<D: Deserializer<'de>>(

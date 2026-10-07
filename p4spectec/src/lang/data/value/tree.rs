@@ -27,11 +27,24 @@ use crate::lang::{
 
 use super::{error::ValueError, flat};
 
+// = Value forms
+
 /// An owned value with its type and source span.
 pub type Value = NotePhrase<ValueKind, TypKind>;
 
 /// A named value field.
 pub type ValueField = (Phrase<Atom>, Value);
+
+/// A filled notation containing its argument values.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename = "Mixfix")]
+pub enum ValueCase {
+    Arg(Box<Value>),
+    Atom(AtomPhrase),
+    Brack(AtomPhrase, Box<ValueCase>, AtomPhrase),
+    Infix(Box<ValueCase>, AtomPhrase, Box<ValueCase>),
+    Seq(Vec<ValueCase>),
+}
 
 /// A value body containing its children directly.
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,6 +64,8 @@ pub enum ValueKind {
 
 // = Arena conversion
 
+// - Entry points
+
 /// Copies an arena value into a tree, including its type and source span.
 pub fn from_flat(arena: &Arena, value: &flat::Value) -> Value {
     Value {
@@ -66,15 +81,17 @@ pub fn into_flat(arena: &mut Arena, value: Value) -> Result<flat::Value, ValueEr
     arena.alloc(kind, value.note.into(), value.span)
 }
 
+// - Bodies
+
 impl ValueKind {
-    /// Expands child handles and case shapes into trees.
+    /// Expands child handles and case mixops into trees.
     pub(super) fn from_flat(arena: &Arena, kind: &flat::ValueKind) -> Self {
         match kind {
             flat::ValueKind::Bool(value) => Self::Bool(*value),
             flat::ValueKind::Num(num) => Self::Num(num.clone()),
             flat::ValueKind::Text(text) => Self::Text(text.clone()),
-            flat::ValueKind::Struct(fields) => Self::Struct(
-                fields
+            flat::ValueKind::Struct(value_fields) => Self::Struct(
+                value_fields
                     .iter()
                     .map(|(atom, value)| (atom.clone(), from_flat(arena, value)))
                     .collect(),
@@ -104,8 +121,8 @@ impl ValueKind {
             Self::Bool(value) => flat::ValueKind::Bool(value),
             Self::Num(num) => flat::ValueKind::Num(num),
             Self::Text(text) => flat::ValueKind::Text(text),
-            Self::Struct(fields) => flat::ValueKind::Struct(
-                fields
+            Self::Struct(value_fields) => flat::ValueKind::Struct(
+                value_fields
                     .into_iter()
                     .map(|(atom, value)| Ok((atom, into_flat(arena, value)?)))
                     .collect::<Result<_, ValueError>>()?,
@@ -132,18 +149,7 @@ impl ValueKind {
     }
 }
 
-// = Case trees
-
-/// A filled notation containing its argument values.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename = "Mixfix")]
-pub enum ValueCase {
-    Arg(Box<Value>),
-    Atom(AtomPhrase),
-    Brack(AtomPhrase, Box<ValueCase>, AtomPhrase),
-    Infix(Box<ValueCase>, AtomPhrase, Box<ValueCase>),
-    Seq(Vec<ValueCase>),
-}
+// - Cases
 
 impl ValueCase {
     /// Expands a case and its arguments in notation order.

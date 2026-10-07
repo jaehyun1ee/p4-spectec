@@ -1,4 +1,7 @@
 //! Rendering shared values through their arena
+//!
+//! `print_value` resolves bodies and case mixops through the arena.
+//! Nested aggregates preserve field order and indentation.
 
 use std::fmt::{self, Write};
 
@@ -9,96 +12,90 @@ use crate::lang::{
     traits::print::{Print, Printer},
 };
 
-use super::flat::{Value, ValueCase, ValueKind};
+use super::flat::{Value, ValueKind};
 
-// - Values
+// = Flat values
 
 /// Prints a value in full, resolving handles through the arena.
 pub fn print_value(arena: &Arena, value: &Value, printer: &mut Printer<'_>) -> fmt::Result {
-    write_value_with(arena, printer, value, 0)
+    print_value_inner(arena, value, printer, 0)
 }
 
 /// Prints a value with nested aggregates indented by `level`.
-fn write_value_with(
+fn print_value_inner(
     arena: &Arena,
-    output: &mut Printer<'_>,
     value: &Value,
+    printer: &mut Printer<'_>,
     level: usize,
 ) -> fmt::Result {
     match arena.kind(value) {
-        ValueKind::Bool(value) => write!(output, "{value}"),
-        ValueKind::Num(value) => value.print(output),
-        ValueKind::Text(text) => output.write_str(&escape_text(text)),
+        ValueKind::Bool(value) => write!(printer, "{value}"),
+        ValueKind::Num(value) => value.print(printer),
+        ValueKind::Text(text) => printer.write_str(&escape_text(text)),
         // Empty structs stay on one line
-        ValueKind::Struct(fields) if fields.is_empty() => output.write_str("{}"),
+        ValueKind::Struct(value_fields) if value_fields.is_empty() => printer.write_str("{}"),
         // One field per line, indented one level deeper
-        ValueKind::Struct(fields) => {
-            output.write_str("{\n")?;
-            for (index, (atom, value)) in fields.iter().enumerate() {
-                if index != 0 {
-                    output.write_str(";\n")?;
+        ValueKind::Struct(value_fields) => {
+            printer.write_str("{\n")?;
+            for (idx, (atom, value)) in value_fields.iter().enumerate() {
+                if idx != 0 {
+                    printer.write_str(";\n")?;
                 }
-                output.write_str(&indent(level + 1))?;
-                atom.print(output)?;
-                output.write_char(' ')?;
-                write_value_with(arena, output, value, level + 1)?;
+                printer.write_str(&indent(level + 1))?;
+                atom.print(printer)?;
+                printer.write_char(' ')?;
+                print_value_inner(arena, value, printer, level + 1)?;
             }
-            output.write_char('\n')?;
-            output.write_str(&indent(level))?;
-            output.write_char('}')
+            printer.write_char('\n')?;
+            printer.write_str(&indent(level))?;
+            printer.write_char('}')
         }
-        ValueKind::Case(case) => write_case_with(arena, output, case, level),
+        ValueKind::Case(value_case) => {
+            value_case.print_in_with(arena.arena_mixop(), printer, |value, printer| {
+                print_value_inner(arena, value, printer, level + 1)
+            })
+        }
         ValueKind::Tuple(values) => {
-            output.write_char('(')?;
-            for (index, value) in values.iter().enumerate() {
-                if index != 0 {
-                    output.write_str(", ")?;
+            printer.write_char('(')?;
+            for (idx, value) in values.iter().enumerate() {
+                if idx != 0 {
+                    printer.write_str(", ")?;
                 }
-                write_value_with(arena, output, value, level + 1)?;
+                print_value_inner(arena, value, printer, level + 1)?;
             }
-            output.write_char(')')
+            printer.write_char(')')
         }
         ValueKind::Opt(Some(value)) => {
-            output.write_str("Some(")?;
-            write_value_with(arena, output, value, level + 1)?;
-            output.write_char(')')
+            printer.write_str("Some(")?;
+            print_value_inner(arena, value, printer, level + 1)?;
+            printer.write_char(')')
         }
-        ValueKind::Opt(None) => output.write_str("None"),
+        ValueKind::Opt(None) => printer.write_str("None"),
         // Empty lists stay on one line
-        ValueKind::List(values) if values.is_empty() => output.write_str("[]"),
+        ValueKind::List(values) if values.is_empty() => printer.write_str("[]"),
         // One element per line, indented one level deeper
         ValueKind::List(values) => {
-            output.write_str("[\n")?;
-            for (index, value) in values.iter().enumerate() {
-                if index != 0 {
-                    output.write_str(",\n")?;
+            printer.write_str("[\n")?;
+            for (idx, value) in values.iter().enumerate() {
+                if idx != 0 {
+                    printer.write_str(",\n")?;
                 }
-                output.write_str(&indent(level + 1))?;
-                write_value_with(arena, output, value, level + 1)?;
+                printer.write_str(&indent(level + 1))?;
+                print_value_inner(arena, value, printer, level + 1)?;
             }
-            output.write_char('\n')?;
-            output.write_str(&indent(level))?;
-            output.write_char(']')
+            printer.write_char('\n')?;
+            printer.write_str(&indent(level))?;
+            printer.write_char(']')
         }
         ValueKind::Func(id) => {
-            output.write_char('$')?;
-            output.write_str(&id.node)
+            printer.write_char('$')?;
+            printer.write_str(&id.node)
         }
-        ValueKind::Extern(_) => output.write_str("extern"),
+        ValueKind::Extern(_) => printer.write_str("extern"),
     }
 }
 
-/// Prints a variant value with its arguments filled into the skeleton.
-fn write_case_with(
-    arena: &Arena,
-    output: &mut Printer<'_>,
-    value_case: &ValueCase,
-    level: usize,
-) -> fmt::Result {
-    value_case.print_in_with(arena.arena_mixop(), output, |value, output| {
-        write_value_with(arena, output, value, level + 1)
-    })
-}
+// = Indentation
 
 fn indent(level: usize) -> String {
     "  ".repeat(level)

@@ -1,4 +1,7 @@
 //! Projections that read a value of a given kind
+//!
+//! Typed getters report a kind mismatch; case matching borrows arguments.
+//! Fixed-arity getters project argument slices without allocating.
 
 use std::rc::Rc;
 

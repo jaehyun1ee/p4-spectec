@@ -34,11 +34,14 @@ use super::{
 
 pub use super::view::ValueRef;
 
+// = Value forms
+
 /// A value's body, type, and span handles in one arena.
 pub type Value = NotePhrase<Interned<ValueKind>, Interned<TypKind>, Interned<Span>>;
 
 /// A named value field.
 pub type ValueField = (Phrase<Atom>, Value);
+
 /// A case with one value per argument position.
 pub type ValueCase = Mixfix<Mixop, Value>;
 
@@ -60,7 +63,7 @@ pub enum ValueKind {
     Extern(Rc<json>),
 }
 
-// - Tags
+// = Structural properties
 
 impl ValueKind {
     /// The kind of this body.
@@ -79,6 +82,7 @@ impl ValueKind {
         }
     }
 }
+
 // = Canonical equality and hashing
 
 impl CanonEq<MixopArena> for ValueKind {

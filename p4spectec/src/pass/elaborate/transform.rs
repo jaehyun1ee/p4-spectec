@@ -24,7 +24,7 @@ use crate::lang::{
     },
     data::notation::{
         Mixfix,
-        tree::{MixfixRef, View},
+        tree::{MixfixRef, MixfixView},
     },
     hints::input,
     traits::{at::At, free::FreeIds, print::Print},
@@ -1829,11 +1829,11 @@ fn notation_shape_matches(not_typ_il: MixfixRef<'_, il::Typ>, exp: &el::Exp) -> 
     }
     match (not_typ_il.view(), &exp.node) {
         // Argument types are checked only by elaboration
-        (View::Arg(_), _) => true,
+        (MixfixView::Arg(_), _) => true,
         // Token spelling does not affect structural correspondence
-        (View::Atom(_), el::ExpKind::Atom(_)) => true,
+        (MixfixView::Atom(_), el::ExpKind::Atom(_)) => true,
         // Every sequence position must have a corresponding subtree
-        (View::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
+        (MixfixView::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
             not_typs_il.len() == exps.len()
                 && not_typs_il
                     .into_iter()
@@ -1841,12 +1841,12 @@ fn notation_shape_matches(not_typ_il: MixfixRef<'_, il::Typ>, exp: &el::Exp) -> 
                     .all(|(not_typ_il, exp)| notation_shape_matches(not_typ_il, exp))
         }
         // Both infix operands must correspond
-        (View::Infix(not_typ_l_il, _, not_typ_r_il), el::ExpKind::Infix(exp_l, _, exp_r)) => {
+        (MixfixView::Infix(not_typ_l_il, _, not_typ_r_il), el::ExpKind::Infix(exp_l, _, exp_r)) => {
             notation_shape_matches(not_typ_l_il, exp_l)
                 && notation_shape_matches(not_typ_r_il, exp_r)
         }
         // Bracket contents must correspond
-        (View::Brack(_, not_typ_inner_il, _), el::ExpKind::Brack(_, exp_inner, _)) => {
+        (MixfixView::Brack(_, not_typ_inner_il, _), el::ExpKind::Brack(_, exp_inner, _)) => {
             notation_shape_matches(not_typ_inner_il, exp_inner)
         }
         // Other syntax does not establish token correspondence
@@ -1885,7 +1885,7 @@ fn elab_not_exp_inner(
     }
     match (not_typ_il.view(), &exp.node) {
         // Count only argument slots and retain a nested failure's own cause
-        (View::Arg(typ_il), _) => {
+        (MixfixView::Arg(typ_il), _) => {
             let exp_expect = ExpExpect::not_arg(expect.kind, exps_il.len(), typ_il);
             match elab_exp_inner(ctx, &exp_expect, exp) {
                 // Keep the elaborated argument
@@ -1906,11 +1906,13 @@ fn elab_not_exp_inner(
             }
         }
         // Atoms must agree literally
-        (View::Atom(atom_expect), el::ExpKind::Atom(atom)) if atom_expect.node == atom.node => {
+        (MixfixView::Atom(atom_expect), el::ExpKind::Atom(atom))
+            if atom_expect.node == atom.node =>
+        {
             success!(())
         }
         // Sequences match element-wise without guessing omitted positions
-        (View::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
+        (MixfixView::Seq(not_typs_il), el::ExpKind::Seq(exps)) => {
             if not_typs_il.len() != exps.len() {
                 return unavailable!(error: error::not::notation_shape_mismatch(&exp.span, expect));
             }
@@ -1921,7 +1923,7 @@ fn elab_not_exp_inner(
         }
         // Infix: the atom agrees, both sides match their notation
         (
-            View::Infix(not_typ_l_il, atom_expect, not_typ_r_il),
+            MixfixView::Infix(not_typ_l_il, atom_expect, not_typ_r_il),
             el::ExpKind::Infix(exp_l, atom, exp_r),
         ) if atom_expect.node == atom.node => {
             unwrap!(elab_not_exp_inner(ctx, not_typ_l_il, exp_l, expect, exps_il));
@@ -1930,7 +1932,7 @@ fn elab_not_exp_inner(
         }
         // Brackets: both atoms agree, the inside matches its notation
         (
-            View::Brack(atom_expect_l, not_typ_inner_il, atom_expect_r),
+            MixfixView::Brack(atom_expect_l, not_typ_inner_il, atom_expect_r),
             el::ExpKind::Brack(atom_l, exp_inner, atom_r),
         ) if atom_expect_l.node == atom_l.node && atom_expect_r.node == atom_r.node => {
             unwrap!(elab_not_exp_inner(ctx, not_typ_inner_il, exp_inner, expect, exps_il));
@@ -1940,18 +1942,18 @@ fn elab_not_exp_inner(
         _ => {
             let error = match (not_typ_il.view(), &exp.node) {
                 // Two literal atoms occupy the same matched slot
-                (View::Atom(atom_expect), el::ExpKind::Atom(atom)) => {
+                (MixfixView::Atom(atom_expect), el::ExpKind::Atom(atom)) => {
                     error::not::notation_token_mismatch(atom_expect, atom, expect)
                 }
                 // Equal operand shapes identify the differing infix token
-                (View::Infix(_, atom_expect, _), el::ExpKind::Infix(_, atom, _))
+                (MixfixView::Infix(_, atom_expect, _), el::ExpKind::Infix(_, atom, _))
                     if notation_shape_matches(not_typ_il, exp) =>
                 {
                     error::not::notation_token_mismatch(atom_expect, atom, expect)
                 }
                 // Equal contents identify the differing bracket delimiter
                 (
-                    View::Brack(atom_expect_l, _, atom_expect_r),
+                    MixfixView::Brack(atom_expect_l, _, atom_expect_r),
                     el::ExpKind::Brack(atom_l, _, atom_r),
                 ) if notation_shape_matches(not_typ_il, exp) => {
                     let (atom_expect, atom) = if atom_expect_l.node != atom_l.node {

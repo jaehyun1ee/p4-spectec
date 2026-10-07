@@ -1,4 +1,7 @@
 //! Constructors that allocate a value in an arena
+//!
+//! Constructors pair each body with its type and span through `new`.
+//! Case construction interns the shared mixop before allocating the value.
 
 use std::rc::Rc;
 

@@ -4,14 +4,33 @@
 //! `tree_with` and `flat_with` separate the remaining pieces with spaces
 //! and delegate argument rendering to the caller.
 
-use std::fmt;
+use std::{fmt, rc::Rc};
 
 use crate::lang::{
     common::notation::atom::Atom,
     traits::print::{Print, Printer},
 };
 
-use super::{MixopArena, Piece, flat, tree};
+use super::{Mixfix, MixopArena, Piece, flat, tree};
+
+// = Tree notation
+
+impl Print for tree::Mixop {
+    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
+        tree_with(self, printer, |_, printer| printer.write("%"))
+    }
+}
+
+impl<T> Mixfix<Rc<tree::Mixop>, T> {
+    /// Writes atoms and arguments, separating non-empty pieces with spaces.
+    pub fn print_with(
+        &self,
+        printer: &mut Printer<'_>,
+        mut print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
+    ) -> fmt::Result {
+        tree_with(&self.mixop, printer, |pos, printer| print_arg(&self.args[pos], printer))
+    }
+}
 
 /// Writes atoms and arguments, separating non-empty pieces with spaces.
 ///
@@ -30,6 +49,22 @@ pub(super) fn tree_with(
         }
     });
     result
+}
+
+// = Flat notation
+
+impl<T> Mixfix<flat::Mixop, T> {
+    /// Writes atoms and arguments as the expanded tree would print.
+    pub fn print_in_with(
+        &self,
+        arena_mixop: &MixopArena,
+        printer: &mut Printer<'_>,
+        mut print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
+    ) -> fmt::Result {
+        flat_with(arena_mixop, self.mixop, printer, |pos, printer| {
+            print_arg(&self.args[pos], printer)
+        })
+    }
 }
 
 /// Writes atoms and arguments, separating non-empty pieces with spaces.
@@ -51,6 +86,8 @@ pub(crate) fn flat_with(
     });
     result
 }
+
+// = Pieces
 
 /// Prints one piece using the same spacing rules for both representations.
 fn print_piece(

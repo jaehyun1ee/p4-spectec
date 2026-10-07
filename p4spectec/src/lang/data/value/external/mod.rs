@@ -6,7 +6,7 @@
 //! for relative data.
 //! Independent payloads are value trees (`tree`) that any arena can intern.
 //! A case body is written as its filled notation in both modes,
-//! so shape handles never appear in a payload.
+//! so mixop handles never appear in a payload.
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_state::{DeserializeState, SerializeState};
@@ -24,10 +24,10 @@ mod case;
 
 // = Configuration
 
-/// What an encoder needs: the encoding and the arena.
+/// The source arena and the representation of handles in JSON.
 ///
 /// Relative handles are written as indices,
-/// but a case body's notation is still expanded from the arena's shapes.
+/// but a case body's notation is still expanded from the arena's mixops.
 pub enum EncodeContext<'arena> {
     /// Write handles as indices.
     ArenaRelative(&'arena Arena),
@@ -36,7 +36,7 @@ pub enum EncodeContext<'arena> {
 }
 
 impl<'arena> EncodeContext<'arena> {
-    /// The context for an encoding.
+    /// Selects the representation for this source arena.
     pub fn new(arena: &'arena Arena, encoding: Encoding) -> Self {
         match encoding {
             Encoding::ArenaRelative => Self::ArenaRelative(arena),
@@ -52,10 +52,10 @@ impl<'arena> EncodeContext<'arena> {
     }
 }
 
-/// What a decoder needs: the encoding and the arena.
+/// The target arena and the representation of handles in JSON.
 ///
 /// Relative handles are read as indices,
-/// but a case body's notation is still interned into the arena's shapes.
+/// but a case body's notation is still interned into the arena's mixops.
 pub enum DecodeContext<'arena> {
     /// Read handles as indices.
     ArenaRelative(&'arena mut Arena),
@@ -64,7 +64,7 @@ pub enum DecodeContext<'arena> {
 }
 
 impl<'arena> DecodeContext<'arena> {
-    /// The context for an encoding.
+    /// Selects the representation for this target arena.
     pub fn new(arena: &'arena mut Arena, encoding: Encoding) -> Self {
         match encoding {
             Encoding::ArenaRelative => Self::ArenaRelative(arena),
@@ -84,7 +84,7 @@ impl<'arena> DecodeContext<'arena> {
 
 // - Entry points
 
-/// Keeps the arena-independent JSON and annotation contract.
+/// Encodes full contents, including annotations, without arena indices.
 pub fn encode<T>(arena: &Arena, data: &T) -> Result<json, serde_json::Error>
 where
     T: for<'arena> SerializeState<EncodeContext<'arena>> + ?Sized,
@@ -92,7 +92,7 @@ where
     encode_with(arena, Encoding::ArenaIndependent, data)
 }
 
-/// Encodes with the chosen encoding.
+/// Encodes handles or flat bodies using the selected mode.
 pub fn encode_with<T>(
     arena: &Arena,
     encoding: Encoding,
@@ -161,7 +161,7 @@ impl SerializeState<EncodeContext<'_>> for Interned<Span> {
 
 // - Entry points
 
-/// Decodes with the chosen encoding, interning into `arena` when independent.
+/// Decodes handles or flat bodies, interning contents in independent mode.
 pub fn decode_with<'de, T>(
     arena: &'de mut Arena,
     encoding: Encoding,

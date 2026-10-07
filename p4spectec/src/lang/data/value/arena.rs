@@ -21,12 +21,12 @@ use super::{
     flat::{Value, ValueKind},
 };
 
-// = Value storage
+// = Arena storage
 
 /// Storage for value bodies, types, and spans.
 #[derive(Debug)]
 pub(in crate::lang::data) struct ValueArena {
-    /// Bodies, with canonical identities; a case reads its shape's.
+    /// Bodies, with canonical identities; a case reads its mixop's.
     values: CanonInterner<ValueKind>,
     /// Types, shared by allocation.
     types: RcInterner<TypKind>,
@@ -45,6 +45,8 @@ impl Default for ValueArena {
 }
 
 impl ValueArena {
+    // - Interning
+
     /// Interns a value body and its annotations in allocation order.
     pub(in crate::lang::data) fn alloc(
         &mut self,
@@ -83,6 +85,8 @@ impl ValueArena {
     ) -> Result<Interned<Span>, std::num::TryFromIntError> {
         self.spans.intern(span)
     }
+
+    // - Lookup
 
     /// Reads the body behind its handle.
     pub(in crate::lang::data) fn kind(&self, value: Interned<ValueKind>) -> &ValueKind {

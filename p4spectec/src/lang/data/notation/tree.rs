@@ -7,24 +7,22 @@
 
 use std::{
     cmp::Ordering,
-    fmt,
     hash::{Hash, Hasher},
+    rc::Rc,
 };
 
 use serde::{Deserialize, Serialize};
 
 use crate::lang::{
-    common::ds::set::IdSet,
-    traits::{
-        eq::SyntaxEq,
-        free::FreeIds,
-        print::{Print, Printer},
-    },
+    common::{ds::set::IdSet, source::Span},
+    traits::{at::At, cmp::SyntaxCmp, eq::SyntaxEq, free::FreeIds},
 };
 
-use super::{AtomPhrase, MixopArena, MixopError, Piece, flat, print};
+use super::{AtomPhrase, Mixfix, MixopArena, MixopError, Piece, flat};
 
-pub use super::mixfix::{MixfixRef, View};
+pub use super::view::{MixfixRef, MixfixView};
+
+// = Notation forms
 
 /// An owned notation with an argument hole at each position.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -35,6 +33,8 @@ pub enum Mixop {
     Infix(Box<Mixop>, AtomPhrase, Box<Mixop>),
     Seq(Vec<Mixop>),
 }
+
+// = Structural properties
 
 impl Mixop {
     /// Counts argument positions in notation order.
@@ -47,7 +47,11 @@ impl Mixop {
             Self::Seq(mixops) => mixops.iter().map(Self::arity).sum(),
         }
     }
+}
 
+// = Equality, ordering, and hashing
+
+impl Mixop {
     /// Orders the variants for comparison across forms.
     fn tag(&self) -> u8 {
         match self {
@@ -58,11 +62,7 @@ impl Mixop {
             Self::Seq(_) => 4,
         }
     }
-}
 
-// = Comparison and traversal
-
-impl Mixop {
     /// Orders two mixops by structure and atom names, lexicographically.
     ///
     /// Brackets compare the opening atom, the inner form, then the closing atom;
@@ -98,38 +98,128 @@ impl Mixop {
             (Mixop::Atom(atom_l), Mixop::Atom(atom_r)) => atom_l.node.cmp(&atom_r.node),
             // Brackets: opening atom, inner form, closing atom
             (
-                Mixop::Brack(atom_l_l, child_l, atom_l_r),
-                Mixop::Brack(atom_r_l, child_r, atom_r_r),
+                Mixop::Brack(atom_l_l, mixop_l, atom_l_r),
+                Mixop::Brack(atom_r_l, mixop_r, atom_r_r),
             ) => atom_l_l
                 .node
                 .cmp(&atom_r_l.node)
-                .then_with(|| child_l.cmp_by_inner(child_r, pos, compare_arg))
+                .then_with(|| mixop_l.cmp_by_inner(mixop_r, pos, compare_arg))
                 .then_with(|| atom_l_r.node.cmp(&atom_r_r.node)),
             // Infix: left form, operator, right form
             (
-                Mixop::Infix(child_l_l, atom_l, child_l_r),
-                Mixop::Infix(child_r_l, atom_r, child_r_r),
-            ) => child_l_l
-                .cmp_by_inner(child_r_l, pos, compare_arg)
+                Mixop::Infix(mixop_l_l, atom_l, mixop_l_r),
+                Mixop::Infix(mixop_r_l, atom_r, mixop_r_r),
+            ) => mixop_l_l
+                .cmp_by_inner(mixop_r_l, pos, compare_arg)
                 .then_with(|| atom_l.node.cmp(&atom_r.node))
-                .then_with(|| child_l_r.cmp_by_inner(child_r_r, pos, compare_arg)),
+                .then_with(|| mixop_l_r.cmp_by_inner(mixop_r_r, pos, compare_arg)),
             // Sequences: common prefix first, then length
-            (Mixop::Seq(elems_l), Mixop::Seq(elems_r)) => {
-                let mixops_l = elems_l.iter();
-                let mixops_r = elems_r.iter();
-                for (mixop_l, mixop_r) in mixops_l.zip(mixops_r) {
+            (Mixop::Seq(mixops_l), Mixop::Seq(mixops_r)) => {
+                for (mixop_l, mixop_r) in mixops_l.iter().zip(mixops_r) {
                     let order = mixop_l.cmp_by_inner(mixop_r, pos, compare_arg);
                     if order != Ordering::Equal {
                         return order;
                     }
                 }
-                elems_l.len().cmp(&elems_r.len())
+                mixops_l.len().cmp(&mixops_r.len())
             }
             // Different forms order by variant
             _ => self.tag().cmp(&mixop_r.tag()),
         }
     }
+}
 
+impl PartialEq for Mixop {
+    fn eq(&self, mixop_other: &Self) -> bool {
+        self.cmp(mixop_other).is_eq()
+    }
+}
+
+impl Eq for Mixop {}
+
+impl Ord for Mixop {
+    fn cmp(&self, mixop_other: &Self) -> Ordering {
+        self.cmp_by(mixop_other, |_| Ordering::Equal)
+    }
+}
+
+impl PartialOrd for Mixop {
+    fn partial_cmp(&self, mixop_other: &Self) -> Option<Ordering> {
+        Some(self.cmp(mixop_other))
+    }
+}
+
+impl Hash for Mixop {
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        // Hash the form first so different variants rarely collide
+        self.tag().hash(hasher);
+        match self {
+            Self::Arg => {}
+            Self::Atom(atom) => atom.node.hash(hasher),
+            Self::Brack(atom_l, mixop, atom_r) => {
+                atom_l.node.hash(hasher);
+                mixop.hash(hasher);
+                atom_r.node.hash(hasher);
+            }
+            Self::Infix(mixop_l, atom, mixop_r) => {
+                mixop_l.hash(hasher);
+                atom.node.hash(hasher);
+                mixop_r.hash(hasher);
+            }
+            Self::Seq(mixops) => mixops.hash(hasher),
+        }
+    }
+}
+
+impl SyntaxEq for Mixop {
+    fn syntax_eq(&self, mixop_other: &Self) -> bool {
+        self == mixop_other
+    }
+}
+
+impl<T> Mixfix<Rc<Mixop>, T> {
+    /// Whether two mixfixes have the same structure and atom names.
+    ///
+    /// Atom spans and arguments are not compared.
+    pub fn eq_mixop<U>(&self, mixfix_other: &Mixfix<Rc<Mixop>, U>) -> bool {
+        self.mixop.as_ref() == mixfix_other.mixop.as_ref()
+    }
+
+    /// Orders two mixfixes as the walk of their mixops meets atoms and arguments.
+    ///
+    /// Atoms compare by name; `compare_arg` orders the arguments
+    /// at each position both mixops reach.
+    pub fn cmp_by<U>(
+        &self,
+        mixfix_other: &Mixfix<Rc<Mixop>, U>,
+        mut compare_arg: impl FnMut(&T, &U) -> Ordering,
+    ) -> Ordering {
+        self.mixop.cmp_by(mixfix_other.mixop.as_ref(), |pos| {
+            compare_arg(&self.args[pos], &mixfix_other.args[pos])
+        })
+    }
+}
+
+impl<T: SyntaxEq> SyntaxEq for Mixfix<Rc<Mixop>, T> {
+    fn syntax_eq(&self, mixfix_other: &Self) -> bool {
+        self.eq_mixop(mixfix_other)
+            && self
+                .args
+                .iter()
+                .zip(&mixfix_other.args)
+                .all(|(arg_l, arg_r)| arg_l.syntax_eq(arg_r))
+    }
+}
+
+impl<T: SyntaxCmp> SyntaxCmp for Mixfix<Rc<Mixop>, T> {
+    fn syntax_cmp(&self, mixfix_other: &Self) -> Ordering {
+        self.cmp_by(mixfix_other, SyntaxCmp::syntax_cmp)
+    }
+}
+
+// = Traversal
+
+impl Mixop {
     /// Visits atoms and argument positions in reading order.
     pub(super) fn visit<'a>(&'a self, mut visit_piece: impl FnMut(Piece<'a>)) {
         let mut pos = 0;
@@ -144,74 +234,22 @@ impl Mixop {
                 *pos += 1;
             }
             Mixop::Atom(atom) => visit_piece(Piece::Atom(atom)),
-            Mixop::Brack(atom_l, child, atom_r) => {
+            Mixop::Brack(atom_l, mixop, atom_r) => {
                 visit_piece(Piece::Atom(atom_l));
-                child.visit_inner(pos, visit_piece);
+                mixop.visit_inner(pos, visit_piece);
                 visit_piece(Piece::Atom(atom_r));
             }
-            Mixop::Infix(child_l, atom, child_r) => {
-                child_l.visit_inner(pos, visit_piece);
+            Mixop::Infix(mixop_l, atom, mixop_r) => {
+                mixop_l.visit_inner(pos, visit_piece);
                 visit_piece(Piece::Atom(atom));
-                child_r.visit_inner(pos, visit_piece);
+                mixop_r.visit_inner(pos, visit_piece);
             }
-            Mixop::Seq(elems) => {
-                for elem in elems {
-                    elem.visit_inner(pos, visit_piece);
+            Mixop::Seq(mixops) => {
+                for mixop in mixops {
+                    mixop.visit_inner(pos, visit_piece);
                 }
             }
         }
-    }
-}
-
-// = Equality, ordering, and hashing
-
-impl PartialEq for Mixop {
-    fn eq(&self, node_other: &Self) -> bool {
-        self.cmp(node_other).is_eq()
-    }
-}
-
-impl Eq for Mixop {}
-
-impl Ord for Mixop {
-    fn cmp(&self, node_other: &Self) -> Ordering {
-        self.cmp_by(node_other, |_| Ordering::Equal)
-    }
-}
-
-impl PartialOrd for Mixop {
-    fn partial_cmp(&self, node_other: &Self) -> Option<Ordering> {
-        Some(self.cmp(node_other))
-    }
-}
-
-impl Hash for Mixop {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        // Hash the form first so different variants rarely collide
-        self.tag().hash(hasher);
-        match self {
-            Self::Arg => {}
-            Self::Atom(atom) => atom.node.hash(hasher),
-            Self::Brack(atom_l, child, atom_r) => {
-                atom_l.node.hash(hasher);
-                child.hash(hasher);
-                atom_r.node.hash(hasher);
-            }
-            Self::Infix(child_l, atom, child_r) => {
-                child_l.hash(hasher);
-                atom.node.hash(hasher);
-                child_r.hash(hasher);
-            }
-            Self::Seq(elems) => elems.hash(hasher),
-        }
-    }
-}
-
-// = Syntax operations
-
-impl SyntaxEq for Mixop {
-    fn syntax_eq(&self, mixop_other: &Self) -> bool {
-        self == mixop_other
     }
 }
 
@@ -221,15 +259,23 @@ impl FreeIds for Mixop {
     }
 }
 
-// = Printing
+// - Source locations
 
-impl Print for Mixop {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        print::tree_with(self, printer, |_, printer| printer.write("%"))
+impl<T: At> At for Mixfix<Rc<Mixop>, T> {
+    fn at(&self) -> Span {
+        // Cover atoms and arguments, so empty sequences add no default span
+        let mut spans = Vec::new();
+        self.mixop.visit(|piece| match piece {
+            Piece::Atom(atom) => spans.push(atom.at()),
+            Piece::Arg(pos) => spans.push(self.args[pos].at()),
+        });
+        spans.at()
     }
 }
 
 // = Arena conversion
+
+// - Entry points
 
 /// Expands a handle into an owned notation, preserving atom spans.
 pub fn from_flat(arena_mixop: &MixopArena, mixop: flat::Mixop) -> Mixop {
@@ -240,6 +286,8 @@ pub fn from_flat(arena_mixop: &MixopArena, mixop: flat::Mixop) -> Mixop {
 pub fn into_flat(arena_mixop: &mut MixopArena, mixop: Mixop) -> Result<flat::Mixop, MixopError> {
     mixop.into_flat(arena_mixop)
 }
+
+// - Bodies
 
 impl Mixop {
     /// Copies atoms and expands child handles in notation order.
