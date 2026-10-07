@@ -14,7 +14,7 @@ use crate::lang::{
     traits::print::Print,
 };
 
-use crate::lang::pl::prepared as ast;
+use crate::lang::pl::{prepared as ast, print::ExpRef};
 
 use crate::diagnostic::Report;
 
@@ -237,10 +237,10 @@ fn eval_if_instr<'global, Tier, Iface: Interface, Ext: Extern>(
             ctx,
             Flow::cont(
                 instr.exp.node.span.clone(),
-                error::prem::condition_unmet(crate::interp::pl::print::exp_to_string(
-                    runner_ctx.arena().arena_mixop(),
-                    &instr.exp
-                ))
+                error::prem::condition_unmet(
+                    ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &instr.exp }
+                        .to_string()
+                )
             )
         ))
     }
@@ -332,10 +332,10 @@ fn eval_case_instr<'global, Tier, Iface: Interface, Ext: Extern>(
         ctx,
         Flow::cont(
             instr.exp.node.span.clone(),
-            error::prem::condition_unmet(crate::interp::pl::print::exp_to_string(
-                runner_ctx.arena().arena_mixop(),
-                &instr.exp
-            ))
+            error::prem::condition_unmet(
+                ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &instr.exp }
+                    .to_string()
+            )
         )
     ))
 }
@@ -530,10 +530,8 @@ fn eval_check_let_sub_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} is not a subtype of {}",
-                    crate::interp::pl::print::exp_to_string(
-                        runner_ctx.arena().arena_mixop(),
-                        &instr.exp_r
-                    ),
+                    ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &instr.exp_r }
+                        .to_string(),
                     Print::to_string(&instr.typ)
                 ))
             )
@@ -569,10 +567,8 @@ fn eval_check_let_match_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} does not match the expected pattern",
-                    crate::interp::pl::print::exp_to_string(
-                        runner_ctx.arena().arena_mixop(),
-                        &instr.exp_r
-                    )
+                    ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &instr.exp_r }
+                        .to_string()
                 ))
             )
         ))
@@ -609,10 +605,8 @@ fn eval_option_get_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} evaluated to an empty option",
-                    crate::interp::pl::print::exp_to_string(
-                        runner_ctx.arena().arena_mixop(),
-                        &instr.exp_r
-                    )
+                    ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &instr.exp_r }
+                        .to_string()
                 ))
             )
         ))

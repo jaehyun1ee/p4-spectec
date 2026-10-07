@@ -6,7 +6,9 @@
 //! iteration premises repeat under `iter::yield`.
 //! A failed premise is an `Unmatch`, so the enclosing candidate is skipped.
 
-use crate::lang::{data::value::get, hints::input};
+use crate::lang::{data::value::get, hints::input, traits::print::Print};
+
+use crate::lang::il::print::ExpRef;
 
 use crate::lang::al::prepared as ast;
 
@@ -86,10 +88,10 @@ fn eval_if_prem<'global, Iface: Interface, Ext: Extern>(
     } else {
         unmatch!(
             prem.exp.span.clone(),
-            error::prem::condition_unmet(crate::interp::shared::print::exp_to_string(
-                runner_ctx.arena().arena_mixop(),
-                &prem.exp
-            )),
+            error::prem::condition_unmet(
+                ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &prem.exp }
+                    .to_string()
+            ),
         )
     }
 }
@@ -176,7 +178,7 @@ fn eval_debug_prem<'global, Iface: Interface, Ext: Extern>(
 ) -> Backtrack<Context<'global>> {
     let value = unwrap!(expr::eval_exp(runner_ctx, &ctx, &prem.exp));
     let exp_text =
-        crate::interp::shared::print::exp_to_string(runner_ctx.arena().arena_mixop(), &prem.exp);
+        ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &prem.exp }.to_string();
     println!("{}: {}", prem.exp.span, exp_text);
     // Print the value's source span when it has one
     let span_text = runner_ctx.arena().span(&value).to_string();

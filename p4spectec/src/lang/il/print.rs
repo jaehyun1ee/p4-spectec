@@ -3,6 +3,7 @@
 //! Prints IL in a readable source-like syntax:
 //! binary operators are parenthesized, premises print on `--` lines,
 //! iterations show their bound (`<-`) and binding (`->`) variables.
+//! `ExpRef` and `ArgRef` render prepared syntax through its notation arena.
 
 use std::fmt::{self, Write};
 
@@ -11,6 +12,10 @@ use crate::util::text::escape_text;
 use crate::lang::traits::print::{Print, Printer};
 
 use super::ast::*;
+
+mod prepared;
+
+pub use prepared::{ArgRef, ExpRef, PatternRef};
 
 // == Printing
 

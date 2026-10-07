@@ -12,5 +12,3 @@ pub mod error;
 pub mod eval;
 pub mod prepare;
 pub mod util;
-
-pub mod print;

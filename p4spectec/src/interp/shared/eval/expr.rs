@@ -16,9 +16,10 @@ use crate::lang::{
         },
         var::IdSlot,
     },
+    traits::print::Print,
 };
 
-use crate::lang::il::prepared as ast;
+use crate::lang::il::{prepared as ast, print::ExpRef};
 
 use crate::runtime::{
     envs::interp::shared::TypeDef,
@@ -106,7 +107,7 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
     result.with_frame(exp.span.clone(), || {
         format!(
             "while evaluating expression {}",
-            crate::interp::shared::print::exp_to_string(runner_ctx.arena().arena_mixop(), exp)
+            ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp }.to_string()
         )
     })
 }
