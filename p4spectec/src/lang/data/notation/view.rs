@@ -60,13 +60,18 @@ impl<'a, T> MixfixRef<'a, T> {
             tree::Mixop::Arg => MixfixView::Arg(&self.args[0]),
             tree::Mixop::Atom(atom) => MixfixView::Atom(atom),
             tree::Mixop::Brack(atom_l, mixop_inner, atom_r) => {
-                MixfixView::Brack(atom_l, take(mixop_inner), atom_r)
+                let mixfix_inner = take(mixop_inner);
+                MixfixView::Brack(atom_l, mixfix_inner, atom_r)
             }
             tree::Mixop::Infix(mixop_l, atom, mixop_r) => {
                 let mixfix_l = take(mixop_l);
-                MixfixView::Infix(mixfix_l, atom, take(mixop_r))
+                let mixfix_r = take(mixop_r);
+                MixfixView::Infix(mixfix_l, atom, mixfix_r)
             }
-            tree::Mixop::Seq(mixops) => MixfixView::Seq(mixops.iter().map(take).collect()),
+            tree::Mixop::Seq(mixops) => {
+                let mixfixes = mixops.iter().map(take).collect();
+                MixfixView::Seq(mixfixes)
+            }
         }
     }
 }
