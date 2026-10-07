@@ -47,7 +47,7 @@ use crate::lang::{
         prim,
         source::{Phrase, Span},
     },
-    data::notation::Mixfix,
+    data::notation::tree::Mixfix,
     hints::input::{self, InputHint},
     traits::{
         at::At,

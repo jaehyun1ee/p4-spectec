@@ -22,10 +22,7 @@ use crate::lang::{
         prim,
         source::{Phrase, Span},
     },
-    data::notation::{
-        Mixfix,
-        tree::{MixfixRef, MixfixView},
-    },
+    data::notation::tree::{Mixfix, MixfixRef, MixfixView},
     hints::input,
     traits::{at::At, free::FreeIds, print::Print},
 };

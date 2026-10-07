@@ -12,7 +12,7 @@ use crate::lang::{
         ds::{map::IdMap, set::IdSet},
         source::Span,
     },
-    data::notation::Mixfix,
+    data::notation::tree::Mixfix,
     hints::input,
     traits::free::FreeIds,
 };

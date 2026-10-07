@@ -51,7 +51,7 @@ fn print_value_inner(
             printer.write_char('}')
         }
         ValueKind::Case(value_case) => {
-            value_case.print_in_with(arena.arena_mixop(), printer, |value, printer| {
+            value_case.print_with(arena.arena_mixop(), printer, |value, printer| {
                 print_value_inner(arena, value, printer, level + 1)
             })
         }

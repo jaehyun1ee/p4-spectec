@@ -71,13 +71,12 @@ impl SyntaxCmp for ValueRef<'_> {
                     .find(|order| !order.is_eq())
                     .unwrap_or_else(|| value_fields_l.len().cmp(&value_fields_r.len()))
             }
-            (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => value_case_l
-                .cmp_in_by(
-                    self.arena.arena_mixop(),
-                    value_case_r,
-                    value_other.arena.arena_mixop(),
-                    compare_value,
-                ),
+            (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => value_case_l.cmp_by(
+                self.arena.arena_mixop(),
+                value_case_r,
+                value_other.arena.arena_mixop(),
+                compare_value,
+            ),
             (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
             | (ValueKind::List(values_l), ValueKind::List(values_r)) => {
                 compare_values(values_l, values_r)

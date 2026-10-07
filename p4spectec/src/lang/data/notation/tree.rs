@@ -14,11 +14,11 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::lang::{
-    common::{ds::set::IdSet, source::Span},
-    traits::{at::At, cmp::SyntaxCmp, eq::SyntaxEq, free::FreeIds},
+    common::source::Span,
+    traits::{at::At, cmp::SyntaxCmp, eq::SyntaxEq},
 };
 
-use super::{AtomPhrase, Mixfix, MixopArena, MixopError, Piece, flat};
+use super::{AtomPhrase, MixopArena, MixopError, Piece, flat};
 
 pub use super::view::{MixfixRef, MixfixView};
 
@@ -33,6 +33,9 @@ pub enum Mixop {
     Infix(Box<Mixop>, AtomPhrase, Box<Mixop>),
     Seq(Vec<Mixop>),
 }
+
+/// A shared tree notation with one argument per position.
+pub type Mixfix<T> = super::Mixfix<Rc<Mixop>, T>;
 
 // = Structural properties
 
@@ -177,11 +180,11 @@ impl SyntaxEq for Mixop {
     }
 }
 
-impl<T> Mixfix<Rc<Mixop>, T> {
+impl<T> Mixfix<T> {
     /// Whether two mixfixes have the same structure and atom names.
     ///
     /// Atom spans and arguments are not compared.
-    pub fn eq_mixop<U>(&self, mixfix_other: &Mixfix<Rc<Mixop>, U>) -> bool {
+    pub fn eq_mixop<U>(&self, mixfix_other: &Mixfix<U>) -> bool {
         self.mixop.as_ref() == mixfix_other.mixop.as_ref()
     }
 
@@ -191,7 +194,7 @@ impl<T> Mixfix<Rc<Mixop>, T> {
     /// at each position both mixops reach.
     pub fn cmp_by<U>(
         &self,
-        mixfix_other: &Mixfix<Rc<Mixop>, U>,
+        mixfix_other: &Mixfix<U>,
         mut compare_arg: impl FnMut(&T, &U) -> Ordering,
     ) -> Ordering {
         self.mixop.cmp_by(mixfix_other.mixop.as_ref(), |pos| {
@@ -200,7 +203,7 @@ impl<T> Mixfix<Rc<Mixop>, T> {
     }
 }
 
-impl<T: SyntaxEq> SyntaxEq for Mixfix<Rc<Mixop>, T> {
+impl<T: SyntaxEq> SyntaxEq for Mixfix<T> {
     fn syntax_eq(&self, mixfix_other: &Self) -> bool {
         self.eq_mixop(mixfix_other)
             && self
@@ -211,7 +214,7 @@ impl<T: SyntaxEq> SyntaxEq for Mixfix<Rc<Mixop>, T> {
     }
 }
 
-impl<T: SyntaxCmp> SyntaxCmp for Mixfix<Rc<Mixop>, T> {
+impl<T: SyntaxCmp> SyntaxCmp for Mixfix<T> {
     fn syntax_cmp(&self, mixfix_other: &Self) -> Ordering {
         self.cmp_by(mixfix_other, SyntaxCmp::syntax_cmp)
     }
@@ -253,15 +256,9 @@ impl Mixop {
     }
 }
 
-impl FreeIds for Mixop {
-    fn free_ids(&self) -> IdSet {
-        IdSet::new()
-    }
-}
-
 // - Source locations
 
-impl<T: At> At for Mixfix<Rc<Mixop>, T> {
+impl<T: At> At for Mixfix<T> {
     fn at(&self) -> Span {
         // Cover atoms and arguments, so empty sequences add no default span
         let mut spans = Vec::new();

@@ -4,14 +4,14 @@
 //! `tree_with` and `flat_with` separate the remaining pieces with spaces
 //! and delegate argument rendering to the caller.
 
-use std::{fmt, rc::Rc};
+use std::fmt;
 
 use crate::lang::{
     common::notation::atom::Atom,
     traits::print::{Print, Printer},
 };
 
-use super::{Mixfix, MixopArena, Piece, flat, tree};
+use super::{MixopArena, Piece, flat, tree};
 
 // = Tree notation
 
@@ -21,7 +21,7 @@ impl Print for tree::Mixop {
     }
 }
 
-impl<T> Mixfix<Rc<tree::Mixop>, T> {
+impl<T> tree::Mixfix<T> {
     /// Writes atoms and arguments, separating non-empty pieces with spaces.
     pub fn print_with(
         &self,
@@ -53,9 +53,9 @@ pub(super) fn tree_with(
 
 // = Flat notation
 
-impl<T> Mixfix<flat::Mixop, T> {
+impl<T> flat::Mixfix<T> {
     /// Writes atoms and arguments as the expanded tree would print.
-    pub fn print_in_with(
+    pub fn print_with(
         &self,
         arena_mixop: &MixopArena,
         printer: &mut Printer<'_>,

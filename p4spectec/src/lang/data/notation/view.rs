@@ -3,9 +3,7 @@
 //! `MixfixRef` pairs a subtree with the arguments of its positions.
 //! `MixfixView` exposes one level with those arguments in place.
 
-use std::rc::Rc;
-
-use super::{AtomPhrase, Mixfix, tree};
+use super::{AtomPhrase, tree};
 
 // = Borrowed views
 
@@ -41,7 +39,7 @@ impl<T> Copy for MixfixRef<'_, T> {}
 
 // = Viewing
 
-impl<T> Mixfix<Rc<tree::Mixop>, T> {
+impl<T> tree::Mixfix<T> {
     /// Borrows the mixfix, for viewing its parts.
     pub fn as_ref(&self) -> MixfixRef<'_, T> {
         MixfixRef { mixop: self.mixop.as_ref(), args: &self.args }

@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::lang::{
-    data::notation::Mixfix,
+    data::notation::tree::Mixfix,
     traits::print::{Print, Printer},
 };
 
@@ -440,7 +440,7 @@ fn write_relinput(
     let idxs_input = rel_signature.input_hint.indices();
     assert_eq!(idxs_input.len(), exps_input.len());
     // Each notation position takes its input, or `%`
-    let mixfix = Mixfix::fill_with(Rc::clone(not_typ.node.mixop()), |index| {
+    let mixfix = Mixfix::fill(Rc::clone(not_typ.node.mixop()), |index| {
         idxs_input
             .iter()
             .position(|idx_input| idx_input.node == index)
@@ -465,7 +465,7 @@ fn write_reloutput(
         .filter(|index| !idxs_input.iter().any(|idx_input| idx_input.node == *index))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
-    let mixfix = Mixfix::fill_with(Rc::clone(not_typ.node.mixop()), |index| {
+    let mixfix = Mixfix::fill(Rc::clone(not_typ.node.mixop()), |index| {
         outputs
             .iter()
             .position(|output| *output == index)

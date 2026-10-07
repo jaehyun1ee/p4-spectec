@@ -99,11 +99,9 @@ impl Print for ExpRef<'_> {
                 ExpRef::print_exps(arena_mixop, exps, printer)?;
                 printer.write_char(')')
             }
-            ExpKind::Case(not_exp) => {
-                not_exp.print_in_with(arena_mixop, printer, |exp, printer| {
-                    ExpRef { arena_mixop, exp }.print(printer)
-                })
-            }
+            ExpKind::Case(not_exp) => not_exp.print_with(arena_mixop, printer, |exp, printer| {
+                ExpRef { arena_mixop, exp }.print(printer)
+            }),
             ExpKind::Str(exp_fields) => {
                 printer.write_char('{')?;
                 for (idx, ExpField { atom, exp }) in exp_fields.iter().enumerate() {

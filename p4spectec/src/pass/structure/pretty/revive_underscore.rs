@@ -19,7 +19,7 @@
 use std::rc::Rc;
 
 use crate::lang::{
-    common::ds::set::IdSet, data::notation::Mixfix, hints::input, traits::free::FreeIds,
+    common::ds::set::IdSet, data::notation::tree::Mixfix, hints::input, traits::free::FreeIds,
 };
 
 use crate::lang::il::{

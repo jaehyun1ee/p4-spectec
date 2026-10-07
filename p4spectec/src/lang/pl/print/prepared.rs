@@ -100,7 +100,7 @@ impl Print for ExpRef<'_> {
             }
             ExpKind::Case(not_exp) => {
                 printer.write_char('(')?;
-                not_exp.print_in_with(arena_mixop, printer, |exp, printer| {
+                not_exp.print_with(arena_mixop, printer, |exp, printer| {
                     ExpRef { arena_mixop, exp }.print(printer)
                 })?;
                 printer.write_char(')')

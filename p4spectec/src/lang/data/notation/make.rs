@@ -1,16 +1,16 @@
-//! Constructors and argument mapping for mixfix forms
+//! Constructors for mixfix forms
 //!
-//! `new` and `new_in` check one argument per mixop position.
-//! Tree constructors compose forms with their arguments in notation order;
-//! `map` and `try_map` replace arguments while preserving the mixop.
+//! Each representation provides `new` to check one argument per position.
+//! Tree constructors compose forms with their arguments in notation order.
+//! `fill` supplies one argument for each position of a shared tree.
 
 use std::{cmp::Ordering, rc::Rc};
 
-use super::{ArityMismatch, AtomPhrase, Mixfix, MixopArena, flat, tree};
+use super::{ArityMismatch, AtomPhrase, MixopArena, flat, tree};
 
 // - General
 
-impl<T> Mixfix<Rc<tree::Mixop>, T> {
+impl<T> tree::Mixfix<T> {
     /// Pairs a mixop with its arguments.
     ///
     /// Fails unless there is exactly one argument per position.
@@ -23,19 +23,19 @@ impl<T> Mixfix<Rc<tree::Mixop>, T> {
         }
     }
 
-    /// Fills each position of a mixop, calling `fill` once per position.
-    pub fn fill_with(mixop: Rc<tree::Mixop>, fill: impl FnMut(usize) -> T) -> Self {
+    /// Fills each position of a mixop, calling `fill_arg` once per position.
+    pub fn fill(mixop: Rc<tree::Mixop>, fill_arg: impl FnMut(usize) -> T) -> Self {
         let arity = mixop.arity();
-        Self { args: (0..arity).map(fill).collect(), mixop }
+        Self { args: (0..arity).map(fill_arg).collect(), mixop }
     }
 }
 
-impl<T> Mixfix<flat::Mixop, T> {
+impl<T> flat::Mixfix<T> {
     /// Pairs a mixop with its arguments.
     ///
     /// Fails unless there is exactly one argument per position;
     /// `mixop` must belong to `arena_mixop`.
-    pub fn new_in(
+    pub fn new(
         arena_mixop: &MixopArena,
         mixop: flat::Mixop,
         args: Vec<T>,
@@ -50,7 +50,7 @@ impl<T> Mixfix<flat::Mixop, T> {
 
 // - Parts
 
-impl<T> Mixfix<Rc<tree::Mixop>, T> {
+impl<T> tree::Mixfix<T> {
     /// A lone argument.
     pub fn arg(arg: T) -> Self {
         Self { mixop: Rc::new(tree::Mixop::Arg), args: vec![arg] }
@@ -87,26 +87,5 @@ impl<T> Mixfix<Rc<tree::Mixop>, T> {
             args.extend(mixfix.args);
         }
         Self { mixop: Rc::new(tree::Mixop::Seq(mixops)), args }
-    }
-}
-
-// - Mapping
-
-impl<M, T> Mixfix<M, T> {
-    /// Maps each argument in order, keeping the mixop.
-    pub fn map<U>(&self, map_arg: impl FnMut(&T) -> U) -> Mixfix<M, U>
-    where
-        M: Clone,
-    {
-        Mixfix { mixop: self.mixop.clone(), args: self.args.iter().map(map_arg).collect() }
-    }
-
-    /// Maps each argument in order, stopping at the first error.
-    pub fn try_map<U, E>(&self, map_arg: impl FnMut(&T) -> Result<U, E>) -> Result<Mixfix<M, U>, E>
-    where
-        M: Clone,
-    {
-        let args = self.args.iter().map(map_arg).collect::<Result<_, _>>()?;
-        Ok(Mixfix { mixop: self.mixop.clone(), args })
     }
 }

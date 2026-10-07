@@ -19,7 +19,7 @@ use serde_derive_state::{DeserializeState, SerializeState};
 use crate::lang::data::intern::{CanonEq, CanonHash, CanonInterner, Interned};
 
 use super::{
-    AtomPhrase, Mixfix, MixopArena, Piece,
+    AtomPhrase, MixopArena, Piece,
     external::{DecodeContext, EncodeContext},
     tree,
 };
@@ -28,6 +28,9 @@ use super::{
 
 /// A notation handle valid only in its issuing arena.
 pub type Mixop = Interned<MixopKind>;
+
+/// An interned notation with one argument per position.
+pub type Mixfix<T> = super::Mixfix<Mixop, T>;
 
 /// One interned notation node, with child handles in the same arena.
 #[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]
@@ -290,15 +293,15 @@ impl MixopKind {
     }
 }
 
-impl<T> Mixfix<Mixop, T> {
+impl<T> Mixfix<T> {
     /// Orders two cases as their expanded trees would order.
     ///
     /// Each case reads its mixop in its own `MixopArena`;
     /// `compare_arg` orders the arguments at each position both reach.
-    pub fn cmp_in_by<U>(
+    pub fn cmp_by<U>(
         &self,
         arena_mixop: &MixopArena,
-        mixfix_other: &Mixfix<Mixop, U>,
+        mixfix_other: &Mixfix<U>,
         arena_mixop_other: &MixopArena,
         mut compare_arg: impl FnMut(&T, &U) -> Ordering,
     ) -> Ordering {

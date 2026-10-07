@@ -733,9 +733,8 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 let mut arena = self.ctx.arena_mut();
                 let arena_mixop = arena.arena_mixop_mut();
                 let mixop = arena_mixop.intern(&mixop).map_err(ValueError::from)?;
-                let value_case =
-                    ValueCase::new_in(arena_mixop, mixop, vec![value_width, value_int])
-                        .expect("the literal shape has two positions");
+                let value_case = ValueCase::new(arena_mixop, mixop, vec![value_width, value_int])
+                    .expect("the literal shape has two positions");
                 let id_typ = phrase!(node: "integerLiteral".to_owned(), span: Span::default());
                 let value = make::new(
                     &mut arena,

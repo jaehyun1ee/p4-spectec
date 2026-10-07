@@ -7,12 +7,16 @@
 //! `print` renders their atoms and argument positions.
 //! EL uses only atoms, which stay in `common::notation`.
 
+use crate::lang::common::{notation::atom::Atom, source::Phrase};
+
 mod arena;
 mod error;
 pub mod external;
 pub mod flat;
+mod free;
 mod get;
 mod make;
+mod map;
 pub mod parse;
 pub(crate) mod print;
 pub mod tree;
@@ -24,8 +28,7 @@ pub use error::{ArityMismatch, MixopError};
 // = Notation forms
 
 /// An atom with its source location.
-pub type AtomPhrase =
-    crate::lang::common::source::Phrase<crate::lang::common::notation::atom::Atom>;
+pub type AtomPhrase = Phrase<Atom>;
 
 /// A mixop with one argument per position, in notation order.
 ///

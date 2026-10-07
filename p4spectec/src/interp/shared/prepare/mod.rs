@@ -13,7 +13,7 @@ use std::rc::Rc;
 use crate::lang::{
     common::{Id, source::NotePhrase},
     data::{
-        notation::{Mixfix, MixopArena, flat, tree},
+        notation::{MixopArena, flat, tree},
         var::{IdSlot, Var, VarSlot},
     },
 };
@@ -98,14 +98,14 @@ impl<T: Prepare, N, S> Prepare for NotePhrase<T, N, S> {
 
 // - Notation
 
-impl<T: Prepare> Prepare for Mixfix<Rc<tree::Mixop>, T> {
-    type Output = Mixfix<flat::Mixop, T::Output>;
+impl<T: Prepare> Prepare for tree::Mixfix<T> {
+    type Output = flat::Mixfix<T::Output>;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         let (mixop, args) = self.into_parts();
         let mixop = prepare_mixop(&mixop, ctx);
         let args = args.prepare(ctx);
-        Mixfix::new_in(ctx.arena_mixop, mixop, args).expect("a mixfix fills every position")
+        flat::Mixfix::new(ctx.arena_mixop, mixop, args).expect("a mixfix fills every position")
     }
 }
 

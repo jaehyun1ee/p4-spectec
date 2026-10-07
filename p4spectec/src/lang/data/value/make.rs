@@ -15,7 +15,7 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::{Mixfix, tree::Mixop},
+        notation::tree::Mixfix,
         typ::{self, Typ, TypKind},
     },
 };
@@ -98,14 +98,14 @@ pub fn structure(
 pub fn case(
     arena: &mut Arena,
     typ: Rc<TypKind>,
-    mixfix: Mixfix<Rc<Mixop>, Value>,
+    mixfix: Mixfix<Value>,
     span: Span,
 ) -> Result<Value, ValueError> {
     let (mixop, values) = mixfix.into_parts();
     let arena_mixop = arena.arena_mixop_mut();
     let mixop = arena_mixop.intern_shared(&mixop)?;
     let value_case =
-        ValueCase::new_in(arena_mixop, mixop, values).expect("a mixfix fills every position");
+        ValueCase::new(arena_mixop, mixop, values).expect("a mixfix fills every position");
     new(arena, ValueKind::Case(value_case), typ, span)
 }
 
@@ -120,7 +120,7 @@ macro_rules! case_shaped {
     ) => {{
         let (mixop_text, args, typ_name, span) = ($shape, $args, $typ, $span);
         let mixop = $crate::lang::data::notation::parse::mixop(mixop_text);
-        let mixfix = $crate::lang::data::notation::Mixfix::new(
+        let mixfix = $crate::lang::data::notation::tree::Mixfix::new(
             mixop,
             std::iter::IntoIterator::into_iter(args).collect(),
         )

@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::lang::{
-    data::notation::Mixfix,
+    data::notation::tree::Mixfix,
     hints::input::InputHint,
     traits::print::{Print, Printer},
 };

@@ -1,9 +1,6 @@
 //! Projections that read a mixfix form and its arguments
 //!
 //! Accessors borrow or consume the parts without changing their pairing.
-//! Free identifiers come only from the arguments.
-
-use crate::lang::{common::ds::set::IdSet, traits::free::FreeIds};
 
 use super::Mixfix;
 
@@ -38,13 +35,5 @@ impl<M, T> Mixfix<M, T> {
     /// The mixop and the arguments.
     pub fn into_parts(self) -> (M, Vec<T>) {
         (self.mixop, self.args)
-    }
-}
-
-// - Free identifiers
-
-impl<M, T: FreeIds> FreeIds for Mixfix<M, T> {
-    fn free_ids_into(&self, free: &mut IdSet) {
-        self.args.as_slice().free_ids_into(free);
     }
 }

@@ -28,7 +28,7 @@ use std::rc::Rc;
 
 use crate::lang::{
     common::{ds::set::IdSet, prim, source::Span},
-    data::notation::Mixfix,
+    data::notation::tree::Mixfix,
     traits::free::FreeIds,
 };
 

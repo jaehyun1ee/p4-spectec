@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use crate::lang::{
     common::ds::{map::IdMap, set::IdSet},
-    data::notation::Mixfix,
+    data::notation::tree::Mixfix,
     hints::input,
     traits::free::FreeIds,
 };

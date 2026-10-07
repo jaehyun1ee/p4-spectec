@@ -11,7 +11,10 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::{Mixfix, flat, parse, tree::Mixop},
+        notation::{
+            flat, parse,
+            tree::{Mixfix, Mixop},
+        },
         typ,
         value::{flat::Value, get, make},
     },

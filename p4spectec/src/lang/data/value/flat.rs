@@ -22,7 +22,7 @@ use crate::lang::{
     },
     data::{
         intern::{CanonEq, CanonHash, CanonInterner, Interned},
-        notation::{Mixfix, MixopArena, flat::Mixop},
+        notation::{MixopArena, flat::Mixfix},
         typ::TypKind,
     },
 };
@@ -43,7 +43,7 @@ pub type Value = NotePhrase<Interned<ValueKind>, Interned<TypKind>, Interned<Spa
 pub type ValueField = (Phrase<Atom>, Value);
 
 /// A case with one value per argument position.
-pub type ValueCase = Mixfix<Mixop, Value>;
+pub type ValueCase = Mixfix<Value>;
 
 /// A stored value body whose children belong to the same arena.
 #[derive(Debug, PartialEq, Eq, Hash, SerializeState, DeserializeState)]

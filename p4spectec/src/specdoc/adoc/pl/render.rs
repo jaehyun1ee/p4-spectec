@@ -26,10 +26,7 @@ use crate::lang::{
         },
         source::Span,
     },
-    data::notation::{
-        Mixfix,
-        tree::{MixfixRef, MixfixView},
-    },
+    data::notation::tree::{Mixfix, MixfixRef, MixfixView},
     hints::{alter, input},
     traits::{has_call::HasCall, print::Print},
 };
@@ -1189,7 +1186,7 @@ impl Code {
     fn of_pattern(pattern: &pl::Pattern) -> Code {
         match pattern {
             Pattern::Case(mixop) => {
-                let mixfix = Mixfix::fill_with(Rc::clone(mixop), |_| ());
+                let mixfix = Mixfix::fill(Rc::clone(mixop), |_| ());
                 Code::of_mixfix(mixfix.as_ref(), &|()| Code::token("%"))
             }
             Pattern::List(ListPattern::Cons) => Code::token("_ :: _"),
