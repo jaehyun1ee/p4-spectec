@@ -124,9 +124,11 @@ impl SerializeState<EncodeContext<'_>> for Interned<flat::ValueKind> {
         match ctx {
             // Relative: the index; independent: the body as a tree
             EncodeContext::ArenaRelative(_) => self.index().serialize(serializer),
-            EncodeContext::ArenaIndependent(arena) => {
-                tree::ValueKind::from_flat(arena, arena.value.kind(*self)).serialize(serializer)
-            }
+            EncodeContext::ArenaIndependent(arena) => arena
+                .value
+                .kind(*self)
+                .into_tree(arena)
+                .serialize(serializer),
         }
     }
 }

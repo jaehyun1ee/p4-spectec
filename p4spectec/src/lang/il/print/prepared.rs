@@ -279,12 +279,9 @@ impl Print for PatternRef<'_> {
         let arena_mixop = self.arena_mixop;
         let pattern = self.pattern;
         match pattern {
-            Pattern::Case(mixop) => crate::lang::data::notation::print::flat_with(
-                arena_mixop,
-                *mixop,
-                printer,
-                |_, printer| printer.write("%"),
-            ),
+            Pattern::Case(mixop) => {
+                mixop.print_with(arena_mixop, printer, |_, printer| printer.write("%"))
+            }
             Pattern::List(ListPattern::Cons) => printer.write_str("_ :: _"),
             Pattern::List(ListPattern::Fixed(length)) => write!(printer, "[ _/{length} ]"),
             Pattern::List(ListPattern::Nil) => printer.write_str("[]"),

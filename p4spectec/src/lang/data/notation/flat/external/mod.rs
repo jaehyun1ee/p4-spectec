@@ -94,7 +94,7 @@ impl SerializeState<EncodeContext<'_>> for flat::Mixop {
         match ctx {
             EncodeContext::ArenaRelative(_) => self.index().serialize(serializer),
             EncodeContext::ArenaIndependent(arena_mixop) => {
-                tree::from_flat(arena_mixop, *self).serialize(serializer)
+                self.into_tree(arena_mixop).serialize(serializer)
             }
         }
     }
@@ -137,7 +137,9 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for flat::Mixop {
             DecodeContext::ArenaRelative(_) => u32::deserialize(deserializer).map(Self::from_index),
             DecodeContext::ArenaIndependent(arena_mixop) => {
                 let mixop_tree = tree::Mixop::deserialize(deserializer)?;
-                tree::into_flat(arena_mixop, mixop_tree).map_err(serde::de::Error::custom)
+                mixop_tree
+                    .into_flat(arena_mixop)
+                    .map_err(serde::de::Error::custom)
             }
         }
     }

@@ -20,6 +20,18 @@ pub mod tree;
 pub use error::{ArityMismatch, MixopError};
 pub use flat::MixopArena;
 
+// = Notation tags
+
+/// The kind of a mixop without its payload, for ordering and hashing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MixopTag {
+    Arg,
+    Atom,
+    Brack,
+    Infix,
+    Seq,
+}
+
 // = Notation forms
 
 /// An atom with its source location.

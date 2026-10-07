@@ -147,8 +147,9 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for ValueCase {
 
         // Intern the decoded notation in the target arena
         let arena_mixop = ctx.arena_mut().arena_mixop_mut();
-        let mixop =
-            notation::tree::into_flat(arena_mixop, mixop).map_err(::serde::de::Error::custom)?;
+        let mixop = mixop
+            .into_flat(arena_mixop)
+            .map_err(::serde::de::Error::custom)?;
         ValueCase::new(arena_mixop, mixop, values).map_err(::serde::de::Error::custom)
     }
 }

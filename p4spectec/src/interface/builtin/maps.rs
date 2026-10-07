@@ -11,10 +11,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::{
-            flat,
-            tree::{Mixfix, Mixop, parse},
-        },
+        notation::tree::{Mixfix, Mixop, parse},
         typ,
         value::flat::{Value, get, make},
     },
@@ -48,7 +45,10 @@ fn map_find_opt(arena: &Arena, key: &Value, map: &[Value]) -> Option<Value> {
         let Ok(value_case) = get::case(arena, pair) else {
             continue;
         };
-        if !flat::matches_tree(arena.arena_mixop(), *value_case.mixop(), &pair_mixop) {
+        if !value_case
+            .mixop()
+            .matches_tree(arena.arena_mixop(), &pair_mixop)
+        {
             continue;
         }
         if let [value_key, value_value] = value_case.args()
@@ -89,7 +89,7 @@ fn map_update(
     let pair_mixop = pair_mixop();
     for pair in map {
         let matching = get::case(arena, pair).ok().is_some_and(|value_case| {
-            if !flat::matches_tree(arena.arena_mixop(), *value_case.mixop(), &pair_mixop) {
+            if !value_case.mixop().matches_tree(arena.arena_mixop(), &pair_mixop) {
                 return false;
             }
             matches!(value_case.args(), [value_key, _] if arena.view(*value_key).syntax_eq(&arena.view(*key)))
@@ -117,7 +117,10 @@ fn map_of_value(arena: &Arena, value: &Value) -> Result<ValueMap, BuiltinError> 
         get::case(arena, value).map_err(|_| BuiltinError::argument_invalid("expected a map"))?;
     let map_mixop = map_mixop();
     // The value must be a map case wrapping one list
-    if !flat::matches_tree(arena.arena_mixop(), *value_case.mixop(), &map_mixop) {
+    if !value_case
+        .mixop()
+        .matches_tree(arena.arena_mixop(), &map_mixop)
+    {
         return Err(BuiltinError::argument_invalid("expected a map"));
     }
     let value_pairs = extract::one(value_case.args())?;

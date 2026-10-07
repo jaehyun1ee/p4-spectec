@@ -1,8 +1,8 @@
 //! Rendering notation atoms and arguments in reading order
 //!
 //! Tree and flat visits supply the pieces; empty keyword atoms are silent.
-//! `tree_with` and `flat_with` separate the remaining pieces with spaces
-//! and delegate argument rendering to the caller.
+//! `print_piece` separates the remaining pieces with spaces
+//! and delegates argument rendering to the caller.
 
 use std::fmt;
 
@@ -11,86 +11,12 @@ use crate::lang::{
     traits::print::{Print, Printer},
 };
 
-use super::{MixopArena, Piece, flat, tree};
-
-// = Tree notation
-
-impl Print for tree::Mixop {
-    fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
-        tree_with(self, printer, |_, printer| printer.write("%"))
-    }
-}
-
-impl<T> tree::Mixfix<T> {
-    /// Writes atoms and arguments, separating non-empty pieces with spaces.
-    pub fn print_with(
-        &self,
-        printer: &mut Printer<'_>,
-        mut print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
-    ) -> fmt::Result {
-        tree_with(&self.mixop, printer, |pos, printer| print_arg(&self.args[pos], printer))
-    }
-}
-
-/// Writes atoms and arguments, separating non-empty pieces with spaces.
-///
-/// Empty keyword atoms print nothing, not even a space;
-/// `print_arg` writes the argument at a position.
-pub(super) fn tree_with(
-    mixop: &tree::Mixop,
-    printer: &mut Printer<'_>,
-    mut print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
-) -> fmt::Result {
-    let mut is_first = true;
-    let mut result = Ok(());
-    mixop.visit(|piece| {
-        if result.is_ok() {
-            result = print_piece(piece, printer, &mut is_first, &mut print_arg);
-        }
-    });
-    result
-}
-
-// = Flat notation
-
-impl<T> flat::Mixfix<T> {
-    /// Writes atoms and arguments as the expanded tree would print.
-    pub fn print_with(
-        &self,
-        arena_mixop: &MixopArena,
-        printer: &mut Printer<'_>,
-        mut print_arg: impl FnMut(&T, &mut Printer<'_>) -> fmt::Result,
-    ) -> fmt::Result {
-        flat_with(arena_mixop, self.mixop, printer, |pos, printer| {
-            print_arg(&self.args[pos], printer)
-        })
-    }
-}
-
-/// Writes atoms and arguments, separating non-empty pieces with spaces.
-///
-/// Empty keyword atoms print nothing, not even a space;
-/// `print_arg` writes the argument at a position.
-pub(crate) fn flat_with(
-    arena_mixop: &MixopArena,
-    mixop: flat::Mixop,
-    printer: &mut Printer<'_>,
-    mut print_arg: impl FnMut(usize, &mut Printer<'_>) -> fmt::Result,
-) -> fmt::Result {
-    let mut is_first = true;
-    let mut result = Ok(());
-    flat::visit(arena_mixop, mixop, |piece| {
-        if result.is_ok() {
-            result = print_piece(piece, printer, &mut is_first, &mut print_arg);
-        }
-    });
-    result
-}
+use super::Piece;
 
 // = Pieces
 
 /// Prints one piece using the same spacing rules for both representations.
-fn print_piece(
+pub(super) fn print_piece(
     piece: Piece<'_>,
     printer: &mut Printer<'_>,
     is_first: &mut bool,
