@@ -21,7 +21,7 @@ pub(super) fn id_name(arena: &Arena, value: &Value) -> Result<String, ExtractErr
         value,
         // Identifiers carry their text; keyword names spell themselves
         "_ID text" => |values| {
-            let text = get::text(arena, values[0]).map_err(|_| unexpected())?;
+            let text = get::text(arena, &values[0]).map_err(|_| unexpected())?;
             Ok(text.to_owned())
         },
         "APPLY" => |_values| Ok("apply".to_owned()),
@@ -32,7 +32,7 @@ pub(super) fn id_name(arena: &Arena, value: &Value) -> Result<String, ExtractErr
         "TYPE" => |_values| Ok("type".to_owned()),
         "PRIORITY" => |_values| Ok("priority".to_owned()),
         "_TID text" => |values| {
-            let text = get::text(arena, values[0]).map_err(|_| unexpected())?;
+            let text = get::text(arena, &values[0]).map_err(|_| unexpected())?;
             Ok(text.to_owned())
         },
         "LIST" => |_values| Ok("list".to_owned()),
@@ -45,7 +45,7 @@ pub(super) fn id_function_prototype(arena: &Arena, value: &Value) -> Result<Stri
     get::matches! { arena,
         value,
         "typeOrVoid name typeParameterListOpt `( parameterList `)" => |values| {
-            id_name(arena, values[1])
+            id_name(arena, &values[1])
         },
         _ => Err(ExtractError::ValueUnexpected("id_function_prototype")),
     }
@@ -56,52 +56,52 @@ pub(super) fn id_declaration(arena: &Arena, value: &Value) -> Result<String, Ext
     get::matches! { arena,
         value,
         // One arm per declaration production, picking out its `name`
-        "annotationList CONST type name initializer ';'" => |values| id_name(arena, values[2]),
-        "annotationList type `( argumentList `) name ';'" => |values| id_name(arena, values[3]),
+        "annotationList CONST type name initializer ';'" => |values| id_name(arena, &values[2]),
+        "annotationList type `( argumentList `) name ';'" => |values| id_name(arena, &values[3]),
         "annotationList type `( argumentList `) name objectInitializer ';'" => |values| {
-            id_name(arena, values[3])
+            id_name(arena, &values[3])
         },
         "annotationList functionPrototype blockStatement" => |values| {
-            id_function_prototype(arena, values[1])
+            id_function_prototype(arena, &values[1])
         },
         "annotationList ACTION name `( parameterList `) blockStatement" => |values| {
-            id_name(arena, values[1])
+            id_name(arena, &values[1])
         },
         "annotationList EXTERN functionPrototype ';'" => |values| {
-            id_function_prototype(arena, values[1])
+            id_function_prototype(arena, &values[1])
         },
         "annotationList EXTERN nonTypeName typeParameterListOpt `{ externConstructorOrMethodPrototypeList `}" => |values| {
-            id_name(arena, values[1])
+            id_name(arena, &values[1])
         },
         "annotationList PARSER name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ parserLocalDeclarationList parserStateList `}" => |values| {
-            id_name(arena, values[1])
+            id_name(arena, &values[1])
         },
         "annotationList CONTROL name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ controlLocalDeclarationList APPLY controlBody `}" => |values| {
-            id_name(arena, values[1])
+            id_name(arena, &values[1])
         },
         "annotationList ENUM name `{ nameList trailingCommaOpt `}" => |values| {
-            id_name(arena, values[1])
+            id_name(arena, &values[1])
         },
         "annotationList ENUM type name `{ namedExpressionList trailingCommaOpt `}" => |values| {
-            id_name(arena, values[2])
+            id_name(arena, &values[2])
         },
         "annotationList STRUCT name typeParameterListOpt `{ typeFieldList `}" => |values| {
-            id_name(arena, values[1])
+            id_name(arena, &values[1])
         },
         "annotationList HEADER name typeParameterListOpt `{ typeFieldList `}" => |values| {
-            id_name(arena, values[1])
+            id_name(arena, &values[1])
         },
         "annotationList HEADER_UNION name typeParameterListOpt `{ typeFieldList `}" => |values| {
-            id_name(arena, values[1])
+            id_name(arena, &values[1])
         },
-        "annotationList TYPEDEF typedef name ';'" => |values| id_name(arena, values[2]),
-        "annotationList TYPE typeRef name ';'" => |values| id_name(arena, values[2]),
+        "annotationList TYPEDEF typedef name ';'" => |values| id_name(arena, &values[2]),
+        "annotationList TYPE typeRef name ';'" => |values| id_name(arena, &values[2]),
         "annotationList PARSER name typeParameterListOpt `( parameterList `) ';'"
         | "annotationList CONTROL name typeParameterListOpt `( parameterList `) ';'"
         | "annotationList PACKAGE name typeParameterListOpt `( parameterList `) ';'" => |values| {
-            id_name(arena, values[1])
+            id_name(arena, &values[1])
         },
-        "annotationList TABLE name `{ tablePropertyList `}" => |values| id_name(arena, values[1]),
+        "annotationList TABLE name `{ tablePropertyList `}" => |values| id_name(arena, &values[1]),
         _ => Err(ExtractError::ValueUnexpected("id_declaration")),
     }
 }
@@ -127,19 +127,19 @@ pub(super) fn type_id_type_ref(arena: &Arena, value: &Value) -> Result<TypeId, E
         | "VARBIT `< int `>"
         | "VARBIT `< `( expression `) `>" => |_values| Ok(TypeId::Empty),
         "_TID text" => |values| {
-            let text = get::text(arena, values[0]).map_err(|_| unexpected())?;
+            let text = get::text(arena, &values[0]).map_err(|_| unexpected())?;
             Ok(TypeId::Local(text.to_owned()))
         },
         // `.T` is looked up globally
         "_TID '.' typeName" => |values| {
-            match type_id_type_ref(arena, values[0])? {
+            match type_id_type_ref(arena, &values[0])? {
                 TypeId::Local(id) => Ok(TypeId::Global(id)),
                 _ => Err(unexpected()),
             }
         },
         // Type arguments do not change which type is named
         "prefixedTypeName `< typeArgumentList `>" => |values| {
-            type_id_type_ref(arena, values[0])
+            type_id_type_ref(arena, &values[0])
         },
         "namedType `[ expression `]"
         | "LIST `< typeArgument `>"
@@ -155,7 +155,7 @@ pub(super) fn type_id_declaration(arena: &Arena, value: &Value) -> Result<TypeId
         "annotationList CONST type name initializer ';'"
         | "annotationList type `( argumentList `) name ';'"
         | "annotationList type `( argumentList `) name objectInitializer ';'" => |values| {
-            type_id_type_ref(arena, values[1])
+            type_id_type_ref(arena, &values[1])
         },
         _ => Err(ExtractError::ValueUnexpected("type_id_declaration")),
     }
@@ -181,7 +181,7 @@ pub(super) fn has_type_params_function_prototype(
     get::matches! { arena,
         value,
         "typeOrVoid name typeParameterListOpt `( parameterList `)" => |values| {
-            has_type_params(arena, values[2])
+            has_type_params(arena, &values[2])
         },
         _ => Err(ExtractError::ValueUnexpected(
             "has_type_params_function_prototype",
@@ -203,16 +203,16 @@ pub(super) fn has_type_params_declaration(
             Ok(false)
         },
         "annotationList functionPrototype blockStatement" => |values| {
-            has_type_params_function_prototype(arena, values[1])
+            has_type_params_function_prototype(arena, &values[1])
         },
         "annotationList ACTION name `( parameterList `) blockStatement" => |_values| Ok(false),
         "annotationList EXTERN functionPrototype ';'" => |values| {
-            has_type_params_function_prototype(arena, values[1])
+            has_type_params_function_prototype(arena, &values[1])
         },
         "annotationList EXTERN nonTypeName typeParameterListOpt `{ externConstructorOrMethodPrototypeList `}"
         | "annotationList PARSER name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ parserLocalDeclarationList parserStateList `}"
         | "annotationList CONTROL name typeParameterListOpt `( parameterList `) constructorParameterListOpt `{ controlLocalDeclarationList APPLY controlBody `}" => |values| {
-            has_type_params(arena, values[2])
+            has_type_params(arena, &values[2])
         },
         "annotationList ENUM name `{ nameList trailingCommaOpt `}"
         | "annotationList ENUM type name `{ namedExpressionList trailingCommaOpt `}" => |_values| {
@@ -221,14 +221,14 @@ pub(super) fn has_type_params_declaration(
         "annotationList STRUCT name typeParameterListOpt `{ typeFieldList `}"
         | "annotationList HEADER name typeParameterListOpt `{ typeFieldList `}"
         | "annotationList HEADER_UNION name typeParameterListOpt `{ typeFieldList `}" => |values| {
-            has_type_params(arena, values[2])
+            has_type_params(arena, &values[2])
         },
         "annotationList TYPEDEF typedef name ';'"
         | "annotationList TYPE typeRef name ';'" => |_values| Ok(false),
         "annotationList PARSER name typeParameterListOpt `( parameterList `) ';'"
         | "annotationList CONTROL name typeParameterListOpt `( parameterList `) ';'"
         | "annotationList PACKAGE name typeParameterListOpt `( parameterList `) ';'" => |values| {
-            has_type_params(arena, values[2])
+            has_type_params(arena, &values[2])
         },
         "annotationList TABLE name `{ tablePropertyList `}" => |_values| Ok(false),
         _ => Err(ExtractError::ValueUnexpected(

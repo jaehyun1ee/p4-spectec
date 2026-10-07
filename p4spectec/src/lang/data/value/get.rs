@@ -14,20 +14,13 @@ use super::{
     flat::{Value, ValueCase, ValueField, ValueKind},
 };
 
-// - Errors
-
-/// The error for a value of the wrong kind.
-fn unexpected(arena: &Arena, value: &Value, expected: ValueTag) -> ValueError {
-    ValueError::KindMismatch { expected, actual: arena.kind(value).tag() }
-}
-
 // - Primitives
 
 /// The boolean in a value.
 pub fn bool(arena: &Arena, value: &Value) -> Result<bool, ValueError> {
     match arena.kind(value) {
         ValueKind::Bool(value) => Ok(*value),
-        _ => Err(unexpected(arena, value, ValueTag::Bool)),
+        kind => Err(kind_mismatch(kind, ValueTag::Bool)),
     }
 }
 
@@ -35,7 +28,7 @@ pub fn bool(arena: &Arena, value: &Value) -> Result<bool, ValueError> {
 pub fn num<'a>(arena: &'a Arena, value: &Value) -> Result<&'a Number, ValueError> {
     match arena.kind(value) {
         ValueKind::Num(value) => Ok(value),
-        _ => Err(unexpected(arena, value, ValueTag::Num)),
+        kind => Err(kind_mismatch(kind, ValueTag::Num)),
     }
 }
 
@@ -43,7 +36,7 @@ pub fn num<'a>(arena: &'a Arena, value: &Value) -> Result<&'a Number, ValueError
 pub fn text<'a>(arena: &'a Arena, value: &Value) -> Result<&'a str, ValueError> {
     match arena.kind(value) {
         ValueKind::Text(value) => Ok(value),
-        _ => Err(unexpected(arena, value, ValueTag::Text)),
+        kind => Err(kind_mismatch(kind, ValueTag::Text)),
     }
 }
 
@@ -53,7 +46,7 @@ pub fn text<'a>(arena: &'a Arena, value: &Value) -> Result<&'a str, ValueError> 
 pub fn structure<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [ValueField], ValueError> {
     match arena.kind(value) {
         ValueKind::Struct(value_fields) => Ok(value_fields),
-        _ => Err(unexpected(arena, value, ValueTag::Struct)),
+        kind => Err(kind_mismatch(kind, ValueTag::Struct)),
     }
 }
 
@@ -63,7 +56,7 @@ pub fn structure<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [ValueField]
 pub fn case<'a>(arena: &'a Arena, value: &Value) -> Result<&'a ValueCase, ValueError> {
     match arena.kind(value) {
         ValueKind::Case(value_case) => Ok(value_case),
-        _ => Err(unexpected(arena, value, ValueTag::Case)),
+        kind => Err(kind_mismatch(kind, ValueTag::Case)),
     }
 }
 
@@ -81,7 +74,7 @@ macro_rules! matches {
                     $crate::lang::data::notation::flat::matches_tree($arena.arena_mixop(), *value_case.mixop(), mixop_expect.as_ref())
                 }) =>
             {
-                let $values = value_case.args().iter().collect::<Vec<_>>();
+                let $values = value_case.args();
                 $body
             }
             _ => $crate::lang::data::value::get::matches! {
@@ -115,7 +108,7 @@ pub(crate) use matches;
 pub fn tuple<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], ValueError> {
     match arena.kind(value) {
         ValueKind::Tuple(values) => Ok(values),
-        _ => Err(unexpected(arena, value, ValueTag::Tuple)),
+        kind => Err(kind_mismatch(kind, ValueTag::Tuple)),
     }
 }
 
@@ -123,7 +116,7 @@ pub fn tuple<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], ValueEr
 pub fn opt(arena: &Arena, value: &Value) -> Result<Option<Value>, ValueError> {
     match arena.kind(value) {
         ValueKind::Opt(value) => Ok(*value),
-        _ => Err(unexpected(arena, value, ValueTag::Opt)),
+        kind => Err(kind_mismatch(kind, ValueTag::Opt)),
     }
 }
 
@@ -131,7 +124,7 @@ pub fn opt(arena: &Arena, value: &Value) -> Result<Option<Value>, ValueError> {
 pub fn list<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], ValueError> {
     match arena.kind(value) {
         ValueKind::List(values) => Ok(values),
-        _ => Err(unexpected(arena, value, ValueTag::List)),
+        kind => Err(kind_mismatch(kind, ValueTag::List)),
     }
 }
 
@@ -141,7 +134,7 @@ pub fn list<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], ValueErr
 pub fn external<'a>(arena: &'a Arena, value: &Value) -> Result<&'a Rc<json>, ValueError> {
     match arena.kind(value) {
         ValueKind::Extern(json) => Ok(json),
-        _ => Err(unexpected(arena, value, ValueTag::Extern)),
+        kind => Err(kind_mismatch(kind, ValueTag::Extern)),
     }
 }
 
@@ -188,4 +181,11 @@ pub fn four(values: &[Value]) -> Result<(&Value, &Value, &Value, &Value), ValueE
         [value_a, value_b, value_c, value_d] => Ok((value_a, value_b, value_c, value_d)),
         _ => Err(ValueError::CountMismatch { expected: 4, actual: values.len() }),
     }
+}
+
+// - Errors
+
+/// Reports the actual kind of a body when a projection expects another kind.
+fn kind_mismatch(kind: &ValueKind, expected: ValueTag) -> ValueError {
+    ValueError::KindMismatch { expected, actual: kind.tag() }
 }

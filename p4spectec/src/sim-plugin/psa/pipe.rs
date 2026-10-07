@@ -1562,8 +1562,8 @@ where
         rel::psa_ingress_parser(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     let value_error = get::matches! { ctx.arena(), &value_call_result,
-        "REJECT errorValue" => |values| match values.as_slice() {
-            [value_error] => Some(**value_error),
+        "REJECT errorValue" => |values| match values {
+            [value_error] => Some(*value_error),
             _ => return Err(ExternError::from(ValueError::CountMismatch {
                 expected: 1,
                 actual: values.len(),
@@ -1673,8 +1673,8 @@ where
         rel::psa_egress_parser(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     let value_error = get::matches! { ctx.arena(), &value_call_result,
-        "REJECT errorValue" => |values| match values.as_slice() {
-            [value_error] => Some(**value_error),
+        "REJECT errorValue" => |values| match values {
+            [value_error] => Some(*value_error),
             _ => return Err(ExternError::from(ValueError::CountMismatch {
                 expected: 1,
                 actual: values.len(),
