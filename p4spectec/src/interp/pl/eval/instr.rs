@@ -9,7 +9,10 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::flat::{Value, get},
+    data::{
+        notation::flat::get as get_notation,
+        value::flat::{Value, get},
+    },
     hints::input,
     traits::print::Print,
 };
@@ -263,7 +266,7 @@ fn eval_hold_instr<'global, Tier, Iface: Interface, Ext: Extern>(
     let mut errors = Vec::new();
     let cond =
         unwrap!(eval_cond_iter(runner_ctx, &ctx, &instr.iter_exps, &mut |runner_ctx, ctx| {
-            let values = unwrap!(eval_exps(runner_ctx, ctx, instr.not_exp.args()));
+            let values = unwrap!(eval_exps(runner_ctx, ctx, get_notation::args(&instr.not_exp)));
             match PlInterp::invoke_rel(runner_ctx, ctx, &instr.id, &values) {
                 // A match means it holds
                 ok!(_) => ok!(true),
@@ -421,7 +424,7 @@ fn eval_rule_instr<'global, Iface: Interface, Ext: Extern>(
 ) -> Backtrack<(Context<'global>, Flow)> {
     // The input hint separates arguments from output patterns
     let (exps_input, exps_output) =
-        input::split(&instr.input_hint, instr.not_exp.args().iter().collect())
+        input::split(&instr.input_hint, get_notation::args(&instr.not_exp).iter().collect())
             .expect("input hint must fit relation");
     // Invoke the relation at each enclosing iteration
     let ctx =
@@ -484,10 +487,9 @@ fn eval_destruct_instr<'global, Iface: Interface, Ext: Extern>(
 ) -> Backtrack<(Context<'global>, Flow)> {
     // Extract fields before mutating the arena during assignment
     let value = unwrap!(eval_exp(runner_ctx, &ctx, &instr.exp));
-    let values = get::case(runner_ctx.arena(), &value)
-        .expect("destructuring value must be a case")
-        .args()
-        .to_vec();
+    let value_case =
+        get::case(runner_ctx.arena(), &value).expect("destructuring value must be a case");
+    let values = get_notation::args(value_case).to_vec();
     let exps = instr
         .bindings
         .iter()

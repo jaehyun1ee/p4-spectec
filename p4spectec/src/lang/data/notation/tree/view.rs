@@ -3,14 +3,15 @@
 //! `MixfixRef` pairs a subtree with the arguments of its positions.
 //! `MixfixView` exposes one level with those arguments in place.
 
-use super::super::{AtomPhrase, tree};
+use super::super::AtomPhrase;
+use super::{Mixfix, Mixop};
 
 // = Borrowed views
 
 /// A borrowed mixfix: a tree mixop and the arguments of its positions.
 #[derive(Debug)]
 pub struct MixfixRef<'a, T> {
-    mixop: &'a tree::Mixop,
+    mixop: &'a Mixop,
     args: &'a [T],
 }
 
@@ -39,7 +40,7 @@ impl<T> Copy for MixfixRef<'_, T> {}
 
 // = Viewing
 
-impl<T> tree::Mixfix<T> {
+impl<T> Mixfix<T> {
     /// Borrows the mixfix, for viewing its parts.
     pub fn as_ref(&self) -> MixfixRef<'_, T> {
         MixfixRef { mixop: self.mixop.as_ref(), args: &self.args }
@@ -51,24 +52,24 @@ impl<'a, T> MixfixRef<'a, T> {
     pub fn view(&self) -> MixfixView<'a, T> {
         // Each child takes as many arguments as it has positions
         let mut args = self.args;
-        let mut take = |mixop: &'a tree::Mixop| {
+        let mut take = |mixop: &'a Mixop| {
             let (args_child, args_rest) = args.split_at(mixop.arity());
             args = args_rest;
             MixfixRef { mixop, args: args_child }
         };
         match self.mixop {
-            tree::Mixop::Arg => MixfixView::Arg(&self.args[0]),
-            tree::Mixop::Atom(atom) => MixfixView::Atom(atom),
-            tree::Mixop::Brack(atom_l, mixop_inner, atom_r) => {
+            Mixop::Arg => MixfixView::Arg(&self.args[0]),
+            Mixop::Atom(atom) => MixfixView::Atom(atom),
+            Mixop::Brack(atom_l, mixop_inner, atom_r) => {
                 let mixfix_inner = take(mixop_inner);
                 MixfixView::Brack(atom_l, mixfix_inner, atom_r)
             }
-            tree::Mixop::Infix(mixop_l, atom, mixop_r) => {
+            Mixop::Infix(mixop_l, atom, mixop_r) => {
                 let mixfix_l = take(mixop_l);
                 let mixfix_r = take(mixop_r);
                 MixfixView::Infix(mixfix_l, atom, mixfix_r)
             }
-            tree::Mixop::Seq(mixops) => {
+            Mixop::Seq(mixops) => {
                 let mixfixes = mixops.iter().map(take).collect();
                 MixfixView::Seq(mixfixes)
             }

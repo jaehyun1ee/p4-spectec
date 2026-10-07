@@ -11,7 +11,7 @@ use crate::lang::{
     common::prim::num,
     data::{
         intern::{CanonEq, CanonHash, CanonInterner},
-        notation::MixopArena,
+        notation::{MixopArena, flat::get as get_notation},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
@@ -44,12 +44,14 @@ impl CanonEq<MixopArena> for ValueKind {
                     )
             }
             (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => {
-                arena_mixop.canon_eq(*value_case_l.mixop(), *value_case_r.mixop())
-                    && value_case_l.args().len() == value_case_r.args().len()
-                    && value_case_l
-                        .args()
+                arena_mixop.canon_eq(
+                    *get_notation::mixop(value_case_l),
+                    *get_notation::mixop(value_case_r),
+                ) && get_notation::args(value_case_l).len()
+                    == get_notation::args(value_case_r).len()
+                    && get_notation::args(value_case_l)
                         .iter()
-                        .zip(value_case_r.args())
+                        .zip(get_notation::args(value_case_r))
                         .all(|(value_l, value_r)| eq_value(value_l, value_r))
             }
             (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
@@ -92,9 +94,11 @@ impl CanonHash<MixopArena> for ValueKind {
                 }
             }
             ValueKind::Case(value_case) => {
-                arena_mixop.canon_id(*value_case.mixop()).hash(hasher);
-                value_case.args().len().hash(hasher);
-                for value in value_case.args() {
+                arena_mixop
+                    .canon_id(*get_notation::mixop(value_case))
+                    .hash(hasher);
+                get_notation::args(value_case).len().hash(hasher);
+                for value in get_notation::args(value_case) {
                     interner.canon_id(value.node).hash(hasher);
                 }
             }

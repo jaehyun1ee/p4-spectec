@@ -12,9 +12,9 @@ use crate::lang::common::{notation::atom::Atom, source::Phrase};
 mod error;
 pub mod flat;
 mod free;
-mod get;
+pub mod get;
 mod map;
-pub(crate) mod print;
+mod print;
 pub mod tree;
 
 pub use error::{ArityMismatch, MixopError};

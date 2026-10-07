@@ -14,7 +14,7 @@ use crate::lang::{
     common::{notation::atom::Atom, prim::num::Number},
     data::{
         arena::Arena,
-        notation::{Piece, tree::Mixop},
+        notation::{Piece, get as get_notation, tree::Mixop},
         value::flat::{Value, ValueCase, ValueKind},
     },
     hints::alter::{self, AlterHint, Renderer},
@@ -56,7 +56,10 @@ fn insert_case_hints(
             continue;
         };
         let hint = alter::init(exp);
-        hints.insert((type_id.to_owned(), not_typ.node.mixop().as_ref().clone()), hint);
+        hints.insert(
+            (type_id.to_owned(), get_notation::mixop(&not_typ.node).as_ref().clone()),
+            hint,
+        );
     }
 }
 
@@ -147,11 +150,11 @@ impl P4Unparser {
         typ: &TypKind,
         value_case: &ValueCase,
     ) -> Result<String, P4UnparseError> {
-        let mixop = value_case.mixop().into_tree(arena.arena_mixop());
+        let mixop = get_notation::mixop(value_case).into_tree(arena.arena_mixop());
         if let TypKind::Var(type_id, _) = typ
             && let Some(hint) = self.hints.get(&(type_id.node.clone(), mixop))
         {
-            let values = value_case.args().iter().collect::<Vec<_>>();
+            let values = get_notation::args(value_case).iter().collect::<Vec<_>>();
             return self.render_hint(arena, hint, &values);
         }
         let mut rendered = Vec::new();
@@ -215,13 +218,15 @@ impl P4Unparser {
         // Pieces in reading order: atoms, and arguments by position
         let arena_mixop = arena.arena_mixop();
         let mut pieces = Vec::new();
-        value_case.mixop().visit(arena_mixop, |piece| {
+        get_notation::mixop(value_case).visit(arena_mixop, |piece| {
             pieces.push(piece);
         });
         for piece in pieces {
             match piece {
                 // Arguments render recursively
-                Piece::Arg(pos) => rendered.push(self.render(arena, &value_case.args()[pos])?),
+                Piece::Arg(pos) => {
+                    rendered.push(self.render(arena, &get_notation::args(value_case)[pos])?)
+                }
                 // Silent atoms are dropped rather than left as empty pieces
                 Piece::Atom(atom) => {
                     let rendered_atom = Self::render_atom(&atom.node);

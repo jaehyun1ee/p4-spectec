@@ -6,7 +6,11 @@
 //! iteration premises repeat under `iter::yield`.
 //! A failed premise is an `Unmatch`, so the enclosing candidate is skipped.
 
-use crate::lang::{data::value::flat::get, hints::input, traits::print::Print};
+use crate::lang::{
+    data::{notation::flat::get as get_notation, value::flat::get},
+    hints::input,
+    traits::print::Print,
+};
 
 use crate::lang::il::print::ExpRef;
 
@@ -66,7 +70,7 @@ fn eval_rule_prem<'global, Iface: Interface, Ext: Extern>(
     prem: &ast::RulePrem,
 ) -> Backtrack<Context<'global>> {
     // Split by the input hint, evaluate inputs, bind outputs
-    let exps = prem.not_exp.args().iter().collect();
+    let exps = get_notation::args(&prem.not_exp).iter().collect();
     let (exps_input, exps_output) =
         input::split(&prem.input_hint, exps).expect("input hint must fit relation");
     let values_input = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps_input));
@@ -104,7 +108,7 @@ fn eval_if_hold_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IfHoldPrem,
 ) -> Backtrack<Context<'global>> {
-    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, prem.not_exp.args()));
+    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, get_notation::args(&prem.not_exp)));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         // The relation applied: the premise passes
         ok!(_) => ok!(ctx),
@@ -129,7 +133,7 @@ fn eval_if_not_hold_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IfNotHoldPrem,
 ) -> Backtrack<Context<'global>> {
-    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, prem.not_exp.args()));
+    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, get_notation::args(&prem.not_exp)));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         // The relation applied: the premise fails
         ok!(_) => unmatch!(

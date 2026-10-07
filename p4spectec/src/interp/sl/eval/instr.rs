@@ -12,7 +12,10 @@ use std::borrow::Cow;
 
 use crate::lang::{
     common::source::Span,
-    data::value::flat::{Value, ValueKind, get},
+    data::{
+        notation::flat::get as get_notation,
+        value::flat::{Value, ValueKind, get},
+    },
     hints::input,
     traits::print::Print,
 };
@@ -215,7 +218,7 @@ fn eval_hold_instr<Iface: Interface, Ext: Extern>(
         ctx.as_ref(),
         &instr.iter_exps,
         &mut |runner_ctx, ctx| {
-            let values = unwrap!(eval_exps(runner_ctx, ctx, instr.not_exp.args()));
+            let values = unwrap!(eval_exps(runner_ctx, ctx, get_notation::args(&instr.not_exp)));
             match SlInterp::invoke_rel(runner_ctx, ctx, &instr.id, &values) {
                 // A match means it holds
                 ok!(_) => ok!(true),
@@ -366,7 +369,7 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
 ) -> Backtrack<Flow> {
     // Split the notation arguments by the input hint
     let (exps_input, exps_output) =
-        input::split(&instr.input_hint, instr.not_exp.args().iter().collect())
+        input::split(&instr.input_hint, get_notation::args(&instr.not_exp).iter().collect())
             .expect("input hint must fit relation");
     // Call and bind the outputs under the iterators
     let ctx = unwrap!(eval_instr_iter(

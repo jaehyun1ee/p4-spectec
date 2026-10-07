@@ -7,11 +7,12 @@ use std::fmt;
 
 use crate::lang::traits::print::{Print, Printer};
 
-use super::super::{print::print_piece, tree};
+use super::super::print::print_piece;
+use super::{Mixfix, Mixop};
 
 // = Notation forms
 
-impl tree::Mixop {
+impl Mixop {
     /// Writes atoms and arguments, separating non-empty pieces with spaces.
     ///
     /// Empty keyword atoms print nothing, not even a space;
@@ -32,15 +33,15 @@ impl tree::Mixop {
     }
 }
 
-// = Filled forms
-
-impl Print for tree::Mixop {
+impl Print for Mixop {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.print_with(printer, |_, printer| printer.write("%"))
     }
 }
 
-impl<T> tree::Mixfix<T> {
+// = Filled forms
+
+impl<T> Mixfix<T> {
     /// Writes atoms and arguments, separating non-empty pieces with spaces.
     pub fn print_with(
         &self,

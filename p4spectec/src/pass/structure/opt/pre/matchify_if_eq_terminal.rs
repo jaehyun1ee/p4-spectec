@@ -17,9 +17,12 @@
 
 use std::rc::Rc;
 
-use crate::lang::common::{
-    prim::bool::{CmpOp as BoolCmpOp, UnOp as BoolUnOp},
-    source::Span,
+use crate::lang::{
+    common::{
+        prim::bool::{CmpOp as BoolCmpOp, UnOp as BoolUnOp},
+        source::Span,
+    },
+    data::notation::tree::get as get_notation,
 };
 
 use crate::lang::il::ast::{CmpOp, ExpKind, ListPattern, OpTyp, OptPattern, Pattern, UnOp};
@@ -49,12 +52,16 @@ fn matchify_exp(exp: Exp) -> Exp {
             ExpKind::Match(exp_r, Pattern::List(ListPattern::Nil))
         }
         // x == STOP or STOP == x -> x matches STOP
-        (CmpOp::Bool(BoolCmpOp::Eq), _, ExpKind::Case(not_exp)) if not_exp.arity() == 0 => {
-            let pattern = Pattern::Case(Rc::clone(not_exp.mixop()));
+        (CmpOp::Bool(BoolCmpOp::Eq), _, ExpKind::Case(not_exp))
+            if get_notation::arity(not_exp) == 0 =>
+        {
+            let pattern = Pattern::Case(Rc::clone(get_notation::mixop(not_exp)));
             ExpKind::Match(exp_l, pattern)
         }
-        (CmpOp::Bool(BoolCmpOp::Eq), ExpKind::Case(not_exp), _) if not_exp.arity() == 0 => {
-            let pattern = Pattern::Case(Rc::clone(not_exp.mixop()));
+        (CmpOp::Bool(BoolCmpOp::Eq), ExpKind::Case(not_exp), _)
+            if get_notation::arity(not_exp) == 0 =>
+        {
+            let pattern = Pattern::Case(Rc::clone(get_notation::mixop(not_exp)));
             ExpKind::Match(exp_r, pattern)
         }
         // x != None or None != x -> x matches Some
@@ -72,15 +79,19 @@ fn matchify_exp(exp: Exp) -> Exp {
             ExpKind::Match(exp_r, Pattern::List(ListPattern::Cons))
         }
         // x != STOP or STOP != x -> not (x matches STOP)
-        (CmpOp::Bool(BoolCmpOp::Ne), _, ExpKind::Case(not_exp)) if not_exp.arity() == 0 => {
-            let pattern = Pattern::Case(Rc::clone(not_exp.mixop()));
+        (CmpOp::Bool(BoolCmpOp::Ne), _, ExpKind::Case(not_exp))
+            if get_notation::arity(not_exp) == 0 =>
+        {
+            let pattern = Pattern::Case(Rc::clone(get_notation::mixop(not_exp)));
             let exp_kind = ExpKind::Match(exp_l, pattern);
             let exp_match =
                 crate::note_phrase!(node: exp_kind, note: exp.note.clone(), span: exp.span.clone());
             ExpKind::Un(UnOp::Bool(BoolUnOp::Not), OpTyp::Bool, Box::new(exp_match))
         }
-        (CmpOp::Bool(BoolCmpOp::Ne), ExpKind::Case(not_exp), _) if not_exp.arity() == 0 => {
-            let pattern = Pattern::Case(Rc::clone(not_exp.mixop()));
+        (CmpOp::Bool(BoolCmpOp::Ne), ExpKind::Case(not_exp), _)
+            if get_notation::arity(not_exp) == 0 =>
+        {
+            let pattern = Pattern::Case(Rc::clone(get_notation::mixop(not_exp)));
             let exp_kind = ExpKind::Match(exp_r, pattern);
             let exp_match =
                 crate::note_phrase!(node: exp_kind, note: exp.note.clone(), span: exp.span.clone());

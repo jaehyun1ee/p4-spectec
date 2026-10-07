@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use p4spectec::lang::{common::source::Span, data::value::make};
+use p4spectec::lang::{common::source::Span, data::value::flat::make};
 
 use p4spectec::diagnostic::{Report, ReportKind};
 

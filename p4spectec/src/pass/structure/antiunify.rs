@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use crate::lang::{
     common::ds::{map::IdMap, set::IdSet},
-    data::notation::tree::Mixfix,
+    data::notation::tree::{get as get_notation, make as make_notation},
     traits::{
         at::At,
         eq::SyntaxEq,
@@ -85,7 +85,11 @@ fn populate_exp_template(uenv: &UEnv, exp_template: &Exp, exp: &Exp) -> Vec<Prem
         (ExpKind::Case(not_exp_template), ExpKind::Case(not_exp))
             if not_exp_template.eq_mixop(not_exp) =>
         {
-            populate_exps_templates(uenv, not_exp_template.args().iter(), not_exp.args().iter())
+            populate_exps_templates(
+                uenv,
+                get_notation::args(not_exp_template).iter(),
+                get_notation::args(not_exp).iter(),
+            )
         }
         (ExpKind::Str(exp_fields_template), ExpKind::Str(exp_fields)) => {
             let exps_template = exp_fields_template.iter().map(|ExpField { exp, .. }| exp);
@@ -250,12 +254,16 @@ fn antiunify_case_exp(
     not_exp: &NotExp,
 ) -> ExpKind {
     let mut exps_unified = vec![];
-    for (exp_template, exp) in not_exp_template.args().iter().zip(not_exp.args()) {
+    for (exp_template, exp) in get_notation::args(not_exp_template)
+        .iter()
+        .zip(get_notation::args(not_exp))
+    {
         let exp_unified = antiunify_exp(frees, uenv, exp_template, exp);
         exps_unified.push(exp_unified);
     }
-    let not_exp_template = Mixfix::new(Rc::clone(not_exp_template.mixop()), exps_unified)
-        .expect("matching mixfix shapes have equal argument counts");
+    let not_exp_template =
+        make_notation::new(Rc::clone(get_notation::mixop(not_exp_template)), exps_unified)
+            .expect("matching mixfix shapes have equal argument counts");
     let not_exp_template = Box::new(not_exp_template);
     ExpKind::Case(not_exp_template)
 }

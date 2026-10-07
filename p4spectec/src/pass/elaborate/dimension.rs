@@ -32,7 +32,7 @@ use crate::lang::{
         ds::map::IdMap,
         source::{Phrase, Span},
     },
-    data::notation::tree::Mixop,
+    data::notation::tree::{Mixop, get as get_notation},
     traits::eq::SyntaxEq,
 };
 
@@ -187,7 +187,7 @@ fn infer_exps(dim_ctx: &mut DimContext, exps: &[ast::Exp], iters: &[ast::Iter]) 
 // - Notation expression inference
 
 fn infer_not_exp(dim_ctx: &mut DimContext, not_exp: &ast::NotExp, iters: &[ast::Iter]) {
-    for exp in not_exp.args() {
+    for exp in get_notation::args(not_exp) {
         infer_exp(dim_ctx, exp, iters);
     }
 }
@@ -673,8 +673,8 @@ fn annotate_iter_exp(
 ///
 /// Occurrences combine as the notation nests, left to right.
 fn annotate_not_exp(bounds: &VEnv, not_exp: &mut ast::NotExp) -> Result<Occurrences, ElabError> {
-    let mixop = Rc::clone(not_exp.mixop());
-    annotate_mixop(bounds, &mixop, &mut not_exp.args_mut().iter_mut())
+    let mixop = Rc::clone(get_notation::mixop(not_exp));
+    annotate_mixop(bounds, &mixop, &mut get_notation::args_mut(not_exp).iter_mut())
 }
 
 /// Annotates the arguments at a mixop's positions, taking them in order.

@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use crate::lang::{
     common::{ds::set::IdSet, prim, source::Span},
-    data::notation::tree::Mixfix,
+    data::notation::tree::{get as get_notation, make as make_notation},
     traits::{at::At, eq::SyntaxEq},
 };
 
@@ -191,11 +191,12 @@ fn overlap_case_exp(
         menv,
         ids_free,
         ids_unifier,
-        not_exp_template.args().iter(),
-        not_exp.args().iter(),
+        get_notation::args(not_exp_template).iter(),
+        get_notation::args(not_exp).iter(),
     )?;
-    let not_exp_template = Mixfix::new(Rc::clone(not_exp_template.mixop()), exps_template)
-        .expect("overlapped arguments must preserve the template mixfix arity");
+    let not_exp_template =
+        make_notation::new(Rc::clone(get_notation::mixop(not_exp_template)), exps_template)
+            .expect("overlapped arguments must preserve the template mixfix arity");
     let not_exp_template = Box::new(not_exp_template);
     Ok(ast::ExpKind::Case(not_exp_template))
 }
@@ -308,7 +309,11 @@ fn populate_exp(ids_unifier: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) ->
         (ast::ExpKind::Case(not_exp_template), ast::ExpKind::Case(not_exp))
             if not_exp_template.eq_mixop(not_exp) =>
         {
-            populate_exps(ids_unifier, not_exp_template.args().iter(), not_exp.args().iter())
+            populate_exps(
+                ids_unifier,
+                get_notation::args(not_exp_template).iter(),
+                get_notation::args(not_exp).iter(),
+            )
         }
         (ast::ExpKind::Str(exp_fields_template), ast::ExpKind::Str(exp_fields)) => {
             let exps_template = exp_fields_template

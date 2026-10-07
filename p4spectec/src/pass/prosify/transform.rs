@@ -15,6 +15,7 @@
 
 use crate::lang::{
     common::{ds::set::IdSet, source::Span},
+    data::notation::tree::get as get_notation,
     hints::{alter, fields, input},
     traits::at::At,
 };
@@ -330,13 +331,13 @@ fn prosify_case_exp(
     // The variant is looked up by the expression's type and its mixfix operator
     let mut hints = annot::Hints::default();
     if let il::TypKind::Var(id_typ, _) = exp_sl.note.as_ref()
-        && let Some(hints_case) = ctx.hints_case(id_typ, not_exp_sl.mixop())
+        && let Some(hints_case) = ctx.hints_case(id_typ, get_notation::mixop(not_exp_sl).as_ref())
     {
         hints.span = hints_case.span.clone();
         hints.node.prose = hints_case.node.prose.clone();
         hints.node.prose_fields = hints_case.node.prose_fields.clone();
         // Holes and field names count the notation's arguments
-        let num_args = not_exp_sl.args().len();
+        let num_args = get_notation::args(not_exp_sl).len();
         validate_hint_prose(&hints, num_args)?;
         validate_hint_fields(&hints, num_args)?;
     }
@@ -870,7 +871,7 @@ fn prosify_dispatch_hold_instr(
         hints.node.prose_true = hints_rel.node.prose_true.clone();
         hints.node.prose_false = hints_rel.node.prose_false.clone();
         // Holes count the notation's arguments
-        let num_args = instr_sl.not_exp.args().len();
+        let num_args = get_notation::args(&instr_sl.not_exp).len();
         validate_hint_prose_true(&hints, num_args)?;
         validate_hint_prose_false(&hints, num_args)?;
     }
@@ -1145,7 +1146,7 @@ fn prosify_group_hold_instr(
         hints.node.prose_true = hints_rel.node.prose_true.clone();
         hints.node.prose_false = hints_rel.node.prose_false.clone();
         // Holes count the notation's arguments
-        let num_args = instr_sl.not_exp.args().len();
+        let num_args = get_notation::args(&instr_sl.not_exp).len();
         validate_hint_prose_true(&hints, num_args)?;
         validate_hint_prose_false(&hints, num_args)?;
     }
@@ -1303,7 +1304,7 @@ fn prosify_group_rule_instr(
             .as_ref()
             .map(|hint| alter::realign(hint, &instr_sl.input_hint));
         // Elaboration validates indices; structure and expansion preserve arity
-        let num_args = instr_sl.not_exp.args().len();
+        let num_args = get_notation::args(&instr_sl.not_exp).len();
         let num_inputs = instr_sl.input_hint.indices().len();
         let num_outputs = num_args - num_inputs;
         validate_hint_prose_in(&hints, num_inputs)?;
@@ -1518,7 +1519,7 @@ fn build_rel_hints(
         .map(|hint| alter::realign(hint, &rel_signature.input_hint));
     // Fresh expressions only when the relation has an input template
     let (prose_input_exps, prose_output_exps) = if hints_rel.node.prose_in.is_some() {
-        let typs = rel_signature.not_typ.node.args().to_vec();
+        let typs = get_notation::args(&rel_signature.not_typ.node).to_vec();
         let (typs_input, typs_output) = input::split(&rel_signature.input_hint, typs)
             .expect("elaboration validates relation inputs; structure preserves signature arity");
         let fresh_exps_from_typs = |typs: Vec<sl::Typ>| {
@@ -1555,7 +1556,7 @@ fn build_rel_hints(
         span: hints_rel.span.clone(),
     };
     // Definition titles use full notation, input, and realigned output domains
-    let num_args = rel_signature.not_typ.node.args().len();
+    let num_args = get_notation::args(&rel_signature.not_typ.node).len();
     let num_inputs = rel_signature.input_hint.indices().len();
     let num_outputs = num_args - num_inputs;
     validate_hint_prose(&hints, num_args)?;

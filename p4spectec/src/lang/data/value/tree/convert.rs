@@ -3,7 +3,10 @@
 //! `into_flat` interns child values before their parent,
 //! preserving types, source spans, and field and argument order.
 
-use crate::lang::data::{arena::Arena, notation};
+use crate::lang::data::{
+    arena::Arena,
+    notation::{self, flat::make as make_notation},
+};
 
 use super::super::{ValueError, flat};
 use super::{Value, ValueCase, ValueKind};
@@ -73,7 +76,7 @@ impl ValueCase {
         let mixop = mixop.into_flat(arena_mixop)?;
 
         // A filled tree supplies one value per argument position
-        Ok(flat::ValueCase::new(arena_mixop, mixop, values)
+        Ok(make_notation::new(arena_mixop, mixop, values)
             .expect("a tree case fills every position"))
     }
 

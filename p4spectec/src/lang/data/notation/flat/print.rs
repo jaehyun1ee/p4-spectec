@@ -7,11 +7,12 @@ use std::fmt;
 
 use crate::lang::traits::print::Printer;
 
-use super::super::{MixopArena, flat, print::print_piece};
+use super::super::print::print_piece;
+use super::{Mixfix, Mixop, MixopArena};
 
 // = Notation forms
 
-impl flat::Mixop {
+impl Mixop {
     /// Writes atoms and arguments, separating non-empty pieces with spaces.
     ///
     /// Empty keyword atoms print nothing, not even a space;
@@ -35,7 +36,7 @@ impl flat::Mixop {
 
 // = Filled forms
 
-impl<T> flat::Mixfix<T> {
+impl<T> Mixfix<T> {
     /// Writes atoms and arguments as the expanded tree would print.
     pub fn print_with(
         &self,

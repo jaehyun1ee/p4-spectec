@@ -16,6 +16,7 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
+        notation::flat::get as get_notation,
         value::flat::{Value, ValueKind},
     },
 };
@@ -135,15 +136,15 @@ where
                         (DefTypKind::Variant(typ_cases), ValueKind::Case(value_case)) => {
                             for TypCase { not_typ, .. } in typ_cases {
                                 // Skip cases of a different shape
-                                if !arena
-                                    .arena_mixop()
-                                    .canon_eq(*not_typ.node.mixop(), *value_case.mixop())
-                                {
+                                if !arena.arena_mixop().canon_eq(
+                                    *get_notation::mixop(&not_typ.node),
+                                    *get_notation::mixop(value_case),
+                                ) {
                                     continue;
                                 }
                                 let not_typ = subst_not_typ(&|id| theta.get(id), not_typ)?;
-                                let typs = not_typ.node.args();
-                                let values = value_case.args();
+                                let typs = get_notation::args(&not_typ.node);
+                                let values = get_notation::args(value_case);
                                 if subs_inner(
                                     arena,
                                     find_typdef_opt,
@@ -263,9 +264,11 @@ where
         // Statically known to hold
         (Subcheck::Skip, _) => Ok(true),
         // Variant case: the tag must be one of the accepted
-        (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => Ok(mixops
-            .iter()
-            .any(|mixop| arena.arena_mixop().canon_eq(*mixop, *value_case.mixop()))),
+        (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => Ok(mixops.iter().any(|mixop| {
+            arena
+                .arena_mixop()
+                .canon_eq(*mixop, *get_notation::mixop(value_case))
+        })),
         // Componentwise
         (Subcheck::Tuple(subchecks), ValueKind::Tuple(values)) => {
             if subchecks.len() != values.len() {

@@ -8,6 +8,7 @@
 
 use crate::lang::{
     common::ds::set::IdSet,
+    data::notation::tree::get as get_notation,
     hints::input,
     traits::{at::At, eq::SyntaxEq, free::FreeIds},
 };
@@ -484,7 +485,7 @@ fn struct_rel_exps_input(
     not_typ: &al::NotTyp,
     input_hint: &input::InputHint,
 ) -> Vec<al::Exp> {
-    let typs = not_typ.node.args();
+    let typs = get_notation::args(&not_typ.node);
     // One fresh variable per input position
     let mut frees = IdSet::new();
     let mut exps_input = vec![];

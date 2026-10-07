@@ -11,7 +11,10 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::tree::{Mixfix, Mixop, parse},
+        notation::{
+            flat::get as get_notation,
+            tree::{Mixop, make as make_notation, parse},
+        },
         typ,
         value::flat::{Value, get, make},
     },
@@ -45,13 +48,10 @@ fn map_find_opt(arena: &Arena, key: &Value, map: &[Value]) -> Option<Value> {
         let Ok(value_case) = get::case(arena, pair) else {
             continue;
         };
-        if !value_case
-            .mixop()
-            .matches_tree(arena.arena_mixop(), &pair_mixop)
-        {
+        if !get_notation::mixop(value_case).matches_tree(arena.arena_mixop(), &pair_mixop) {
             continue;
         }
-        if let [value_key, value_value] = value_case.args()
+        if let [value_key, value_value] = get_notation::args(value_case)
             && arena.view(*value_key).syntax_eq(&arena.view(*key))
         {
             return Some(*value_value);
@@ -70,7 +70,7 @@ fn make_pair(
 ) -> Result<Value, BuiltinError> {
     let pair_id = crate::phrase!(node: "pair".to_owned(), span: Span::default());
     let typ = typ::make::var(pair_id, vec![typ_key.clone(), typ_value.clone()]);
-    let value_case = Mixfix::new(pair_mixop(), vec![value_key, value_value])
+    let value_case = make_notation::new(pair_mixop(), vec![value_key, value_value])
         .expect("the pair mixop has exactly two arguments");
     Ok(make::case(arena, typ.node.into(), value_case, Span::default())?)
 }
@@ -89,10 +89,10 @@ fn map_update(
     let pair_mixop = pair_mixop();
     for pair in map {
         let matching = get::case(arena, pair).ok().is_some_and(|value_case| {
-            if !value_case.mixop().matches_tree(arena.arena_mixop(), &pair_mixop) {
+            if !get_notation::mixop(value_case).matches_tree(arena.arena_mixop(), &pair_mixop) {
                 return false;
             }
-            matches!(value_case.args(), [value_key, _] if arena.view(*value_key).syntax_eq(&arena.view(*key)))
+            matches!(get_notation::args(value_case), [value_key, _] if arena.view(*value_key).syntax_eq(&arena.view(*key)))
         });
         // Replace in place once; later duplicates are kept as they are
         if !found && matching {
@@ -117,13 +117,10 @@ fn map_of_value(arena: &Arena, value: &Value) -> Result<ValueMap, BuiltinError> 
         get::case(arena, value).map_err(|_| BuiltinError::argument_invalid("expected a map"))?;
     let map_mixop = map_mixop();
     // The value must be a map case wrapping one list
-    if !value_case
-        .mixop()
-        .matches_tree(arena.arena_mixop(), &map_mixop)
-    {
+    if !get_notation::mixop(value_case).matches_tree(arena.arena_mixop(), &map_mixop) {
         return Err(BuiltinError::argument_invalid("expected a map"));
     }
-    let value_pairs = extract::one(value_case.args())?;
+    let value_pairs = extract::one(get_notation::args(value_case))?;
     get::list(arena, value_pairs)
         .map(<[Value]>::to_vec)
         .map_err(|_| BuiltinError::argument_invalid("expected a map"))
@@ -143,7 +140,7 @@ fn value_of_map(
     let value_pairs = make::list(arena, typ_pairs.node.into(), map, Span::default())?;
     let map_id = crate::phrase!(node: "map".to_owned(), span: Span::default());
     let typ = typ::make::var(map_id, vec![typ_key.clone(), typ_value.clone()]);
-    let value_case = Mixfix::new(map_mixop(), vec![value_pairs])
+    let value_case = make_notation::new(map_mixop(), vec![value_pairs])
         .expect("the map mixop has exactly one argument");
     let value = make::case(arena, typ.node.into(), value_case, Span::default())?;
     Ok(value)

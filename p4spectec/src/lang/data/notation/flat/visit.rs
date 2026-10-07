@@ -6,6 +6,8 @@
 use super::super::Piece;
 use super::{Mixop, MixopArena, MixopKind};
 
+// = Traversal
+
 impl Mixop {
     /// Visits atoms and argument positions in reading order.
     pub(crate) fn visit<'a>(

@@ -12,6 +12,7 @@ use super::{AtomPhrase, MixopTag};
 
 mod cmp;
 mod convert;
+pub mod get;
 pub mod make;
 pub mod parse;
 mod print;

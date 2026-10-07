@@ -12,7 +12,7 @@ use crate::lang::{
         ds::{map::IdMap, set::IdSet},
         source::Span,
     },
-    data::notation::tree::Mixfix,
+    data::notation::tree::{get as get_notation, make as make_notation},
     hints::input,
     traits::free::FreeIds,
 };
@@ -374,7 +374,7 @@ impl Replacer {
     fn replace_rule_instr(&self, instr_ol: ol::RuleInstr) -> ol::InstrKind {
         let ol::RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
         // Split the arguments by the input hint
-        let exps = not_exp.args().to_vec();
+        let exps = get_notation::args(&not_exp).to_vec();
         // Elaboration validates hints; OL rewrites preserve notation arity
         let (exps_input, exps_output) =
             input::split(&input_hint, exps).expect("validated relation hints and argument counts");
@@ -391,7 +391,7 @@ impl Replacer {
         // Renaming preserves the argument counts returned by input::split
         let exps = input::combine(&input_hint, exps_input, exps_output)
             .expect("validated relation hints and argument counts");
-        let not_exp = Mixfix::new(Rc::clone(not_exp.mixop()), exps)
+        let not_exp = make_notation::new(Rc::clone(get_notation::mixop(&not_exp)), exps)
             .expect("validated arguments preserve the mixfix arity");
         let iter_instrs = replacer.replace_iterinstrs_bound(iter_instrs);
         let block = replacer.replace_block(block);

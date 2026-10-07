@@ -11,7 +11,10 @@ use serde::{Deserializer, Serializer};
 use serde_derive_state::{DeserializeState, SerializeState};
 use serde_state::{DeserializeState, SerializeState};
 
-use crate::lang::data::notation::{self, AtomPhrase, MixopArena};
+use crate::lang::data::notation::{
+    self, AtomPhrase, MixopArena,
+    flat::{get as get_notation, make as make_notation},
+};
 
 use super::{
     super::{Value, ValueCase},
@@ -43,7 +46,11 @@ enum CaseRef<'a> {
 impl<'a> CaseRef<'a> {
     /// Fills a case's mixop, borrowing its atoms and arguments.
     fn from_flat(arena_mixop: &'a MixopArena, value_case: &'a ValueCase) -> Self {
-        Self::from_flat_inner(arena_mixop, *value_case.mixop(), &mut value_case.args().iter())
+        Self::from_flat_inner(
+            arena_mixop,
+            *get_notation::mixop(value_case),
+            &mut get_notation::args(value_case).iter(),
+        )
     }
 
     /// Visits argument positions in notation order.
@@ -150,6 +157,6 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for ValueCase {
         let mixop = mixop
             .into_flat(arena_mixop)
             .map_err(::serde::de::Error::custom)?;
-        ValueCase::new(arena_mixop, mixop, values).map_err(::serde::de::Error::custom)
+        make_notation::new(arena_mixop, mixop, values).map_err(::serde::de::Error::custom)
     }
 }

@@ -16,6 +16,7 @@ mod arena;
 mod cmp;
 mod convert;
 pub mod external;
+pub mod get;
 pub mod make;
 mod print;
 mod visit;

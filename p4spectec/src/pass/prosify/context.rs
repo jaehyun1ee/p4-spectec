@@ -6,7 +6,10 @@
 
 use crate::lang::{
     common::source::Span,
-    data::{notation::tree::Mixop, typ},
+    data::{
+        notation::tree::{Mixop, get as get_notation},
+        typ,
+    },
     hints::{alter, fields},
 };
 
@@ -198,9 +201,16 @@ impl Context {
             let mut hints =
                 crate::phrase! { node: HintsKind::default(), span: not_typ.span.clone() };
             Self::load_alter_hints(&mut hints, hints_sl);
-            Self::load_field_hints(&mut hints, hints_sl, Some(not_typ.node.args().len()))?;
-            self.henv
-                .insert_case(&def_typ_sl.id, not_typ.node.mixop(), hints);
+            Self::load_field_hints(
+                &mut hints,
+                hints_sl,
+                Some(get_notation::args(&not_typ.node).len()),
+            )?;
+            self.henv.insert_case(
+                &def_typ_sl.id,
+                get_notation::mixop(&not_typ.node).as_ref(),
+                hints,
+            );
         }
         Ok(())
     }

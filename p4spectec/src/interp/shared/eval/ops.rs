@@ -14,6 +14,7 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
+        notation::flat::get as get_notation,
         value::flat::{Value, ValueKind, get, make},
     },
     traits::eq::SyntaxEq,
@@ -149,9 +150,9 @@ pub(crate) fn sub(
 pub(crate) fn r#match(arena: &Arena, pattern: &ast::Pattern<Prepared>, value: Value) -> bool {
     match (pattern, arena.kind(&value)) {
         // Case: same constructor shape
-        (ast::Pattern::Case(mixop), ValueKind::Case(value_case)) => {
-            arena.arena_mixop().canon_eq(*mixop, *value_case.mixop())
-        }
+        (ast::Pattern::Case(mixop), ValueKind::Case(value_case)) => arena
+            .arena_mixop()
+            .canon_eq(*mixop, *get_notation::mixop(value_case)),
         // List: non-empty, fixed length, or empty
         (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {
             ast::ListPattern::Cons => !values.is_empty(),

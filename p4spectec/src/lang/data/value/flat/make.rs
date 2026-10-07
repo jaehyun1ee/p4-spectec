@@ -15,13 +15,16 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::tree::Mixfix,
+        notation::{
+            flat::make as make_notation,
+            tree::{Mixfix, get as get_notation},
+        },
         typ::{self, Typ, TypKind},
     },
 };
 
 use super::super::ValueError;
-use super::{Value, ValueCase, ValueField, ValueKind};
+use super::{Value, ValueField, ValueKind};
 
 // - General
 
@@ -99,11 +102,11 @@ pub fn case(
     mixfix: Mixfix<Value>,
     span: Span,
 ) -> Result<Value, ValueError> {
-    let (mixop, values) = mixfix.into_parts();
+    let (mixop, values) = get_notation::into_parts(mixfix);
     let arena_mixop = arena.arena_mixop_mut();
     let mixop = arena_mixop.intern_shared(&mixop)?;
     let value_case =
-        ValueCase::new(arena_mixop, mixop, values).expect("a mixfix fills every position");
+        make_notation::new(arena_mixop, mixop, values).expect("a mixfix fills every position");
     new(arena, ValueKind::Case(value_case), typ, span)
 }
 
@@ -118,7 +121,7 @@ macro_rules! case_shaped {
     ) => {{
         let (mixop_text, args, typ_name, span) = ($shape, $args, $typ, $span);
         let mixop = $crate::lang::data::notation::tree::parse::mixop(mixop_text);
-        let mixfix = $crate::lang::data::notation::tree::Mixfix::new(
+        let mixfix = $crate::lang::data::notation::tree::make::new(
             mixop,
             std::iter::IntoIterator::into_iter(args).collect(),
         )
