@@ -10,7 +10,7 @@ use crate::util::json::json;
 
 use crate::lang::data::encoding::Encoding;
 
-use super::{MixopArena, flat, tree};
+use super::super::{MixopArena, flat, tree};
 
 // = Configuration
 

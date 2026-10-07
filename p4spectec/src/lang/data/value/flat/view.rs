@@ -12,7 +12,7 @@ use crate::lang::{
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
 
-use super::flat::{Value, ValueKind};
+use super::{Value, ValueKind};
 
 // = Borrowed views
 

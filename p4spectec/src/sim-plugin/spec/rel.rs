@@ -5,7 +5,7 @@
 //! `Lvalue_read` and `Lvalue_write` take a cursor (`LOCAL` or `GLOBAL`)
 //! and a reference.
 
-use crate::lang::data::value::{flat::Value, get};
+use crate::lang::data::value::flat::{Value, get};
 
 use crate::runner::{Extern, ExternError, Interface, Interpreter, InterpreterError, RunnerContext};
 
@@ -26,7 +26,7 @@ where
     Interp: Interpreter<Iface, Ext>,
 {
     // A bare name read at the global cursor
-    let value_cursor = crate::lang::data::value::make::case_shaped! {
+    let value_cursor = crate::lang::data::value::flat::make::case_shaped! {
         arena: ctx.arena_mut(),
         shape: "GLOBAL",
         args: vec![],
@@ -53,7 +53,7 @@ where
     Ext: Extern,
     Interp: Interpreter<Iface, Ext>,
 {
-    use crate::lang::{common::source::Span, data::value::make};
+    use crate::lang::{common::source::Span, data::value::flat::make};
     let value_cursor = make::case_shaped! {
         arena: ctx.arena_mut(),
         shape: "GLOBAL",
@@ -116,7 +116,7 @@ where
     Ext: Extern,
     Interp: Interpreter<Iface, Ext>,
 {
-    use crate::lang::{common::source::Span, data::value::make};
+    use crate::lang::{common::source::Span, data::value::flat::make};
     let value_cursor = make::case_shaped! {
         arena: ctx.arena_mut(),
         shape: "LOCAL",
@@ -157,7 +157,7 @@ where
     Ext: Extern,
     Interp: Interpreter<Iface, Ext>,
 {
-    use crate::lang::{common::source::Span, data::value::make};
+    use crate::lang::{common::source::Span, data::value::flat::make};
     let value_cursor = make::case_shaped! {
         arena: ctx.arena_mut(),
         shape: "GLOBAL",
@@ -309,7 +309,7 @@ where
     Interp: Interpreter<Iface, Ext>,
 {
     // The port becomes an integer value
-    let value_port = crate::lang::data::value::make::int(
+    let value_port = crate::lang::data::value::flat::make::int(
         ctx.arena_mut(),
         port.into(),
         crate::lang::common::source::Span::default(),
@@ -332,7 +332,7 @@ where
     Ext: Extern,
     Interp: Interpreter<Iface, Ext>,
 {
-    use crate::lang::{common::source::Span, data::value::make};
+    use crate::lang::{common::source::Span, data::value::flat::make};
     let value_port =
         make::int(ctx.arena_mut(), port.into(), Span::default()).map_err(ExternError::from)?;
     let value_path =
@@ -446,7 +446,7 @@ where
     Interp: Interpreter<Iface, Ext>,
 {
     // The port becomes an integer value
-    let value_port = crate::lang::data::value::make::int(
+    let value_port = crate::lang::data::value::flat::make::int(
         ctx.arena_mut(),
         port.into(),
         crate::lang::common::source::Span::default(),
@@ -471,7 +471,7 @@ where
     Ext: Extern,
     Interp: Interpreter<Iface, Ext>,
 {
-    use crate::lang::{common::source::Span, data::value::make};
+    use crate::lang::{common::source::Span, data::value::flat::make};
     // Egress metadata also carries class of service and instance
     let value_port =
         make::int(ctx.arena_mut(), port.into(), Span::default()).map_err(ExternError::from)?;
@@ -592,7 +592,7 @@ where
     Interp: Interpreter<Iface, Ext>,
 {
     // The port becomes an integer value
-    let value_port = crate::lang::data::value::make::int(
+    let value_port = crate::lang::data::value::flat::make::int(
         ctx.arena_mut(),
         port.into(),
         crate::lang::common::source::Span::default(),

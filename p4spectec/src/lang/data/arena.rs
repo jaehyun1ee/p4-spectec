@@ -109,7 +109,7 @@ impl Arena {
     pub fn to_string(&self, value: &Value) -> String {
         let mut output = String::new();
         let mut printer = crate::lang::traits::print::Printer::new(&mut output);
-        super::value::print::print_value(self, value, &mut printer)
+        super::value::flat::print::print_value(self, value, &mut printer)
             .expect("writing to a String cannot fail");
         output
     }

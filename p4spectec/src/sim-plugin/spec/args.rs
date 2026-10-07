@@ -5,7 +5,10 @@
 
 use crate::lang::data::{
     arena::Arena,
-    value::{ValueError, flat::Value, get},
+    value::{
+        ValueError,
+        flat::{Value, get},
+    },
 };
 
 use crate::runner::ExternError;

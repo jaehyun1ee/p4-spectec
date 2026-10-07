@@ -26,9 +26,11 @@ use crate::lang::{
         typ,
         value::{
             ValueError,
-            external::{DecodeContext, EncodeContext, decode_with, encode_with},
-            flat::Value,
-            get, make,
+            flat::{
+                Value,
+                external::{DecodeContext, EncodeContext, decode_with, encode_with},
+                get, make,
+            },
         },
     },
 };

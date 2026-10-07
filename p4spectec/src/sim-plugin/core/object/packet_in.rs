@@ -15,7 +15,7 @@ use crate::lang::{
     common::{prim::num, source::Span},
     data::{
         typ,
-        value::{flat::Value, get, make},
+        value::flat::{Value, get, make},
     },
 };
 

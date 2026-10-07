@@ -27,12 +27,19 @@ use crate::lang::{
     },
 };
 
-use super::{
-    ValueTag,
-    external::{DecodeContext, EncodeContext},
-};
+use super::ValueTag;
 
-pub use super::view::ValueRef;
+use self::external::{DecodeContext, EncodeContext};
+
+mod arena;
+pub mod external;
+pub mod get;
+pub mod make;
+pub mod print;
+mod view;
+
+pub(in crate::lang::data) use arena::ValueArena;
+pub use view::ValueRef;
 
 // = Value forms
 

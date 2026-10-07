@@ -14,9 +14,9 @@ use crate::lang::{
         arena::Arena,
         encoding::Encoding,
         typ,
-        value::{
+        value::flat::{
+            Value,
             external::{DecodeContext, EncodeContext, decode_with, encode_with},
-            flat::Value,
             get, make,
         },
     },

@@ -20,7 +20,11 @@ use crate::lang::{
 
 use super::{AtomPhrase, MixopArena, MixopError, Piece, flat};
 
-pub use super::view::{MixfixRef, MixfixView};
+pub mod make;
+pub mod parse;
+mod view;
+
+pub use view::{MixfixRef, MixfixView};
 
 // = Notation forms
 

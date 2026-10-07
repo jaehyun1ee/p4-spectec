@@ -9,21 +9,16 @@
 
 use crate::lang::common::{notation::atom::Atom, source::Phrase};
 
-mod arena;
 mod error;
-pub mod external;
 pub mod flat;
 mod free;
 mod get;
-mod make;
 mod map;
-pub mod parse;
 pub(crate) mod print;
 pub mod tree;
-mod view;
 
-pub use arena::MixopArena;
 pub use error::{ArityMismatch, MixopError};
+pub use flat::MixopArena;
 
 // = Notation forms
 

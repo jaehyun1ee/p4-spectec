@@ -3,7 +3,7 @@
 //! `MixfixRef` pairs a subtree with the arguments of its positions.
 //! `MixfixView` exposes one level with those arguments in place.
 
-use super::{AtomPhrase, tree};
+use super::super::{AtomPhrase, tree};
 
 // = Borrowed views
 

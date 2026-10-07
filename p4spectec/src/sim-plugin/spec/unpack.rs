@@ -10,7 +10,10 @@ use crate::lang::{
     common::prim::num,
     data::{
         arena::Arena,
-        value::{ValueError, flat::Value, get},
+        value::{
+            ValueError,
+            flat::{Value, get},
+        },
     },
 };
 

@@ -6,7 +6,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::frontend;
 
-use super::tree::Mixop;
+use super::Mixop;
 
 // = Mixop parsing
 

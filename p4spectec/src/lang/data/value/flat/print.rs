@@ -12,7 +12,7 @@ use crate::lang::{
     traits::print::{Print, Printer},
 };
 
-use super::flat::{Value, ValueKind};
+use super::{Value, ValueKind};
 
 // = Flat values
 

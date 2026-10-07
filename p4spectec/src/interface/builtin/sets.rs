@@ -11,11 +11,11 @@ use crate::lang::{
     data::{
         arena::Arena,
         notation::{
-            flat, parse,
-            tree::{Mixfix, Mixop},
+            flat,
+            tree::{Mixfix, Mixop, parse},
         },
         typ,
-        value::{flat::Value, get, make},
+        value::flat::{Value, get, make},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };

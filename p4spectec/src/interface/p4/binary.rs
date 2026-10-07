@@ -11,7 +11,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        value::{flat::Value, make},
+        value::flat::{Value, make},
     },
 };
 

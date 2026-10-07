@@ -1,12 +1,11 @@
-//! Constructors for mixfix forms
+//! Constructors for tree mixfix forms
 //!
-//! Each representation provides `new` to check one argument per position.
-//! Tree constructors compose forms with their arguments in notation order.
-//! `fill` supplies one argument for each position of a shared tree.
+//! `new` checks the argument count; `fill` supplies each position.
+//! Part constructors compose forms and arguments in notation order.
 
 use std::{cmp::Ordering, rc::Rc};
 
-use super::{ArityMismatch, AtomPhrase, MixopArena, flat, tree};
+use super::super::{ArityMismatch, AtomPhrase, tree};
 
 // - General
 
@@ -27,24 +26,6 @@ impl<T> tree::Mixfix<T> {
     pub fn fill(mixop: Rc<tree::Mixop>, fill_arg: impl FnMut(usize) -> T) -> Self {
         let arity = mixop.arity();
         Self { args: (0..arity).map(fill_arg).collect(), mixop }
-    }
-}
-
-impl<T> flat::Mixfix<T> {
-    /// Pairs a mixop with its arguments.
-    ///
-    /// Fails unless there is exactly one argument per position;
-    /// `mixop` must belong to `arena_mixop`.
-    pub fn new(
-        arena_mixop: &MixopArena,
-        mixop: flat::Mixop,
-        args: Vec<T>,
-    ) -> Result<Self, ArityMismatch> {
-        match args.len().cmp(&arena_mixop.arity(mixop)) {
-            Ordering::Less => Err(ArityMismatch::ArgumentCountTooFew),
-            Ordering::Greater => Err(ArityMismatch::ArgumentCountTooMany),
-            Ordering::Equal => Ok(Self { mixop, args }),
-        }
     }
 }
 

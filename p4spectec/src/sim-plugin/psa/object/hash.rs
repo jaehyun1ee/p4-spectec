@@ -11,7 +11,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::{flat::Value, make},
+        value::flat::{Value, make},
     },
 };
 

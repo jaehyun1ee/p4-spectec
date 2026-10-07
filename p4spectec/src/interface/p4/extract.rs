@@ -7,7 +7,7 @@
 
 use crate::lang::data::{
     arena::Arena,
-    value::{flat::Value, get},
+    value::flat::{Value, get},
 };
 
 use super::{context::TypeId, error::ExtractError};

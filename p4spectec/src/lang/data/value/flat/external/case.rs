@@ -14,7 +14,7 @@ use serde_state::{DeserializeState, SerializeState};
 use crate::lang::data::notation::{self, AtomPhrase, MixopArena};
 
 use super::{
-    super::flat::{Value, ValueCase},
+    super::{Value, ValueCase},
     DecodeContext, EncodeContext,
 };
 

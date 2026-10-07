@@ -10,10 +10,7 @@ use std::{borrow::Borrow, rc::Rc};
 use crate::lang::{
     common::source::Span,
     data::{
-        value::{
-            flat::{Value, ValueKind},
-            get, make,
-        },
+        value::flat::{Value, ValueKind, get, make},
         var::IdSlot,
     },
     traits::print::Print,

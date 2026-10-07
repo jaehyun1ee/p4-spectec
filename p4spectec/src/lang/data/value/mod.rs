@@ -5,21 +5,15 @@
 //! Each representation defines its own `Value` and `ValueKind`.
 //! `flat::ValueCase` pairs a mixop handle with its arguments;
 //! `tree::ValueCase` owns its filled notation.
-//! `make` allocates values of each kind with their type,
-//! `get` projects a kind back out or fails with `ValueError`.
+//! `flat::make` allocates values of each kind with their type,
+//! `flat::get` projects a kind back out or fails with `ValueError`.
 
-mod arena;
 mod error;
-pub mod external;
 pub mod flat;
-pub mod get;
-pub mod make;
-pub mod print;
 pub mod tree;
-mod view;
 
-pub(super) use arena::ValueArena;
 pub use error::ValueError;
+pub(super) use flat::ValueArena;
 
 // = Value tags
 

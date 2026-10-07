@@ -18,7 +18,7 @@ use crate::lang::{
     data::{arena::Arena, encoding::Encoding, intern::Interned, typ::TypKind},
 };
 
-use super::{flat, tree};
+use super::super::{flat, tree};
 
 mod case;
 

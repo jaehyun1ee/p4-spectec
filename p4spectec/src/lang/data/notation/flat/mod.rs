@@ -18,11 +18,15 @@ use serde_derive_state::{DeserializeState, SerializeState};
 
 use crate::lang::data::intern::{CanonEq, CanonHash, CanonInterner, Interned};
 
-use super::{
-    AtomPhrase, MixopArena, Piece,
-    external::{DecodeContext, EncodeContext},
-    tree,
-};
+use super::{AtomPhrase, Piece, tree};
+
+use self::external::{DecodeContext, EncodeContext};
+
+mod arena;
+pub mod external;
+pub mod make;
+
+pub use arena::MixopArena;
 
 // = Notation forms
 

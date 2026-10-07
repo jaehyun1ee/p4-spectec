@@ -13,7 +13,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{flat::Value, make},
+        value::flat::{Value, make},
     },
 };
 

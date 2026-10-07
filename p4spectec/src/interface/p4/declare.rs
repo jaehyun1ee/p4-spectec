@@ -7,7 +7,7 @@
 //! List-shaped declarations are traversed left to right
 //! so every name is available to following tokens.
 
-use crate::lang::data::value::{flat::Value, get};
+use crate::lang::data::value::flat::{Value, get};
 
 use super::{
     context::{Context, Namespace, TypeId},

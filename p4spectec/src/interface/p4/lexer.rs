@@ -50,8 +50,7 @@ use crate::lang::{
         typ,
         value::{
             ValueError,
-            flat::{Value, ValueCase, ValueKind},
-            make,
+            flat::{Value, ValueCase, ValueKind, make},
         },
     },
 };

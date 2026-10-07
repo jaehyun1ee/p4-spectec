@@ -12,10 +12,7 @@ use std::borrow::Cow;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{
-        flat::{Value, ValueKind},
-        get,
-    },
+    data::value::flat::{Value, ValueKind, get},
     hints::input,
     traits::print::Print,
 };

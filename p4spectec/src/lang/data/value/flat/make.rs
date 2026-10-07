@@ -20,10 +20,8 @@ use crate::lang::{
     },
 };
 
-use super::{
-    ValueError,
-    flat::{Value, ValueCase, ValueField, ValueKind},
-};
+use super::super::ValueError;
+use super::{Value, ValueCase, ValueField, ValueKind};
 
 // - General
 
@@ -119,7 +117,7 @@ macro_rules! case_shaped {
         span: $span:expr $(,)?
     ) => {{
         let (mixop_text, args, typ_name, span) = ($shape, $args, $typ, $span);
-        let mixop = $crate::lang::data::notation::parse::mixop(mixop_text);
+        let mixop = $crate::lang::data::notation::tree::parse::mixop(mixop_text);
         let mixfix = $crate::lang::data::notation::tree::Mixfix::new(
             mixop,
             std::iter::IntoIterator::into_iter(args).collect(),
@@ -130,7 +128,12 @@ macro_rules! case_shaped {
             span: $crate::lang::common::source::Span::default(),
         };
         let typ = $crate::lang::data::typ::make::var(id, std::vec::Vec::new());
-        $crate::lang::data::value::make::case($arena, std::rc::Rc::new(typ.node), mixfix, span)
+        $crate::lang::data::value::flat::make::case(
+            $arena,
+            std::rc::Rc::new(typ.node),
+            mixfix,
+            span,
+        )
     }};
 }
 

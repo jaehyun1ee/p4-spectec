@@ -12,7 +12,7 @@ use foldhash::fast::RandomState;
 
 use crate::lang::data::intern::{CanonId, CanonInterner};
 
-use super::{error::MixopError, flat, tree};
+use super::super::{error::MixopError, flat, tree};
 
 // = Arena storage
 
@@ -46,7 +46,10 @@ impl MixopArena {
     }
 
     /// Interns a node whose children already belong to this arena.
-    pub(super) fn intern_kind(&mut self, kind: flat::MixopKind) -> Result<flat::Mixop, MixopError> {
+    pub(in crate::lang::data::notation) fn intern_kind(
+        &mut self,
+        kind: flat::MixopKind,
+    ) -> Result<flat::Mixop, MixopError> {
         // Child canonical identities are available when the parent is hashed
         let mixop = self.mixops.intern(kind, &())?;
         // A new mixop sums its children's positions, which are recorded

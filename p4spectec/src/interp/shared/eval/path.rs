@@ -7,7 +7,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::{flat::Value, get, make},
+    data::value::flat::{Value, get, make},
 };
 
 use crate::lang::il::prepared as ast;

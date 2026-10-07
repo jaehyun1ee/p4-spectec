@@ -9,10 +9,8 @@ use crate::util::json::json;
 
 use crate::lang::{common::prim::num::Number, data::arena::Arena};
 
-use super::{
-    ValueError, ValueTag,
-    flat::{Value, ValueCase, ValueField, ValueKind},
-};
+use super::super::{ValueError, ValueTag};
+use super::{Value, ValueCase, ValueField, ValueKind};
 
 // - Primitives
 
@@ -70,14 +68,14 @@ macro_rules! matches {
         match $value_case {
             Some(value_case)
                 if [$shape, $($shape_alt),*].into_iter().any(|mixop_text| {
-                    let mixop_expect = $crate::lang::data::notation::parse::mixop(mixop_text);
+                    let mixop_expect = $crate::lang::data::notation::tree::parse::mixop(mixop_text);
                     $crate::lang::data::notation::flat::matches_tree($arena.arena_mixop(), *value_case.mixop(), mixop_expect.as_ref())
                 }) =>
             {
                 let $values = value_case.args();
                 $body
             }
-            _ => $crate::lang::data::value::get::matches! {
+            _ => $crate::lang::data::value::flat::get::matches! {
                 @arms $arena, $value_case;
                 $($rest)+
             },
@@ -93,7 +91,7 @@ macro_rules! matches {
             $crate::lang::data::value::flat::ValueKind::Case(value_case) => Some(value_case),
             _ => None,
         };
-        $crate::lang::data::value::get::matches! {
+        $crate::lang::data::value::flat::get::matches! {
             @arms arena, value_case;
             $($arms)+
         }

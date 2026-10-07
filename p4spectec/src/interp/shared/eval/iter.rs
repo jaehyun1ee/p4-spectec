@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use crate::lang::{
     common::source::Span,
-    data::value::{flat::Value, make},
+    data::value::flat::{Value, make},
 };
 
 use crate::lang::il::prepared as ast;

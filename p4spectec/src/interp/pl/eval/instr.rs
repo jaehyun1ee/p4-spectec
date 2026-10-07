@@ -9,7 +9,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::{flat::Value, get},
+    data::value::flat::{Value, get},
     hints::input,
     traits::print::Print,
 };

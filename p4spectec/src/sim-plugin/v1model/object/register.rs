@@ -10,9 +10,9 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{
+        value::flat::{
+            Value,
             external::{DecodeContext, EncodeContext},
-            flat::Value,
             make,
         },
     },
@@ -62,7 +62,7 @@ impl Register {
         Ext: Extern,
         Interp: Interpreter<Iface, Ext>,
     {
-        let values_targ = crate::lang::data::value::get::list(ctx.arena(), &value_targs)?;
+        let values_targ = crate::lang::data::value::flat::get::list(ctx.arena(), &value_targs)?;
         // Exactly one type argument, the element type
         let [value_typ] = values_targ else {
             return Err(error::register_type_argument_arity_mismatch(format!(

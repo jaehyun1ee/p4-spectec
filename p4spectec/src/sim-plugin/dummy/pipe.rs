@@ -6,7 +6,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         typ,
-        value::{external::encode, flat::Value, make},
+        value::flat::{Value, external::encode, make},
     },
 };
 

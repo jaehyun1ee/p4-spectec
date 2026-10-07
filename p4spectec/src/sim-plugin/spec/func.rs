@@ -5,7 +5,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::{flat::Value, get, make},
+    data::value::flat::{Value, get, make},
 };
 
 use crate::runner::{Extern, ExternError, Interface, Interpreter, InterpreterError, RunnerContext};

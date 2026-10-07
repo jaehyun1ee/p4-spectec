@@ -6,7 +6,7 @@
 //! iteration premises repeat under `iter::yield`.
 //! A failed premise is an `Unmatch`, so the enclosing candidate is skipped.
 
-use crate::lang::{data::value::get, hints::input, traits::print::Print};
+use crate::lang::{data::value::flat::get, hints::input, traits::print::Print};
 
 use crate::lang::il::print::ExpRef;
 

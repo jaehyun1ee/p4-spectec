@@ -5,9 +5,9 @@
 use serde::{Deserialize, Serialize};
 use serde_derive_state::{DeserializeState, SerializeState};
 
-use crate::lang::data::value::{
+use crate::lang::data::value::flat::{
+    Value,
     external::{DecodeContext, EncodeContext},
-    flat::Value,
 };
 
 use super::super::core::object::PacketIn;
