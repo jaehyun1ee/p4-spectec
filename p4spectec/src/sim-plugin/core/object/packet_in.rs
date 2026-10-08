@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use crate::lang::{
     common::{prim::num, source::Span},
     data::{
-        notation::flat as notation,
         typ,
         value::flat::{self as value, Value},
     },
@@ -197,7 +196,7 @@ impl PacketIn {
             .to_usize()
             .ok_or_else(|| error::packet_size_invalid("invalid packet size".to_owned()))?;
         // The variable size as a number
-        let values_size = notation::get::args(value::get::case(ctx.arena(), &value_size)?);
+        let values_size = value::get::case(ctx.arena(), &value_size)?.args();
         let value_varsize = values_size.get(1).ok_or_else(|| {
             ExternError::from(crate::lang::data::value::ValueError::IndexOutOfBounds {
                 index: 1,

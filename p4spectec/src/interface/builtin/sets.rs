@@ -10,10 +10,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::{
-            self,
-            tree::{Mixop, parse},
-        },
+        notation::tree::{self as notation, Mixop, parse},
         typ,
         value::flat::{self as value, Value},
     },
@@ -52,12 +49,13 @@ fn set_mixop() -> Rc<Mixop> {
 fn set_of_value(arena: &Arena, value: &Value) -> Result<ValueSet, BuiltinError> {
     let value_case = value::get::case(arena, value)
         .map_err(|_| BuiltinError::argument_invalid("expected a set"))?;
-    let set_mixop = set_mixop();
+    let mixop_set = set_mixop();
     // The value must be a set case wrapping one list
-    if !notation::flat::get::mixop(value_case).matches_tree(arena.arena_mixop(), &set_mixop) {
+    let mixop = value_case.mixop().into_tree(arena.mixop());
+    if !mixop.syntax_eq(mixop_set.as_ref()) {
         return Err(BuiltinError::argument_invalid("expected a set"));
     }
-    let value_set = extract::one(notation::flat::get::args(value_case))?;
+    let value_set = extract::one(value_case.args())?;
     let values = value::get::list(arena, value_set)
         .map_err(|_| BuiltinError::argument_invalid("expected a set"))?;
     let mut set = values.to_vec();
@@ -73,7 +71,7 @@ fn value_of_set(arena: &mut Arena, typ_key: &Typ, set: ValueSet) -> Result<Value
     let value_set = value::make::list(arena, typ_list.node.into(), values_elem, Span::default())?;
     let set_id = crate::phrase!(node: "set".to_owned(), span: Span::default());
     let typ = typ::make::var(set_id, vec![typ_key.clone()]);
-    let value_case = notation::tree::make::new(set_mixop(), vec![value_set])
+    let value_case = notation::make::new(set_mixop(), vec![value_set])
         .expect("the set mixop has exactly one argument");
     let value = value::make::case(arena, typ.node.into(), value_case, Span::default())?;
     Ok(value)

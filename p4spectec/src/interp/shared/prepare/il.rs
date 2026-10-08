@@ -38,7 +38,7 @@ pub fn prepare_def_typ(def_typ: source::DefTyp, arena_mixop: &mut MixopArena) ->
 /// Prepares one variant case, interning its notation as a shape.
 fn prepare_typ_case(typ_case: source::TypCase, arena_mixop: &mut MixopArena) -> TypCase {
     let source::TypCase { not_typ, typ_origin, hints } = typ_case;
-    let (mixop, typs) = notation::get::into_parts(not_typ.node);
+    let (mixop, typs) = not_typ.node.into_parts();
     let mixop = arena_mixop
         .intern_shared(&mixop)
         .expect("specification mixops fit in 32-bit shape handles");

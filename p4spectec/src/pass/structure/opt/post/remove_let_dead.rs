@@ -15,7 +15,6 @@
 
 use crate::lang::{
     common::{ds::set::IdSet, source::Span},
-    data::notation::tree as notation,
     hints::input,
     traits::{free::FreeIds, has_call::HasCall},
 };
@@ -63,7 +62,7 @@ fn downstream_block(ids_defined: &IdSet, block: &Block) -> IdSet {
                 ids_defined.difference(&ids_bound)
             }
             InstrKind::Rule(instr_rule) => {
-                let exps = notation::get::args(&instr_rule.not_exp).iter().collect();
+                let exps = instr_rule.not_exp.args().iter().collect();
                 // Elaboration validates hints; OL rewrites preserve notation arity
                 let (_, exps_output) = input::split(&instr_rule.input_hint, exps)
                     .expect("validated relation hints and argument counts");
@@ -135,7 +134,7 @@ fn downstream_let_instr(ids_defined: &IdSet, instr_ol: &LetInstr) -> IdSet {
 
 fn downstream_rule_instr(ids_defined: &IdSet, instr_ol: &RuleInstr) -> IdSet {
     let RuleInstr { not_exp, input_hint, block, .. } = instr_ol;
-    let exps = notation::get::args(not_exp).iter().collect();
+    let exps = not_exp.args().iter().collect();
     // Elaboration validates hints; OL rewrites preserve notation arity
     let (exps_input, _) =
         input::split(input_hint, exps).expect("validated relation hints and argument counts");

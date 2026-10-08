@@ -1,14 +1,12 @@
 //! Comparison of flat notation
 //!
 //! Canonical equality uses child canonical identities.
-//! Structural comparison resolves handles and visits arguments in notation order;
-//! `matches_tree` compares a parsed tree pattern without allocating a tree.
+//! Structural comparison resolves handles and visits arguments in notation order.
 
 use std::cmp::Ordering;
 
 use crate::lang::data::intern::{CanonEq, CanonInterner};
 
-use super::super::tree;
 use super::{Mixfix, Mixop, MixopArena, MixopKind};
 
 // = Canonical equality
@@ -117,38 +115,6 @@ impl Mixop {
             }
             // Different forms order by variant
             (kind_l, kind_r) => kind_l.tag().cmp(&kind_r.tag()),
-        }
-    }
-
-    /// Compares this node and its children with a tree, ignoring atom spans.
-    pub(crate) fn matches_tree(self, arena_mixop: &MixopArena, mixop_tree: &tree::Mixop) -> bool {
-        match (arena_mixop.kind(self), mixop_tree) {
-            (MixopKind::Arg, tree::Mixop::Arg) => true,
-            (MixopKind::Atom(atom_l), tree::Mixop::Atom(atom_r)) => atom_l.node == atom_r.node,
-            (
-                MixopKind::Brack(atom_l_l, mixop_l, atom_l_r),
-                tree::Mixop::Brack(atom_r_l, mixop_r, atom_r_r),
-            ) => {
-                atom_l_l.node == atom_r_l.node
-                    && atom_l_r.node == atom_r_r.node
-                    && mixop_l.matches_tree(arena_mixop, mixop_r)
-            }
-            (
-                MixopKind::Infix(mixop_l_l, atom_l, mixop_l_r),
-                tree::Mixop::Infix(mixop_r_l, atom_r, mixop_r_r),
-            ) => {
-                atom_l.node == atom_r.node
-                    && mixop_l_l.matches_tree(arena_mixop, mixop_r_l)
-                    && mixop_l_r.matches_tree(arena_mixop, mixop_r_r)
-            }
-            (MixopKind::Seq(mixops_l), tree::Mixop::Seq(mixops_r)) => {
-                mixops_l.len() == mixops_r.len()
-                    && mixops_l
-                        .iter()
-                        .zip(mixops_r)
-                        .all(|(mixop_l, mixop_r)| mixop_l.matches_tree(arena_mixop, mixop_r))
-            }
-            _ => false,
         }
     }
 }

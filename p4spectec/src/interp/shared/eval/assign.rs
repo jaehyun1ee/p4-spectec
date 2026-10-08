@@ -13,7 +13,6 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::flat as notation,
         typ,
         value::flat::{self as value, Value, ValueKind},
         var::IdSlot,
@@ -75,7 +74,7 @@ pub fn assign_exp<Ctx: WriteContext>(
         }
         // Case: the arguments
         (ast::ExpKind::Case(not_exp), ValueKind::Case(value_case)) => {
-            let values = notation::get::args(value_case).to_vec();
+            let values = value_case.args().to_vec();
             assign_case_exp(arena, ctx, not_exp, &values)
         }
         // Struct: the fields in order
@@ -156,7 +155,7 @@ fn assign_case_exp<Ctx: WriteContext>(
     not_exp: &ast::NotExp,
     values: &[Value],
 ) -> Backtrack<Ctx> {
-    assign_exps(arena, ctx, notation::get::args(not_exp), values)
+    assign_exps(arena, ctx, not_exp.args(), values)
 }
 
 // - Struct expression

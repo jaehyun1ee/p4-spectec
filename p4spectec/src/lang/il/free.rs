@@ -6,7 +6,6 @@
 
 use crate::lang::{
     common::ds::set::IdSet,
-    data::notation,
     traits::{
         eq::SyntaxEq,
         free::{FreeIds, FreeVars},
@@ -154,7 +153,7 @@ impl FreeVars for Exp {
             }
             ExpKind::Case(not_exp) => {
                 let mut vars_free = Vec::new();
-                for exp in notation::get::args(not_exp) {
+                for exp in not_exp.args() {
                     exp.free_vars_into(&mut vars_free);
                 }
                 vars_free

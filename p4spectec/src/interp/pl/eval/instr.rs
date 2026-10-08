@@ -9,10 +9,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::{
-        notation::flat as notation,
-        value::flat::{self as value, Value},
-    },
+    data::value::flat::{self as value, Value},
     hints::input,
     traits::print::Print,
 };
@@ -241,8 +238,7 @@ fn eval_if_instr<'global, Tier, Iface: Interface, Ext: Extern>(
             Flow::cont(
                 instr.exp.node.span.clone(),
                 error::prem::condition_unmet(
-                    ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &instr.exp }
-                        .to_string()
+                    ExpRef { arena_mixop: runner_ctx.arena().mixop(), exp: &instr.exp }.to_string()
                 )
             )
         ))
@@ -266,7 +262,7 @@ fn eval_hold_instr<'global, Tier, Iface: Interface, Ext: Extern>(
     let mut errors = Vec::new();
     let cond =
         unwrap!(eval_cond_iter(runner_ctx, &ctx, &instr.iter_exps, &mut |runner_ctx, ctx| {
-            let values = unwrap!(eval_exps(runner_ctx, ctx, notation::get::args(&instr.not_exp)));
+            let values = unwrap!(eval_exps(runner_ctx, ctx, instr.not_exp.args()));
             match PlInterp::invoke_rel(runner_ctx, ctx, &instr.id, &values) {
                 // A match means it holds
                 ok!(_) => ok!(true),
@@ -336,8 +332,7 @@ fn eval_case_instr<'global, Tier, Iface: Interface, Ext: Extern>(
         Flow::cont(
             instr.exp.node.span.clone(),
             error::prem::condition_unmet(
-                ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &instr.exp }
-                    .to_string()
+                ExpRef { arena_mixop: runner_ctx.arena().mixop(), exp: &instr.exp }.to_string()
             )
         )
     ))
@@ -424,7 +419,7 @@ fn eval_rule_instr<'global, Iface: Interface, Ext: Extern>(
 ) -> Backtrack<(Context<'global>, Flow)> {
     // The input hint separates arguments from output patterns
     let (exps_input, exps_output) =
-        input::split(&instr.input_hint, notation::get::args(&instr.not_exp).iter().collect())
+        input::split(&instr.input_hint, instr.not_exp.args().iter().collect())
             .expect("input hint must fit relation");
     // Invoke the relation at each enclosing iteration
     let ctx =
@@ -489,7 +484,7 @@ fn eval_destruct_instr<'global, Iface: Interface, Ext: Extern>(
     let value = unwrap!(eval_exp(runner_ctx, &ctx, &instr.exp));
     let value_case =
         value::get::case(runner_ctx.arena(), &value).expect("destructuring value must be a case");
-    let values = notation::get::args(value_case).to_vec();
+    let values = value_case.args().to_vec();
     let exps = instr
         .bindings
         .iter()
@@ -532,7 +527,7 @@ fn eval_check_let_sub_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} is not a subtype of {}",
-                    ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &instr.exp_r }
+                    ExpRef { arena_mixop: runner_ctx.arena().mixop(), exp: &instr.exp_r }
                         .to_string(),
                     Print::to_string(&instr.typ)
                 ))
@@ -569,7 +564,7 @@ fn eval_check_let_match_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} does not match the expected pattern",
-                    ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &instr.exp_r }
+                    ExpRef { arena_mixop: runner_ctx.arena().mixop(), exp: &instr.exp_r }
                         .to_string()
                 ))
             )
@@ -607,7 +602,7 @@ fn eval_option_get_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} evaluated to an empty option",
-                    ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &instr.exp_r }
+                    ExpRef { arena_mixop: runner_ctx.arena().mixop(), exp: &instr.exp_r }
                         .to_string()
                 ))
             )

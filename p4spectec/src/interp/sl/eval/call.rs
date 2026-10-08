@@ -12,7 +12,6 @@ use std::{borrow::Cow, rc::Rc};
 use crate::lang::{
     data::{
         arena::Arena,
-        notation::tree as notation,
         value::flat::{Value, ValueKind},
     },
     hints::input,
@@ -83,7 +82,7 @@ pub(in crate::interp::sl) fn check_rel_inputs(
         return ok!(());
     }
     // Input types are the notation arguments the hint selects
-    let typs = notation::get::args(&not_typ.node);
+    let typs = not_typ.node.args();
     let typs = inputs
         .indices()
         .iter()
@@ -287,14 +286,14 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
     // Attach the call site to fatal host failures
     let (values, _) = unwrap!(result.map_err(|failure| failure.with_span(&id.span)));
     // Check the number of extern outputs before assigning them
-    let len = notation::get::args(&rel.rel_signature.not_typ.node).len()
-        - rel.rel_signature.input_hint.indices().len();
+    let len =
+        rel.rel_signature.not_typ.node.args().len() - rel.rel_signature.input_hint.indices().len();
     unwrap!(backtrack::check(len == values.len(), id.span.clone(), || {
         error::guard::relation_output_arity_mismatch(len, values.len())
     }));
     if runner_ctx.interp().config.guard {
         // Output types are the notation arguments the hint leaves
-        let typs = notation::get::args(&rel.rel_signature.not_typ.node).to_vec();
+        let typs = rel.rel_signature.not_typ.node.args().to_vec();
         let (_, typs) = input::split(&rel.rel_signature.input_hint, typs)
             .expect("input hint must fit relation");
         unwrap!(check_values(runner_ctx.arena(), ctx, id, &typs, &values, || {

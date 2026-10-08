@@ -7,11 +7,7 @@
 
 use std::rc::Rc;
 
-use crate::lang::{
-    data::notation::{MixopArena, tree as notation},
-    hints::input,
-    traits::eq::SyntaxEq,
-};
+use crate::lang::{data::notation::MixopArena, hints::input, traits::eq::SyntaxEq};
 
 use crate::lang::sl::{ast as source, prepared as ast};
 
@@ -133,9 +129,8 @@ impl Preparer<'_> {
     fn prepare_rule(&mut self, instr: source::RuleInstr, pos: Position) -> ast::Rule {
         // Compare source expressions before their mixops become arena handles
         if pos == Position::Tail && returns_outputs(&instr) {
-            let (exps_input, _) =
-                input::split(&instr.input_hint, notation::get::into_args(instr.not_exp))
-                    .expect("input hint must fit relation");
+            let (exps_input, _) = input::split(&instr.input_hint, instr.not_exp.into_args())
+                .expect("input hint must fit relation");
             return ast::Rule::Tail(ast::RuleTailInstr {
                 id: instr.id,
                 exps_input: exps_input.prepare(&mut self.ctx),
@@ -271,9 +266,8 @@ fn returns_outputs(instr: &source::RuleInstr) -> bool {
     let [instr_result] = instr.block.as_slice() else { return false };
     let source::InstrKind::Result(instr_result) = &instr_result.node else { return false };
     // Output and result expressions must agree in order, ignoring source spans
-    let (_, exps_output) =
-        input::split(&instr.input_hint, notation::get::args(&instr.not_exp).iter().collect())
-            .expect("input hint must fit relation");
+    let (_, exps_output) = input::split(&instr.input_hint, instr.not_exp.args().iter().collect())
+        .expect("input hint must fit relation");
     exps_output.len() == instr_result.exps.len()
         && exps_output
             .iter()

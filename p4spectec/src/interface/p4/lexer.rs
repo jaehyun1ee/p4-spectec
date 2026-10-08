@@ -735,7 +735,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 // Each literal's atom has its own span, so its shape is not shared
                 let mixop = Mixop::Seq(vec![Mixop::Arg, Mixop::Atom(atom), Mixop::Arg]);
                 let mut arena = self.ctx.arena_mut();
-                let arena_mixop = arena.arena_mixop_mut();
+                let arena_mixop = arena.mixop_mut();
                 let mixop = arena_mixop.intern(&mixop).map_err(ValueError::from)?;
                 let value_case =
                     notation::flat::make::new(arena_mixop, mixop, vec![value_width, value_int])

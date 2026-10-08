@@ -12,8 +12,6 @@
 
 use std::collections::VecDeque;
 
-use crate::lang::data::notation::tree as notation;
-
 use crate::lang::il::ast::OptPattern;
 
 use crate::lang::pl::ast as pl;
@@ -175,7 +173,7 @@ fn shorten_destruct<Tier>(instr: &mut pl::Instr<Tier>) {
     let pl::ExpKind::Case(not_exp) = &exp_l.node.node else {
         return;
     };
-    let exps = notation::get::args(not_exp);
+    let exps = not_exp.args();
     // Field names must match the arity and something must be visible
     if exps.len() != field_names.len() || exps.iter().all(|exp| !visible(exp)) {
         return;

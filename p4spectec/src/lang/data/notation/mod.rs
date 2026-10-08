@@ -12,7 +12,7 @@ use crate::lang::common::{notation::atom::Atom, source::Phrase};
 mod error;
 pub mod flat;
 mod free;
-pub mod get;
+mod get;
 mod map;
 mod print;
 pub mod tree;

@@ -3,7 +3,7 @@
 //! Expressions and paths collect located calls in preorder,
 //! including calls nested in arguments and update paths.
 
-use crate::lang::{data::notation, traits::has_call::HasCall};
+use crate::lang::traits::has_call::HasCall;
 
 use super::ast::{ArgKind, Exp, ExpField, ExpKind, Path, PathKind};
 
@@ -35,7 +35,8 @@ impl HasCall for Exp {
             ExpKind::Tuple(exps) | ExpKind::List(exps) => {
                 exps.iter().flat_map(HasCall::nested_call).collect()
             }
-            ExpKind::Case(not_exp) => notation::get::args(not_exp)
+            ExpKind::Case(not_exp) => not_exp
+                .args()
                 .iter()
                 .flat_map(HasCall::nested_call)
                 .collect(),

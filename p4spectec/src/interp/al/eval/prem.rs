@@ -6,11 +6,7 @@
 //! iteration premises repeat under `iter::yield`.
 //! A failed premise is an `Unmatch`, so the enclosing candidate is skipped.
 
-use crate::lang::{
-    data::{notation::flat as notation, value::flat as value},
-    hints::input,
-    traits::print::Print,
-};
+use crate::lang::{data::value::flat as value, hints::input, traits::print::Print};
 
 use crate::lang::il::print::ExpRef;
 
@@ -70,7 +66,7 @@ fn eval_rule_prem<'global, Iface: Interface, Ext: Extern>(
     prem: &ast::RulePrem,
 ) -> Backtrack<Context<'global>> {
     // Split by the input hint, evaluate inputs, bind outputs
-    let exps = notation::get::args(&prem.not_exp).iter().collect();
+    let exps = prem.not_exp.args().iter().collect();
     let (exps_input, exps_output) =
         input::split(&prem.input_hint, exps).expect("input hint must fit relation");
     let values_input = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps_input));
@@ -93,8 +89,7 @@ fn eval_if_prem<'global, Iface: Interface, Ext: Extern>(
         unmatch!(
             prem.exp.span.clone(),
             error::prem::condition_unmet(
-                ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &prem.exp }
-                    .to_string()
+                ExpRef { arena_mixop: runner_ctx.arena().mixop(), exp: &prem.exp }.to_string()
             ),
         )
     }
@@ -108,7 +103,7 @@ fn eval_if_hold_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IfHoldPrem,
 ) -> Backtrack<Context<'global>> {
-    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, notation::get::args(&prem.not_exp)));
+    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, prem.not_exp.args()));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         // The relation applied: the premise passes
         ok!(_) => ok!(ctx),
@@ -133,7 +128,7 @@ fn eval_if_not_hold_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IfNotHoldPrem,
 ) -> Backtrack<Context<'global>> {
-    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, notation::get::args(&prem.not_exp)));
+    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, prem.not_exp.args()));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         // The relation applied: the premise fails
         ok!(_) => unmatch!(
@@ -181,8 +176,7 @@ fn eval_debug_prem<'global, Iface: Interface, Ext: Extern>(
     prem: &ast::DebugPrem,
 ) -> Backtrack<Context<'global>> {
     let value = unwrap!(expr::eval_exp(runner_ctx, &ctx, &prem.exp));
-    let exp_text =
-        ExpRef { arena_mixop: runner_ctx.arena().arena_mixop(), exp: &prem.exp }.to_string();
+    let exp_text = ExpRef { arena_mixop: runner_ctx.arena().mixop(), exp: &prem.exp }.to_string();
     println!("{}: {}", prem.exp.span, exp_text);
     // Print the value's source span when it has one
     let span_text = runner_ctx.arena().span(&value).to_string();

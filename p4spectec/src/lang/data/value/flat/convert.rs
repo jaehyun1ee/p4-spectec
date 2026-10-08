@@ -62,11 +62,7 @@ impl ValueKind {
 impl ValueCase {
     /// Expands a case and its arguments in notation order.
     fn into_tree(&self, arena: &Arena) -> tree::ValueCase {
-        Self::into_tree_inner(
-            arena,
-            *notation::flat::get::mixop(self),
-            &mut notation::flat::get::args(self).iter(),
-        )
+        Self::into_tree_inner(arena, *self.mixop(), &mut self.args().iter())
     }
 
     /// Resolves each argument as the mixop traversal reaches its position.
@@ -75,7 +71,7 @@ impl ValueCase {
         mixop: notation::flat::Mixop,
         values: &mut slice::Iter<'_, Value>,
     ) -> tree::ValueCase {
-        match arena.arena_mixop().kind(mixop) {
+        match arena.mixop().kind(mixop) {
             notation::flat::MixopKind::Arg => tree::ValueCase::Arg(Box::new(
                 values
                     .next()

@@ -191,12 +191,11 @@ fn overlap_case_exp(
         menv,
         ids_free,
         ids_unifier,
-        notation::get::args(not_exp_template).iter(),
-        notation::get::args(not_exp).iter(),
+        not_exp_template.args().iter(),
+        not_exp.args().iter(),
     )?;
-    let not_exp_template =
-        notation::make::new(Rc::clone(notation::get::mixop(not_exp_template)), exps_template)
-            .expect("overlapped arguments must preserve the template mixfix arity");
+    let not_exp_template = notation::make::new(Rc::clone(not_exp_template.mixop()), exps_template)
+        .expect("overlapped arguments must preserve the template mixfix arity");
     let not_exp_template = Box::new(not_exp_template);
     Ok(ast::ExpKind::Case(not_exp_template))
 }
@@ -309,11 +308,7 @@ fn populate_exp(ids_unifier: &IdSet, exp_template: &ast::Exp, exp: &ast::Exp) ->
         (ast::ExpKind::Case(not_exp_template), ast::ExpKind::Case(not_exp))
             if not_exp_template.eq_mixop(not_exp) =>
         {
-            populate_exps(
-                ids_unifier,
-                notation::get::args(not_exp_template).iter(),
-                notation::get::args(not_exp).iter(),
-            )
+            populate_exps(ids_unifier, not_exp_template.args().iter(), not_exp.args().iter())
         }
         (ast::ExpKind::Str(exp_fields_template), ast::ExpKind::Str(exp_fields)) => {
             let exps_template = exp_fields_template

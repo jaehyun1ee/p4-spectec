@@ -43,7 +43,7 @@ impl ValueRef<'_> {
                 printer.write_char('}')
             }
             ValueKind::Case(value_case) => {
-                value_case.print_with(self.arena.arena_mixop(), printer, |value, printer| {
+                value_case.print_with(self.arena.mixop(), printer, |value, printer| {
                     self.arena.view(*value).print_inner(printer, level + 1)
                 })
             }

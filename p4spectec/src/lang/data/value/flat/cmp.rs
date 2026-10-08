@@ -10,7 +10,7 @@ use crate::lang::{
     common::prim::num,
     data::{
         intern::{CanonEq, CanonInterner},
-        notation::{MixopArena, flat as notation},
+        notation::MixopArena,
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
@@ -46,14 +46,12 @@ impl CanonEq<MixopArena> for ValueKind {
                     )
             }
             (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => {
-                arena_mixop.canon_eq(
-                    *notation::get::mixop(value_case_l),
-                    *notation::get::mixop(value_case_r),
-                ) && notation::get::args(value_case_l).len()
-                    == notation::get::args(value_case_r).len()
-                    && notation::get::args(value_case_l)
+                arena_mixop.canon_eq(*value_case_l.mixop(), *value_case_r.mixop())
+                    && value_case_l.args().len() == value_case_r.args().len()
+                    && value_case_l
+                        .args()
                         .iter()
-                        .zip(notation::get::args(value_case_r))
+                        .zip(value_case_r.args())
                         .all(|(value_l, value_r)| eq_value(value_l, value_r))
             }
             (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
@@ -133,7 +131,7 @@ impl SyntaxCmp for ValueRef<'_> {
                     .unwrap_or_else(|| value_fields_l.len().cmp(&value_fields_r.len()))
             }
             (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => {
-                value_case_l.cmp_by(self.arena.arena_mixop(), value_case_r, compare_value)
+                value_case_l.cmp_by(self.arena.mixop(), value_case_r, compare_value)
             }
             (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
             | (ValueKind::List(values_l), ValueKind::List(values_r)) => {

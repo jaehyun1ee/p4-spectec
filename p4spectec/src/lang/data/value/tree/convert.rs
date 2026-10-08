@@ -71,7 +71,7 @@ impl ValueCase {
             .into_iter()
             .map(|value| value.into_flat(arena))
             .collect::<Result<_, _>>()?;
-        let arena_mixop = arena.arena_mixop_mut();
+        let arena_mixop = arena.mixop_mut();
         let mixop = mixop.into_flat(arena_mixop)?;
 
         // A filled tree supplies one value per argument position

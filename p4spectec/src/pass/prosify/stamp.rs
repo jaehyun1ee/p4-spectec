@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use crate::lang::{data::notation::tree as notation, traits::has_call::HasCall};
+use crate::lang::traits::has_call::HasCall;
 
 use crate::lang::pl::{ast as pl, rule_group};
 
@@ -44,7 +44,7 @@ fn can_fail_instr(instr: &pl::Instr<pl::GroupInstr>) -> bool {
 fn can_fail_group_instr(instr: &pl::GroupInstr) -> bool {
     match instr {
         pl::GroupInstr::Rule(pl::RuleInstr { not_exp, .. }) => {
-            notation::get::args(not_exp).iter().any(HasCall::has_call)
+            not_exp.args().iter().any(HasCall::has_call)
         }
         pl::GroupInstr::Result(pl::ResultInstr { exps_output, .. }) => {
             exps_output.iter().any(HasCall::has_call)

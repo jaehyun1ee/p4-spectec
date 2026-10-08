@@ -11,7 +11,6 @@ use std::rc::Rc;
 use crate::lang::{
     data::{
         arena::Arena,
-        notation::tree as notation,
         value::flat::{Value, ValueKind},
     },
     hints::input,
@@ -78,7 +77,7 @@ pub(crate) fn check_rel_inputs(
         return ok!(());
     }
     // Select input types at the positions named by the hint
-    let typs = notation::get::args(&signature.not_typ.node);
+    let typs = signature.not_typ.node.args();
     let typs = signature
         .input_hint
         .indices()
@@ -256,14 +255,14 @@ fn invoke_extern_rel<Iface: Interface, Ext: Extern>(
     // Attach the call site to fatal host failures
     let (values, _) = unwrap!(result.map_err(|failure| failure.with_span(&id.span)));
     // Check the number of extern outputs before assigning them
-    let len = notation::get::args(&rel.rel_signature.not_typ.node).len()
-        - rel.rel_signature.input_hint.indices().len();
+    let len =
+        rel.rel_signature.not_typ.node.args().len() - rel.rel_signature.input_hint.indices().len();
     unwrap!(backtrack::check(len == values.len(), id.span.clone(), || {
         error::guard::relation_output_arity_mismatch(len, values.len())
     }));
     // Guard the outputs against their declared types
     if runner_ctx.interp().config.guard {
-        let typs = notation::get::args(&rel.rel_signature.not_typ.node).to_vec();
+        let typs = rel.rel_signature.not_typ.node.args().to_vec();
         // Output types occupy the positions the input hint leaves
         let (_, typs) = input::split(&rel.rel_signature.input_hint, typs)
             .expect("input hint must fit relation");

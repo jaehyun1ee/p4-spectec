@@ -5,13 +5,10 @@
 //! Function types compare up to renaming of their type parameters,
 //! using fresh variables bound in a local type environment.
 
-use crate::lang::{
-    common::{
-        ds::map::{ArityMismatch, IdMap},
-        prim::num,
-        source::Span,
-    },
-    data::notation::tree as notation,
+use crate::lang::common::{
+    ds::map::{ArityMismatch, IdMap},
+    prim::num,
+    source::Span,
 };
 
 use crate::lang::il::ast::{self, TypKind};
@@ -129,8 +126,8 @@ fn equiv_not_typ_with<'env>(
         return Ok(false);
     }
     // Then the arguments pairwise
-    let typs_l = notation::get::args(&not_typ_l.node);
-    let typs_r = notation::get::args(&not_typ_r.node);
+    let typs_l = not_typ_l.node.args();
+    let typs_r = not_typ_r.node.args();
     for (typ_l, typ_r) in typs_l.iter().zip(typs_r) {
         if !equiv_typ_with(find_typdef_opt, typ_l, typ_r)? {
             return Ok(false);

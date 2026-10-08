@@ -67,13 +67,17 @@ macro_rules! matches {
     ) => {{
         match $value_case {
             Some(value_case)
-                if [$shape, $($shape_alt),*].into_iter().any(|mixop_text| {
-                    let mixop_expect = $crate::lang::data::notation::tree::parse::mixop(mixop_text);
-                    let mixop = $crate::lang::data::notation::flat::get::mixop(value_case);
-                    mixop.matches_tree($arena.arena_mixop(), mixop_expect.as_ref())
-                }) =>
+                if {
+                    use $crate::lang::traits::eq::SyntaxEq as _;
+
+                    let mixop = value_case.mixop().into_tree($arena.mixop());
+                    [$shape, $($shape_alt),*].into_iter().any(|mixop_text| {
+                        let mixop_expect = $crate::lang::data::notation::tree::parse::mixop(mixop_text);
+                        mixop.syntax_eq(mixop_expect.as_ref())
+                    })
+                } =>
             {
-                let $values = $crate::lang::data::notation::flat::get::args(value_case);
+                let $values = value_case.args();
                 $body
             }
             _ => $crate::lang::data::value::flat::get::matches! {

@@ -4,7 +4,7 @@
 //! it records free variables
 //! and retains the minimal dimension when one occurs more than once.
 
-use crate::lang::{common::ds::map::IdMap, data::notation::tree as notation};
+use crate::lang::common::ds::map::IdMap;
 
 use crate::lang::il::ast;
 
@@ -63,7 +63,7 @@ fn infer_exp_inner(venv: &mut VEnv, exp: &ast::Exp, iters: &[ast::Iter]) {
         }
         // Case: the arguments
         ast::ExpKind::Case(not_exp) => {
-            for exp in notation::get::args(not_exp) {
+            for exp in not_exp.args() {
                 infer_exp_inner(venv, exp, iters);
             }
         }

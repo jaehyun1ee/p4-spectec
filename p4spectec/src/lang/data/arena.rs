@@ -56,12 +56,12 @@ impl Arena {
     // - Lookup
 
     /// The notation shapes of prepared syntax and case bodies.
-    pub fn arena_mixop(&self) -> &MixopArena {
+    pub fn mixop(&self) -> &MixopArena {
         &self.mixop
     }
 
     /// The notation shapes, for interning notations during a run.
-    pub fn arena_mixop_mut(&mut self) -> &mut MixopArena {
+    pub fn mixop_mut(&mut self) -> &mut MixopArena {
         &mut self.mixop
     }
     // - Interning

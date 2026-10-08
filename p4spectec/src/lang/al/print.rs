@@ -207,7 +207,7 @@ fn write_ruleinput(
     let idxs_input = input_hint.indices();
     assert_eq!(idxs_input.len(), exps_input.len());
     // Each notation position takes its input, or nothing
-    let exps = (0..notation::get::arity(&not_typ.node))
+    let exps = (0..not_typ.node.arity())
         .map(|index| {
             idxs_input
                 .iter()
@@ -227,7 +227,7 @@ fn write_ruleoutput(
 ) -> fmt::Result {
     let idxs_input = input_hint.indices();
     // Outputs are the positions the hint leaves
-    let outputs = (0..notation::get::arity(&not_typ.node))
+    let outputs = (0..not_typ.node.arity())
         .filter(|index| !idxs_input.iter().any(|idx_input| idx_input.node == *index))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
@@ -235,7 +235,7 @@ fn write_ruleoutput(
     if exps_output.is_empty() {
         output.write_str("-- the relation holds")
     } else {
-        let exps = (0..notation::get::arity(&not_typ.node))
+        let exps = (0..not_typ.node.arity())
             .map(|index| {
                 outputs
                     .iter()
@@ -456,7 +456,7 @@ fn write_notation(
     not_typ: &NotTyp,
     exps: Vec<Option<&Exp>>,
 ) -> fmt::Result {
-    notation::make::new(Rc::clone(notation::get::mixop(&not_typ.node)), exps)
+    notation::make::new(Rc::clone(not_typ.node.mixop()), exps)
         .expect("one argument slot per notation position")
         .print_with(output, |exp, output| match exp {
             Some(exp) => exp.print(output),

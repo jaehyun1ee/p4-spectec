@@ -8,7 +8,7 @@
 
 use std::rc::Rc;
 
-use crate::lang::{common::prim::num, data::notation::tree as notation};
+use crate::lang::common::prim::num;
 
 use crate::lang::il::ast::{self, DefTypKind, Iter, Subcheck, TypKind};
 
@@ -213,7 +213,7 @@ pub fn optimize_sub_typ(
             // The target's case tags are the accepted set
             let mut mixops_target = Vec::with_capacity(typ_cases_target.len());
             for ast::TypCase { not_typ, .. } in typ_cases_target {
-                mixops_target.push(Rc::clone(notation::get::mixop(&not_typ.node)));
+                mixops_target.push(Rc::clone(not_typ.node.mixop()));
             }
             let subcheck = Subcheck::Mixop(mixops_target);
             Ok(subcheck)

@@ -414,8 +414,8 @@ fn lower_rule_prem(
     span: &Span,
     rule_prem_il: &ast::RulePrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<AnalyzedPrem>), AlgoError> {
-    let mixop = Rc::clone(notation::get::mixop(&rule_prem_il.not_exp));
-    let exps_il = notation::get::args(&rule_prem_il.not_exp).to_vec();
+    let mixop = Rc::clone(rule_prem_il.not_exp.mixop());
+    let exps_il = rule_prem_il.not_exp.args().to_vec();
     let (exps_input_il, exps_output_il) = input::split(&rule_prem_il.input_hint, exps_il)
         .map_err(|error| input_error(error, span.clone()))?;
     // Inputs are bound, outputs are binders
@@ -520,7 +520,7 @@ fn lower_if_hold_prem(
     if_prem_il: &ast::IfHoldPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<AnalyzedPrem>), AlgoError> {
     // Every argument must already be bound
-    for exp_il in notation::get::args(&if_prem_il.not_exp) {
+    for exp_il in if_prem_il.not_exp.args() {
         analyze_exp_as_bound(ctx, exp_il)?;
     }
     let prem_al = phrase! {
@@ -543,7 +543,7 @@ fn lower_if_not_hold_prem(
     if_prem_il: &ast::IfNotHoldPrem,
 ) -> Result<(VEnv, al::ast::Prem, Vec<AnalyzedPrem>), AlgoError> {
     // Every argument must already be bound
-    for exp_il in notation::get::args(&if_prem_il.not_exp) {
+    for exp_il in if_prem_il.not_exp.args() {
         analyze_exp_as_bound(ctx, exp_il)?;
     }
     let prem_al = phrase! {
@@ -737,7 +737,7 @@ fn lower_rule_group(
         let ast::RuleKind { id, not_exp, prems } = rule_il.node;
         ids.push(id);
         prems_by_rule_il.push(prems);
-        let exps_il = notation::get::into_args(not_exp);
+        let exps_il = not_exp.into_args();
         let (exps_input_il, exps_output_il) =
             input::split(inputs, exps_il).map_err(|error| input_error(error, rule_span))?;
         exps_input_by_rule_il.push(exps_input_il);

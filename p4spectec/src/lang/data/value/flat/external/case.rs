@@ -43,11 +43,7 @@ enum CaseRef<'a> {
 impl<'a> CaseRef<'a> {
     /// Fills a case's mixop, borrowing its atoms and arguments.
     fn from_flat(arena_mixop: &'a MixopArena, value_case: &'a ValueCase) -> Self {
-        Self::from_flat_inner(
-            arena_mixop,
-            *notation::flat::get::mixop(value_case),
-            &mut notation::flat::get::args(value_case).iter(),
-        )
+        Self::from_flat_inner(arena_mixop, *value_case.mixop(), &mut value_case.args().iter())
     }
 
     /// Visits argument positions in notation order.
@@ -86,7 +82,7 @@ impl SerializeState<EncodeContext<'_>> for ValueCase {
         serializer: S,
         ctx: &EncodeContext<'_>,
     ) -> Result<S::Ok, S::Error> {
-        CaseRef::from_flat(ctx.arena().arena_mixop(), self).serialize_state(serializer, ctx)
+        CaseRef::from_flat(ctx.arena().mixop(), self).serialize_state(serializer, ctx)
     }
 }
 
@@ -150,7 +146,7 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for ValueCase {
         let (mixop, values) = case.into_parts();
 
         // Intern the decoded notation in the target arena
-        let arena_mixop = ctx.arena_mut().arena_mixop_mut();
+        let arena_mixop = ctx.arena_mut().mixop_mut();
         let mixop = mixop
             .into_flat(arena_mixop)
             .map_err(::serde::de::Error::custom)?;

@@ -13,7 +13,7 @@
 
 use std::rc::Rc;
 
-use crate::lang::{common::prim::bool, data::notation::tree as notation, traits::eq::SyntaxEq};
+use crate::lang::{common::prim::bool, traits::eq::SyntaxEq};
 
 use crate::lang::il::ast::*;
 
@@ -289,9 +289,7 @@ pub(crate) fn typ_as_variant(
             DefTypKind::Variant(typ_cases) => Some(
                 typ_cases
                     .iter()
-                    .map(|TypCase { not_typ: nottyp, .. }| {
-                        Rc::clone(notation::get::mixop(&nottyp.node))
-                    })
+                    .map(|TypCase { not_typ: nottyp, .. }| Rc::clone(nottyp.node.mixop()))
                     .collect(),
             ),
             _ => None,
@@ -480,8 +478,8 @@ fn disjoint_exp_literal(exp_a: &Exp, exp_b: &Exp) -> bool {
                 return true;
             }
             disjoint_exps_literal(
-                &notation::get::args(notexp_a).iter().collect::<Vec<_>>(),
-                &notation::get::args(notexp_b).iter().collect::<Vec<_>>(),
+                &notexp_a.args().iter().collect::<Vec<_>>(),
+                &notexp_b.args().iter().collect::<Vec<_>>(),
             )
         }
         // [] vs [1] -> disjoint by length; [1] vs [2] -> compare elements

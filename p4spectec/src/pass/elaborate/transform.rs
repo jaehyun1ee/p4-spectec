@@ -448,11 +448,10 @@ fn elab_def_typ(
             }
             // Two cases with the same mixfix shape would be ambiguous
             for (idx, typ_case_il) in typ_cases_il.iter().enumerate() {
-                let mixop = notation::get::mixop(&typ_case_il.not_typ.node);
-                if let Some(typ_case_previous_il) =
-                    typ_cases_il[..idx].iter().find(|typ_case_other_il| {
-                        notation::get::mixop(&typ_case_other_il.not_typ.node) == mixop
-                    })
+                let mixop = typ_case_il.not_typ.node.mixop();
+                if let Some(typ_case_previous_il) = typ_cases_il[..idx]
+                    .iter()
+                    .find(|typ_case_other_il| typ_case_other_il.not_typ.node.mixop() == mixop)
                 {
                     return Err(error::typ::variant_case_shape_repeated(
                         &Print::to_string(mixop.as_ref()),
@@ -1859,9 +1858,9 @@ fn notation_shape_matches(not_typ_il: MixfixRef<'_, il::Typ>, exp: &el::Exp) -> 
 /// so only the arguments come from the expression.
 fn elab_not_exp(ctx: &mut Context, expect: &NotExpect<'_>, exp: &el::Exp) -> Backtrack<il::NotExp> {
     let not_typ_il = &expect.not_typ_il.node;
-    let mut exps_il = Vec::with_capacity(notation::get::arity(not_typ_il));
+    let mut exps_il = Vec::with_capacity(not_typ_il.arity());
     unwrap!(elab_not_exp_inner(ctx, not_typ_il.as_ref(), exp, expect, &mut exps_il));
-    let not_exp_il = notation::make::new(Rc::clone(notation::get::mixop(not_typ_il)), exps_il)
+    let not_exp_il = notation::make::new(Rc::clone(not_typ_il.mixop()), exps_il)
         .expect("notation elaboration fills every argument position");
     success!(not_exp_il)
 }
@@ -2593,7 +2592,7 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Backtrack<il::PremK
         elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp)
             .recoverable_as_failure()
     );
-    let exps_il = notation::get::args(&not_exp_il);
+    let exps_il = not_exp_il.args();
     let conditional = match input::is_conditional(&input_hint, exps_il) {
         Ok(conditional) => conditional,
         Err(error) => {
@@ -2624,7 +2623,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il
         elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp)
             .recoverable_as_failure()
     );
-    let exps_il = notation::get::args(&not_exp_il).iter().collect();
+    let exps_il = not_exp_il.args().iter().collect();
     let (_, exps_output_il) = match input::split(&input_hint, exps_il) {
         Ok(parts) => parts,
         Err(error) => {
@@ -3102,7 +3101,7 @@ fn fetch_input_hint(
     not_typ_il: &il::NotTyp,
     hints: &[el::Hint],
 ) -> Result<input::InputHint, ElabError> {
-    let arity = notation::get::arity(&not_typ_il.node);
+    let arity = not_typ_il.node.arity();
     // Without a hint every position is an input
     let Some(el::Hint { exp: exp_hint, .. }) = hints.iter().find(|hint| hint.id.node == "input")
     else {

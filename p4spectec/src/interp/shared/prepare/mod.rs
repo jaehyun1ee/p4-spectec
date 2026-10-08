@@ -102,7 +102,7 @@ impl<T: Prepare> Prepare for tree::Mixfix<T> {
     type Output = flat::Mixfix<T::Output>;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
-        let (mixop, args) = notation::get::into_parts(self);
+        let (mixop, args) = self.into_parts();
         let mixop = prepare_mixop(&mixop, ctx);
         let args = args.prepare(ctx);
         notation::flat::make::new(ctx.arena_mixop, mixop, args)
