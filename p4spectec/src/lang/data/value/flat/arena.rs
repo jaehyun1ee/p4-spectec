@@ -53,7 +53,7 @@ impl ValueArena {
         typ: Rc<TypKind>,
         span: Span,
     ) -> Result<Value, ValueError> {
-        let node = self.intern_kind(value_kind, arena_mixop)?;
+        let node = self.intern_kind(arena_mixop, value_kind)?;
         let note = self.intern_typ(typ)?;
         let span = self.intern_span(span)?;
         Ok(Value { node, note, span })
@@ -62,10 +62,10 @@ impl ValueArena {
     /// Interns a body using the canonical identities of its mixops.
     pub(in crate::lang::data) fn intern_kind(
         &mut self,
-        value_kind: ValueKind,
         arena_mixop: &MixopArena,
+        value_kind: ValueKind,
     ) -> Result<Interned<ValueKind>, std::num::TryFromIntError> {
-        self.values.intern(value_kind, arena_mixop)
+        self.values.intern(arena_mixop, value_kind)
     }
 
     /// Interns a shared type annotation by allocation identity.

@@ -17,8 +17,8 @@ use crate::interp::shared::prepare::{Prepare, PrepareContext};
 
 /// Prepares a relation for the runner's instruction-selection mode.
 pub(super) fn prepare_rel(
-    rel: source::RelDef,
     arena_mixop: &mut MixopArena,
+    rel: source::RelDef,
     det: bool,
 ) -> Callable<ast::RelDef> {
     let mut layout = FrameLayout::default();
@@ -29,8 +29,8 @@ pub(super) fn prepare_rel(
 
 /// Prepares a function for the runner's instruction-selection mode.
 pub(super) fn prepare_func(
-    func: source::MetaFuncDef,
     arena_mixop: &mut MixopArena,
+    func: source::MetaFuncDef,
     det: bool,
 ) -> Callable<ast::MetaFuncDef> {
     let mut layout = FrameLayout::default();

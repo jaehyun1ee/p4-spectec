@@ -1491,7 +1491,7 @@ enum Rendered {
 
 /// Renders one tier payload while preserving the shared renderer state.
 type RenderTier<'ctx, 'a, Tier> =
-    fn(&mut Renderer<'ctx, 'a>, usize, &Context, bool, &pl::Instr<Tier>, &Tier) -> Rendered;
+    fn(&mut Renderer<'ctx, 'a>, &Context, usize, bool, &pl::Instr<Tier>, &Tier) -> Rendered;
 
 impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Starts one body with its anchor prefix and local counters.
@@ -1562,39 +1562,39 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders one shared or tier-specific instruction.
     fn render_instr<Tier>(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         instr: &pl::Instr<Tier>,
     ) -> Block {
         match &instr.node.node {
             pl::InstrKind::If(if_instr) => {
-                self.render_if_instr(level, ctx, render_tier, instr, if_instr)
+                self.render_if_instr(ctx, level, render_tier, instr, if_instr)
             }
             pl::InstrKind::Hold(hold_instr) => {
-                self.render_hold_instr(level, ctx, render_tier, instr, hold_instr)
+                self.render_hold_instr(ctx, level, render_tier, instr, hold_instr)
             }
             pl::InstrKind::Case(case_instr) => {
-                self.render_case_instr(level, ctx, render_tier, instr, case_instr)
+                self.render_case_instr(ctx, level, render_tier, instr, case_instr)
             }
-            pl::InstrKind::Let(let_instr) => Self::render_let_instr(level, ctx, instr, let_instr),
+            pl::InstrKind::Let(let_instr) => Self::render_let_instr(ctx, level, instr, let_instr),
             pl::InstrKind::Debug(debug_instr) => {
-                Self::render_debug_instr(level, ctx, instr, debug_instr)
+                Self::render_debug_instr(ctx, level, instr, debug_instr)
             }
             pl::InstrKind::Destruct(destruct_instr) => {
-                Self::render_destruct_instr(level, ctx, instr, destruct_instr)
+                Self::render_destruct_instr(ctx, level, instr, destruct_instr)
             }
             pl::InstrKind::CheckLetSub(check_instr) => {
-                self.render_check_let_sub_instr(level, ctx, render_tier, instr, check_instr)
+                self.render_check_let_sub_instr(ctx, level, render_tier, instr, check_instr)
             }
             pl::InstrKind::CheckLetMatch(check_instr) => {
-                self.render_check_let_match_instr(level, ctx, render_tier, instr, check_instr)
+                self.render_check_let_match_instr(ctx, level, render_tier, instr, check_instr)
             }
             pl::InstrKind::OptionGet(option_instr) => {
-                self.render_option_get_instr(level, ctx, render_tier, instr, option_instr)
+                self.render_option_get_instr(ctx, level, render_tier, instr, option_instr)
             }
             pl::InstrKind::Tier(tier_instr) => {
-                self.render_tier_instr(level, ctx, render_tier, instr, tier_instr)
+                self.render_tier_instr(ctx, level, render_tier, instr, tier_instr)
             }
         }
     }
@@ -1606,9 +1606,9 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders instructions under an optional heading.
     fn render_instrs<Tier>(
         &mut self,
+        ctx: &Context,
         level: usize,
         block_head: Option<Block>,
-        ctx: &Context,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         instrs: &[pl::Instr<Tier>],
     ) -> Block {
@@ -1616,14 +1616,14 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         if let [instr] = instrs
             && let pl::InstrKind::Tier(tier_instr) = &instr.node.node
         {
-            let rendered = render_tier(self, level, ctx, true, instr, &tier_instr.tier);
+            let rendered = render_tier(self, ctx, level, true, instr, &tier_instr.tier);
             return Self::compose(block_head, true, rendered);
         }
 
         // Render general blocks as a sequence below the optional heading
         let blocks_rendered: Vec<Block> = instrs
             .iter()
-            .map(|instr| self.render_instr(level, ctx, render_tier, instr))
+            .map(|instr| self.render_instr(ctx, level, render_tier, instr))
             .collect();
         match block_head {
             Some(block_head) => Block::seq(std::iter::once(block_head).chain(blocks_rendered)),
@@ -1634,9 +1634,9 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Appends continuation instructions below a check heading at the same level.
     fn render_continuation<Tier>(
         &mut self,
+        ctx: &Context,
         level: usize,
         block_head: Block,
-        ctx: &Context,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         instrs: &[pl::Instr<Tier>],
     ) -> Block {
@@ -1647,7 +1647,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
 
         let blocks_rendered = instrs
             .iter()
-            .map(|instr| self.render_instr(level, ctx, render_tier, instr));
+            .map(|instr| self.render_instr(ctx, level, render_tier, instr));
         Block::seq(std::iter::once(block_head).chain(blocks_rendered))
     }
 
@@ -1660,8 +1660,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Serializes an otherwise block with its optional anchor.
     fn render_elseblock<Tier>(
         &mut self,
-        anchor_else: Option<&str>,
         ctx: &Context,
+        anchor_else: Option<&str>,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         block_opt: Option<&[pl::Instr<Tier>]>,
     ) -> String {
@@ -1674,7 +1674,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
             .filter(|anchor| self.anchor_ctx.claim_anchor(anchor))
             .map(|anchor| format!("+++<span id=\"{anchor}\"></span>+++"))
             .unwrap_or_default();
-        let block_body = self.render_instrs(1, None, ctx, render_tier, block);
+        let block_body = self.render_instrs(ctx, 1, None, render_tier, block);
         let text_body = serialize::ser_block(self.anchor_ctx, self.warnings, &block_body);
         let text_bullet = serialize::adoc_ordered_bullet(0);
         format!("\n\n{text_bullet}{text_anchor}Otherwise:{text_body}")
@@ -1810,8 +1810,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders a conditional check and its continuation.
     fn render_if_instr<Tier>(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         instr: &pl::Instr<Tier>,
         if_instr: &pl::IfInstr<Tier>,
@@ -1828,7 +1828,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
             prose_fallthrough,
         ]);
         let block_head = Block::item_ordered(level, prose_head);
-        self.render_continuation(level, block_head, ctx, render_tier, &if_instr.block)
+        self.render_continuation(ctx, level, block_head, render_tier, &if_instr.block)
     }
 
     // - Hold instructions
@@ -1839,8 +1839,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
 
     /// Builds the heading of a positive or negative relation holding branch.
     fn render_hold_head<Tier>(
-        level: usize,
         ctx: &Context,
+        level: usize,
         instr: &pl::Instr<Tier>,
         hold_instr: &pl::HoldInstr<Tier>,
         hold: bool,
@@ -1889,8 +1889,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders positive, negative, or two-sided relation holding branches.
     fn render_hold_instr<Tier>(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         instr: &pl::Instr<Tier>,
         hold_instr: &pl::HoldInstr<Tier>,
@@ -1898,27 +1898,27 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         // Render the selected one-sided or two-sided branch structure
         match &hold_instr.hold_case {
             pl::HoldCase::Hold(block, _) => {
-                let block_head = Self::render_hold_head(level, ctx, instr, hold_instr, true);
-                self.render_instrs(level + 1, Some(block_head), ctx, render_tier, block)
+                let block_head = Self::render_hold_head(ctx, level, instr, hold_instr, true);
+                self.render_instrs(ctx, level + 1, Some(block_head), render_tier, block)
             }
             pl::HoldCase::NotHold(block, _) => {
-                let block_head = Self::render_hold_head(level, ctx, instr, hold_instr, false);
-                self.render_instrs(level + 1, Some(block_head), ctx, render_tier, block)
+                let block_head = Self::render_hold_head(ctx, level, instr, hold_instr, false);
+                self.render_instrs(ctx, level + 1, Some(block_head), render_tier, block)
             }
             pl::HoldCase::Both(block_hold, block_not_hold) => {
-                let block_head_hold = Self::render_hold_head(level, ctx, instr, hold_instr, true);
+                let block_head_hold = Self::render_hold_head(ctx, level, instr, hold_instr, true);
                 let block_branch_hold = self.render_instrs(
+                    ctx,
                     level + 1,
                     Some(block_head_hold),
-                    ctx,
                     render_tier,
                     block_hold,
                 );
                 let block_head_else = Block::item_ordered(level, Prose::text("Else:"));
                 let block_branch_else = self.render_instrs(
+                    ctx,
                     level + 1,
                     Some(block_head_else),
-                    ctx,
                     render_tier,
                     block_not_hold,
                 );
@@ -1937,8 +1937,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders a check or an if/else-if case ladder with explicit guards.
     fn render_case_instr<Tier>(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         instr: &pl::Instr<Tier>,
         case_instr: &pl::CaseInstr<Tier>,
@@ -1954,7 +1954,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
                 prose_fallthrough,
             ]);
             let block_head = Block::item_ordered(level, prose_head);
-            return self.render_continuation(level, block_head, ctx, render_tier, &case.block);
+            return self.render_continuation(ctx, level, block_head, render_tier, &case.block);
         }
 
         let num_cases = case_instr.cases.len();
@@ -1970,7 +1970,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
                 Prose::seq([Prose::text(keyword), prose_guard, Prose::text(":"), prose_label]);
             let block_head = Block::item_ordered(level, prose_head);
             let block_case =
-                self.render_instrs(level + 1, Some(block_head), ctx, render_tier, &case.block);
+                self.render_instrs(ctx, level + 1, Some(block_head), render_tier, &case.block);
             blocks_case.push(block_case);
         }
         Block::seq(blocks_case)
@@ -2021,8 +2021,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
 
     /// Renders a binding and any instruction iterations around it.
     fn render_let_instr<Tier>(
-        level: usize,
         ctx: &Context,
+        level: usize,
         instr: &pl::Instr<Tier>,
         let_instr: &pl::LetInstr,
     ) -> Block {
@@ -2071,8 +2071,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
 
     /// Renders a relation application and its bound outputs.
     fn render_rule_instr(
-        level: usize,
         ctx: &Context,
+        level: usize,
         instr: &pl::Instr<pl::GroupInstr>,
         rule_instr: &pl::RuleInstr,
     ) -> Block {
@@ -2180,8 +2180,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     //   -> . The result is ``n~h~`` ``{two-colons}`` ``n~h~`` ``{two-colons}`` ``m^{asterisk}^``.
 
     fn render_result_instr(
-        level: usize,
         ctx: &Context,
+        level: usize,
         singleton: bool,
         instr: &pl::Instr<pl::GroupInstr>,
         result_instr: &pl::ResultInstr,
@@ -2207,8 +2207,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     //   def $i_if(n, m) = n  -- if $(n < m)   -> . Return ``n``.
 
     fn render_return_instr(
-        level: usize,
         ctx: &Context,
+        level: usize,
         singleton: bool,
         instr: &pl::Instr<pl::GroupInstr>,
         return_instr: &pl::ReturnInstr,
@@ -2236,8 +2236,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     //   -- debug n   -> . (debug: ``n``)
 
     fn render_debug_instr<Tier>(
-        level: usize,
         ctx: &Context,
+        level: usize,
         instr: &pl::Instr<Tier>,
         debug_instr: &pl::DebugInstr,
     ) -> Block {
@@ -2254,8 +2254,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
 
     /// Renders named destructuring projections.
     fn render_destruct_instr<Tier>(
-        level: usize,
         ctx: &Context,
+        level: usize,
         instr: &pl::Instr<Tier>,
         destruct_instr: &pl::DestructInstr,
     ) -> Block {
@@ -2314,8 +2314,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders a partial subtype binding.
     fn render_check_let_sub_instr<Tier>(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         instr: &pl::Instr<Tier>,
         check_instr: &pl::CheckLetSubInstr<Tier>,
@@ -2334,14 +2334,14 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
             prose_fallthrough,
         ]);
         let block_head = Block::item_ordered(level, prose_head);
-        self.render_continuation(level, block_head, ctx, render_tier, block)
+        self.render_continuation(ctx, level, block_head, render_tier, block)
     }
 
     /// Renders a partial pattern binding.
     fn render_check_let_match_instr<Tier>(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         instr: &pl::Instr<Tier>,
         check_instr: &pl::CheckLetMatchInstr<Tier>,
@@ -2360,7 +2360,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
             prose_fallthrough,
         ]);
         let block_head = Block::item_ordered(level, prose_head);
-        self.render_continuation(level, block_head, ctx, render_tier, block)
+        self.render_continuation(ctx, level, block_head, render_tier, block)
     }
 
     // - Option-get instructions
@@ -2371,8 +2371,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders a forced option binding.
     fn render_option_get_instr<Tier>(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         instr: &pl::Instr<Tier>,
         option_instr: &pl::OptionGetInstr<Tier>,
@@ -2396,7 +2396,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
             prose_fallthrough,
         ]);
         let block_head = Block::item_ordered(level, prose_head);
-        self.render_continuation(level, block_head, ctx, render_tier, &option_instr.block)
+        self.render_continuation(ctx, level, block_head, render_tier, &option_instr.block)
     }
 
     // - Tier instructions
@@ -2405,13 +2405,13 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
 
     fn render_tier_instr<Tier>(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         render_tier: RenderTier<'ctx, 'a, Tier>,
         instr: &pl::Instr<Tier>,
         tier_instr: &pl::TierInstr<Tier>,
     ) -> Block {
-        let rendered = render_tier(self, level, ctx, false, instr, &tier_instr.tier);
+        let rendered = render_tier(self, ctx, level, false, instr, &tier_instr.tier);
         Self::compose(None, false, rendered)
     }
 }
@@ -2598,8 +2598,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders backtracking arms with derived next-arm targets.
     fn render_block_arms<Arm>(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         arms: &[Arm],
         render_arm: &dyn Fn(&mut Renderer<'ctx, 'a>, &Context, &Arm) -> Block,
     ) -> Block {
@@ -2639,24 +2639,24 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders a group-tier instruction.
     fn render_instr_group(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         singleton: bool,
         instr: &pl::Instr<pl::GroupInstr>,
         tier: &pl::GroupInstr,
     ) -> Rendered {
         match tier {
             pl::GroupInstr::Return(return_instr) => {
-                Self::render_return_instr(level, ctx, singleton, instr, return_instr)
+                Self::render_return_instr(ctx, level, singleton, instr, return_instr)
             }
             pl::GroupInstr::Result(result_instr) => {
-                Self::render_result_instr(level, ctx, singleton, instr, result_instr)
+                Self::render_result_instr(ctx, level, singleton, instr, result_instr)
             }
             pl::GroupInstr::Rule(rule_instr) => {
-                Rendered::Nested(Self::render_rule_instr(level, ctx, instr, rule_instr))
+                Rendered::Nested(Self::render_rule_instr(ctx, level, instr, rule_instr))
             }
             pl::GroupInstr::Backtrack(backtrack_instr) => {
-                self.render_backtrack_instr(level, ctx, backtrack_instr)
+                self.render_backtrack_instr(ctx, level, backtrack_instr)
             }
         }
     }
@@ -2671,18 +2671,18 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
 
     fn render_backtrack_instr(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         backtrack_instr: &pl::BacktrackInstr,
     ) -> Rendered {
         let level_body = level + 1;
         let block_arms = self.render_block_arms(
-            level,
             ctx,
+            level,
             &backtrack_instr.blocks,
             &|renderer, ctx_arm, arm| {
                 let blocks_rendered = arm.iter().map(|instr| {
-                    renderer.render_instr(level_body, ctx_arm, Self::render_instr_group, instr)
+                    renderer.render_instr(ctx_arm, level_body, Self::render_instr_group, instr)
                 });
                 Block::seq(blocks_rendered)
             },
@@ -2701,8 +2701,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders a dispatch-tier instruction.
     fn render_instr_dispatch(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         singleton: bool,
         instr: &pl::Instr<pl::DispatchInstr>,
         tier: &pl::DispatchInstr,
@@ -2712,7 +2712,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
                 Self::render_group_instr_dispatch(&instr.node.span, level, singleton, group_instr)
             }
             pl::DispatchInstr::Route(route_instr) => {
-                self.render_route_instr(level, ctx, route_instr)
+                self.render_route_instr(ctx, level, route_instr)
             }
         }
     }
@@ -2727,15 +2727,15 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
 
     fn render_route_instr(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         route_instr: &pl::RouteInstr,
     ) -> Rendered {
         let level_body = level + 1;
         let block_arms =
-            self.render_block_arms(level, ctx, &route_instr.blocks, &|renderer, ctx_arm, arm| {
+            self.render_block_arms(ctx, level, &route_instr.blocks, &|renderer, ctx_arm, arm| {
                 let blocks_rendered = arm.iter().map(|instr| {
-                    renderer.render_instr(level_body, ctx_arm, Self::render_instr_dispatch, instr)
+                    renderer.render_instr(ctx_arm, level_body, Self::render_instr_dispatch, instr)
                 });
                 Block::seq(blocks_rendered)
             });
@@ -2750,18 +2750,18 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     /// Renders an otherwise dispatch group with its body inline.
     fn render_instr_dispatch_inline(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         singleton: bool,
         instr: &pl::Instr<pl::DispatchInstr>,
         tier: &pl::DispatchInstr,
     ) -> Rendered {
         match tier {
             pl::DispatchInstr::Group(group_instr) => {
-                self.render_group_instr_inline(level, ctx, instr, group_instr)
+                self.render_group_instr_inline(ctx, level, instr, group_instr)
             }
             pl::DispatchInstr::Route(_) => {
-                self.render_instr_dispatch(level, ctx, singleton, instr, tier)
+                self.render_instr_dispatch(ctx, level, singleton, instr, tier)
             }
         }
     }
@@ -2773,8 +2773,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
 
     fn render_group_instr_inline(
         &mut self,
-        level: usize,
         ctx: &Context,
+        level: usize,
         instr: &pl::Instr<pl::DispatchInstr>,
         group_instr: &pl::RuleGroupInstr,
     ) -> Rendered {
@@ -2803,9 +2803,9 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         // Render the group body below its linked title
         let block_head = Block::item_ordered(level, Prose::seq([prose_title, Prose::text(":")]));
         let block_group = self.render_instrs(
+            ctx,
             level + 1,
             Some(block_head),
-            ctx,
             Self::render_instr_group,
             &group_instr.block,
         );
@@ -2853,7 +2853,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         let prose_title = Prose::link(link, prose_body);
         // Render local arms while keeping relation fragment targets fixed
         let ctx = Context::new(&id_rel.node);
-        let block_body = self.render_instrs(0, None, &ctx, Self::render_instr_group, block);
+        let block_body = self.render_instrs(&ctx, 0, None, Self::render_instr_group, block);
         // Serialize the linked title and body as one fragment
         let text_title = serialize::ser_prose(self.anchor_ctx, self.warnings, &prose_title);
         let text_body = serialize::ser_block(self.anchor_ctx, self.warnings, &block_body);
@@ -2871,8 +2871,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         let ctx = Context::new(&id_rel.node);
         let anchor_else = fallthrough::anchor_of_else(&id_rel.node);
         let text_else = self.render_elseblock(
-            Some(&anchor_else),
             &ctx,
+            Some(&anchor_else),
             Self::render_instr_dispatch_inline,
             Some(block),
         );
@@ -2890,7 +2890,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
     pub fn render_defined_rel_def_dispatch(&mut self, rel: &pl::DefinedRel) -> String {
         let ctx = Context::new(&rel.id.node);
         let block_dispatch =
-            self.render_instrs(0, None, &ctx, Self::render_instr_dispatch, &rel.block);
+            self.render_instrs(&ctx, 0, None, Self::render_instr_dispatch, &rel.block);
         let text_dispatch = serialize::ser_block(self.anchor_ctx, self.warnings, &block_dispatch);
         format!("{} dispatch:\n{text_dispatch}", rel.id.node)
     }
@@ -2926,8 +2926,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         let text_dispatch = self.render_defined_rel_def_dispatch(rel);
         let ctx = Context::new(&rel.id.node);
         let text_else = self.render_elseblock(
-            anchor_else.as_deref(),
             &ctx,
+            anchor_else.as_deref(),
             Self::render_instr_dispatch_inline,
             rel.block_else_opt.as_deref(),
         );
@@ -3105,7 +3105,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
                 let blocks_rendered: Vec<Block> = func
                     .block
                     .iter()
-                    .map(|instr| self.render_instr(0, &ctx, Self::render_instr_group, instr))
+                    .map(|instr| self.render_instr(&ctx, 0, Self::render_instr_group, instr))
                     .collect();
                 block_body = Block::seq(blocks_rendered);
                 anchor_else = has_else.then(|| fallthrough::anchor_of_else(&self.anchor_prefix));
@@ -3114,8 +3114,8 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         // Append the otherwise clause after the selected body form
         let block_header = Self::render_func_title(hints, &func.id, &func.tparams, &func.params);
         let text_else = self.render_elseblock(
-            anchor_else.as_deref(),
             &ctx,
+            anchor_else.as_deref(),
             Self::render_instr_group,
             func.block_else_opt.as_deref(),
         );

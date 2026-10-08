@@ -82,7 +82,7 @@ pub fn parse_string(
     // The lexer and parser share one context for name classification
     let ctx = Rc::new(Context::new(arena));
     let position = Position::new(Rc::clone(&file), 1, 0);
-    let mut lexer = Lexer::new(file, source, Rc::clone(&ctx));
+    let mut lexer = Lexer::new(Rc::clone(&ctx), file, source);
     let input = parser_input(ctx.as_ref(), &mut lexer, position);
 
     let result = p4programParser::new().parse(ctx.as_ref(), input);

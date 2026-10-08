@@ -154,9 +154,9 @@ fn expand_path(path: &Path, files: &mut Vec<PathBuf>) -> Result<(), FrontendErro
 
 /// Lexes and parses one source text into definitions.
 fn parse_text_with_context(
+    ctx: &Context,
     name: Rc<str>,
     source: &str,
-    ctx: &Context,
 ) -> Result<Spec, FrontendError> {
     let lexer = Lexer::new(name, source, |id| ctx.find_id(id));
     let tokens = parser_tokens(ctx, lexer);
@@ -170,7 +170,7 @@ fn parse_text_with_context(
 
 /// Parses a UTF-8 source string with fresh variable bindings.
 pub fn parse_text(name: Rc<str>, source: &str) -> Result<Spec, FrontendError> {
-    parse_text_with_context(name, source, &Context::default())
+    parse_text_with_context(&Context::default(), name, source)
 }
 
 /// Validates UTF-8 bytes and parses them with fresh variable bindings.
@@ -208,7 +208,7 @@ where
         // Decode and parse each file with the shared variable bindings
         let source = decode_utf8(Rc::clone(&name), &bytes)?;
         let ctx = Context::with_bindings(Rc::clone(&bindings));
-        let defs = parse_text_with_context(name, source, &ctx)?;
+        let defs = parse_text_with_context(&ctx, name, source)?;
         spec.extend(defs);
     }
     Ok(spec)

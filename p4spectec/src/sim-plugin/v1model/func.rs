@@ -235,7 +235,7 @@ where
         ))
         .into());
     }
-    hash::compute_checksum(&id_field, None, ctx.arena(), &values)
+    hash::compute_checksum(ctx.arena(), &id_field, None, &values)
 }
 
 /// Shared body of `verify_checksum` and its `_with_payload` variant.

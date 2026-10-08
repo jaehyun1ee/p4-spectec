@@ -21,14 +21,14 @@ use super::{Prepare, PrepareContext, prepare_mixop};
 /// Prepares a type definition body, interning its case notations as shapes.
 ///
 /// Type definitions have no frame of their own, so only `arena_mixop` is filled.
-pub fn prepare_def_typ(def_typ: source::DefTyp, arena_mixop: &mut MixopArena) -> DefTyp {
+pub fn prepare_def_typ(arena_mixop: &mut MixopArena, def_typ: source::DefTyp) -> DefTyp {
     let def_typ_kind = match def_typ.node {
         source::DefTypKind::Plain(typ) => DefTypKind::Plain(typ),
         source::DefTypKind::Struct(typ_fields) => DefTypKind::Struct(typ_fields),
         source::DefTypKind::Variant(typ_cases) => DefTypKind::Variant(
             typ_cases
                 .into_iter()
-                .map(|typ_case| prepare_typ_case(typ_case, arena_mixop))
+                .map(|typ_case| prepare_typ_case(arena_mixop, typ_case))
                 .collect(),
         ),
     };
@@ -36,7 +36,7 @@ pub fn prepare_def_typ(def_typ: source::DefTyp, arena_mixop: &mut MixopArena) ->
 }
 
 /// Prepares one variant case, interning its notation as a shape.
-fn prepare_typ_case(typ_case: source::TypCase, arena_mixop: &mut MixopArena) -> TypCase {
+fn prepare_typ_case(arena_mixop: &mut MixopArena, typ_case: source::TypCase) -> TypCase {
     let source::TypCase { not_typ, typ_origin, hints } = typ_case;
     let (mixop, typs) = not_typ.node.into_parts();
     let mixop = arena_mixop
@@ -54,7 +54,7 @@ impl Prepare for source::Pattern {
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         match self {
-            source::Pattern::Case(mixop) => Pattern::Case(prepare_mixop(&mixop, ctx)),
+            source::Pattern::Case(mixop) => Pattern::Case(prepare_mixop(ctx, &mixop)),
             source::Pattern::List(pattern) => Pattern::List(pattern),
             source::Pattern::Opt(pattern) => Pattern::Opt(pattern),
         }
@@ -70,7 +70,7 @@ impl Prepare for source::Subcheck {
             source::Subcheck::Mixop(mixops) => Subcheck::Mixop(
                 mixops
                     .iter()
-                    .map(|mixop| prepare_mixop(mixop, ctx))
+                    .map(|mixop| prepare_mixop(ctx, mixop))
                     .collect(),
             ),
             source::Subcheck::Tuple(subchecks) => Subcheck::Tuple(subchecks.prepare(ctx)),
@@ -214,7 +214,7 @@ impl Prepare for source::PremIter {
     type Output = PremIter;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
-        fn prepare_outer_vars(vars: &[VarSlot], iter: Iter, layout: &mut FrameLayout) {
+        fn prepare_outer_vars(layout: &mut FrameLayout, vars: &[VarSlot], iter: Iter) {
             for var in vars {
                 let mut var_outer = var.var.clone();
                 var_outer.iters.push(iter);
@@ -225,8 +225,8 @@ impl Prepare for source::PremIter {
         // Register the outer variables of the bound and binding variables
         let vars_bound = self.vars_bound.prepare(ctx);
         let vars_bind = self.vars_bind.prepare(ctx);
-        prepare_outer_vars(&vars_bound, self.iter, ctx.layout);
-        prepare_outer_vars(&vars_bind, self.iter, ctx.layout);
+        prepare_outer_vars(ctx.layout, &vars_bound, self.iter);
+        prepare_outer_vars(ctx.layout, &vars_bind, self.iter);
         PremIter { iter: self.iter, vars_bound, vars_bind }
     }
 }

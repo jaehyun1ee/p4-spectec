@@ -1526,7 +1526,7 @@ fn build_rel_hints(
             typs.into_iter()
                 .map(|typ| {
                     let (ids_fresh, exp_sl) =
-                        al::fresh::exp_from_typ(true, ctx.menv(), &ids_used, &typ);
+                        al::fresh::exp_from_typ(ctx.menv(), true, &ids_used, &typ);
                     ids_used = ids_fresh;
                     exp_sl
                 })

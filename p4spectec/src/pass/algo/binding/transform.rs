@@ -190,7 +190,7 @@ fn analyze_exps_as_bind(
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_exp = ICtx::new();
     let exps_al =
-        partial::rename_exps(ctx, &venv.domain(), &mut renv_partial, &mut iter_ctx_exp, exps_al)?;
+        partial::rename_exps(ctx, &mut renv_partial, &mut iter_ctx_exp, &venv.domain(), exps_al)?;
     update_venv_partial(&mut venv, &renv_partial);
     let prems_partial = partial::gen_prems(ctx, iter_ctx, &renv_partial)?;
     Ok((venv, exps_al, generated_prems(prems_partial, prems_multiple)))
@@ -254,7 +254,7 @@ fn analyze_args_as_bind(
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_arg = ICtx::new();
     let args_al =
-        partial::rename_args(ctx, &venv.domain(), &mut renv_partial, &mut iter_ctx_arg, args_al)?;
+        partial::rename_args(ctx, &mut renv_partial, &mut iter_ctx_arg, &venv.domain(), args_al)?;
     update_venv_partial(&mut venv, &renv_partial);
     let prems_partial = partial::gen_prems(ctx, &ICtx::new(), &renv_partial)?;
     Ok((venv, args_al, generated_prems(prems_partial, prems_multiple)))
@@ -292,7 +292,7 @@ fn analyze_args_as_bind_shallow(
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_arg = ICtx::new();
     let args_al =
-        partial::rename_args(ctx, &venv.domain(), &mut renv_partial, &mut iter_ctx_arg, args_al)?;
+        partial::rename_args(ctx, &mut renv_partial, &mut iter_ctx_arg, &venv.domain(), args_al)?;
     update_venv_partial(&mut venv, &renv_partial);
     let prems_al = partial::gen_prems(ctx, &ICtx::new(), &renv_partial)?
         .into_iter()
@@ -478,8 +478,8 @@ fn lower_if_eq_prem(
             Ok((VEnv::new(), iter_ctx.iterate_prem(prem_al), vec![]))
         }
         // Both sides binding is ambiguous
-        (false, true) => lower_let_prem(ctx, span, iter_ctx, exp_l_il, &benv_l, exp_r_il),
-        (true, false) => lower_let_prem(ctx, span, iter_ctx, exp_r_il, &benv_r, exp_l_il),
+        (false, true) => lower_let_prem(ctx, iter_ctx, span, exp_l_il, &benv_l, exp_r_il),
+        (true, false) => lower_let_prem(ctx, iter_ctx, span, exp_r_il, &benv_r, exp_l_il),
         (false, false) => {
             Err(error::binding::equality_binding_invalid(&if_prem_il.exp.span, &benv_l, &benv_r))
         }
@@ -561,8 +561,8 @@ fn lower_if_not_hold_prem(
 /// Analyzes `let pattern = exp`, rewriting the pattern side.
 fn lower_let_prem(
     ctx: &mut Context,
-    span: &Span,
     iter_ctx: ICtx,
+    span: &Span,
     exp_l_il: &ast::Exp,
     benv_l: &BEnv,
     exp_r_il: &ast::Exp,
@@ -578,7 +578,7 @@ fn lower_let_prem(
     let mut renv_partial = partial::RenameEnv::new();
     let mut iter_ctx_exp = ICtx::new();
     let exp_l_al =
-        partial::rename_exp(ctx, &venv.domain(), &mut renv_partial, &mut iter_ctx_exp, exp_l_al)?;
+        partial::rename_exp(ctx, &mut renv_partial, &mut iter_ctx_exp, &venv.domain(), exp_l_al)?;
     update_venv_partial(&mut venv, &renv_partial);
     let prems_partial = partial::gen_prems(ctx, &iter_ctx, &renv_partial)?;
     let prems_analyzed = generated_prems(prems_partial, prems_multiple);

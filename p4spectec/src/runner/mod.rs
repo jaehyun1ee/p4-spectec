@@ -88,9 +88,9 @@ pub fn build_al<Ext: Extern>(
     let Spec::Al(spec) = spec else { unreachable!() };
     // Load and prepare the definitions
     let mut arena_mixop = MixopArena::new();
-    let global = AlGlobal::load(spec, &mut arena_mixop)?;
+    let global = AlGlobal::load(&mut arena_mixop, spec)?;
     let config = AlConfig::new(config.cache, config.det, config.guard);
-    Ok(Runner::new(global, arena_mixop, AlInterp::new(config), interface, external))
+    Ok(Runner::new(arena_mixop, global, AlInterp::new(config), interface, external))
 }
 
 /// Builds an SL runner from a specification, with the P4 builtins.
@@ -107,9 +107,9 @@ pub fn build_sl<Ext: Extern>(
     let Spec::Sl(spec) = spec else { unreachable!() };
     // Load and prepare the definitions
     let mut arena_mixop = MixopArena::new();
-    let global = SlGlobal::load(spec, &mut arena_mixop, config.det)?;
+    let global = SlGlobal::load(&mut arena_mixop, spec, config.det)?;
     let config = SlConfig::new(config.cache, config.det, config.guard);
-    Ok(Runner::new(global, arena_mixop, SlInterp::new(config), interface, external))
+    Ok(Runner::new(arena_mixop, global, SlInterp::new(config), interface, external))
 }
 
 /// Builds a PL runner from a specification, with the P4 builtins.
@@ -124,9 +124,9 @@ pub fn build_pl<Ext: Extern>(
     let interface = builtin::p4(&spec);
     let Spec::Pl(spec) = spec else { unreachable!() };
     let mut arena_mixop = MixopArena::new();
-    let global = PlGlobal::load(spec, &mut arena_mixop)?;
+    let global = PlGlobal::load(&mut arena_mixop, spec)?;
     let config = PlConfig::new(config.cache, config.det, config.guard);
-    Ok(Runner::new(global, arena_mixop, PlInterp::new(config), interface, external))
+    Ok(Runner::new(arena_mixop, global, PlInterp::new(config), interface, external))
 }
 
 // == Runner assembly
@@ -153,8 +153,8 @@ where
 {
     /// Assembles the components around an arena over the specification's shapes.
     pub fn new(
-        spec: Interp::Spec,
         arena_mixop: MixopArena,
+        spec: Interp::Spec,
         interp: Interp,
         interface: Iface,
         external: Ext,

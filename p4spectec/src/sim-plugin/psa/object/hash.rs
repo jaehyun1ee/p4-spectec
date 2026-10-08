@@ -78,7 +78,7 @@ impl HashExtern {
     {
         let value_data = func::find_var_e_local(ctx, value_ctx, "data")?;
         let values = unpack::p4_tuple(ctx.arena(), &value_data)?;
-        let int_hash = hash::compute_checksum(&self.algo, None, ctx.arena(), &values)?;
+        let int_hash = hash::compute_checksum(ctx.arena(), &self.algo, None, &values)?;
         self.return_hash(ctx, value_ctx, value_arch, int_hash)
     }
 
@@ -109,7 +109,7 @@ impl HashExtern {
         let max = unpack::p4_fixed_bit(ctx.arena(), &value_max)?.1;
         let value_data = func::find_var_e_local(ctx, value_ctx, "data")?;
         let values = unpack::p4_tuple(ctx.arena(), &value_data)?;
-        let int_hash = hash::compute_checksum(&self.algo, None, ctx.arena(), &values)?;
+        let int_hash = hash::compute_checksum(ctx.arena(), &self.algo, None, &values)?;
         if max <= BigInt::zero() {
             return Err(
                 error::hash_range_invalid("hash modulus must be positive".to_owned()).into()

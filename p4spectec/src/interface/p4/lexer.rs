@@ -235,7 +235,7 @@ pub struct Lexer<'source, 'arena> {
 
 impl<'source, 'arena> Lexer<'source, 'arena> {
     /// Tokenizes preprocessed `source` using context-sensitive name classes.
-    pub fn new(file: Rc<str>, source: &'source str, ctx: Rc<Context<'arena>>) -> Self {
+    pub fn new(ctx: Rc<Context<'arena>>, file: Rc<str>, source: &'source str) -> Self {
         Self {
             source,
             index: 0,

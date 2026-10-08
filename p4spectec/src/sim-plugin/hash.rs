@@ -131,9 +131,9 @@ pub fn package(arena: &Arena, values: &[Value]) -> Result<(BigInt, BigInt), Exte
 
 /// Packs the fields and hashes them.
 pub fn compute_checksum(
+    arena: &Arena,
     algo: &str,
     int_init: Option<&BigInt>,
-    arena: &Arena,
     values: &[Value],
 ) -> Result<BigInt, ExternError> {
     let bits = package(arena, values)?;

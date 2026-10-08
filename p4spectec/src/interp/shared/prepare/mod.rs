@@ -103,7 +103,7 @@ impl<T: Prepare> Prepare for tree::Mixfix<T> {
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         let (mixop, args) = self.into_parts();
-        let mixop = prepare_mixop(&mixop, ctx);
+        let mixop = prepare_mixop(ctx, &mixop);
         let args = args.prepare(ctx);
         notation::flat::Mixfix::new(ctx.arena_mixop, mixop, args)
             .expect("a mixfix fills every position")
@@ -111,7 +111,7 @@ impl<T: Prepare> Prepare for tree::Mixfix<T> {
 }
 
 /// Interns a shared mixop as a shape, walking it once per specification.
-pub(crate) fn prepare_mixop(mixop: &Rc<tree::Mixop>, ctx: &mut PrepareContext<'_>) -> flat::Mixop {
+pub(crate) fn prepare_mixop(ctx: &mut PrepareContext<'_>, mixop: &Rc<tree::Mixop>) -> flat::Mixop {
     ctx.arena_mixop
         .intern_shared(mixop)
         .expect("specification mixops fit in 32-bit shape handles")

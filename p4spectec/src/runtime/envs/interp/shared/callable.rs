@@ -26,7 +26,7 @@ impl<T> Callable<T> {
     ///
     /// Notations are interned into `arena_mixop`,
     /// which must stay with the prepared definition for evaluation.
-    pub fn prepare<S: Prepare<Output = T>>(source: S, arena_mixop: &mut MixopArena) -> Self {
+    pub fn prepare<S: Prepare<Output = T>>(arena_mixop: &mut MixopArena, source: S) -> Self {
         // The traversal fills the layout as it resolves names
         let mut layout = FrameLayout::default();
         let def = source.prepare(&mut PrepareContext { layout: &mut layout, arena_mixop });

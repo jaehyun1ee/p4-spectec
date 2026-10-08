@@ -202,7 +202,7 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for Interned<flat::ValueKind>
                     .map_err(::serde::de::Error::custom)?;
                 arena
                     .value
-                    .intern_kind(kind, &arena.mixop)
+                    .intern_kind(&arena.mixop, kind)
                     .map_err(::serde::de::Error::custom)
             }
         }

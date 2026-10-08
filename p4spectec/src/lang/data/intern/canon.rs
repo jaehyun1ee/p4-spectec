@@ -147,8 +147,8 @@ impl<T: Eq + Hash> CanonInterner<T> {
     /// that keep the identities read through them unchanged.
     pub fn intern<Deps: ?Sized>(
         &mut self,
-        item: T,
         deps: &Deps,
+        item: T,
     ) -> Result<Interned<T>, TryFromIntError>
     where
         T: CanonEq<Deps> + CanonHash<Deps>,

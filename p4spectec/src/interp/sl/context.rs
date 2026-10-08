@@ -40,8 +40,8 @@ impl Global {
     /// The loaded definitions must execute with the same `det` mode.
     /// Panics if a global definition is repeated.
     pub fn load(
-        spec: source::Spec,
         arena_mixop: &mut MixopArena,
+        spec: source::Spec,
         det: bool,
     ) -> Result<Self, Error> {
         let mut loaded = Self::new();
@@ -58,7 +58,7 @@ impl Global {
                                 id,
                                 TypeDef::Defined(
                                     tparams,
-                                    Box::new(prepare_def_typ(def_typ, arena_mixop)),
+                                    Box::new(prepare_def_typ(arena_mixop, def_typ)),
                                 ),
                             )
                         }
@@ -69,7 +69,7 @@ impl Global {
                 source::DefKind::Var(_) => {}
                 source::DefKind::Rel(rel) => {
                     // Relations are prepared into callables with a frame layout
-                    let rel = prepare_rel(rel, arena_mixop, det);
+                    let rel = prepare_rel(arena_mixop, rel, det);
                     let id = match &rel.def {
                         ast::RelDef::Extern(rel) => &rel.id,
                         ast::RelDef::Defined(rel) => &rel.id,
@@ -78,7 +78,7 @@ impl Global {
                 }
                 source::DefKind::MetaFunc(func) => {
                     // Prepare functions before sharing them with local bindings
-                    let func = prepare_func(func, arena_mixop, det);
+                    let func = prepare_func(arena_mixop, func, det);
                     let id = match &func.def {
                         ast::MetaFuncDef::Extern(func) => &func.id,
                         ast::MetaFuncDef::Builtin(func) => &func.id,
