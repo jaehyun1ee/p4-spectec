@@ -150,7 +150,10 @@ pub(crate) fn r#match(arena: &Arena, pattern: &ast::Pattern<Prepared>, value: Va
     match (pattern, arena.kind(&value)) {
         // Case: same constructor shape
         (ast::Pattern::Case(mixop), ValueKind::Case(value_case)) => {
-            arena.mixop().canon_eq(*mixop, *value_case.mixop())
+            let arena_mixop = arena.mixop();
+            let mixop_pattern = mixop.view(arena_mixop);
+            let mixop_value = value_case.mixop().view(arena_mixop);
+            mixop_pattern.syntax_eq(&mixop_value)
         }
         // List: non-empty, fixed length, or empty
         (ast::Pattern::List(pattern), ValueKind::List(values)) => match pattern {

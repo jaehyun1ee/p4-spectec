@@ -5,9 +5,12 @@
 
 use std::cmp::Ordering;
 
-use crate::lang::data::intern::{CanonEq, CanonInterner};
+use crate::lang::{
+    data::intern::{CanonEq, CanonInterner},
+    traits::{cmp::SyntaxCmp, eq::SyntaxEq},
+};
 
-use super::{Mixfix, Mixop, MixopArena, MixopKind};
+use super::{Mixfix, Mixop, MixopArena, MixopKind, MixopRef};
 
 // = Canonical equality
 
@@ -45,6 +48,29 @@ impl CanonEq for MixopKind {
             }
             _ => false,
         }
+    }
+}
+
+// = Syntax comparison
+
+impl SyntaxEq for MixopRef<'_> {
+    fn syntax_eq(&self, mixop_other: &Self) -> bool {
+        assert!(
+            std::ptr::eq(self.arena_mixop, mixop_other.arena_mixop),
+            "mixops must belong to the same arena"
+        );
+        self.arena_mixop.canon_eq(self.mixop, mixop_other.mixop)
+    }
+}
+
+impl SyntaxCmp for MixopRef<'_> {
+    fn syntax_cmp(&self, mixop_other: &Self) -> Ordering {
+        assert!(
+            std::ptr::eq(self.arena_mixop, mixop_other.arena_mixop),
+            "mixops must belong to the same arena"
+        );
+        self.mixop
+            .cmp_by(self.arena_mixop, mixop_other.mixop, |_| Ordering::Equal)
     }
 }
 

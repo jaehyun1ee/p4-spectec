@@ -18,6 +18,7 @@ use crate::lang::{
         arena::Arena,
         value::flat::{Value, ValueField, ValueKind},
     },
+    traits::eq::SyntaxEq,
 };
 
 use crate::lang::il::prepared::{
@@ -135,12 +136,12 @@ where
                         }
                         // A variant: a same-shaped case accepts the arguments
                         (DefTypKind::Variant(typ_cases), ValueKind::Case(value_case)) => {
+                            let arena_mixop = arena.mixop();
+                            let mixop_value = value_case.mixop().view(arena_mixop);
                             for TypCase { not_typ, .. } in typ_cases {
                                 // Skip cases of a different shape
-                                if !arena
-                                    .mixop()
-                                    .canon_eq(*not_typ.node.mixop(), *value_case.mixop())
-                                {
+                                let mixop_typ = not_typ.node.mixop().view(arena_mixop);
+                                if !mixop_typ.syntax_eq(&mixop_value) {
                                     continue;
                                 }
                                 let not_typ = subst_not_typ(&|id| theta.get(id), not_typ)?;
@@ -265,9 +266,13 @@ where
         // Statically known to hold
         (Subcheck::Skip, _) => Ok(true),
         // Variant case: the tag must be one of the accepted
-        (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => Ok(mixops
-            .iter()
-            .any(|mixop| arena.mixop().canon_eq(*mixop, *value_case.mixop()))),
+        (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => {
+            let arena_mixop = arena.mixop();
+            let mixop_value = value_case.mixop().view(arena_mixop);
+            Ok(mixops
+                .iter()
+                .any(|mixop| mixop.view(arena_mixop).syntax_eq(&mixop_value)))
+        }
         // Componentwise
         (Subcheck::Tuple(subchecks), ValueKind::Tuple(values)) => {
             if subchecks.len() != values.len() {

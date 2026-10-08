@@ -19,9 +19,11 @@ pub mod external;
 mod hash;
 mod make;
 mod print;
+mod view;
 mod visit;
 
 pub use arena::MixopArena;
+pub use view::MixopRef;
 
 // = Notation forms
 
