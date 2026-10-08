@@ -1,6 +1,6 @@
 //! Borrowed prepared syntax rendered through the Print trait
 //!
-//! Each view pairs prepared syntax with its notation arena.
+//! The `view` methods pair prepared syntax with its notation arena.
 //! `Print::print` resolves mixops while traversing the syntax;
 //! `Print::to_string` supplies the common string-rendering entry point.
 
@@ -13,8 +13,6 @@ use crate::lang::{
     traits::print::{Print, Printer},
 };
 
-use crate::lang::il::print::PatternRef;
-
 use crate::lang::pl::prepared::*;
 
 // == Borrowed views
@@ -23,18 +21,32 @@ use crate::lang::pl::prepared::*;
 #[derive(Clone, Copy, Debug)]
 pub struct ExpRef<'a> {
     /// The arena that owns the notation handles.
-    pub arena_mixop: &'a MixopArena,
+    arena_mixop: &'a MixopArena,
     /// The prepared expression to render.
-    pub exp: &'a Exp,
+    exp: &'a Exp,
 }
 
 /// Borrows a prepared argument and its notation arena for printing.
 #[derive(Clone, Copy, Debug)]
 pub struct ArgRef<'a> {
     /// The arena that owns the notation handles.
-    pub arena_mixop: &'a MixopArena,
+    arena_mixop: &'a MixopArena,
     /// The prepared argument to render.
-    pub arg: &'a Arg,
+    arg: &'a Arg,
+}
+
+impl Exp {
+    /// Borrows this expression with its notation arena for printing.
+    pub fn view<'a>(&'a self, arena_mixop: &'a MixopArena) -> ExpRef<'a> {
+        ExpRef { arena_mixop, exp: self }
+    }
+}
+
+impl Arg {
+    /// Borrows this argument with its notation arena for printing.
+    pub fn view<'a>(&'a self, arena_mixop: &'a MixopArena) -> ArgRef<'a> {
+        ArgRef { arena_mixop, arg: self }
+    }
 }
 
 // == Printing
@@ -52,45 +64,45 @@ impl Print for ExpRef<'_> {
             ExpKind::Id(id) => id.print(printer),
             ExpKind::Un(op, _, exp) => {
                 op.print(printer)?;
-                ExpRef { arena_mixop, exp }.print(printer)
+                exp.view(arena_mixop).print(printer)
             }
             ExpKind::Bin(op, _, exp_l, exp_r) => {
                 printer.write_char('(')?;
-                ExpRef { arena_mixop, exp: exp_l }.print(printer)?;
+                exp_l.view(arena_mixop).print(printer)?;
                 printer.write_char(' ')?;
                 op.print(printer)?;
                 printer.write_char(' ')?;
-                ExpRef { arena_mixop, exp: exp_r }.print(printer)?;
+                exp_r.view(arena_mixop).print(printer)?;
                 printer.write_char(')')
             }
             ExpKind::Cmp(op, _, exp_l, exp_r) => {
                 printer.write_char('(')?;
-                ExpRef { arena_mixop, exp: exp_l }.print(printer)?;
+                exp_l.view(arena_mixop).print(printer)?;
                 printer.write_char(' ')?;
                 op.print(printer)?;
                 printer.write_char(' ')?;
-                ExpRef { arena_mixop, exp: exp_r }.print(printer)?;
+                exp_r.view(arena_mixop).print(printer)?;
                 printer.write_char(')')
             }
             ExpKind::UpCast(typ, exp) | ExpKind::DownCast(typ, exp) => {
                 printer.write_char('(')?;
-                ExpRef { arena_mixop, exp }.print(printer)?;
+                exp.view(arena_mixop).print(printer)?;
                 printer.write_str(" as ")?;
                 typ.print(printer)?;
                 printer.write_char(')')
             }
             ExpKind::Sub(exp, typ, _) => {
                 printer.write_char('(')?;
-                ExpRef { arena_mixop, exp }.print(printer)?;
+                exp.view(arena_mixop).print(printer)?;
                 printer.write_str(" has type ")?;
                 typ.print(printer)?;
                 printer.write_char(')')
             }
             ExpKind::Match(exp, pattern) => {
                 printer.write_char('(')?;
-                ExpRef { arena_mixop, exp }.print(printer)?;
+                exp.view(arena_mixop).print(printer)?;
                 printer.write_str(" matches pattern ")?;
-                PatternRef { arena_mixop, pattern }.print(printer)?;
+                pattern.view(arena_mixop).print(printer)?;
                 printer.write_char(')')
             }
             ExpKind::Tuple(exps) => {
@@ -101,7 +113,7 @@ impl Print for ExpRef<'_> {
             ExpKind::Case(not_exp) => {
                 printer.write_char('(')?;
                 not_exp.print_with(arena_mixop, printer, |exp, printer| {
-                    ExpRef { arena_mixop, exp }.print(printer)
+                    exp.view(arena_mixop).print(printer)
                 })?;
                 printer.write_char(')')
             }
@@ -113,13 +125,13 @@ impl Print for ExpRef<'_> {
                     }
                     atom.print(printer)?;
                     printer.write_char(' ')?;
-                    ExpRef { arena_mixop, exp }.print(printer)?;
+                    exp.view(arena_mixop).print(printer)?;
                 }
                 printer.write_char('}')
             }
             ExpKind::Opt(Some(exp)) => {
                 printer.write_str("?(")?;
-                ExpRef { arena_mixop, exp }.print(printer)?;
+                exp.view(arena_mixop).print(printer)?;
                 printer.write_char(')')
             }
             ExpKind::Opt(None) => printer.write_str("?()"),
@@ -129,50 +141,50 @@ impl Print for ExpRef<'_> {
                 printer.write_char(']')
             }
             ExpKind::Cons(exp_head, exp_tail) => {
-                ExpRef { arena_mixop, exp: exp_head }.print(printer)?;
+                exp_head.view(arena_mixop).print(printer)?;
                 printer.write_str(" :: ")?;
-                ExpRef { arena_mixop, exp: exp_tail }.print(printer)
+                exp_tail.view(arena_mixop).print(printer)
             }
             ExpKind::Cat(exp_l, exp_r) => {
-                ExpRef { arena_mixop, exp: exp_l }.print(printer)?;
+                exp_l.view(arena_mixop).print(printer)?;
                 printer.write_str(" ++ ")?;
-                ExpRef { arena_mixop, exp: exp_r }.print(printer)
+                exp_r.view(arena_mixop).print(printer)
             }
             ExpKind::Mem(exp_elem, exp_set) => {
-                ExpRef { arena_mixop, exp: exp_elem }.print(printer)?;
+                exp_elem.view(arena_mixop).print(printer)?;
                 printer.write_str(" is in ")?;
-                ExpRef { arena_mixop, exp: exp_set }.print(printer)
+                exp_set.view(arena_mixop).print(printer)
             }
             ExpKind::Len(exp) => {
                 printer.write_char('|')?;
-                ExpRef { arena_mixop, exp }.print(printer)?;
+                exp.view(arena_mixop).print(printer)?;
                 printer.write_char('|')
             }
             ExpKind::Dot(exp, atom) => {
-                ExpRef { arena_mixop, exp }.print(printer)?;
+                exp.view(arena_mixop).print(printer)?;
                 printer.write_char('.')?;
                 atom.print(printer)
             }
             ExpKind::Idx(exp_base, exp_idx) => {
-                ExpRef { arena_mixop, exp: exp_base }.print(printer)?;
+                exp_base.view(arena_mixop).print(printer)?;
                 printer.write_char('[')?;
-                ExpRef { arena_mixop, exp: exp_idx }.print(printer)?;
+                exp_idx.view(arena_mixop).print(printer)?;
                 printer.write_char(']')
             }
             ExpKind::Slice(exp_base, exp_idx, exp_len) => {
-                ExpRef { arena_mixop, exp: exp_base }.print(printer)?;
+                exp_base.view(arena_mixop).print(printer)?;
                 printer.write_char('[')?;
-                ExpRef { arena_mixop, exp: exp_idx }.print(printer)?;
+                exp_idx.view(arena_mixop).print(printer)?;
                 printer.write_str(" : ")?;
-                ExpRef { arena_mixop, exp: exp_len }.print(printer)?;
+                exp_len.view(arena_mixop).print(printer)?;
                 printer.write_char(']')
             }
             ExpKind::Upd(exp_base, path, exp_field) => {
-                ExpRef { arena_mixop, exp: exp_base }.print(printer)?;
+                exp_base.view(arena_mixop).print(printer)?;
                 printer.write_char('[')?;
                 ExpRef::print_path(arena_mixop, path, printer)?;
                 printer.write_str(" = ")?;
-                ExpRef { arena_mixop, exp: exp_field }.print(printer)?;
+                exp_field.view(arena_mixop).print(printer)?;
                 printer.write_char(']')
             }
             ExpKind::Call(id, targs, args) => {
@@ -187,7 +199,7 @@ impl Print for ExpRef<'_> {
             }
             ExpKind::Iter(exp, iter_exp) => {
                 printer.write_char('(')?;
-                ExpRef { arena_mixop, exp }.print(printer)?;
+                exp.view(arena_mixop).print(printer)?;
                 printer.write_char(')')?;
                 std::slice::from_ref(iter_exp).print(printer)
             }
@@ -206,7 +218,7 @@ impl ExpRef<'_> {
             if idx != 0 {
                 printer.write(", ")?;
             }
-            ExpRef { arena_mixop, exp }.print(printer)?;
+            exp.view(arena_mixop).print(printer)?;
         }
         Ok(())
     }
@@ -218,15 +230,15 @@ impl ExpRef<'_> {
             PathKind::Idx(path, exp_idx) => {
                 ExpRef::print_path(arena_mixop, path, printer)?;
                 printer.write_char('[')?;
-                ExpRef { arena_mixop, exp: exp_idx }.print(printer)?;
+                exp_idx.view(arena_mixop).print(printer)?;
                 printer.write_char(']')
             }
             PathKind::Slice(path, exp_idx, exp_len) => {
                 ExpRef::print_path(arena_mixop, path, printer)?;
                 printer.write_char('[')?;
-                ExpRef { arena_mixop, exp: exp_idx }.print(printer)?;
+                exp_idx.view(arena_mixop).print(printer)?;
                 printer.write_str(" : ")?;
-                ExpRef { arena_mixop, exp: exp_len }.print(printer)?;
+                exp_len.view(arena_mixop).print(printer)?;
                 printer.write_char(']')
             }
             // A field of the root prints bare
@@ -247,7 +259,7 @@ impl Print for ArgRef<'_> {
         let arena_mixop = self.arena_mixop;
         let arg = self.arg;
         match &arg.node {
-            ArgKind::Exp(exp) => ExpRef { arena_mixop, exp }.print(printer),
+            ArgKind::Exp(exp) => exp.view(arena_mixop).print(printer),
             ArgKind::Def(id) => {
                 printer.write_char('$')?;
                 id.print(printer)
@@ -271,7 +283,7 @@ impl ArgRef<'_> {
             if idx != 0 {
                 printer.write(", ")?;
             }
-            ArgRef { arena_mixop, arg }.print(printer)?;
+            arg.view(arena_mixop).print(printer)?;
         }
         printer.write(")")
     }

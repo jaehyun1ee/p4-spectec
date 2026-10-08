@@ -12,7 +12,7 @@ use crate::lang::{
     traits::print::Print,
 };
 
-use crate::lang::il::{prepared as ast, print::ArgRef};
+use crate::lang::il::prepared as ast;
 
 use crate::runner::{Extern, Interface, RunnerContext};
 
@@ -33,10 +33,7 @@ fn eval_arg<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>
         ast::ArgKind::Def(id) => eval_def_arg(runner_ctx.arena_mut(), ctx, id, &arg.span),
     };
     result.with_frame(arg.span.clone(), || {
-        format!(
-            "while evaluating argument {}",
-            ArgRef { arena_mixop: runner_ctx.arena().mixop(), arg }.to_string()
-        )
+        format!("while evaluating argument {}", arg.view(runner_ctx.arena().mixop()).to_string())
     })
 }
 

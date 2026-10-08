@@ -26,7 +26,7 @@ pub type Var = VarSlot;
 
 /// An expression over slot-resolved identifiers.
 ///
-/// Rendering uses [`super::print::ExpRef`] with its notation arena.
+/// Rendering uses `view(arena_mixop)` to obtain [`super::print::ExpRef`].
 pub type Exp = source::Exp<Prepared>;
 pub type ExpField = source::ExpField<Prepared>;
 pub type ExpKind = source::ExpKind<Prepared>;

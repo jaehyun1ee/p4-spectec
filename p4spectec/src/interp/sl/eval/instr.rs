@@ -17,8 +17,6 @@ use crate::lang::{
     traits::print::Print,
 };
 
-use crate::lang::il::print::ExpRef;
-
 use crate::lang::sl::prepared as ast;
 
 use crate::diagnostic::Report;
@@ -191,9 +189,7 @@ fn eval_if_instr<Iface: Interface, Ext: Extern>(
     } else {
         ok!(Flow::cont(
             instr.exp.span.clone(),
-            error::prem::condition_unmet(
-                ExpRef { arena_mixop: runner_ctx.arena().mixop(), exp: &instr.exp }.to_string()
-            ),
+            error::prem::condition_unmet(instr.exp.view(runner_ctx.arena().mixop()).to_string()),
         ))
     }
 }
@@ -275,7 +271,7 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
         instr.exp.span.clone(),
         error::prem::condition_unmet(format!(
             "case {}",
-            ExpRef { arena_mixop: runner_ctx.arena().mixop(), exp: &instr.exp }.to_string()
+            instr.exp.view(runner_ctx.arena().mixop()).to_string()
         )),
     ))
 }
@@ -454,11 +450,7 @@ fn eval_debug_instr<Iface: Interface, Ext: Extern>(
     tail: bool,
 ) -> Backtrack<Flow> {
     let value = unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
-    println!(
-        "{}: {}",
-        instr.exp.span,
-        ExpRef { arena_mixop: runner_ctx.arena().mixop(), exp: &instr.exp }.to_string()
-    );
+    println!("{}: {}", instr.exp.span, instr.exp.view(runner_ctx.arena().mixop()).to_string());
     // Print the value's source span when it has one
     let span = runner_ctx.arena().span(&value).to_string();
     if span.is_empty() {
