@@ -5,11 +5,7 @@
 //! Function types compare up to renaming of their type parameters,
 //! using fresh variables bound in a local type environment.
 
-use crate::lang::common::{
-    ds::map::{ArityMismatch, IdMap},
-    prim::num,
-    source::Span,
-};
+use crate::lang::common::{ds::map::ArityMismatch, prim::num, source::Span};
 
 use crate::lang::il::ast::{self, TypKind};
 
@@ -170,7 +166,7 @@ pub fn equiv_func_typ<'env, P: ast::Stage>(
     let mut fresh = Fresh::default();
     let mut theta_l = Theta::new();
     let mut theta_r = Theta::new();
-    let mut tdenv_fresh: IdMap<TypeDef<P>> = IdMap::new();
+    let mut tdenv_fresh = TDEnv::<P>::new();
     for (tparam_l, tparam_r) in tparams_l.iter().zip(tparams_r) {
         let (tparam_fresh, typ_fresh) = fresh.fresh();
         tdenv_fresh.insert(tparam_fresh, TypeDef::Parameter);

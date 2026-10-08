@@ -10,8 +10,12 @@ pub mod frame;
 
 use crate::lang::common::ds::map::IdMap;
 
-/// A type definition whose notation bodies use prepared mixops.
-pub type TypeDef = crate::runtime::typdef::TypeDef<crate::lang::il::stage::Prepared>;
+use crate::lang::il::stage::Prepared;
+
+use crate::runtime::typdef;
+
+/// A type definition, prepared by default for execution.
+pub type TypeDef<P = Prepared> = typdef::TypeDef<P>;
 
 /// Type names to their definitions.
-pub type TDEnv = IdMap<TypeDef>;
+pub type TDEnv<P = Prepared> = IdMap<TypeDef<P>>;
