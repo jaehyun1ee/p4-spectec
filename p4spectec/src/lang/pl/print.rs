@@ -218,7 +218,7 @@ impl Print for Path {
 
 // - Parameters
 
-impl<E: Print> Print for Param<E> {
+impl Print for Param {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node {
             ParamKind::Exp(_, exp) => exp.print(printer),
@@ -238,7 +238,7 @@ impl<E: Print> Print for Param<E> {
     }
 }
 
-impl<E: Print> Print for [Param<E>] {
+impl Print for [Param] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         if self.is_empty() {
             return Ok(());
@@ -292,9 +292,9 @@ impl Print for [Arg] {
 type TierPrinter<Tier> = fn(&mut Printer<'_>, &Tier, bool, usize, usize) -> fmt::Result;
 
 /// Prints one instruction as a numbered step, then its blocks unless `short`.
-fn write_instr_with<Tier, E: Print>(
+fn write_instr_with<Tier>(
     output: &mut Printer<'_>,
-    instr: &Instr<Tier, E>,
+    instr: &Instr<Tier>,
     tier_printer: TierPrinter<Tier>,
     short: bool,
     level: usize,
@@ -467,16 +467,16 @@ fn write_instr_with<Tier, E: Print>(
 
 // - Group-body tier
 
-impl<E: Print> Print for Instr<GroupInstr<E>, E> {
+impl Print for Instr<GroupInstr> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         write_instr_with(printer, self, write_group_instr_with, false, 0, 0)
     }
 }
 
 /// Prints a group-body instruction; a backtrack lists its arms.
-fn write_group_instr_with<E: Print>(
+fn write_group_instr_with(
     output: &mut Printer<'_>,
-    tier: &GroupInstr<E>,
+    tier: &GroupInstr,
     short: bool,
     level: usize,
     index: usize,
@@ -529,16 +529,16 @@ fn write_group_instr_with<E: Print>(
     }
 }
 
-impl<E: Print> Print for GroupBlock<E> {
+impl Print for GroupBlock {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         write_group_block_with(printer, self, 0, 0)
     }
 }
 
 /// Prints a group-body block.
-fn write_group_block_with<E: Print>(
+fn write_group_block_with(
     output: &mut Printer<'_>,
-    block: &GroupBlock<E>,
+    block: &GroupBlock,
     level: usize,
     index: usize,
 ) -> fmt::Result {
@@ -547,16 +547,16 @@ fn write_group_block_with<E: Print>(
 
 // - Dispatch tier
 
-impl<E: Print> Print for Instr<DispatchInstr<E>, E> {
+impl Print for Instr<DispatchInstr> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         write_instr_with(printer, self, write_dispatch_instr_with, false, 0, 0)
     }
 }
 
 /// Prints a dispatch instruction; a route lists its arms.
-fn write_dispatch_instr_with<E: Print>(
+fn write_dispatch_instr_with(
     output: &mut Printer<'_>,
-    tier: &DispatchInstr<E>,
+    tier: &DispatchInstr,
     short: bool,
     level: usize,
     index: usize,
@@ -600,16 +600,16 @@ fn write_dispatch_instr_with<E: Print>(
     }
 }
 
-impl<E: Print> Print for DispatchBlock<E> {
+impl Print for DispatchBlock {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         write_dispatch_block_with(printer, self, 0, 0)
     }
 }
 
 /// Prints a dispatch block.
-fn write_dispatch_block_with<E: Print>(
+fn write_dispatch_block_with(
     output: &mut Printer<'_>,
-    block: &DispatchBlock<E>,
+    block: &DispatchBlock,
     level: usize,
     index: usize,
 ) -> fmt::Result {
@@ -618,7 +618,7 @@ fn write_dispatch_block_with<E: Print>(
 
 // - Case analysis
 
-impl<E: Print> Print for Guard<E> {
+impl Print for Guard {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
             Guard::Bool(value) => write!(printer, "{value}"),
@@ -663,9 +663,9 @@ impl<E: Print> Print for Guard<E> {
 }
 
 /// Prints the arms of a case analysis, numbered from one.
-fn write_cases_with<Tier, E: Print>(
+fn write_cases_with<Tier>(
     output: &mut Printer<'_>,
-    cases: &[Case<Tier, E>],
+    cases: &[Case<Tier>],
     tier_printer: TierPrinter<Tier>,
     level: usize,
 ) -> fmt::Result {
@@ -679,9 +679,9 @@ fn write_cases_with<Tier, E: Print>(
 }
 
 /// Prints one arm as `Case guard` and its block.
-fn write_case_with<Tier, E: Print>(
+fn write_case_with<Tier>(
     output: &mut Printer<'_>,
-    case: &Case<Tier, E>,
+    case: &Case<Tier>,
     tier_printer: TierPrinter<Tier>,
     level: usize,
     index: usize,
@@ -695,9 +695,9 @@ fn write_case_with<Tier, E: Print>(
 // - Blocks
 
 /// Prints a block's instructions as consecutive steps.
-fn write_block_with<Tier, E: Print>(
+fn write_block_with<Tier>(
     output: &mut Printer<'_>,
-    block: &Block<Tier, E>,
+    block: &Block<Tier>,
     tier_printer: TierPrinter<Tier>,
     level: usize,
     index: usize,
@@ -712,9 +712,9 @@ fn write_block_with<Tier, E: Print>(
 }
 
 /// Prints the otherwise block as the next step, if present.
-fn write_elseblock_opt_with<Tier, E: Print>(
+fn write_elseblock_opt_with<Tier>(
     output: &mut Printer<'_>,
-    block: &Option<Block<Tier, E>>,
+    block: &Option<Block<Tier>>,
     tier_printer: TierPrinter<Tier>,
     level: usize,
     index: usize,
@@ -728,7 +728,7 @@ fn write_elseblock_opt_with<Tier, E: Print>(
 
 // - Table rows
 
-impl<E: Print> Print for TableRow<E> {
+impl Print for TableRow {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_str("\n  Row : ")?;
         printer.separated(&self.exps_input, ", ")?;
@@ -739,7 +739,7 @@ impl<E: Print> Print for TableRow<E> {
     }
 }
 
-impl<E: Print> Print for [TableRow<E>] {
+impl Print for [TableRow] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for (index, table_row) in self.iter().enumerate() {
             if index != 0 {
@@ -777,7 +777,7 @@ impl Print for TypDef {
 
 // == Relation definitions
 
-impl<E: Print> Print for RelDef<E> {
+impl Print for RelDef {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
             Self::Extern(relation) => {
@@ -792,7 +792,7 @@ impl<E: Print> Print for RelDef<E> {
     }
 }
 
-impl<E: Print> Print for ExternRel<E> {
+impl Print for ExternRel {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.id.print(printer)?;
         printer.write_str(": ")?;
@@ -800,7 +800,7 @@ impl<E: Print> Print for ExternRel<E> {
     }
 }
 
-impl<E: Print> Print for DefinedRel<E> {
+impl Print for DefinedRel {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.id.print(printer)?;
         printer.write_str(": ")?;
@@ -818,10 +818,10 @@ impl<E: Print> Print for DefinedRel<E> {
 }
 
 /// Fills the input expressions into the notation at the hint's positions.
-fn write_relinput<E: Print>(
+fn write_relinput(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
-    exps_input: &[E],
+    exps_input: &[Exp],
 ) -> fmt::Result {
     let not_typ = &rel_signature.not_typ;
     let idxs_input = rel_signature.input_hint.indices();
@@ -840,10 +840,10 @@ fn write_relinput<E: Print>(
 }
 
 /// Fills the output expressions into the notation at the non-input positions.
-fn write_reloutput<E: Print>(
+fn write_reloutput(
     output: &mut Printer<'_>,
     rel_signature: &RelSignature,
-    exps_output: &[E],
+    exps_output: &[Exp],
 ) -> fmt::Result {
     let not_typ = &rel_signature.not_typ;
     let idxs_input = rel_signature.input_hint.indices();
@@ -866,7 +866,7 @@ fn write_reloutput<E: Print>(
 
 // == Meta-function definitions
 
-impl<E: Print> Print for MetaFuncDef<E> {
+impl Print for MetaFuncDef {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match self {
             Self::Extern(func) => {
@@ -889,7 +889,7 @@ impl<E: Print> Print for MetaFuncDef<E> {
     }
 }
 
-impl<E: Print> Print for ExternFunc<E> {
+impl Print for ExternFunc {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -902,7 +902,7 @@ impl<E: Print> Print for ExternFunc<E> {
     }
 }
 
-impl<E: Print> Print for BuiltinFunc<E> {
+impl Print for BuiltinFunc {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -915,7 +915,7 @@ impl<E: Print> Print for BuiltinFunc<E> {
     }
 }
 
-impl<E: Print> Print for TableFunc<E> {
+impl Print for TableFunc {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -925,7 +925,7 @@ impl<E: Print> Print for TableFunc<E> {
     }
 }
 
-impl<E: Print> Print for DefinedFunc<E> {
+impl Print for DefinedFunc {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         printer.write_char('$')?;
         self.id.print(printer)?;
@@ -949,7 +949,7 @@ impl<E: Print> Print for DefinedFunc<E> {
 
 // == Definitions
 
-impl<E: Print> Print for Def<E> {
+impl Print for Def {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         match &self.node.node {
             DefKind::Typ(typ_def) => typ_def.print(printer),
@@ -965,7 +965,7 @@ impl<E: Print> Print for Def<E> {
     }
 }
 
-impl<E: Print> Print for [Def<E>] {
+impl Print for [Def] {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         for (index, def) in self.iter().enumerate() {
             if index != 0 {
@@ -979,7 +979,7 @@ impl<E: Print> Print for [Def<E>] {
 
 // == Specifications
 
-impl<E: Print> Print for Spec<E> {
+impl Print for Spec {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
         self.as_slice().print(printer)
     }

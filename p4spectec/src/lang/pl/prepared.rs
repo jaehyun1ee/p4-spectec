@@ -30,67 +30,67 @@ pub type ArgKind = source::ArgKind<Prepared>;
 
 // - Parameters
 
-pub type Param = source::Param<Exp>;
-pub type ParamKind = source::ParamKind<Exp>;
+pub type Param = source::Param<Prepared>;
+pub type ParamKind = source::ParamKind<Prepared>;
 
 // - Holding conditions
 
-pub type HoldCase<Tier> = source::HoldCase<Tier, Exp, Prepared>;
+pub type HoldCase<Tier> = source::HoldCase<Tier, Prepared>;
 
 // - Case analysis
 
-pub type Guard = source::Guard<Exp, Prepared>;
-pub type Case<Tier> = source::Case<Tier, Exp, Prepared>;
+pub type Guard = source::Guard<Prepared>;
+pub type Case<Tier> = source::Case<Tier, Prepared>;
 
 // - Instructions
 
-pub type Instr<Tier> = source::Instr<Tier, Exp, Prepared>;
-pub type InstrKind<Tier> = source::InstrKind<Tier, Exp, Prepared>;
-pub type IfInstr<Tier> = source::IfInstr<Tier, Exp, Prepared>;
-pub type HoldInstr<Tier> = source::HoldInstr<Tier, Exp, Prepared>;
-pub type CaseInstr<Tier> = source::CaseInstr<Tier, Exp, Prepared>;
-pub type LetInstr = source::LetInstr<Exp, Prepared>;
-pub type DebugInstr = source::DebugInstr<Exp>;
-pub type DestructInstr = source::DestructInstr<Exp>;
-pub type CheckLetSubInstr<Tier> = source::CheckLetSubInstr<Tier, Exp, Prepared>;
-pub type CheckLetMatchInstr<Tier> = source::CheckLetMatchInstr<Tier, Exp, Prepared>;
-pub type OptionGetInstr<Tier> = source::OptionGetInstr<Tier, Exp, Prepared>;
+pub type Instr<Tier> = source::Instr<Tier, Prepared>;
+pub type InstrKind<Tier> = source::InstrKind<Tier, Prepared>;
+pub type IfInstr<Tier> = source::IfInstr<Tier, Prepared>;
+pub type HoldInstr<Tier> = source::HoldInstr<Tier, Prepared>;
+pub type CaseInstr<Tier> = source::CaseInstr<Tier, Prepared>;
+pub type LetInstr = source::LetInstr<Prepared>;
+pub type DebugInstr = source::DebugInstr<Prepared>;
+pub type DestructInstr = source::DestructInstr<Prepared>;
+pub type CheckLetSubInstr<Tier> = source::CheckLetSubInstr<Tier, Prepared>;
+pub type CheckLetMatchInstr<Tier> = source::CheckLetMatchInstr<Tier, Prepared>;
+pub type OptionGetInstr<Tier> = source::OptionGetInstr<Tier, Prepared>;
 pub type InstrIter = PremIter;
 
 // - Blocks
 
-pub type Block<Tier> = source::Block<Tier, Exp, Prepared>;
-pub type GroupBlock = source::GroupBlock<Exp, Prepared>;
-pub type DispatchBlock = source::DispatchBlock<Exp, Prepared>;
+pub type Block<Tier> = source::Block<Tier, Prepared>;
+pub type GroupBlock = source::GroupBlock<Prepared>;
+pub type DispatchBlock = source::DispatchBlock<Prepared>;
 
 // - Group-body tier
 
-pub type GroupInstr = source::GroupInstr<Exp, Prepared>;
-pub type ResultInstr = source::ResultInstr<Exp>;
-pub type ReturnInstr = source::ReturnInstr<Exp>;
-pub type RuleInstr = source::RuleInstr<Exp, Prepared>;
-pub type BacktrackInstr = source::BacktrackInstr<Exp, Prepared>;
+pub type GroupInstr = source::GroupInstr<Prepared>;
+pub type ResultInstr = source::ResultInstr<Prepared>;
+pub type ReturnInstr = source::ReturnInstr<Prepared>;
+pub type RuleInstr = source::RuleInstr<Prepared>;
+pub type BacktrackInstr = source::BacktrackInstr<Prepared>;
 
 // - Dispatch tier
 
-pub type DispatchInstr = source::DispatchInstr<Exp, Prepared>;
-pub type RuleGroupInstr = source::RuleGroupInstr<Exp, Prepared>;
-pub type RouteInstr = source::RouteInstr<Exp, Prepared>;
+pub type DispatchInstr = source::DispatchInstr<Prepared>;
+pub type RuleGroupInstr = source::RuleGroupInstr<Prepared>;
+pub type RouteInstr = source::RouteInstr<Prepared>;
 
 // - Table rows
 
-pub type TableRow = source::TableRow<Exp, Prepared>;
+pub type TableRow = source::TableRow<Prepared>;
 
 // - Relation definitions
 
-pub type RelDef = source::RelDef<Exp, Prepared>;
-pub type ExternRel = source::ExternRel<Exp>;
-pub type DefinedRel = source::DefinedRel<Exp, Prepared>;
+pub type RelDef = source::RelDef<Prepared>;
+pub type ExternRel = source::ExternRel<Prepared>;
+pub type DefinedRel = source::DefinedRel<Prepared>;
 
 // - Meta-function definitions
 
-pub type MetaFuncDef = source::MetaFuncDef<Exp, Prepared>;
-pub type ExternFunc = source::ExternFunc<Exp>;
-pub type BuiltinFunc = source::BuiltinFunc<Exp>;
-pub type TableFunc = source::TableFunc<Exp, Prepared>;
-pub type DefinedFunc = source::DefinedFunc<Exp, Prepared>;
+pub type MetaFuncDef = source::MetaFuncDef<Prepared>;
+pub type ExternFunc = source::ExternFunc<Prepared>;
+pub type BuiltinFunc = source::BuiltinFunc<Prepared>;
+pub type TableFunc = source::TableFunc<Prepared>;
+pub type DefinedFunc = source::DefinedFunc<Prepared>;
