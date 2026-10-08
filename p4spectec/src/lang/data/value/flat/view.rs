@@ -13,6 +13,13 @@ use super::Value;
 /// Comparisons require both views to refer to the same arena.
 #[derive(Clone, Copy, Debug)]
 pub struct ValueRef<'a> {
-    pub(in crate::lang::data) arena: &'a Arena,
-    pub(in crate::lang::data) value: Value,
+    pub(super) arena: &'a Arena,
+    pub(super) value: Value,
+}
+
+impl Value {
+    /// Pairs this value with its arena for comparison and printing.
+    pub fn view(self, arena: &Arena) -> ValueRef<'_> {
+        ValueRef { arena, value: self }
+    }
 }

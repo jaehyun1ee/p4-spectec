@@ -94,9 +94,9 @@ impl SyntaxCmp for ValueRef<'_> {
         );
         // Compare child contents in the same arena
         let compare_value = |value_l: &Value, value_r: &Value| {
-            self.arena
-                .view(*value_l)
-                .syntax_cmp(&self.arena.view(*value_r))
+            value_l
+                .view(self.arena)
+                .syntax_cmp(&value_r.view(self.arena))
         };
         let compare_values = |values_l: &[Value], values_r: &[Value]| {
             values_l

@@ -50,7 +50,7 @@ fn map_find_opt(arena: &Arena, key: &Value, map: &[Value]) -> Option<Value> {
             continue;
         }
         if let [value_key, value_value] = value_case.args()
-            && arena.view(*value_key).syntax_eq(&arena.view(*key))
+            && value_key.view(arena).syntax_eq(&key.view(arena))
         {
             return Some(*value_value);
         }
@@ -91,7 +91,7 @@ fn map_update(
             if !mixop.syntax_eq(mixop_pair.as_ref()) {
                 return false;
             }
-            matches!(value_case.args(), [value_key, _] if arena.view(*value_key).syntax_eq(&arena.view(*key)))
+            matches!(value_case.args(), [value_key, _] if value_key.view(arena).syntax_eq(&key.view(arena)))
         });
         // Replace in place once; later duplicates are kept as they are
         if !found && matching {

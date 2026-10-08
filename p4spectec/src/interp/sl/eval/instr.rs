@@ -462,9 +462,9 @@ fn eval_debug_instr<Iface: Interface, Ext: Extern>(
     // Print the value's source span when it has one
     let span = runner_ctx.arena().span(&value).to_string();
     if span.is_empty() {
-        println!("{}", runner_ctx.arena().view(value).to_string());
+        println!("{}", value.view(runner_ctx.arena()).to_string());
     } else {
-        println!("{span}: {}", runner_ctx.arena().view(value).to_string());
+        println!("{span}: {}", value.view(runner_ctx.arena()).to_string());
     }
     eval_instr(runner_ctx, ctx, &instr.instr, tail)
 }

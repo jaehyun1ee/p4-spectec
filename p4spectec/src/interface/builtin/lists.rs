@@ -76,10 +76,10 @@ pub fn distinct_(
     let values = list_of_value(arena, value_list)?;
     let mut values = values.to_vec();
     // Sort, then equal elements are neighbors
-    values.sort_by(|value_a, value_b| arena.view(*value_a).syntax_cmp(&arena.view(*value_b)));
+    values.sort_by(|value_a, value_b| value_a.view(arena).syntax_cmp(&value_b.view(arena)));
     let all_distinct = values
         .windows(2)
-        .all(|values| !arena.view(values[0]).syntax_eq(&arena.view(values[1])));
+        .all(|values| !values[0].view(arena).syntax_eq(&values[1].view(arena)));
     let value = value::make::bool(arena, all_distinct, Span::default())?;
     Ok(value)
 }
@@ -140,7 +140,7 @@ pub fn assoc_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Valu
             }
         };
         // The first match wins, but the rest are still checked for shape
-        if found.is_none() && arena.view(*value).syntax_eq(&arena.view(pair[0])) {
+        if found.is_none() && value.view(arena).syntax_eq(&pair[0].view(arena)) {
             found = Some(pair[1]);
         }
     }

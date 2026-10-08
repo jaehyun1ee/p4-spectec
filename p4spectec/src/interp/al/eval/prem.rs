@@ -181,9 +181,9 @@ fn eval_debug_prem<'global, Iface: Interface, Ext: Extern>(
     // Print the value's source span when it has one
     let span_text = runner_ctx.arena().span(&value).to_string();
     if span_text.is_empty() {
-        println!("{}", runner_ctx.arena().view(value).to_string());
+        println!("{}", value.view(runner_ctx.arena()).to_string());
     } else {
-        println!("{span_text}: {}", runner_ctx.arena().view(value).to_string());
+        println!("{span_text}: {}", value.view(runner_ctx.arena()).to_string());
     }
     ok!(ctx)
 }

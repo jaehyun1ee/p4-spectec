@@ -36,7 +36,7 @@ impl ValueRef<'_> {
                     printer.write_str(&"  ".repeat(level + 1))?;
                     atom.print(printer)?;
                     printer.write_char(' ')?;
-                    self.arena.view(*value).print_inner(printer, level + 1)?;
+                    value.view(self.arena).print_inner(printer, level + 1)?;
                 }
                 printer.write_char('\n')?;
                 printer.write_str(&"  ".repeat(level))?;
@@ -44,7 +44,7 @@ impl ValueRef<'_> {
             }
             ValueKind::Case(value_case) => {
                 value_case.print_with(self.arena.mixop(), printer, |value, printer| {
-                    self.arena.view(*value).print_inner(printer, level + 1)
+                    value.view(self.arena).print_inner(printer, level + 1)
                 })
             }
             ValueKind::Tuple(values) => {
@@ -53,13 +53,13 @@ impl ValueRef<'_> {
                     if idx != 0 {
                         printer.write_str(", ")?;
                     }
-                    self.arena.view(*value).print_inner(printer, level + 1)?;
+                    value.view(self.arena).print_inner(printer, level + 1)?;
                 }
                 printer.write_char(')')
             }
             ValueKind::Opt(Some(value)) => {
                 printer.write_str("Some(")?;
-                self.arena.view(*value).print_inner(printer, level + 1)?;
+                value.view(self.arena).print_inner(printer, level + 1)?;
                 printer.write_char(')')
             }
             ValueKind::Opt(None) => printer.write_str("None"),
@@ -73,7 +73,7 @@ impl ValueRef<'_> {
                         printer.write_str(",\n")?;
                     }
                     printer.write_str(&"  ".repeat(level + 1))?;
-                    self.arena.view(*value).print_inner(printer, level + 1)?;
+                    value.view(self.arena).print_inner(printer, level + 1)?;
                 }
                 printer.write_char('\n')?;
                 printer.write_str(&"  ".repeat(level))?;

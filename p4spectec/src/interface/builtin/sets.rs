@@ -28,13 +28,13 @@ type ValueSet = Vec<Value>;
 
 /// Sorts by syntax and drops syntactic duplicates.
 fn sort_set(arena: &Arena, set: &mut ValueSet) {
-    set.sort_by(|value_a, value_b| arena.view(*value_a).syntax_cmp(&arena.view(*value_b)));
-    set.dedup_by(|value_a, value_b| arena.view(*value_a).syntax_eq(&arena.view(*value_b)));
+    set.sort_by(|value_a, value_b| value_a.view(arena).syntax_cmp(&value_b.view(arena)));
+    set.dedup_by(|value_a, value_b| value_a.view(arena).syntax_eq(&value_b.view(arena)));
 }
 
 /// Membership by binary search; the set must be sorted.
 fn contains(arena: &Arena, set: &[Value], value: &Value) -> bool {
-    set.binary_search_by(|value_element| arena.view(*value_element).syntax_cmp(&arena.view(*value)))
+    set.binary_search_by(|value_element| value_element.view(arena).syntax_cmp(&value.view(arena)))
         .is_ok()
 }
 
@@ -169,7 +169,7 @@ pub fn eq_set(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Valu
         && set_l
             .iter()
             .zip(&set_r)
-            .all(|(value_a, value_b)| arena.view(*value_a).syntax_eq(&arena.view(*value_b)));
+            .all(|(value_a, value_b)| value_a.view(arena).syntax_eq(&value_b.view(arena)));
     let value = value::make::bool(arena, equal, Span::default())?;
     Ok(value)
 }

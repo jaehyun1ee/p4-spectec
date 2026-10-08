@@ -15,7 +15,7 @@ use super::{
     typ::TypKind,
     value::{
         ValueArena, ValueError,
-        flat::{Value, ValueKind, ValueRef},
+        flat::{Value, ValueKind},
     },
 };
 
@@ -96,10 +96,5 @@ impl Arena {
     /// The span of a value.
     pub fn span(&self, value: &Value) -> &Span {
         self.value.span(value.span)
-    }
-
-    /// Borrows a value issued by this arena for comparison and printing.
-    pub fn view(&self, value: Value) -> ValueRef<'_> {
-        ValueRef { arena: self, value }
     }
 }

@@ -106,10 +106,10 @@ pub(crate) fn cmpop(
 ) -> Backtrack<bool> {
     ok!(match op {
         // Equality is syntactic
-        ast::CmpOp::Bool(bool::CmpOp::Eq) => arena.view(value_l).syntax_eq(&arena.view(value_r)),
+        ast::CmpOp::Bool(bool::CmpOp::Eq) => value_l.view(arena).syntax_eq(&value_r.view(arena)),
         // So is inequality
         ast::CmpOp::Bool(bool::CmpOp::Ne) => {
-            !arena.view(value_l).syntax_eq(&arena.view(value_r))
+            !value_l.view(arena).syntax_eq(&value_r.view(arena))
         }
         // Ordering compares numbers
         ast::CmpOp::Num(op) => {
@@ -178,7 +178,7 @@ pub(crate) fn mem(
     let values = value::get::list(arena, &value_list).expect("operand must be a list");
     ok!(values
         .iter()
-        .any(|value| arena.view(*value).syntax_eq(&arena.view(value_elem))),)
+        .any(|value| value.view(arena).syntax_eq(&value_elem.view(arena))),)
 }
 
 // = Casts

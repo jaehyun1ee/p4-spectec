@@ -721,7 +721,7 @@ pub fn format_braces(arena: &Arena, fmt: &str, args: &[Value]) -> Result<String,
                         "not enough arguments for format string in log_msg".to_owned(),
                     )
                 })?;
-                text.push_str(&arena.view(*value).to_string());
+                text.push_str(&value.view(arena).to_string());
             }
             // Anything else is copied
             _ => text.push(char),
