@@ -1860,7 +1860,7 @@ fn elab_not_exp(ctx: &mut Context, expect: &NotExpect<'_>, exp: &el::Exp) -> Bac
     let not_typ_il = &expect.not_typ_il.node;
     let mut exps_il = Vec::with_capacity(not_typ_il.arity());
     unwrap!(elab_not_exp_inner(ctx, not_typ_il.as_ref(), exp, expect, &mut exps_il));
-    let not_exp_il = notation::make::new(Rc::clone(not_typ_il.mixop()), exps_il)
+    let not_exp_il = notation::Mixfix::new(Rc::clone(not_typ_il.mixop()), exps_il)
         .expect("notation elaboration fills every argument position");
     success!(not_exp_il)
 }

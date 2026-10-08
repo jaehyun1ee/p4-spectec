@@ -546,7 +546,7 @@ fn rename_exp_bind(
         ast::ExpKind::Case(not_exp) => {
             let (mixop, args) = (*not_exp).into_parts();
             let args = rename_exps(ctx, binds, renv, iter_ctx, args)?;
-            let not_exp = notation::make::new(Rc::clone(&mixop), args)
+            let not_exp = notation::Mixfix::new(Rc::clone(&mixop), args)
                 .expect("arguments obtained from the same mixfix must match its arity");
             let exp_from = note_phrase! {
                 node: ast::ExpKind::Case(Box::new(not_exp)),

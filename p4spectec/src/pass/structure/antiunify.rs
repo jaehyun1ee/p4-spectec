@@ -254,7 +254,7 @@ fn antiunify_case_exp(
         let exp_unified = antiunify_exp(frees, uenv, exp_template, exp);
         exps_unified.push(exp_unified);
     }
-    let not_exp_template = notation::make::new(Rc::clone(not_exp_template.mixop()), exps_unified)
+    let not_exp_template = notation::Mixfix::new(Rc::clone(not_exp_template.mixop()), exps_unified)
         .expect("matching mixfix shapes have equal argument counts");
     let not_exp_template = Box::new(not_exp_template);
     ExpKind::Case(not_exp_template)

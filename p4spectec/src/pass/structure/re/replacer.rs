@@ -391,7 +391,7 @@ impl Replacer {
         // Renaming preserves the argument counts returned by input::split
         let exps = input::combine(&input_hint, exps_input, exps_output)
             .expect("validated relation hints and argument counts");
-        let not_exp = notation::make::new(Rc::clone(not_exp.mixop()), exps)
+        let not_exp = notation::Mixfix::new(Rc::clone(not_exp.mixop()), exps)
             .expect("validated arguments preserve the mixfix arity");
         let iter_instrs = replacer.replace_iterinstrs_bound(iter_instrs);
         let block = replacer.replace_block(block);

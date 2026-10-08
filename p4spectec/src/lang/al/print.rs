@@ -456,7 +456,7 @@ fn write_notation(
     not_typ: &NotTyp,
     exps: Vec<Option<&Exp>>,
 ) -> fmt::Result {
-    notation::make::new(Rc::clone(not_typ.node.mixop()), exps)
+    notation::Mixfix::new(Rc::clone(not_typ.node.mixop()), exps)
         .expect("one argument slot per notation position")
         .print_with(output, |exp, output| match exp {
             Some(exp) => exp.print(output),

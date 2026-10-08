@@ -105,7 +105,7 @@ impl<T: Prepare> Prepare for tree::Mixfix<T> {
         let (mixop, args) = self.into_parts();
         let mixop = prepare_mixop(&mixop, ctx);
         let args = args.prepare(ctx);
-        notation::flat::make::new(ctx.arena_mixop, mixop, args)
+        notation::flat::Mixfix::new(ctx.arena_mixop, mixop, args)
             .expect("a mixfix fills every position")
     }
 }

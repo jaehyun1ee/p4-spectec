@@ -9,22 +9,25 @@ use super::{Mixfix, Mixop};
 
 // - General
 
-/// Pairs a mixop with its arguments.
-///
-/// Fails unless there is exactly one argument per position.
-pub fn new<T>(mixop: Rc<Mixop>, args: Vec<T>) -> Result<Mixfix<T>, ArityMismatch> {
-    let arity = mixop.arity();
-    match args.len().cmp(&arity) {
-        Ordering::Less => Err(ArityMismatch::ArgumentCountTooFew),
-        Ordering::Greater => Err(ArityMismatch::ArgumentCountTooMany),
-        Ordering::Equal => Ok(Mixfix { mixop, args }),
+impl<T> Mixfix<T> {
+    /// Pairs a mixop with its arguments.
+    ///
+    /// Fails unless there is exactly one argument per position.
+    pub fn new(mixop: Rc<Mixop>, args: Vec<T>) -> Result<Self, ArityMismatch> {
+        let arity = mixop.arity();
+        match args.len().cmp(&arity) {
+            Ordering::Less => Err(ArityMismatch::ArgumentCountTooFew),
+            Ordering::Greater => Err(ArityMismatch::ArgumentCountTooMany),
+            Ordering::Equal => Ok(Self { mixop, args }),
+        }
     }
-}
 
-/// Fills each position of a mixop, calling `fill_arg` once per position.
-pub fn fill<T>(mixop: Rc<Mixop>, fill_arg: impl FnMut(usize) -> T) -> Mixfix<T> {
-    let arity = mixop.arity();
-    Mixfix { args: (0..arity).map(fill_arg).collect(), mixop }
+    /// Fills each position of a mixop, calling `fill_arg` once per position.
+    pub fn fill(mixop: Rc<Mixop>, fill_arg: impl FnMut(usize) -> T) -> Self {
+        let arity = mixop.arity();
+        let args = (0..arity).map(fill_arg).collect();
+        Self { mixop, args }
+    }
 }
 
 // - Parts

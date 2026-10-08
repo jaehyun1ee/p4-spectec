@@ -194,8 +194,9 @@ fn overlap_case_exp(
         not_exp_template.args().iter(),
         not_exp.args().iter(),
     )?;
-    let not_exp_template = notation::make::new(Rc::clone(not_exp_template.mixop()), exps_template)
-        .expect("overlapped arguments must preserve the template mixfix arity");
+    let not_exp_template =
+        notation::Mixfix::new(Rc::clone(not_exp_template.mixop()), exps_template)
+            .expect("overlapped arguments must preserve the template mixfix arity");
     let not_exp_template = Box::new(not_exp_template);
     Ok(ast::ExpKind::Case(not_exp_template))
 }

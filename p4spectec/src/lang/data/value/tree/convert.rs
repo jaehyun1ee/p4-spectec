@@ -75,7 +75,7 @@ impl ValueCase {
         let mixop = mixop.into_flat(arena_mixop)?;
 
         // A filled tree supplies one value per argument position
-        Ok(notation::make::new(arena_mixop, mixop, values)
+        Ok(notation::Mixfix::new(arena_mixop, mixop, values)
             .expect("a tree case fills every position"))
     }
 }

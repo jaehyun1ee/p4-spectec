@@ -1186,7 +1186,7 @@ impl Code {
     fn of_pattern(pattern: &pl::Pattern) -> Code {
         match pattern {
             Pattern::Case(mixop) => {
-                let mixfix = notation::make::fill(Rc::clone(mixop), |_| ());
+                let mixfix = notation::Mixfix::fill(Rc::clone(mixop), |_| ());
                 Code::of_mixfix(mixfix.as_ref(), &|()| Code::token("%"))
             }
             Pattern::List(ListPattern::Cons) => Code::token("_ :: _"),
@@ -2453,7 +2453,7 @@ impl Prose {
         let codes_output: Vec<Code> = (0..num_outputs).map(|_| Code::token("%")).collect();
         let codes_args = input::combine(&signature.input_hint, codes_input, codes_output)
             .expect("validated relation input hint");
-        let not_exp = notation::make::new(Rc::clone(signature.not_typ.node.mixop()), codes_args)
+        let not_exp = notation::Mixfix::new(Rc::clone(signature.not_typ.node.mixop()), codes_args)
             .expect("relation title fills its notation");
         let code_not = Code::of_mixfix(not_exp.as_ref(), &Clone::clone);
         Prose::code(code_not)

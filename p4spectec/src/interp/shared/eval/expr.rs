@@ -281,7 +281,7 @@ fn eval_case_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ex
     // The prepared shape already belongs to the arena
     let kind = ValueKind::Case(case);
     let value = unwrap_from_result!(
-        value::make::new(runner_ctx.arena_mut(), kind, typ.clone(), Span::default()),
+        Value::new(runner_ctx.arena_mut(), kind, typ.clone(), Span::default()),
         span
     );
     ok!(value)

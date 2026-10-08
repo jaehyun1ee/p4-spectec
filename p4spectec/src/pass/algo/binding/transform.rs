@@ -429,7 +429,7 @@ fn lower_rule_prem(
     let exps_al =
         input::combine(&rule_prem_il.input_hint, exps_input_il.clone(), exps_output_al.clone())
             .map_err(|error| input_error(error, span.clone()))?;
-    let not_exp_al = notation::make::new(mixop, exps_al)
+    let not_exp_al = notation::Mixfix::new(mixop, exps_al)
         .expect("arguments obtained from the same mixfix must match its arity");
     let prem_al = phrase! {
         node: al::ast::PremKind::Rule(al::ast::RulePrem {
