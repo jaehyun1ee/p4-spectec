@@ -6,7 +6,7 @@
 use crate::lang::data::{arena::Arena, notation::flat::make as make_notation};
 
 use super::super::{ValueError, flat};
-use super::{Value, ValueCase, ValueKind};
+use super::{Value, ValueCase, ValueField, ValueKind};
 
 // = Values
 
@@ -33,7 +33,9 @@ impl ValueKind {
             Self::Struct(value_fields) => flat::ValueKind::Struct(
                 value_fields
                     .into_iter()
-                    .map(|(atom, value)| Ok((atom, value.into_flat(arena)?)))
+                    .map(|ValueField { atom, value }| {
+                        Ok(flat::ValueField { atom, value: value.into_flat(arena)? })
+                    })
                     .collect::<Result<_, ValueError>>()?,
             ),
             Self::Case(value_case) => flat::ValueKind::Case(value_case.into_flat(arena)?),

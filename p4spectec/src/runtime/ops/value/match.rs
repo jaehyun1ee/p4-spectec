@@ -17,7 +17,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         notation::flat::get as get_notation,
-        value::flat::{Value, ValueKind},
+        value::flat::{Value, ValueField, ValueKind},
     },
 };
 
@@ -119,8 +119,10 @@ where
                             if typ_fields.len() != value_fields.len() {
                                 return Ok(false);
                             }
-                            for (TypField { atom: atom_typ, typ }, (atom_value, value)) in
-                                typ_fields.iter().zip(value_fields)
+                            for (
+                                TypField { atom: atom_typ, typ },
+                                ValueField { atom: atom_value, value },
+                            ) in typ_fields.iter().zip(value_fields)
                             {
                                 if atom_typ.node != atom_value.node {
                                     return Ok(false);

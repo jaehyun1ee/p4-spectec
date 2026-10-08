@@ -13,11 +13,14 @@ use crate::util::json::json;
 use crate::lang::{
     common::{
         Id,
-        notation::atom::Atom,
         prim::num::Number,
-        source::{NotePhrase, Phrase, Span},
+        source::{NotePhrase, Span},
     },
-    data::{intern::Interned, notation::flat::Mixfix, typ::TypKind},
+    data::{
+        intern::Interned,
+        notation::{AtomPhrase, flat::Mixfix},
+        typ::TypKind,
+    },
 };
 
 use super::ValueTag;
@@ -43,7 +46,11 @@ pub use view::ValueRef;
 pub type Value = NotePhrase<Interned<ValueKind>, Interned<TypKind>, Interned<Span>>;
 
 /// A named value field.
-pub type ValueField = (Phrase<Atom>, Value);
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ValueField {
+    pub atom: AtomPhrase,
+    pub value: Value,
+}
 
 /// A case with one value per argument position.
 pub type ValueCase = Mixfix<Value>;

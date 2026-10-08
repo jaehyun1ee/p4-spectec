@@ -297,7 +297,10 @@ fn eval_str_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
 ) -> Backtrack<Value> {
     let mut value_fields = Vec::with_capacity(exp_fields.len());
     for ast::ExpField { atom, exp } in exp_fields {
-        value_fields.push((atom.clone(), unwrap!(eval_exp(runner_ctx, ctx, exp))));
+        value_fields.push(ast::ValueField {
+            atom: atom.clone(),
+            value: unwrap!(eval_exp(runner_ctx, ctx, exp)),
+        });
     }
     let value = unwrap_from_result!(
         make::structure(runner_ctx.arena_mut(), typ.clone(), value_fields, Span::default()),

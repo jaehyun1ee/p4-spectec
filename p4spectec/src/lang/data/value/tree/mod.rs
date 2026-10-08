@@ -11,16 +11,12 @@ use serde::{Deserialize, Serialize};
 use crate::util::json::json;
 
 use crate::lang::{
-    common::{
-        Id,
-        notation::atom::Atom,
-        prim::num::Number,
-        source::{NotePhrase, Phrase},
-    },
+    common::{Id, prim::num::Number, source::NotePhrase},
     data::{notation::AtomPhrase, typ::TypKind},
 };
 
 mod convert;
+mod external;
 pub mod get;
 
 // = Value forms
@@ -29,7 +25,11 @@ pub mod get;
 pub type Value = NotePhrase<ValueKind, TypKind>;
 
 /// A named value field.
-pub type ValueField = (Phrase<Atom>, Value);
+#[derive(Debug)]
+pub struct ValueField {
+    pub atom: AtomPhrase,
+    pub value: Value,
+}
 
 /// A filled notation containing its argument values.
 #[derive(Debug, Serialize, Deserialize)]

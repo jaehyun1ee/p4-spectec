@@ -9,7 +9,7 @@ use crate::lang::data::{
     notation::{MixopArena, flat::get as get_notation},
 };
 
-use super::ValueKind;
+use super::{ValueField, ValueKind};
 
 impl CanonHash<MixopArena> for ValueKind {
     fn canon_hash<H: Hasher>(
@@ -25,7 +25,7 @@ impl CanonHash<MixopArena> for ValueKind {
             ValueKind::Text(value) => value.hash(hasher),
             ValueKind::Struct(value_fields) => {
                 value_fields.len().hash(hasher);
-                for (atom, value) in value_fields {
+                for ValueField { atom, value } in value_fields {
                     atom.node.hash(hasher);
                     interner.canon_id(value.node).hash(hasher);
                 }

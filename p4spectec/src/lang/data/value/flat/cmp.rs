@@ -15,7 +15,7 @@ use crate::lang::{
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
 
-use super::{Value, ValueKind, ValueRef};
+use super::{Value, ValueField, ValueKind, ValueRef};
 
 // = Canonical equality
 
@@ -37,7 +37,10 @@ impl CanonEq<MixopArena> for ValueKind {
             (ValueKind::Struct(value_fields_l), ValueKind::Struct(value_fields_r)) => {
                 value_fields_l.len() == value_fields_r.len()
                     && value_fields_l.iter().zip(value_fields_r).all(
-                        |((atom_l, value_l), (atom_r, value_r))| {
+                        |(
+                            ValueField { atom: atom_l, value: value_l },
+                            ValueField { atom: atom_r, value: value_r },
+                        )| {
                             atom_l.node == atom_r.node && eq_value(value_l, value_r)
                         },
                     )
@@ -115,12 +118,17 @@ impl SyntaxCmp for ValueRef<'_> {
                 value_fields_l
                     .iter()
                     .zip(value_fields_r)
-                    .map(|((atom_l, value_l), (atom_r, value_r))| {
-                        atom_l
-                            .node
-                            .cmp(&atom_r.node)
-                            .then_with(|| compare_value(value_l, value_r))
-                    })
+                    .map(
+                        |(
+                            ValueField { atom: atom_l, value: value_l },
+                            ValueField { atom: atom_r, value: value_r },
+                        )| {
+                            atom_l
+                                .node
+                                .cmp(&atom_r.node)
+                                .then_with(|| compare_value(value_l, value_r))
+                        },
+                    )
                     .find(|order| !order.is_eq())
                     .unwrap_or_else(|| value_fields_l.len().cmp(&value_fields_r.len()))
             }

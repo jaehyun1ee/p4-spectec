@@ -9,7 +9,7 @@ use crate::util::text::escape_text;
 
 use crate::lang::traits::print::{Print, Printer};
 
-use super::{ValueKind, ValueRef};
+use super::{ValueField, ValueKind, ValueRef};
 
 impl Print for ValueRef<'_> {
     fn print(&self, printer: &mut Printer<'_>) -> fmt::Result {
@@ -29,7 +29,7 @@ impl ValueRef<'_> {
             // One field per line, indented one level deeper
             ValueKind::Struct(value_fields) => {
                 printer.write_str("{\n")?;
-                for (idx, (atom, value)) in value_fields.iter().enumerate() {
+                for (idx, ValueField { atom, value }) in value_fields.iter().enumerate() {
                     if idx != 0 {
                         printer.write_str(";\n")?;
                     }

@@ -82,7 +82,7 @@ pub fn assign_exp<Ctx: WriteContext>(
         (ast::ExpKind::Str(exp_fields), ValueKind::Struct(value_fields)) => {
             let values = value_fields
                 .iter()
-                .map(|(_, value)| *value)
+                .map(|value_field| value_field.value)
                 .collect::<Vec<_>>();
             assign_str_exp(arena, ctx, exp_fields, &values)
         }

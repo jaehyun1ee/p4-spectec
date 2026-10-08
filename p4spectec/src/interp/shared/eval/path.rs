@@ -208,8 +208,9 @@ fn eval_update_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
     // Replace the named field, keep the others
     let value_fields = value_fields
         .iter()
-        .map(|(field, value)| {
-            (field.clone(), if field.node == atom.node { value_upd } else { *value })
+        .map(|value_field| ast::ValueField {
+            atom: value_field.atom.clone(),
+            value: if value_field.atom.node == atom.node { value_upd } else { value_field.value },
         })
         .collect();
     let value = unwrap_from_result!(

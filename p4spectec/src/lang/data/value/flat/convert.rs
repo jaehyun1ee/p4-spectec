@@ -11,7 +11,7 @@ use crate::lang::data::{
 };
 
 use super::super::tree;
-use super::{Value, ValueCase, ValueKind};
+use super::{Value, ValueCase, ValueField, ValueKind};
 
 // = Values
 
@@ -38,7 +38,10 @@ impl ValueKind {
             Self::Struct(value_fields) => tree::ValueKind::Struct(
                 value_fields
                     .iter()
-                    .map(|(atom, value)| (atom.clone(), value.into_tree(arena)))
+                    .map(|ValueField { atom, value }| tree::ValueField {
+                        atom: atom.clone(),
+                        value: value.into_tree(arena),
+                    })
                     .collect(),
             ),
             Self::Case(value_case) => tree::ValueKind::Case(value_case.into_tree(arena)),

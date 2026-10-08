@@ -21,6 +21,7 @@ use crate::lang::{
 use super::super::{flat, tree};
 
 mod case;
+mod field;
 
 // = Configuration
 

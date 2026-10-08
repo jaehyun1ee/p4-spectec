@@ -360,9 +360,9 @@ pub(crate) fn access_dot(
     let value_fields = get::structure(arena, value).expect("operand must be a structure");
     match value_fields
         .iter()
-        .find(|(field, _)| field.node == atom.node)
+        .find(|value_field| value_field.atom.node == atom.node)
     {
-        Some((_, value)) => ok!(*value),
+        Some(value_field) => ok!(value_field.value),
         None => unreachable!("structure must contain the field"),
     }
 }
