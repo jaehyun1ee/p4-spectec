@@ -12,7 +12,9 @@ use crate::lang::{
 
 use super::{Mixfix, Mixop, MixopArena, MixopKind, MixopRef};
 
-// = Canonical equality
+// = Mixops
+
+// - Canonical equality
 
 impl CanonEq for MixopKind {
     fn canon_eq(&self, interner: &CanonInterner<Self>, _: &(), kind_r: &Self) -> bool {
@@ -51,30 +53,7 @@ impl CanonEq for MixopKind {
     }
 }
 
-// = Syntax comparison
-
-impl SyntaxEq for MixopRef<'_> {
-    fn syntax_eq(&self, mixop_other: &Self) -> bool {
-        assert!(
-            std::ptr::eq(self.arena_mixop, mixop_other.arena_mixop),
-            "mixops must belong to the same arena"
-        );
-        self.arena_mixop.canon_eq(self.mixop, mixop_other.mixop)
-    }
-}
-
-impl SyntaxCmp for MixopRef<'_> {
-    fn syntax_cmp(&self, mixop_other: &Self) -> Ordering {
-        assert!(
-            std::ptr::eq(self.arena_mixop, mixop_other.arena_mixop),
-            "mixops must belong to the same arena"
-        );
-        self.mixop
-            .cmp_by(self.arena_mixop, mixop_other.mixop, |_| Ordering::Equal)
-    }
-}
-
-// = Structural comparison
+// - Structural comparison
 
 impl Mixop {
     /// Orders two mixops by structure and atom names, lexicographically.
@@ -144,6 +123,33 @@ impl Mixop {
         }
     }
 }
+
+// - Syntax comparison
+
+impl SyntaxEq for MixopRef<'_> {
+    fn syntax_eq(&self, mixop_other: &Self) -> bool {
+        assert!(
+            std::ptr::eq(self.arena_mixop, mixop_other.arena_mixop),
+            "mixops must belong to the same arena"
+        );
+        self.arena_mixop.canon_eq(self.mixop, mixop_other.mixop)
+    }
+}
+
+impl SyntaxCmp for MixopRef<'_> {
+    fn syntax_cmp(&self, mixop_other: &Self) -> Ordering {
+        assert!(
+            std::ptr::eq(self.arena_mixop, mixop_other.arena_mixop),
+            "mixops must belong to the same arena"
+        );
+        self.mixop
+            .cmp_by(self.arena_mixop, mixop_other.mixop, |_| Ordering::Equal)
+    }
+}
+
+// = Mixfix forms
+
+// - Structural comparison
 
 impl<T> Mixfix<T> {
     /// Orders two cases as their expanded trees would order.

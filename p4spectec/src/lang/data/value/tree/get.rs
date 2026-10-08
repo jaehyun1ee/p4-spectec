@@ -6,6 +6,8 @@ use crate::lang::data::notation::tree::Mixop;
 
 use super::{Value, ValueCase};
 
+// - Cases
+
 /// Splits a filled tree into its mixop and arguments in notation order.
 pub fn into_parts(value_case: ValueCase) -> (Mixop, Vec<Value>) {
     let mut values = Vec::new();

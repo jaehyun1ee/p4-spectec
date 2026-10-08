@@ -1,7 +1,7 @@
 //! Structural comparison of tree notation
 //!
-//! Mixops compare and hash atom names, ignoring source spans.
-//! Mixfix comparison visits the arguments in notation order.
+//! Mixops compare structure and atom names, ignoring source spans.
+//! Mixfix comparison interleaves atoms and arguments in notation order.
 
 use std::cmp::Ordering;
 
@@ -9,7 +9,9 @@ use crate::lang::traits::{cmp::SyntaxCmp, eq::SyntaxEq};
 
 use super::{Mixfix, Mixop};
 
-// = Equality and ordering
+// = Mixops
+
+// - Structural comparison
 
 impl Mixop {
     /// Orders two mixops by structure and atom names, lexicographically.
@@ -78,6 +80,8 @@ impl Mixop {
     }
 }
 
+// - Equality and ordering
+
 impl PartialEq for Mixop {
     fn eq(&self, mixop_other: &Self) -> bool {
         self.cmp(mixop_other).is_eq()
@@ -98,11 +102,17 @@ impl PartialOrd for Mixop {
     }
 }
 
+// - Syntax comparison
+
 impl SyntaxEq for Mixop {
     fn syntax_eq(&self, mixop_other: &Self) -> bool {
         self == mixop_other
     }
 }
+
+// = Mixfix forms
+
+// - Structural comparison
 
 impl<T> Mixfix<T> {
     /// Whether two mixfixes have the same structure and atom names.
@@ -126,6 +136,8 @@ impl<T> Mixfix<T> {
         })
     }
 }
+
+// - Syntax comparison
 
 impl<T: SyntaxEq> SyntaxEq for Mixfix<T> {
     fn syntax_eq(&self, mixfix_other: &Self) -> bool {

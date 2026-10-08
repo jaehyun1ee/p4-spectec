@@ -15,6 +15,8 @@ pub struct MixopRef<'a> {
     pub(super) mixop: Mixop,
 }
 
+// = Construction
+
 impl Mixop {
     /// Pairs this mixop with its arena for comparison.
     pub fn view(self, arena_mixop: &MixopArena) -> MixopRef<'_> {

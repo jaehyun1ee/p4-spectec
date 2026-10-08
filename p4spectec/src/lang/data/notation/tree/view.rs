@@ -38,7 +38,7 @@ impl<T> Clone for MixfixRef<'_, T> {
 
 impl<T> Copy for MixfixRef<'_, T> {}
 
-// = Viewing
+// = Construction
 
 impl<T> Mixfix<T> {
     /// Borrows the mixfix, for viewing its parts.
@@ -46,6 +46,8 @@ impl<T> Mixfix<T> {
         MixfixRef { mixop: self.mixop.as_ref(), args: &self.args }
     }
 }
+
+// = Inspection
 
 impl<'a, T> MixfixRef<'a, T> {
     /// The top level of the tree, splitting arguments among the children.
