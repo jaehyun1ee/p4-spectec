@@ -7,7 +7,7 @@
 use crate::lang::{
     common::source::Span,
     data::{
-        notation::tree::{Mixop, get as get_notation},
+        notation::tree::{self as notation, Mixop},
         typ,
     },
     hints::{alter, fields},
@@ -204,11 +204,11 @@ impl Context {
             Self::load_field_hints(
                 &mut hints,
                 hints_sl,
-                Some(get_notation::args(&not_typ.node).len()),
+                Some(notation::get::args(&not_typ.node).len()),
             )?;
             self.henv.insert_case(
                 &def_typ_sl.id,
-                get_notation::mixop(&not_typ.node).as_ref(),
+                notation::get::mixop(&not_typ.node).as_ref(),
                 hints,
             );
         }

@@ -5,10 +5,7 @@
 
 use std::{rc::Rc, slice};
 
-use crate::lang::data::{
-    arena::Arena,
-    notation::{self, flat::get as get_notation},
-};
+use crate::lang::data::{arena::Arena, notation};
 
 use super::super::tree;
 use super::{Value, ValueCase, ValueField, ValueKind};
@@ -67,8 +64,8 @@ impl ValueCase {
     fn into_tree(&self, arena: &Arena) -> tree::ValueCase {
         Self::into_tree_inner(
             arena,
-            *get_notation::mixop(self),
-            &mut get_notation::args(self).iter(),
+            *notation::flat::get::mixop(self),
+            &mut notation::flat::get::args(self).iter(),
         )
     }
 

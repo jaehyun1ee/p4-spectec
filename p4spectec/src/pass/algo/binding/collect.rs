@@ -5,7 +5,7 @@
 //! is rejected at that operation's source span.
 //! In `let (x, y + 1) = e`, `x` is collected and `y` is rejected at `y + 1`.
 
-use crate::lang::{common::source::Span, data::notation::tree::get as get_notation};
+use crate::lang::{common::source::Span, data::notation::tree as notation};
 
 use crate::lang::il::ast;
 
@@ -93,7 +93,7 @@ pub fn collect_exp(ctx: &Context, exp: &ast::Exp) -> Result<BEnv, AlgoError> {
         // Tuple or list: binders in every component
         ast::ExpKind::Tuple(exps) | ast::ExpKind::List(exps) => collect_exps(ctx, exps),
         // Case: binders in the arguments
-        ast::ExpKind::Case(not_exp) => collect_exps(ctx, get_notation::args(not_exp)),
+        ast::ExpKind::Case(not_exp) => collect_exps(ctx, notation::get::args(not_exp)),
         // Struct: binders in the fields
         ast::ExpKind::Str(fields) => {
             collect_exps(ctx, fields.iter().map(|ast::ExpField { exp, .. }| exp))

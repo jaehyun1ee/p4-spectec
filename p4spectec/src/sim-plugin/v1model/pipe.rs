@@ -27,9 +27,8 @@ use crate::lang::{
         value::{
             ValueError,
             flat::{
-                Value,
+                self as value, Value,
                 external::{DecodeContext, EncodeContext, decode_with, encode_with},
-                get, make,
             },
         },
     },
@@ -123,7 +122,7 @@ impl ObjectState {
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
             Vec::new(),
         );
-        Ok(make::external(arena, typ.node.into(), payload.into(), Span::default())?)
+        Ok(value::make::external(arena, typ.node.into(), payload.into(), Span::default())?)
     }
 
     // - Decoding
@@ -134,7 +133,7 @@ impl ObjectState {
         encoding: Encoding,
         value: &Value,
     ) -> Result<Self, ExternError> {
-        let json = get::external(arena, value)?.clone();
+        let json = value::get::external(arena, value)?.clone();
         decode_with(arena, encoding, json.as_ref()).map_err(ExternError::from)
     }
 }
@@ -239,13 +238,14 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     // The object id is the one-element path `packet_in`
-    let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
+    let value_name = value::make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
     let values_name = vec![value_name];
     let typ_id = typ::make::list(typ::make::var(
         crate::phrase!(node: "id".to_owned(), span: Span::default()),
         vec![],
     ));
-    let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
+    let value_id =
+        value::make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
     match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketIn(pkt) => Ok(pkt),
         _ => Err(error::extern_object_undefined("packet_in extern not found".to_owned()).into()),
@@ -262,13 +262,14 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     // The object id is the one-element path `packet_out`
-    let value_name = make::text(ctx.arena_mut(), "packet_out".to_owned(), Span::default())?;
+    let value_name = value::make::text(ctx.arena_mut(), "packet_out".to_owned(), Span::default())?;
     let values_name = vec![value_name];
     let typ_id = typ::make::list(typ::make::var(
         crate::phrase!(node: "id".to_owned(), span: Span::default()),
         vec![],
     ));
-    let value_id = make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
+    let value_id =
+        value::make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
     match find_object_state(ctx, value_arch, value_id)? {
         ObjectState::PacketOut(pkt) => Ok(pkt),
         _ => Err(error::extern_object_undefined("packet_out extern not found".to_owned()).into()),
@@ -292,8 +293,8 @@ where
     Interp: Interpreter<Iface, V1Model>,
 {
     let encoding = ctx.external().encoding;
-    let (value_name, value_targs, value_ids, value_args) = get::four(values)?;
-    let name = get::text(ctx.arena(), value_name)?.to_owned();
+    let (value_name, value_targs, value_ids, value_args) = value::get::four(values)?;
+    let name = value::get::text(ctx.arena(), value_name)?.to_owned();
     let object = match name.as_str() {
         "counter" => Some(ObjectState::Counter(Counter::init(
             ctx.arena(),
@@ -328,7 +329,12 @@ where
                 crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
                 Vec::new(),
             );
-            make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())?
+            value::make::external(
+                ctx.arena_mut(),
+                typ.node.into(),
+                payload.into(),
+                Span::default(),
+            )?
         }
     })
 }
@@ -347,11 +353,11 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, V1Model>,
 {
-    let (value_ctx, value_arch, value_name, value_names) = get::four(values)?;
-    let name = get::text(ctx.arena(), value_name)?.to_owned();
-    let names = get::list(ctx.arena(), value_names)?
+    let (value_ctx, value_arch, value_name, value_names) = value::get::four(values)?;
+    let name = value::get::text(ctx.arena(), value_name)?.to_owned();
+    let names = value::get::list(ctx.arena(), value_names)?
         .iter()
-        .map(|value| get::text(ctx.arena(), value).map(str::to_owned))
+        .map(|value| value::get::text(ctx.arena(), value).map(str::to_owned))
         .collect::<Result<Vec<_>, _>>()?;
     let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
     let (value_ctx, value_arch, value_call_result) = match (name.as_str(), names_ref.as_slice()) {
@@ -425,10 +431,10 @@ where
         .into());
     };
     let object = find_object_state(ctx, *value_arch, *value_id)?;
-    let name = get::text(ctx.arena(), value_name)?.to_owned();
-    let names = get::list(ctx.arena(), value_names)?
+    let name = value::get::text(ctx.arena(), value_name)?.to_owned();
+    let names = value::get::list(ctx.arena(), value_names)?
         .iter()
-        .map(|value| get::text(ctx.arena(), value).map(str::to_owned))
+        .map(|value| value::get::text(ctx.arena(), value).map(str::to_owned))
         .collect::<Result<Vec<_>, _>>()?;
     let names_ref: Vec<_> = names.iter().map(String::as_str).collect();
     // Each arm hands the object to its method and wraps it again
@@ -499,9 +505,9 @@ where
             }
             // Unknown method: name the object in the error
             _ => {
-                let ids = get::list(ctx.arena(), value_id)?
+                let ids = value::get::list(ctx.arena(), value_id)?
                     .iter()
-                    .map(|value| get::text(ctx.arena(), value).map(str::to_owned))
+                    .map(|value| value::get::text(ctx.arena(), value).map(str::to_owned))
                     .collect::<Result<Vec<_>, _>>()?;
                 return Err(error::extern_method_unsupported(format!(
                     "unsupported extern method call: {}.{name}({})",
@@ -673,14 +679,15 @@ where
 {
     state.value_arch = {
         // The object id is the one-element path `packet_in`
-        let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
+        let value_name =
+            value::make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
         let value_id =
-            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
+            value::make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
         let encoding = ctx.external().encoding;
         let value_object =
             ObjectState::PacketIn(packet.packet_in).to_value(ctx.arena_mut(), encoding)?;
@@ -703,14 +710,15 @@ where
     pkt.reset();
     state.value_arch = {
         // The object id is the one-element path `packet_in`
-        let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
+        let value_name =
+            value::make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
         let value_id =
-            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
+            value::make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
         let encoding = ctx.external().encoding;
         let value_object = ObjectState::PacketIn(pkt).to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)
@@ -729,14 +737,15 @@ where
 {
     state.value_arch = {
         // The object id is the one-element path `packet_out`
-        let value_name = make::text(ctx.arena_mut(), "packet_out".to_owned(), Span::default())?;
+        let value_name =
+            value::make::text(ctx.arena_mut(), "packet_out".to_owned(), Span::default())?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
         let value_id =
-            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
+            value::make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
         let encoding = ctx.external().encoding;
         let value_object =
             ObjectState::PacketOut(PacketOut::default()).to_value(ctx.arena_mut(), encoding)?;
@@ -846,7 +855,7 @@ where
         rel::v1model_parser(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
     // A `REJECT` carries the error value
-    let value_error = get::matches! { ctx.arena(), &value_call_result,
+    let value_error = value::get::matches! { ctx.arena(), &value_call_result,
         "REJECT errorValue" => |values| match values {
             [value_error] => Some(*value_error),
             _ => return Err(ExternError::from(ValueError::CountMismatch {
@@ -1229,14 +1238,15 @@ where
     let pkt = ObjectState::PacketIn(PacketIn::init(&packet)?);
     state.value_arch = {
         // The object id is the one-element path `packet_in`
-        let value_name = make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
+        let value_name =
+            value::make::text(ctx.arena_mut(), "packet_in".to_owned(), Span::default())?;
         let values_name = vec![value_name];
         let typ_id = typ::make::list(typ::make::var(
             crate::phrase!(node: "id".to_owned(), span: Span::default()),
             vec![],
         ));
         let value_id =
-            make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
+            value::make::list(ctx.arena_mut(), typ_id.node.into(), values_name, Span::default())?;
         let encoding = ctx.external().encoding;
         let value_object = pkt.to_value(ctx.arena_mut(), encoding)?;
         func::update_object_state_e(ctx, state.value_arch, value_id, value_object)

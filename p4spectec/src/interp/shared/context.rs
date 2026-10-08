@@ -13,7 +13,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::flat::{Value, get, make},
+        value::flat::{self as value, Value},
         var::{SlotIdx, VarSlot},
     },
 };
@@ -472,7 +472,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
                 .find_value_at_slot(var.slot)
                 .expect("value must be bound");
             // Each variable must hold a list
-            let values = get::list(arena, value).expect("iteration input must be a list");
+            let values = value::get::list(arena, value).expect("iteration input must be a list");
             values_by_var.push(values);
         }
         // No variables: nothing to iterate
@@ -503,7 +503,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
                 .find_value_at_slot(var.slot)
                 .expect("value must be bound");
             // Each variable must hold an option
-            let value = get::opt(arena, value).expect("iteration input must be an option");
+            let value = value::get::opt(arena, value).expect("iteration input must be an option");
             values.push(value);
         }
         // All present, all absent, or a mismatch
@@ -549,7 +549,7 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
         for (var, values) in vars.iter().zip(values_by_var) {
             let typ = typ::make::iterate(var.var.typ.clone(), &var.var.iters);
             // Each variable becomes a list one iteration outward
-            let value = make::list(arena, typ.node.into(), values, Span::default());
+            let value = value::make::list(arena, typ.node.into(), values, Span::default());
             let value = unwrap_from_result!(value, &Span::default());
             self.add_value_at_slot(var.slot, value);
         }
@@ -565,8 +565,12 @@ impl<R, F: FuncSignature> IterContext for Context<'_, R, F> {
         for (var, values) in vars.iter().zip(values_by_var) {
             let typ = typ::make::iterate(var.var.typ.clone(), &var.var.iters);
             // Each variable becomes an option one iteration outward
-            let value =
-                make::opt(arena, typ.node.into(), values.into_iter().next(), Span::default());
+            let value = value::make::opt(
+                arena,
+                typ.node.into(),
+                values.into_iter().next(),
+                Span::default(),
+            );
             let value = unwrap_from_result!(value, &Span::default());
             self.add_value_at_slot(var.slot, value);
         }

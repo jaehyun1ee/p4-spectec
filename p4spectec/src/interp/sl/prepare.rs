@@ -8,7 +8,7 @@
 use std::rc::Rc;
 
 use crate::lang::{
-    data::notation::{MixopArena, tree::get as get_notation},
+    data::notation::{MixopArena, tree as notation},
     hints::input,
     traits::eq::SyntaxEq,
 };
@@ -134,7 +134,7 @@ impl Preparer<'_> {
         // Compare source expressions before their mixops become arena handles
         if pos == Position::Tail && returns_outputs(&instr) {
             let (exps_input, _) =
-                input::split(&instr.input_hint, get_notation::into_args(instr.not_exp))
+                input::split(&instr.input_hint, notation::get::into_args(instr.not_exp))
                     .expect("input hint must fit relation");
             return ast::Rule::Tail(ast::RuleTailInstr {
                 id: instr.id,
@@ -272,7 +272,7 @@ fn returns_outputs(instr: &source::RuleInstr) -> bool {
     let source::InstrKind::Result(instr_result) = &instr_result.node else { return false };
     // Output and result expressions must agree in order, ignoring source spans
     let (_, exps_output) =
-        input::split(&instr.input_hint, get_notation::args(&instr.not_exp).iter().collect())
+        input::split(&instr.input_hint, notation::get::args(&instr.not_exp).iter().collect())
             .expect("input hint must fit relation");
     exps_output.len() == instr_result.exps.len()
         && exps_output

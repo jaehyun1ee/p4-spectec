@@ -7,7 +7,7 @@
 //! A failed premise is an `Unmatch`, so the enclosing candidate is skipped.
 
 use crate::lang::{
-    data::{notation::flat::get as get_notation, value::flat::get},
+    data::{notation::flat as notation, value::flat as value},
     hints::input,
     traits::print::Print,
 };
@@ -70,7 +70,7 @@ fn eval_rule_prem<'global, Iface: Interface, Ext: Extern>(
     prem: &ast::RulePrem,
 ) -> Backtrack<Context<'global>> {
     // Split by the input hint, evaluate inputs, bind outputs
-    let exps = get_notation::args(&prem.not_exp).iter().collect();
+    let exps = notation::get::args(&prem.not_exp).iter().collect();
     let (exps_input, exps_output) =
         input::split(&prem.input_hint, exps).expect("input hint must fit relation");
     let values_input = unwrap!(expr::eval_exps(runner_ctx, &ctx, &exps_input));
@@ -87,7 +87,7 @@ fn eval_if_prem<'global, Iface: Interface, Ext: Extern>(
     prem: &ast::IfPrem,
 ) -> Backtrack<Context<'global>> {
     let value = unwrap!(expr::eval_exp(runner_ctx, &ctx, &prem.exp));
-    if get::bool(runner_ctx.arena(), &value).expect("condition must be a boolean") {
+    if value::get::bool(runner_ctx.arena(), &value).expect("condition must be a boolean") {
         ok!(ctx)
     } else {
         unmatch!(
@@ -108,7 +108,7 @@ fn eval_if_hold_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IfHoldPrem,
 ) -> Backtrack<Context<'global>> {
-    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, get_notation::args(&prem.not_exp)));
+    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, notation::get::args(&prem.not_exp)));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         // The relation applied: the premise passes
         ok!(_) => ok!(ctx),
@@ -133,7 +133,7 @@ fn eval_if_not_hold_prem<'global, Iface: Interface, Ext: Extern>(
     ctx: Context<'global>,
     prem: &ast::IfNotHoldPrem,
 ) -> Backtrack<Context<'global>> {
-    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, get_notation::args(&prem.not_exp)));
+    let values = unwrap!(expr::eval_exps(runner_ctx, &ctx, notation::get::args(&prem.not_exp)));
     match AlInterp::invoke_rel(runner_ctx, &ctx, &prem.id, &values) {
         // The relation applied: the premise fails
         ok!(_) => unmatch!(

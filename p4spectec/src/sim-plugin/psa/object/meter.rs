@@ -9,7 +9,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::flat::{Value, make},
+        value::flat::{self as value, Value},
     },
 };
 
@@ -93,8 +93,8 @@ impl Meter {
             Vec::new(),
         ));
         let value_opt =
-            make::opt(ctx.arena_mut(), typ.node.into(), Some(value_color), Span::default())?;
-        let value_call_result = make::case_shaped! {
+            value::make::opt(ctx.arena_mut(), typ.node.into(), Some(value_color), Span::default())?;
+        let value_call_result = value::make::case_shaped! {
             arena: ctx.arena_mut(),
             shape: "RETURN value?",
             args: vec![value_opt],

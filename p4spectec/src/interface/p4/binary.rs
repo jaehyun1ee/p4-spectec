@@ -11,7 +11,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        value::flat::{Value, make},
+        value::flat::{self as value, Value},
     },
 };
 
@@ -111,7 +111,7 @@ fn reduce(
     let op = operators.pop().expect("binary operator");
     let value_r = values.pop().expect("binary right operand");
     let value_l = values.pop().expect("binary left operand");
-    let value_operator = make::case_shaped! { arena: arena,
+    let value_operator = value::make::case_shaped! { arena: arena,
         shape: op.op.shape(),
         args: vec![],
         typ: "binop",
@@ -119,7 +119,7 @@ fn reduce(
     }?;
     // The expression spans both operands
     let span = Span::new(arena.span(&value_l).left.clone(), arena.span(&value_r).right.clone());
-    values.push(make::case_shaped! { arena: arena,
+    values.push(value::make::case_shaped! { arena: arena,
         shape: "expression binop expression",
         args: vec![value_l, value_operator, value_r],
         typ: "binaryExpression",

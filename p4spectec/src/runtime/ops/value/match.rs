@@ -16,7 +16,7 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::flat::get as get_notation,
+        notation::flat as notation,
         value::flat::{Value, ValueField, ValueKind},
     },
 };
@@ -139,14 +139,14 @@ where
                             for TypCase { not_typ, .. } in typ_cases {
                                 // Skip cases of a different shape
                                 if !arena.arena_mixop().canon_eq(
-                                    *get_notation::mixop(&not_typ.node),
-                                    *get_notation::mixop(value_case),
+                                    *notation::get::mixop(&not_typ.node),
+                                    *notation::get::mixop(value_case),
                                 ) {
                                     continue;
                                 }
                                 let not_typ = subst_not_typ(&|id| theta.get(id), not_typ)?;
-                                let typs = get_notation::args(&not_typ.node);
-                                let values = get_notation::args(value_case);
+                                let typs = notation::get::args(&not_typ.node);
+                                let values = notation::get::args(value_case);
                                 if subs_inner(
                                     arena,
                                     find_typdef_opt,
@@ -269,7 +269,7 @@ where
         (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => Ok(mixops.iter().any(|mixop| {
             arena
                 .arena_mixop()
-                .canon_eq(*mixop, *get_notation::mixop(value_case))
+                .canon_eq(*mixop, *notation::get::mixop(value_case))
         })),
         // Componentwise
         (Subcheck::Tuple(subchecks), ValueKind::Tuple(values)) => {

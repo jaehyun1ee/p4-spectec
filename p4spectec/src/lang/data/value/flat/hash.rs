@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::lang::data::{
     intern::{CanonHash, CanonInterner},
-    notation::{MixopArena, flat::get as get_notation},
+    notation::{MixopArena, flat as notation},
 };
 
 use super::{ValueField, ValueKind};
@@ -32,10 +32,10 @@ impl CanonHash<MixopArena> for ValueKind {
             }
             ValueKind::Case(value_case) => {
                 arena_mixop
-                    .canon_id(*get_notation::mixop(value_case))
+                    .canon_id(*notation::get::mixop(value_case))
                     .hash(hasher);
-                get_notation::args(value_case).len().hash(hasher);
-                for value in get_notation::args(value_case) {
+                notation::get::args(value_case).len().hash(hasher);
+                for value in notation::get::args(value_case) {
                     interner.canon_id(value.node).hash(hasher);
                 }
             }

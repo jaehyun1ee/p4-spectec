@@ -15,10 +15,7 @@ use crate::lang::{
     },
     data::{
         arena::Arena,
-        notation::{
-            flat::make as make_notation,
-            tree::{Mixfix, get as get_notation},
-        },
+        notation::{self, tree::Mixfix},
         typ::{self, Typ, TypKind},
     },
 };
@@ -102,11 +99,11 @@ pub fn case(
     mixfix: Mixfix<Value>,
     span: Span,
 ) -> Result<Value, ValueError> {
-    let (mixop, values) = get_notation::into_parts(mixfix);
+    let (mixop, values) = notation::tree::get::into_parts(mixfix);
     let arena_mixop = arena.arena_mixop_mut();
     let mixop = arena_mixop.intern_shared(&mixop)?;
-    let value_case =
-        make_notation::new(arena_mixop, mixop, values).expect("a mixfix fills every position");
+    let value_case = notation::flat::make::new(arena_mixop, mixop, values)
+        .expect("a mixfix fills every position");
     new(arena, ValueKind::Case(value_case), typ, span)
 }
 

@@ -26,7 +26,7 @@ use crate::lang::{
         },
         source::Span,
     },
-    data::notation::tree::{MixfixRef, MixfixView, get as get_notation, make as make_notation},
+    data::notation::tree::{self as notation, MixfixRef, MixfixView},
     hints::{alter, input},
     traits::{has_call::HasCall, print::Print},
 };
@@ -1006,7 +1006,7 @@ impl Prose {
     fn of_case_exp(exp: &pl::Exp, not_exp: &pl::NotExp) -> Prose {
         // Hinted variant values link their prose to the type definition
         if let (Some(hint), pl::TypKind::Var(id_typ, _)) = (&exp.hints.node.prose, &exp.node.note) {
-            let exps = get_notation::args(not_exp).iter().collect::<Vec<_>>();
+            let exps = notation::get::args(not_exp).iter().collect::<Vec<_>>();
             let prose_case = alternate(
                 hint,
                 &|text_body| reindent_lines(0, text_body),
@@ -1186,7 +1186,7 @@ impl Code {
     fn of_pattern(pattern: &pl::Pattern) -> Code {
         match pattern {
             Pattern::Case(mixop) => {
-                let mixfix = make_notation::fill(Rc::clone(mixop), |_| ());
+                let mixfix = notation::make::fill(Rc::clone(mixop), |_| ());
                 Code::of_mixfix(mixfix.as_ref(), &|()| Code::token("%"))
             }
             Pattern::List(ListPattern::Cons) => Code::token("_ :: _"),
@@ -1856,7 +1856,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         let prose_cond = match hint_opt {
             // Hinted relations describe the branch condition in prose
             Some(hint) => {
-                let exps = get_notation::args(&hold_instr.not_exp)
+                let exps = notation::get::args(&hold_instr.not_exp)
                     .iter()
                     .collect::<Vec<_>>();
                 let prose_hint = alternate(
@@ -2079,7 +2079,7 @@ impl<'ctx, 'a> Renderer<'ctx, 'a> {
         rule_instr: &pl::RuleInstr,
     ) -> Block {
         // Split the notation into input and output expressions
-        let exps = get_notation::args(&rule_instr.not_exp).iter().collect();
+        let exps = notation::get::args(&rule_instr.not_exp).iter().collect();
         let (exps_input, exps_output) =
             input::split(&rule_instr.input_hint, exps).expect("validated rule input hint");
         let prose_fallthrough = Prose::of_fallthrough_link(ctx, instr);
@@ -2148,7 +2148,7 @@ impl Prose {
 
     /// Describes a relation result according to its output shape and hints.
     fn of_result(hints: &Hints, signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
-        let typs = get_notation::args(&signature.not_typ.node);
+        let typs = notation::get::args(&signature.not_typ.node);
         let is_conditional = input::is_conditional(&signature.input_hint, typs)
             .expect("validated relation input hint");
         if is_conditional {
@@ -2450,14 +2450,16 @@ impl Prose {
 
     /// Fills relation inputs and leaves output positions as percent holes.
     fn of_rel_title_math(signature: &pl::RelSignature, exps: &[pl::Exp]) -> Prose {
-        let num_outputs = get_notation::arity(&signature.not_typ.node) - exps.len();
+        let num_outputs = notation::get::arity(&signature.not_typ.node) - exps.len();
         let codes_input: Vec<Code> = exps.iter().map(Code::of_exp).collect();
         let codes_output: Vec<Code> = (0..num_outputs).map(|_| Code::token("%")).collect();
         let codes_args = input::combine(&signature.input_hint, codes_input, codes_output)
             .expect("validated relation input hint");
-        let not_exp =
-            make_notation::new(Rc::clone(get_notation::mixop(&signature.not_typ.node)), codes_args)
-                .expect("relation title fills its notation");
+        let not_exp = notation::make::new(
+            Rc::clone(notation::get::mixop(&signature.not_typ.node)),
+            codes_args,
+        )
+        .expect("relation title fills its notation");
         let code_not = Code::of_mixfix(not_exp.as_ref(), &Clone::clone);
         Prose::code(code_not)
     }

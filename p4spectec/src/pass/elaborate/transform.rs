@@ -22,7 +22,7 @@ use crate::lang::{
         prim,
         source::{Phrase, Span},
     },
-    data::notation::tree::{MixfixRef, MixfixView, get as get_notation, make as make_notation},
+    data::notation::tree::{self as notation, MixfixRef, MixfixView},
     hints::input,
     traits::{at::At, free::FreeIds, print::Print},
 };
@@ -285,30 +285,30 @@ fn elab_not_typ(ctx: &Context, typ: &el::Typ) -> Result<il::NotTyp, ElabError> {
         // A plain type is a single notation argument
         el::Typ::Plain(plain_typ) => {
             let typ_il = elab_plain_typ(ctx, plain_typ)?;
-            let not_typ_il = make_notation::arg(typ_il);
+            let not_typ_il = notation::make::arg(typ_il);
             let not_typ_il = phrase!(node: not_typ_il, span: plain_typ.span.clone());
             Ok(not_typ_il)
         }
         // Notation types mirror the mixfix shape
         el::Typ::Notation(not_typ) => {
             let not_typ_kind_il = match &not_typ.node {
-                el::NotTypKind::Atom(atom) => make_notation::atom(atom.clone()),
+                el::NotTypKind::Atom(atom) => notation::make::atom(atom.clone()),
                 el::NotTypKind::Seq(typs) => {
                     let mut not_typs_il = Vec::with_capacity(typs.len());
                     for typ in typs {
                         let not_typ_il = elab_not_typ(ctx, typ)?;
                         not_typs_il.push(not_typ_il.node);
                     }
-                    make_notation::seq(not_typs_il)
+                    notation::make::seq(not_typs_il)
                 }
                 el::NotTypKind::Infix(typ_l, atom, typ_r) => {
                     let not_typ_l_il = elab_not_typ(ctx, typ_l)?;
                     let not_typ_r_il = elab_not_typ(ctx, typ_r)?;
-                    make_notation::infix(not_typ_l_il.node, atom.clone(), not_typ_r_il.node)
+                    notation::make::infix(not_typ_l_il.node, atom.clone(), not_typ_r_il.node)
                 }
                 el::NotTypKind::Brack(atom_l, typ, atom_r) => {
                     let not_typ_il = elab_not_typ(ctx, typ)?;
-                    make_notation::brack(atom_l.clone(), not_typ_il.node, atom_r.clone())
+                    notation::make::brack(atom_l.clone(), not_typ_il.node, atom_r.clone())
                 }
             };
             let not_typ_il = phrase!(node: not_typ_kind_il, span: not_typ.span.clone());
@@ -448,10 +448,10 @@ fn elab_def_typ(
             }
             // Two cases with the same mixfix shape would be ambiguous
             for (idx, typ_case_il) in typ_cases_il.iter().enumerate() {
-                let mixop = get_notation::mixop(&typ_case_il.not_typ.node);
+                let mixop = notation::get::mixop(&typ_case_il.not_typ.node);
                 if let Some(typ_case_previous_il) =
                     typ_cases_il[..idx].iter().find(|typ_case_other_il| {
-                        get_notation::mixop(&typ_case_other_il.not_typ.node) == mixop
+                        notation::get::mixop(&typ_case_other_il.not_typ.node) == mixop
                     })
                 {
                     return Err(error::typ::variant_case_shape_repeated(
@@ -1859,9 +1859,9 @@ fn notation_shape_matches(not_typ_il: MixfixRef<'_, il::Typ>, exp: &el::Exp) -> 
 /// so only the arguments come from the expression.
 fn elab_not_exp(ctx: &mut Context, expect: &NotExpect<'_>, exp: &el::Exp) -> Backtrack<il::NotExp> {
     let not_typ_il = &expect.not_typ_il.node;
-    let mut exps_il = Vec::with_capacity(get_notation::arity(not_typ_il));
+    let mut exps_il = Vec::with_capacity(notation::get::arity(not_typ_il));
     unwrap!(elab_not_exp_inner(ctx, not_typ_il.as_ref(), exp, expect, &mut exps_il));
-    let not_exp_il = make_notation::new(Rc::clone(get_notation::mixop(not_typ_il)), exps_il)
+    let not_exp_il = notation::make::new(Rc::clone(notation::get::mixop(not_typ_il)), exps_il)
         .expect("notation elaboration fills every argument position");
     success!(not_exp_il)
 }
@@ -2593,7 +2593,7 @@ fn elab_rule_prem(ctx: &mut Context, prem: &el::RulePrem) -> Backtrack<il::PremK
         elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp)
             .recoverable_as_failure()
     );
-    let exps_il = get_notation::args(&not_exp_il);
+    let exps_il = notation::get::args(&not_exp_il);
     let conditional = match input::is_conditional(&input_hint, exps_il) {
         Ok(conditional) => conditional,
         Err(error) => {
@@ -2624,7 +2624,7 @@ fn elab_rule_not_prem(ctx: &mut Context, prem: &el::RuleNotPrem) -> Backtrack<il
         elab_not_exp(ctx, &NotExpect::rel(&prem.id, &not_typ_il), &prem.exp)
             .recoverable_as_failure()
     );
-    let exps_il = get_notation::args(&not_exp_il).iter().collect();
+    let exps_il = notation::get::args(&not_exp_il).iter().collect();
     let (_, exps_output_il) = match input::split(&input_hint, exps_il) {
         Ok(parts) => parts,
         Err(error) => {
@@ -3102,7 +3102,7 @@ fn fetch_input_hint(
     not_typ_il: &il::NotTyp,
     hints: &[el::Hint],
 ) -> Result<input::InputHint, ElabError> {
-    let arity = get_notation::arity(&not_typ_il.node);
+    let arity = notation::get::arity(&not_typ_il.node);
     // Without a hint every position is an input
     let Some(el::Hint { exp: exp_hint, .. }) = hints.iter().find(|hint| hint.id.node == "input")
     else {

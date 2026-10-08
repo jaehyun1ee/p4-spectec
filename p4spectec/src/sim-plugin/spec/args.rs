@@ -7,7 +7,7 @@ use crate::lang::data::{
     arena::Arena,
     value::{
         ValueError,
-        flat::{Value, get},
+        flat::{self as value, Value},
     },
 };
 
@@ -24,11 +24,11 @@ pub fn assoc(
     value_args: Value,
 ) -> Result<Vec<(String, Value)>, ExternError> {
     // Names are texts, arguments any values
-    let names = get::list(arena, &value_ids)?
+    let names = value::get::list(arena, &value_ids)?
         .iter()
-        .map(|value_id| get::text(arena, value_id).map(str::to_owned))
+        .map(|value_id| value::get::text(arena, value_id).map(str::to_owned))
         .collect::<Result<Vec<_>, _>>()?;
-    let values = get::list(arena, &value_args)?;
+    let values = value::get::list(arena, &value_args)?;
     // One value per name
     if names.len() != values.len() {
         return Err(

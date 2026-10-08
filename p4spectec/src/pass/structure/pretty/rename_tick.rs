@@ -18,10 +18,7 @@
 use std::rc::Rc;
 
 use crate::lang::{
-    common::ds::set::IdSet,
-    data::notation::tree::{get as get_notation, make as make_notation},
-    hints::input,
-    traits::free::FreeIds,
+    common::ds::set::IdSet, data::notation::tree as notation, hints::input, traits::free::FreeIds,
 };
 
 use crate::lang::il::ast::{Arg, Exp};
@@ -184,7 +181,7 @@ fn upstream_rule_instr(
     instr_ol: RuleInstr,
 ) -> InstrKind {
     let RuleInstr { id, not_exp, input_hint, iter_instrs, block } = instr_ol;
-    let exps = get_notation::args(&not_exp).to_vec();
+    let exps = notation::get::args(&not_exp).to_vec();
     // Elaboration validates hints; OL rewrites preserve notation arity
     let (exps_input, exps_output) =
         input::split(&input_hint, exps).expect("validated relation hints and argument counts");
@@ -211,7 +208,7 @@ fn upstream_rule_instr(
     // Renaming preserves the argument counts returned by input::split
     let exps = input::combine(&input_hint, exps_input, exps_output)
         .expect("validated relation hints and argument counts");
-    let not_exp = make_notation::new(Rc::clone(get_notation::mixop(&not_exp)), exps)
+    let not_exp = notation::make::new(Rc::clone(notation::get::mixop(&not_exp)), exps)
         .expect("validated arguments preserve the mixfix arity");
     let block = renamer.rename_block(changed, block);
     let block = upstream_block(changed, &frees, block);

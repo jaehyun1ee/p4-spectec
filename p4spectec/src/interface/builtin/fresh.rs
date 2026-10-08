@@ -9,7 +9,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        value::flat::{Value, make},
+        value::flat::{self as value, Value},
     },
 };
 
@@ -35,6 +35,6 @@ pub fn fresh_type_id(
     extract::zero(values)?;
     let counter = COUNTER.fetch_add(1, Ordering::Relaxed);
     let type_id = format!("FRESH__{counter}");
-    let value = make::text(arena, type_id, Span::default())?;
+    let value = value::make::text(arena, type_id, Span::default())?;
     Ok(value)
 }

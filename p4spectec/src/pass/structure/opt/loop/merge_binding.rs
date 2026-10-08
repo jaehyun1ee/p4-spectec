@@ -23,7 +23,7 @@
 use std::collections::VecDeque;
 
 use crate::lang::{
-    data::notation::tree::get as get_notation,
+    data::notation::tree as notation,
     hints::input,
     traits::{eq::SyntaxEq, free::FreeIds},
 };
@@ -98,7 +98,7 @@ impl<'a> Bind<'a> {
     /// Views a rule call, splitting its arguments by the input hint.
     fn from_rule(instr_rule: &'a RuleInstr) -> Self {
         let RuleInstr { id, not_exp, input_hint, iter_instrs, .. } = instr_rule;
-        let exps = get_notation::args(not_exp).iter().collect();
+        let exps = notation::get::args(not_exp).iter().collect();
         // Elaboration validates hints; OL rewrites preserve notation arity
         let (exps_input, exps_output) =
             input::split(input_hint, exps).expect("validated relation hints and argument counts");
@@ -259,8 +259,8 @@ fn collapse_case_exp(
     if !not_exp.eq_mixop(not_exp_target) {
         return None;
     }
-    let exps = get_notation::args(not_exp).iter().collect();
-    let exps_target = get_notation::args(not_exp_target).iter().collect();
+    let exps = notation::get::args(not_exp).iter().collect();
+    let exps_target = notation::get::args(not_exp_target).iter().collect();
     collapse_exps(renamer, exps, exps_target)
 }
 

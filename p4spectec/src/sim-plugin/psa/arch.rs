@@ -14,9 +14,8 @@ use crate::lang::{
         encoding::Encoding,
         typ,
         value::flat::{
-            Value,
+            self as value, Value,
             external::{DecodeContext, EncodeContext, decode_with, encode_with},
-            get, make,
         },
     },
 };
@@ -47,7 +46,7 @@ impl Arch {
             crate::phrase!(node: "archState".to_owned(), span: Span::default()),
             Vec::new(),
         );
-        Ok(make::external(arena, typ.node.into(), payload.into(), Span::default())?)
+        Ok(value::make::external(arena, typ.node.into(), payload.into(), Span::default())?)
     }
 
     /// Decodes the state from an `archState` external value.
@@ -56,7 +55,7 @@ impl Arch {
         encoding: Encoding,
         value: &Value,
     ) -> Result<Self, ExternError> {
-        let json = get::external(arena, value)?.clone();
+        let json = value::get::external(arena, value)?.clone();
         decode_with(arena, encoding, json.as_ref()).map_err(ExternError::from)
     }
 }

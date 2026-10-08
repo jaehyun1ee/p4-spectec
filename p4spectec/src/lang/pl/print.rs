@@ -15,7 +15,7 @@ use std::{
 use crate::util::text::escape_text;
 
 use crate::lang::{
-    data::notation::tree::{get as get_notation, make as make_notation},
+    data::notation::tree as notation,
     traits::print::{Print, Printer},
 };
 
@@ -827,7 +827,7 @@ fn write_relinput<E: Print>(
     let idxs_input = rel_signature.input_hint.indices();
     assert_eq!(idxs_input.len(), exps_input.len());
     // Each notation position takes its input, or `%`
-    let mixfix = make_notation::fill(Rc::clone(get_notation::mixop(&not_typ.node)), |index| {
+    let mixfix = notation::make::fill(Rc::clone(notation::get::mixop(&not_typ.node)), |index| {
         idxs_input
             .iter()
             .position(|idx_input| idx_input.node == index)
@@ -848,11 +848,11 @@ fn write_reloutput<E: Print>(
     let not_typ = &rel_signature.not_typ;
     let idxs_input = rel_signature.input_hint.indices();
     // Outputs are the positions the hint leaves
-    let outputs = (0..get_notation::arity(&not_typ.node))
+    let outputs = (0..notation::get::arity(&not_typ.node))
         .filter(|index| !idxs_input.iter().any(|idx_input| idx_input.node == *index))
         .collect::<Vec<_>>();
     assert_eq!(outputs.len(), exps_output.len());
-    let mixfix = make_notation::fill(Rc::clone(get_notation::mixop(&not_typ.node)), |index| {
+    let mixfix = notation::make::fill(Rc::clone(notation::get::mixop(&not_typ.node)), |index| {
         outputs
             .iter()
             .position(|output| *output == index)

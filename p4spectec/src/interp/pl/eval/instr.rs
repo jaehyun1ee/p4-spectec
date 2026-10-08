@@ -10,8 +10,8 @@
 use crate::lang::{
     common::source::Span,
     data::{
-        notation::flat::get as get_notation,
-        value::flat::{Value, get},
+        notation::flat as notation,
+        value::flat::{self as value, Value},
     },
     hints::input,
     traits::print::Print,
@@ -230,7 +230,7 @@ fn eval_if_instr<'global, Tier, Iface: Interface, Ext: Extern>(
     let cond =
         unwrap!(eval_cond_iter(runner_ctx, &ctx, &instr.iter_exps, &mut |runner_ctx, ctx| {
             let value = unwrap!(eval_exp(runner_ctx, ctx, &instr.exp));
-            ok!(get::bool(runner_ctx.arena(), &value).expect("condition must be a boolean"))
+            ok!(value::get::bool(runner_ctx.arena(), &value).expect("condition must be a boolean"))
         }));
     // Run the block, or fall through recording the failed condition
     if cond {
@@ -266,7 +266,7 @@ fn eval_hold_instr<'global, Tier, Iface: Interface, Ext: Extern>(
     let mut errors = Vec::new();
     let cond =
         unwrap!(eval_cond_iter(runner_ctx, &ctx, &instr.iter_exps, &mut |runner_ctx, ctx| {
-            let values = unwrap!(eval_exps(runner_ctx, ctx, get_notation::args(&instr.not_exp)));
+            let values = unwrap!(eval_exps(runner_ctx, ctx, notation::get::args(&instr.not_exp)));
             match PlInterp::invoke_rel(runner_ctx, ctx, &instr.id, &values) {
                 // A match means it holds
                 ok!(_) => ok!(true),
@@ -353,7 +353,7 @@ fn eval_guard<'global, Iface: Interface, Ext: Extern>(
     // Test the scrutinee before introducing checked bindings
     let matched = match guard {
         // Compare the scrutinee with the expected boolean
-        ast::Guard::Bool(expected) => ok!(get::bool(runner_ctx.arena(), &value)
+        ast::Guard::Bool(expected) => ok!(value::get::bool(runner_ctx.arena(), &value)
             .expect("boolean guard value must be a boolean")
             == *expected),
         // Compare against the evaluated right side
@@ -424,7 +424,7 @@ fn eval_rule_instr<'global, Iface: Interface, Ext: Extern>(
 ) -> Backtrack<(Context<'global>, Flow)> {
     // The input hint separates arguments from output patterns
     let (exps_input, exps_output) =
-        input::split(&instr.input_hint, get_notation::args(&instr.not_exp).iter().collect())
+        input::split(&instr.input_hint, notation::get::args(&instr.not_exp).iter().collect())
             .expect("input hint must fit relation");
     // Invoke the relation at each enclosing iteration
     let ctx =
@@ -488,8 +488,8 @@ fn eval_destruct_instr<'global, Iface: Interface, Ext: Extern>(
     // Extract fields before mutating the arena during assignment
     let value = unwrap!(eval_exp(runner_ctx, &ctx, &instr.exp));
     let value_case =
-        get::case(runner_ctx.arena(), &value).expect("destructuring value must be a case");
-    let values = get_notation::args(value_case).to_vec();
+        value::get::case(runner_ctx.arena(), &value).expect("destructuring value must be a case");
+    let values = notation::get::args(value_case).to_vec();
     let exps = instr
         .bindings
         .iter()
@@ -593,7 +593,7 @@ fn eval_option_get_instr<'global, Tier, Iface: Interface, Ext: Extern>(
     // Only a present option enters the nested block
     let value = unwrap!(eval_exp(runner_ctx, &ctx, &instr.exp_r));
     if let Some(value) =
-        get::opt(runner_ctx.arena(), &value).expect("option binding value must be an option")
+        value::get::opt(runner_ctx.arena(), &value).expect("option binding value must be an option")
     {
         // The shorthand binding belongs to the nested block
         let ctx_bound =

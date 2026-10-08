@@ -6,7 +6,7 @@
 //! `check_args` rejects invalid shapes and repeated new binders.
 //! Failures retain the responsible syntax for caller-specific diagnostics.
 
-use crate::lang::{common::ds::map::IdMap, data::notation::tree::get as get_notation};
+use crate::lang::{common::ds::map::IdMap, data::notation::tree as notation};
 
 use crate::lang::il::ast;
 
@@ -38,7 +38,7 @@ pub fn check_exp(exp: &ast::Exp) -> bool {
         ast::ExpKind::UpCast(_, exp) => {
             matches!(&exp.node, ast::ExpKind::Id(_) | ast::ExpKind::Case(_))
         }
-        ast::ExpKind::Case(not_exp) => get_notation::args(not_exp).iter().all(is_iterated_id_exp),
+        ast::ExpKind::Case(not_exp) => notation::get::args(not_exp).iter().all(is_iterated_id_exp),
         _ => false,
     }
 }
@@ -97,7 +97,7 @@ fn check_repeated_binding<'a>(
         }
         ast::ExpKind::Case(not_exp) => {
             // Visit case arguments from left to right
-            for exp in get_notation::args(not_exp) {
+            for exp in notation::get::args(not_exp) {
                 check_repeated_binding(venv, ids_seen, exp)?;
             }
         }

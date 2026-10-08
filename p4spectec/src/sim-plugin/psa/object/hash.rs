@@ -11,7 +11,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::flat::{Value, make},
+        value::flat::{self as value, Value},
     },
 };
 
@@ -139,9 +139,13 @@ impl HashExtern {
             crate::phrase!(node: "value".to_owned(), span: Span::default()),
             Vec::new(),
         ));
-        let value_opt =
-            make::opt(ctx.arena_mut(), typ.node.into(), Some(value_result), Span::default())?;
-        let value_call_result = make::case_shaped! {
+        let value_opt = value::make::opt(
+            ctx.arena_mut(),
+            typ.node.into(),
+            Some(value_result),
+            Span::default(),
+        )?;
+        let value_call_result = value::make::case_shaped! {
             arena: ctx.arena_mut(),
             shape: "RETURN value?",
             args: vec![value_opt],

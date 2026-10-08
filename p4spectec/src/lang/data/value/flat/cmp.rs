@@ -10,7 +10,7 @@ use crate::lang::{
     common::prim::num,
     data::{
         intern::{CanonEq, CanonInterner},
-        notation::{MixopArena, flat::get as get_notation},
+        notation::{MixopArena, flat as notation},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
@@ -47,13 +47,13 @@ impl CanonEq<MixopArena> for ValueKind {
             }
             (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => {
                 arena_mixop.canon_eq(
-                    *get_notation::mixop(value_case_l),
-                    *get_notation::mixop(value_case_r),
-                ) && get_notation::args(value_case_l).len()
-                    == get_notation::args(value_case_r).len()
-                    && get_notation::args(value_case_l)
+                    *notation::get::mixop(value_case_l),
+                    *notation::get::mixop(value_case_r),
+                ) && notation::get::args(value_case_l).len()
+                    == notation::get::args(value_case_r).len()
+                    && notation::get::args(value_case_l)
                         .iter()
-                        .zip(get_notation::args(value_case_r))
+                        .zip(notation::get::args(value_case_r))
                         .all(|(value_l, value_r)| eq_value(value_l, value_r))
             }
             (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))

@@ -15,7 +15,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::flat::{Value, get, make},
+        value::flat::{self as value, Value},
     },
 };
 
@@ -32,10 +32,10 @@ const MAX_BIT_WIDTH: usize = 2048;
 
 /// The booleans of a bit-array value.
 fn bits_of_value(arena: &Arena, value: &Value) -> Result<Vec<bool>, BuiltinError> {
-    let values = get::list(arena, value).map_err(BuiltinError::from)?;
+    let values = value::get::list(arena, value).map_err(BuiltinError::from)?;
     let mut bits = Vec::with_capacity(values.len());
     for value in values {
-        let bit = get::bool(arena, value).map_err(BuiltinError::from)?;
+        let bit = value::get::bool(arena, value).map_err(BuiltinError::from)?;
         bits.push(bit);
     }
     Ok(bits)
@@ -47,10 +47,10 @@ fn value_of_bits(arena: &mut Arena, bits: Vec<bool>) -> Result<Value, BuiltinErr
     let typ = typ::make::var(bit_id, Vec::new());
     let mut bit_values = Vec::with_capacity(bits.len());
     for bit in bits {
-        let bit_value = make::bool(arena, bit, Span::default())?;
+        let bit_value = value::make::bool(arena, bit, Span::default())?;
         bit_values.push(bit_value);
     }
-    let value = make::list(arena, typ.node.into(), bit_values, Span::default())?;
+    let value = value::make::list(arena, typ.node.into(), bit_values, Span::default())?;
     Ok(value)
 }
 
@@ -58,13 +58,13 @@ fn value_of_bits(arena: &mut Arena, bits: Vec<bool>) -> Result<Value, BuiltinErr
 
 /// The integer in a number value.
 fn bigint_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
-    let num = get::num(arena, value).map_err(BuiltinError::from)?;
+    let num = value::get::num(arena, value).map_err(BuiltinError::from)?;
     Ok(num::to_int(num))
 }
 
 /// An integer value.
 fn value_of_bigint(arena: &mut Arena, value: BigInt) -> Result<Value, BuiltinError> {
-    let value = make::int(arena, value, Span::default())?;
+    let value = value::make::int(arena, value, Span::default())?;
     Ok(value)
 }
 

@@ -12,7 +12,7 @@ use crate::lang::{
         arena::Arena,
         value::{
             ValueError,
-            flat::{Value, get},
+            flat::{self as value, Value},
         },
     },
 };
@@ -25,7 +25,7 @@ use crate::sim_plugin::error;
 
 /// The boolean in a `_B bool` value.
 pub fn p4_bool(arena: &Arena, value: &Value) -> Result<bool, ExternError> {
-    get::matches! { arena,
+    value::get::matches! { arena,
         value,
         "_B bool" => |values| {
             // Exactly one argument
@@ -35,7 +35,7 @@ pub fn p4_bool(arena: &Arena, value: &Value) -> Result<bool, ExternError> {
                     actual: values.len(),
                 }.into());
             };
-            get::bool(arena, value).map_err(ExternError::from)
+            value::get::bool(arena, value).map_err(ExternError::from)
         },
         _ => Err(error::value_invalid("expected P4 bool value".to_owned()).into()),
     }
@@ -43,7 +43,7 @@ pub fn p4_bool(arena: &Arena, value: &Value) -> Result<bool, ExternError> {
 
 /// The text in a `"text"` value.
 pub fn p4_string(arena: &Arena, value: &Value) -> Result<String, ExternError> {
-    get::matches! { arena,
+    value::get::matches! { arena,
         value,
         "'\"' text '\"'" => |values| {
             // Exactly one argument
@@ -53,7 +53,7 @@ pub fn p4_string(arena: &Arena, value: &Value) -> Result<String, ExternError> {
                     actual: values.len(),
                 }.into());
             };
-            get::text(arena, value).map(str::to_owned).map_err(ExternError::from)
+            value::get::text(arena, value).map(str::to_owned).map_err(ExternError::from)
         },
         _ => Err(error::value_invalid("expected P4 string value".to_owned()).into()),
     }
@@ -61,13 +61,13 @@ pub fn p4_string(arena: &Arena, value: &Value) -> Result<String, ExternError> {
 
 /// The type and member names of a `tid . id` value.
 pub fn p4_enum(arena: &Arena, value: &Value) -> Result<(String, String), ExternError> {
-    get::matches! { arena, value,
+    value::get::matches! { arena, value,
         "tid '.' id" => |values| {
             // Type name, then member
             let [value_enum, value_id] = values else {
                 return Err(ValueError::CountMismatch { expected: 2, actual: values.len() }.into());
             };
-            Ok((get::text(arena, value_enum)?.to_owned(), get::text(arena, value_id)?.to_owned()))
+            Ok((value::get::text(arena, value_enum)?.to_owned(), value::get::text(arena, value_id)?.to_owned()))
         },
         _ => Err(error::value_invalid("expected P4 enum value".to_owned()).into()),
     }
@@ -75,13 +75,13 @@ pub fn p4_enum(arena: &Arena, value: &Value) -> Result<(String, String), ExternE
 
 /// The components of a `TUPLE (...)` value.
 pub fn p4_tuple(arena: &Arena, value: &Value) -> Result<Vec<Value>, ExternError> {
-    get::matches! { arena, value,
+    value::get::matches! { arena, value,
         "TUPLE `( value* `)" => |values| {
             // One list of components
             let [value_list] = values else {
                 return Err(ValueError::CountMismatch { expected: 1, actual: values.len() }.into());
             };
-            Ok(get::list(arena, value_list)?.to_vec())
+            Ok(value::get::list(arena, value_list)?.to_vec())
         },
         _ => Err(error::value_invalid("expected P4 tuple value".to_owned()).into()),
     }
@@ -91,7 +91,7 @@ pub fn p4_tuple(arena: &Arena, value: &Value) -> Result<Vec<Value>, ExternError>
 
 /// Width and value of a `nat W int` bit string.
 pub fn p4_fixed_bit(arena: &Arena, value: &Value) -> Result<(BigInt, BigInt), ExternError> {
-    get::matches! { arena, value,
+    value::get::matches! { arena, value,
         "nat W int" => |values| {
             // Width, then value
             let [value_width, value_int] = values else {
@@ -101,8 +101,8 @@ pub fn p4_fixed_bit(arena: &Arena, value: &Value) -> Result<(BigInt, BigInt), Ex
                 }.into());
             };
             Ok((
-                num::to_int(get::num(arena, value_width)?).clone(),
-                num::to_int(get::num(arena, value_int)?).clone(),
+                num::to_int(value::get::num(arena, value_width)?).clone(),
+                num::to_int(value::get::num(arena, value_int)?).clone(),
             ))
         },
         _ => Err(error::value_invalid("expected P4 fixed-bit value".to_owned()).into()),
@@ -111,15 +111,15 @@ pub fn p4_fixed_bit(arena: &Arena, value: &Value) -> Result<(BigInt, BigInt), Ex
 
 /// Width and value of any fixed-width number: `W`, `S`, or varbit `V`.
 pub fn p4_precision_number(arena: &Arena, value: &Value) -> Result<(BigInt, BigInt), ExternError> {
-    get::matches! { arena, value,
+    value::get::matches! { arena, value,
         "nat W int" | "nat S int" => |values| {
             // Width, then value
             let [value_width, value_int] = values else {
                 return Err(ValueError::CountMismatch { expected: 2, actual: values.len() }.into());
             };
             Ok((
-                num::to_int(get::num(arena, value_width)?).clone(),
-                num::to_int(get::num(arena, value_int)?).clone(),
+                num::to_int(value::get::num(arena, value_width)?).clone(),
+                num::to_int(value::get::num(arena, value_int)?).clone(),
             ))
         },
         // A varbit carries its maximum width first; only the actual one matters
@@ -127,10 +127,10 @@ pub fn p4_precision_number(arena: &Arena, value: &Value) -> Result<(BigInt, BigI
             let [value_width_max, value_width, value_int] = values else {
                 return Err(ValueError::CountMismatch { expected: 3, actual: values.len() }.into());
             };
-            get::num(arena, value_width_max)?;
+            value::get::num(arena, value_width_max)?;
             Ok((
-                num::to_int(get::num(arena, value_width)?).clone(),
-                num::to_int(get::num(arena, value_int)?).clone(),
+                num::to_int(value::get::num(arena, value_width)?).clone(),
+                num::to_int(value::get::num(arena, value_int)?).clone(),
             ))
         },
         _ => Err(error::value_invalid("expected P4 precision number value".to_owned()).into()),

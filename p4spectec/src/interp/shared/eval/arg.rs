@@ -7,7 +7,7 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        value::flat::{Value, make},
+        value::flat::{self as value, Value},
     },
     traits::print::Print,
 };
@@ -65,7 +65,7 @@ fn eval_def_arg(
     // A function value carries the referenced function's type
     let typ_func = unwrap_from_result!(ctx.find_func_typ(id), span);
     let value = unwrap_from_result!(
-        make::func(
+        value::make::func(
             arena,
             id.clone(),
             typ_func.tparams,

@@ -13,9 +13,9 @@ use crate::lang::{
     common::source::Span,
     data::{
         arena::Arena,
-        notation::flat::get as get_notation,
+        notation::flat as notation,
         typ,
-        value::flat::{Value, ValueKind, get, make},
+        value::flat::{self as value, Value, ValueKind},
         var::IdSlot,
     },
     traits::at::At,
@@ -75,7 +75,7 @@ pub fn assign_exp<Ctx: WriteContext>(
         }
         // Case: the arguments
         (ast::ExpKind::Case(not_exp), ValueKind::Case(value_case)) => {
-            let values = get_notation::args(value_case).to_vec();
+            let values = notation::get::args(value_case).to_vec();
             assign_case_exp(arena, ctx, not_exp, &values)
         }
         // Struct: the fields in order
@@ -156,7 +156,7 @@ fn assign_case_exp<Ctx: WriteContext>(
     not_exp: &ast::NotExp,
     values: &[Value],
 ) -> Backtrack<Ctx> {
-    assign_exps(arena, ctx, get_notation::args(not_exp), values)
+    assign_exps(arena, ctx, notation::get::args(not_exp), values)
 }
 
 // - Struct expression
@@ -222,7 +222,7 @@ fn assign_cons_exp<Ctx: WriteContext>(
     // Rebuild the tail as a list value of the same type
     let typ = phrase!(node: arena.typ(value).clone(), span: exp.span.clone());
     let value_tail = unwrap_from_result!(
-        make::list(arena, typ.node.clone(), values_tail.to_vec(), Span::default()),
+        value::make::list(arena, typ.node.clone(), values_tail.to_vec(), Span::default()),
         &Span::default()
     );
     let ctx = unwrap!(assign_exp(arena, ctx, exp_head, *value_head));
@@ -251,8 +251,8 @@ fn assign_iter_exp<Ctx: WriteContext>(
     match exp_iter.iter {
         // Option: assign the payload once, or bind every variable to none
         ast::Iter::Opt => {
-            let value_opt =
-                get::opt(arena, &value).expect("iteration assignment value must be an option");
+            let value_opt = value::get::opt(arena, &value)
+                .expect("iteration assignment value must be an option");
             let ctx_sub = match value_opt {
                 Some(value) => Some(unwrap!(assign_exp(arena, ctx.clone(), exp_inner, value))),
                 None => None,
@@ -265,7 +265,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
                         .expect("value must be bound")
                 });
                 let value = unwrap_from_result!(
-                    make::opt(arena, typ.node.into(), value_opt, Span::default()),
+                    value::make::opt(arena, typ.node.into(), value_opt, Span::default()),
                     span
                 );
                 ctx.add_value_at_slot(var_outer.slot, value);
@@ -274,7 +274,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
         }
         // List: one fresh sub-context per element
         ast::Iter::List => {
-            let values = get::list(arena, &value)
+            let values = value::get::list(arena, &value)
                 .expect("iteration assignment value must be a list")
                 .to_vec();
             let mut ctx_sub = ctx.clone();
@@ -294,7 +294,7 @@ fn assign_iter_exp<Ctx: WriteContext>(
                     values.push(*value);
                 }
                 let value_sub = unwrap_from_result!(
-                    make::list(arena, typ.node.into(), values, Span::default()),
+                    value::make::list(arena, typ.node.into(), values, Span::default()),
                     span
                 );
                 ctx.add_value_at_slot(var_outer.slot, value_sub);

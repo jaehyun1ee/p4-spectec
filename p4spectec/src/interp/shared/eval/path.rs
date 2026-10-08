@@ -7,7 +7,7 @@
 
 use crate::lang::{
     common::source::Span,
-    data::value::flat::{Value, get, make},
+    data::value::flat::{self as value, Value},
 };
 
 use crate::lang::il::prepared as ast;
@@ -203,8 +203,8 @@ fn eval_update_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
 ) -> Backtrack<Value> {
     let typ = crate::phrase!(node: path.note.clone(), span: path.span.clone());
     let value = unwrap!(eval_access_path(runner_ctx, ctx, value_base, path));
-    let value_fields =
-        get::structure(runner_ctx.arena(), &value).expect("field update base must be a struct");
+    let value_fields = value::get::structure(runner_ctx.arena(), &value)
+        .expect("field update base must be a struct");
     // Replace the named field, keep the others
     let value_fields = value_fields
         .iter()
@@ -214,7 +214,12 @@ fn eval_update_dot_path<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, 
         })
         .collect();
     let value = unwrap_from_result!(
-        make::structure(runner_ctx.arena_mut(), typ.node.clone(), value_fields, Span::default()),
+        value::make::structure(
+            runner_ctx.arena_mut(),
+            typ.node.clone(),
+            value_fields,
+            Span::default()
+        ),
         &Span::default()
     );
     eval_update_path(runner_ctx, ctx, value_base, path, value)

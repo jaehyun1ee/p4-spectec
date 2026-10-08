@@ -7,7 +7,7 @@
 
 use crate::lang::data::{
     arena::Arena,
-    value::flat::{Value, get},
+    value::flat::{self as value, Value},
 };
 
 use super::{context::TypeId, error::ExtractError};
@@ -17,11 +17,11 @@ use super::{context::TypeId, error::ExtractError};
 /// The text of a `name` value, including the keywords usable as names.
 pub(super) fn id_name(arena: &Arena, value: &Value) -> Result<String, ExtractError> {
     let unexpected = || ExtractError::ValueUnexpected("id_name");
-    get::matches! { arena,
+    value::get::matches! { arena,
         value,
         // Identifiers carry their text; keyword names spell themselves
         "_ID text" => |values| {
-            let text = get::text(arena, &values[0]).map_err(|_| unexpected())?;
+            let text = value::get::text(arena, &values[0]).map_err(|_| unexpected())?;
             Ok(text.to_owned())
         },
         "APPLY" => |_values| Ok("apply".to_owned()),
@@ -32,7 +32,7 @@ pub(super) fn id_name(arena: &Arena, value: &Value) -> Result<String, ExtractErr
         "TYPE" => |_values| Ok("type".to_owned()),
         "PRIORITY" => |_values| Ok("priority".to_owned()),
         "_TID text" => |values| {
-            let text = get::text(arena, &values[0]).map_err(|_| unexpected())?;
+            let text = value::get::text(arena, &values[0]).map_err(|_| unexpected())?;
             Ok(text.to_owned())
         },
         "LIST" => |_values| Ok("list".to_owned()),
@@ -42,7 +42,7 @@ pub(super) fn id_name(arena: &Arena, value: &Value) -> Result<String, ExtractErr
 
 /// The function name of a `functionPrototype` value.
 pub(super) fn id_function_prototype(arena: &Arena, value: &Value) -> Result<String, ExtractError> {
-    get::matches! { arena,
+    value::get::matches! { arena,
         value,
         "typeOrVoid name typeParameterListOpt `( parameterList `)" => |values| {
             id_name(arena, &values[1])
@@ -53,7 +53,7 @@ pub(super) fn id_function_prototype(arena: &Arena, value: &Value) -> Result<Stri
 
 /// The declared name of any declaration value.
 pub(super) fn id_declaration(arena: &Arena, value: &Value) -> Result<String, ExtractError> {
-    get::matches! { arena,
+    value::get::matches! { arena,
         value,
         // One arm per declaration production, picking out its `name`
         "annotationList CONST type name initializer ';'" => |values| id_name(arena, &values[2]),
@@ -111,7 +111,7 @@ pub(super) fn id_declaration(arena: &Arena, value: &Value) -> Result<String, Ext
 /// The named type a `typeRef` refers to; built-in types have no members.
 pub(super) fn type_id_type_ref(arena: &Arena, value: &Value) -> Result<TypeId, ExtractError> {
     let unexpected = || ExtractError::ValueUnexpected("type_id_type_ref");
-    get::matches! { arena,
+    value::get::matches! { arena,
         value,
         // Built-in types have no members to resolve
         "BOOL"
@@ -127,7 +127,7 @@ pub(super) fn type_id_type_ref(arena: &Arena, value: &Value) -> Result<TypeId, E
         | "VARBIT `< int `>"
         | "VARBIT `< `( expression `) `>" => |_values| Ok(TypeId::Empty),
         "_TID text" => |values| {
-            let text = get::text(arena, &values[0]).map_err(|_| unexpected())?;
+            let text = value::get::text(arena, &values[0]).map_err(|_| unexpected())?;
             Ok(TypeId::Local(text.to_owned()))
         },
         // `.T` is looked up globally
@@ -150,7 +150,7 @@ pub(super) fn type_id_type_ref(arena: &Arena, value: &Value) -> Result<TypeId, E
 
 /// The declared type of a variable or instance declaration.
 pub(super) fn type_id_declaration(arena: &Arena, value: &Value) -> Result<TypeId, ExtractError> {
-    get::matches! { arena,
+    value::get::matches! { arena,
         value,
         "annotationList CONST type name initializer ';'"
         | "annotationList type `( argumentList `) name ';'"
@@ -165,7 +165,7 @@ pub(super) fn type_id_declaration(arena: &Arena, value: &Value) -> Result<TypeId
 
 /// Whether a `typeParameterListOpt` is non-empty.
 fn has_type_params(arena: &Arena, value: &Value) -> Result<bool, ExtractError> {
-    get::matches! { arena,
+    value::get::matches! { arena,
         value,
         "_EMPTY" => |_values| Ok(false),
         "`< typeParameterList `>" => |_values| Ok(true),
@@ -178,7 +178,7 @@ pub(super) fn has_type_params_function_prototype(
     arena: &Arena,
     value: &Value,
 ) -> Result<bool, ExtractError> {
-    get::matches! { arena,
+    value::get::matches! { arena,
         value,
         "typeOrVoid name typeParameterListOpt `( parameterList `)" => |values| {
             has_type_params(arena, &values[2])
@@ -194,7 +194,7 @@ pub(super) fn has_type_params_declaration(
     arena: &Arena,
     value: &Value,
 ) -> Result<bool, ExtractError> {
-    get::matches! { arena,
+    value::get::matches! { arena,
         value,
         // One arm per declaration production; only some take type parameters
         "annotationList CONST type name initializer ';'"

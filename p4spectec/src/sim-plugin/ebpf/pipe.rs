@@ -21,9 +21,8 @@ use crate::lang::{
         encoding::Encoding,
         typ,
         value::flat::{
-            Value,
+            self as value, Value,
             external::{DecodeContext, EncodeContext, decode_with, encode_with},
-            get, make,
         },
     },
 };
@@ -82,7 +81,7 @@ impl ExternObject {
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
             Vec::new(),
         );
-        Ok(make::external(arena, typ.node.into(), payload.into(), Span::default())?)
+        Ok(value::make::external(arena, typ.node.into(), payload.into(), Span::default())?)
     }
 
     // - Decoding
@@ -93,7 +92,7 @@ impl ExternObject {
         encoding: Encoding,
         value: &Value,
     ) -> Result<Self, ExternError> {
-        let json = get::external(arena, value)?.clone();
+        let json = value::get::external(arena, value)?.clone();
         decode_with(arena, encoding, json.as_ref()).map_err(ExternError::from)
     }
 }
@@ -141,7 +140,7 @@ where
         crate::phrase!(node: "archState".to_owned(), span: Span::default()),
         Vec::new(),
     );
-    Ok(make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())?)
+    Ok(value::make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())?)
 }
 
 // == Extern calls
@@ -158,8 +157,8 @@ where
     Interp: Interpreter<Iface, Ebpf>,
 {
     let encoding = ctx.external().encoding;
-    let (value_name, _value_targs, value_ids, value_args) = get::four(values)?;
-    let name = get::text(ctx.arena(), value_name)?;
+    let (value_name, _value_targs, value_ids, value_args) = value::get::four(values)?;
+    let name = value::get::text(ctx.arena(), value_name)?;
     // Only `CounterArray` carries state
     Ok(if name == "CounterArray" {
         let counter = CounterArray::init(ctx.arena(), *value_ids, *value_args)?;
@@ -170,7 +169,7 @@ where
             crate::phrase!(node: "objectState".to_owned(), span: Span::default()),
             Vec::new(),
         );
-        make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())?
+        value::make::external(ctx.arena_mut(), typ.node.into(), payload.into(), Span::default())?
     })
 }
 
@@ -185,11 +184,11 @@ where
     Iface: Interface,
     Interp: Interpreter<Iface, Ebpf>,
 {
-    let (value_ctx, value_arch, value_name, value_names) = get::four(values)?;
-    let name = get::text(ctx.arena(), value_name)?.to_owned();
-    let names = get::list(ctx.arena(), value_names)?
+    let (value_ctx, value_arch, value_name, value_names) = value::get::four(values)?;
+    let name = value::get::text(ctx.arena(), value_name)?.to_owned();
+    let names = value::get::list(ctx.arena(), value_names)?
         .iter()
-        .map(|value| get::text(ctx.arena(), value).map(str::to_owned))
+        .map(|value| value::get::text(ctx.arena(), value).map(str::to_owned))
         .collect::<Result<Vec<_>, _>>()?;
     let (value_ctx, value_arch, value_call_result) =
         // Only `verify` is supported
@@ -213,9 +212,9 @@ fn unsupported_method(
     name: &str,
     names: &[String],
 ) -> Result<ExternError, ExternError> {
-    let ids = get::list(arena, &value_id)?
+    let ids = value::get::list(arena, &value_id)?
         .iter()
-        .map(|value| get::text(arena, value).map(str::to_owned))
+        .map(|value| value::get::text(arena, value).map(str::to_owned))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(error::extern_method_unsupported(format!(
         "unsupported extern method call: {}.{name}({})",
@@ -246,10 +245,10 @@ where
     };
     let value_state = func::find_object_state_e(ctx, *value_arch, *value_id)?;
     let object = ExternObject::from_value(ctx.arena_mut(), encoding, &value_state)?;
-    let name = get::text(ctx.arena(), value_name)?.to_owned();
-    let names = get::list(ctx.arena(), value_names)?
+    let name = value::get::text(ctx.arena(), value_name)?.to_owned();
+    let names = value::get::list(ctx.arena(), value_names)?
         .iter()
-        .map(|value| get::text(ctx.arena(), value).map(str::to_owned))
+        .map(|value| value::get::text(ctx.arena(), value).map(str::to_owned))
         .collect::<Result<Vec<_>, _>>()?;
     let (object, value_ctx, value_arch, value_call_result) = match object {
         ExternObject::PacketIn(pkt) => {
@@ -342,7 +341,7 @@ where
     let (value_ctx, value_arch, value_call_result) =
         rel::ebpf_parse(ctx, state.value_ctx, state.value_arch)?;
     (state.value_ctx, state.value_arch) = (value_ctx, value_arch);
-    let rejected = get::matches! { ctx.arena(), &value_call_result,
+    let rejected = value::get::matches! { ctx.arena(), &value_call_result,
         "REJECT errorValue" => |_values| true,
         _ => false,
     };

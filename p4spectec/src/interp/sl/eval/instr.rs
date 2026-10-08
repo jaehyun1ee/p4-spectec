@@ -13,8 +13,8 @@ use std::borrow::Cow;
 use crate::lang::{
     common::source::Span,
     data::{
-        notation::flat::get as get_notation,
-        value::flat::{Value, ValueKind, get},
+        notation::flat as notation,
+        value::flat::{self as value, Value, ValueKind},
     },
     hints::input,
     traits::print::Print,
@@ -185,7 +185,7 @@ fn eval_if_instr<Iface: Interface, Ext: Extern>(
         &instr.iter_exps,
         &mut |runner_ctx, ctx| {
             let value = unwrap!(eval_exp(runner_ctx, ctx, &instr.exp));
-            ok!(get::bool(runner_ctx.arena(), &value).expect("condition must be a boolean"))
+            ok!(value::get::bool(runner_ctx.arena(), &value).expect("condition must be a boolean"))
         }
     ));
     // Run the block, or fall through recording the failed condition
@@ -218,7 +218,7 @@ fn eval_hold_instr<Iface: Interface, Ext: Extern>(
         ctx.as_ref(),
         &instr.iter_exps,
         &mut |runner_ctx, ctx| {
-            let values = unwrap!(eval_exps(runner_ctx, ctx, get_notation::args(&instr.not_exp)));
+            let values = unwrap!(eval_exps(runner_ctx, ctx, notation::get::args(&instr.not_exp)));
             match SlInterp::invoke_rel(runner_ctx, ctx, &instr.id, &values) {
                 // A match means it holds
                 ok!(_) => ok!(true),
@@ -294,14 +294,13 @@ fn eval_guard<Iface: Interface, Ext: Extern>(
 ) -> Backtrack<bool> {
     // The trivial guard reads the boolean itself
     if matches!(guard, ast::Guard::Bool(true)) {
-        return ok!(
-            get::bool(runner_ctx.arena(), &value).expect("boolean guard value must be a boolean")
-        );
+        return ok!(value::get::bool(runner_ctx.arena(), &value)
+            .expect("boolean guard value must be a boolean"));
     }
     (|| match guard {
         // Negation
         ast::Guard::Bool(_) => {
-            ok!(!get::bool(runner_ctx.arena(), &value)
+            ok!(!value::get::bool(runner_ctx.arena(), &value)
                 .expect("boolean guard value must be a boolean"))
         }
         // Comparison against the evaluated right side
@@ -369,7 +368,7 @@ fn eval_rule_instr<Iface: Interface, Ext: Extern>(
 ) -> Backtrack<Flow> {
     // Split the notation arguments by the input hint
     let (exps_input, exps_output) =
-        input::split(&instr.input_hint, get_notation::args(&instr.not_exp).iter().collect())
+        input::split(&instr.input_hint, notation::get::args(&instr.not_exp).iter().collect())
             .expect("input hint must fit relation");
     // Call and bind the outputs under the iterators
     let ctx = unwrap!(eval_instr_iter(

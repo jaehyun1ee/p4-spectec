@@ -11,11 +11,11 @@ use crate::lang::{
     data::{
         arena::Arena,
         notation::{
-            flat::get as get_notation,
-            tree::{Mixop, make as make_notation, parse},
+            self,
+            tree::{Mixop, parse},
         },
         typ,
-        value::flat::{Value, get, make},
+        value::flat::{self as value, Value},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
@@ -50,15 +50,15 @@ fn set_mixop() -> Rc<Mixop> {
 
 /// Decodes a `set<K>` value into a sorted set.
 fn set_of_value(arena: &Arena, value: &Value) -> Result<ValueSet, BuiltinError> {
-    let value_case =
-        get::case(arena, value).map_err(|_| BuiltinError::argument_invalid("expected a set"))?;
+    let value_case = value::get::case(arena, value)
+        .map_err(|_| BuiltinError::argument_invalid("expected a set"))?;
     let set_mixop = set_mixop();
     // The value must be a set case wrapping one list
-    if !get_notation::mixop(value_case).matches_tree(arena.arena_mixop(), &set_mixop) {
+    if !notation::flat::get::mixop(value_case).matches_tree(arena.arena_mixop(), &set_mixop) {
         return Err(BuiltinError::argument_invalid("expected a set"));
     }
-    let value_set = extract::one(get_notation::args(value_case))?;
-    let values = get::list(arena, value_set)
+    let value_set = extract::one(notation::flat::get::args(value_case))?;
+    let values = value::get::list(arena, value_set)
         .map_err(|_| BuiltinError::argument_invalid("expected a set"))?;
     let mut set = values.to_vec();
     sort_set(arena, &mut set);
@@ -70,12 +70,12 @@ fn value_of_set(arena: &mut Arena, typ_key: &Typ, set: ValueSet) -> Result<Value
     // The element list is typed `K*`, the case `set<K>`
     let values_elem = set.into_iter().collect();
     let typ_list = typ::make::list(typ_key.clone());
-    let value_set = make::list(arena, typ_list.node.into(), values_elem, Span::default())?;
+    let value_set = value::make::list(arena, typ_list.node.into(), values_elem, Span::default())?;
     let set_id = crate::phrase!(node: "set".to_owned(), span: Span::default());
     let typ = typ::make::var(set_id, vec![typ_key.clone()]);
-    let value_case = make_notation::new(set_mixop(), vec![value_set])
+    let value_case = notation::tree::make::new(set_mixop(), vec![value_set])
         .expect("the set mixop has exactly one argument");
-    let value = make::case(arena, typ.node.into(), value_case, Span::default())?;
+    let value = value::make::case(arena, typ.node.into(), value_case, Span::default())?;
     Ok(value)
 }
 
@@ -122,7 +122,7 @@ pub fn unions_set(
 ) -> Result<Value, BuiltinError> {
     let typ_key = extract::one(targs)?;
     let value_sets = extract::one(values)?;
-    let values = get::list(arena, value_sets).map_err(BuiltinError::from)?;
+    let values = value::get::list(arena, value_sets).map_err(BuiltinError::from)?;
     let mut union = ValueSet::new();
     // Gather every element, then sort and deduplicate once
     for value in values {
@@ -155,7 +155,7 @@ pub fn sub_set(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Val
     let set_l = set_of_value(arena, value_set_l)?;
     let set_r = set_of_value(arena, value_set_r)?;
     let is_subset = set_l.iter().all(|value| contains(arena, &set_r, value));
-    let value = make::bool(arena, is_subset, Span::default())?;
+    let value = value::make::bool(arena, is_subset, Span::default())?;
     Ok(value)
 }
 
@@ -172,6 +172,6 @@ pub fn eq_set(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Valu
             .iter()
             .zip(&set_r)
             .all(|(value_a, value_b)| arena.view(*value_a).syntax_eq(&arena.view(*value_b)));
-    let value = make::bool(arena, equal, Span::default())?;
+    let value = value::make::bool(arena, equal, Span::default())?;
     Ok(value)
 }

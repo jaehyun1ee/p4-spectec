@@ -11,10 +11,7 @@ use serde::{Deserializer, Serializer};
 use serde_derive_state::{DeserializeState, SerializeState};
 use serde_state::{DeserializeState, SerializeState};
 
-use crate::lang::data::notation::{
-    self, AtomPhrase, MixopArena,
-    flat::{get as get_notation, make as make_notation},
-};
+use crate::lang::data::notation::{self, AtomPhrase, MixopArena};
 
 use super::{
     super::{Value, ValueCase},
@@ -48,8 +45,8 @@ impl<'a> CaseRef<'a> {
     fn from_flat(arena_mixop: &'a MixopArena, value_case: &'a ValueCase) -> Self {
         Self::from_flat_inner(
             arena_mixop,
-            *get_notation::mixop(value_case),
-            &mut get_notation::args(value_case).iter(),
+            *notation::flat::get::mixop(value_case),
+            &mut notation::flat::get::args(value_case).iter(),
         )
     }
 
@@ -157,6 +154,6 @@ impl<'de> DeserializeState<'de, DecodeContext<'_>> for ValueCase {
         let mixop = mixop
             .into_flat(arena_mixop)
             .map_err(::serde::de::Error::custom)?;
-        make_notation::new(arena_mixop, mixop, values).map_err(::serde::de::Error::custom)
+        notation::flat::make::new(arena_mixop, mixop, values).map_err(::serde::de::Error::custom)
     }
 }

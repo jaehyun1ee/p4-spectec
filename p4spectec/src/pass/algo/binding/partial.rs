@@ -28,7 +28,7 @@ use std::rc::Rc;
 
 use crate::lang::{
     common::{ds::set::IdSet, prim, source::Span},
-    data::notation::tree::{get as get_notation, make as make_notation},
+    data::notation::tree as notation,
     traits::free::FreeIds,
 };
 
@@ -86,7 +86,7 @@ fn is_upcast_terminal(exp: &ast::Exp) -> bool {
     matches!(
         &exp.node,
         ast::ExpKind::UpCast(_, exp_inner)
-            if matches!(&exp_inner.node, ast::ExpKind::Case(not_exp) if get_notation::arity(not_exp) == 0)
+            if matches!(&exp_inner.node, ast::ExpKind::Case(not_exp) if notation::get::arity(not_exp) == 0)
     )
 }
 
@@ -171,12 +171,12 @@ fn gen_prem_bound(
     let typ_from = phrase!(node: exp_from.note.as_ref().clone(), span: exp_from.span.clone());
     let (exp_kind, origin) = match &exp_from.node {
         ast::ExpKind::Case(not_exp)
-            if get_notation::arity(not_exp) == 0 && !is_singleton_case(ctx, &typ_from)? =>
+            if notation::get::arity(not_exp) == 0 && !is_singleton_case(ctx, &typ_from)? =>
         {
             (
                 ast::ExpKind::Match(
                     Box::new(exp_l),
-                    ast::Pattern::Case(Rc::clone(get_notation::mixop(not_exp))),
+                    ast::Pattern::Case(Rc::clone(notation::get::mixop(not_exp))),
                 ),
                 Origin::Match(exp_from.span.clone(), "variant case"),
             )
@@ -544,9 +544,9 @@ fn rename_exp_bind(
             Ok(exp)
         }
         ast::ExpKind::Case(not_exp) => {
-            let (mixop, args) = get_notation::into_parts(*not_exp);
+            let (mixop, args) = notation::get::into_parts(*not_exp);
             let args = rename_exps(ctx, binds, renv, iter_ctx, args)?;
-            let not_exp = make_notation::new(Rc::clone(&mixop), args)
+            let not_exp = notation::make::new(Rc::clone(&mixop), args)
                 .expect("arguments obtained from the same mixfix must match its arity");
             let exp_from = note_phrase! {
                 node: ast::ExpKind::Case(Box::new(not_exp)),

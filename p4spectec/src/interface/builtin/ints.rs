@@ -9,7 +9,7 @@ use crate::lang::{
     common::{prim::num, source::Span},
     data::{
         arena::Arena,
-        value::flat::{Value, get, make},
+        value::flat::{self as value, Value},
     },
 };
 
@@ -21,20 +21,20 @@ use super::{BuiltinError, extract};
 
 /// The integer in a number value.
 fn bigint_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
-    let num = get::num(arena, value).map_err(BuiltinError::from)?;
+    let num = value::get::num(arena, value).map_err(BuiltinError::from)?;
     Ok(num::to_int(num))
 }
 
 /// An integer value.
 fn value_of_bigint(arena: &mut Arena, value: BigInt) -> Result<Value, BuiltinError> {
-    let value = make::int(arena, value, Span::default())?;
+    let value = value::make::int(arena, value, Span::default())?;
     Ok(value)
 }
 
 /// The elements of the single list argument.
 fn input_values<'a>(arena: &'a Arena, values: &[Value]) -> Result<&'a [Value], BuiltinError> {
     let value = extract::one(values)?;
-    get::list(arena, value).map_err(BuiltinError::from)
+    value::get::list(arena, value).map_err(BuiltinError::from)
 }
 
 // == Built-in implementations

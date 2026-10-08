@@ -11,7 +11,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::flat::{Value, get, make},
+        value::flat::{self as value, Value},
     },
     traits::print::Print,
 };
@@ -24,12 +24,12 @@ use super::{BuiltinError, extract};
 
 /// The text in a text value.
 fn text_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a str, BuiltinError> {
-    get::text(arena, value).map_err(BuiltinError::from)
+    value::get::text(arena, value).map_err(BuiltinError::from)
 }
 
 /// A number value printed as text.
 fn numeric_text(arena: &Arena, value: &Value) -> Result<String, BuiltinError> {
-    let num = get::num(arena, value).map_err(BuiltinError::from)?;
+    let num = value::get::num(arena, value).map_err(BuiltinError::from)?;
     Ok(Print::to_string(num))
 }
 
@@ -72,7 +72,7 @@ pub fn text_to_int(
     if negative {
         int = -int;
     }
-    let value = make::int(arena, int, Span::default())?;
+    let value = value::make::int(arena, int, Span::default())?;
     Ok(value)
 }
 
@@ -85,7 +85,7 @@ pub fn int_to_text(
     extract::zero(targs)?;
     let value_int = extract::one(values)?;
     let text = numeric_text(arena, value_int)?;
-    let value = make::text(arena, text, Span::default())?;
+    let value = value::make::text(arena, text, Span::default())?;
     Ok(value)
 }
 
@@ -108,10 +108,10 @@ pub fn split_text(
     let parts = text.split(separator).map(str::to_owned).collect::<Vec<_>>();
     let parts = parts
         .into_iter()
-        .map(|part| make::text(arena, part, Span::default()))
+        .map(|part| value::make::text(arena, part, Span::default()))
         .collect::<Result<Vec<_>, _>>()?;
     let typ_list = typ::make::list(typ::make::bool());
-    let value = make::list(arena, typ_list.node.into(), parts, Span::default())?;
+    let value = value::make::list(arena, typ_list.node.into(), parts, Span::default())?;
     Ok(value)
 }
 
@@ -131,7 +131,7 @@ pub fn strip_prefix(
         .strip_prefix(prefix)
         .ok_or_else(|| BuiltinError::argument_invalid("text does not start with prefix"))?;
     let text = text.to_owned();
-    let value = make::text(arena, text, Span::default())?;
+    let value = value::make::text(arena, text, Span::default())?;
     Ok(value)
 }
 
@@ -151,7 +151,7 @@ pub fn strip_suffix(
         .strip_suffix(suffix)
         .ok_or_else(|| BuiltinError::argument_invalid("text does not end with suffix"))?;
     let text = text.to_owned();
-    let value = make::text(arena, text, Span::default())?;
+    let value = value::make::text(arena, text, Span::default())?;
     Ok(value)
 }
 
@@ -164,6 +164,6 @@ pub fn strip_all_whitespace(
     extract::zero(targs)?;
     let value_text = extract::one(values)?;
     let text = text_of_value(arena, value_text)?.replace(' ', "");
-    let value = make::text(arena, text, Span::default())?;
+    let value = value::make::text(arena, text, Span::default())?;
     Ok(value)
 }

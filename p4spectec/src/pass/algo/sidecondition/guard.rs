@@ -11,7 +11,7 @@
 
 use crate::lang::{
     common::prim,
-    data::notation::tree::get as get_notation,
+    data::notation::tree as notation,
     traits::{at::At, eq::SyntaxEq, free::FreeIds},
 };
 
@@ -453,7 +453,7 @@ fn collect_exp(exp_al: &ast::Exp) -> Vec<ast::Prem> {
         // Tuple or list: guards of every element
         ast::ExpKind::Tuple(exps_al) | ast::ExpKind::List(exps_al) => collect_exps(exps_al.iter()),
         // Case: guards of the arguments
-        ast::ExpKind::Case(not_exp) => collect_exps(get_notation::args(not_exp)),
+        ast::ExpKind::Case(not_exp) => collect_exps(notation::get::args(not_exp)),
         // Struct: guards of the fields
         ast::ExpKind::Str(fields) => {
             collect_exps(fields.iter().map(|ast::ExpField { exp, .. }| exp))
@@ -567,7 +567,7 @@ fn collect_prem(prem_al: &ast::Prem) -> Collected {
 }
 
 fn collect_rule_prem(rule_prem: &ast::RulePrem) -> Collected {
-    let prems_insert = collect_exps(get_notation::args(&rule_prem.not_exp));
+    let prems_insert = collect_exps(notation::get::args(&rule_prem.not_exp));
     Collected { prems_must: vec![], prems_insert }
 }
 
@@ -577,12 +577,12 @@ fn collect_if_prem(if_prem: &ast::IfPrem) -> Collected {
 }
 
 fn collect_if_hold_prem(if_prem: &ast::IfHoldPrem) -> Collected {
-    let prems_insert = collect_exps(get_notation::args(&if_prem.not_exp));
+    let prems_insert = collect_exps(notation::get::args(&if_prem.not_exp));
     Collected { prems_must: vec![], prems_insert }
 }
 
 fn collect_if_not_hold_prem(if_prem: &ast::IfNotHoldPrem) -> Collected {
-    let prems_insert = collect_exps(get_notation::args(&if_prem.not_exp));
+    let prems_insert = collect_exps(notation::get::args(&if_prem.not_exp));
     Collected { prems_must: vec![], prems_insert }
 }
 

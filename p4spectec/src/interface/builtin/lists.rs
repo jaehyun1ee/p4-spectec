@@ -15,7 +15,7 @@ use crate::lang::{
     data::{
         arena::Arena,
         typ,
-        value::flat::{Value, ValueKind, get, make},
+        value::flat::{self as value, Value, ValueKind},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
 };
@@ -28,12 +28,12 @@ use super::{BuiltinError, extract};
 
 /// The elements of a list value.
 fn list_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], BuiltinError> {
-    get::list(arena, value).map_err(BuiltinError::from)
+    value::get::list(arena, value).map_err(BuiltinError::from)
 }
 
 /// The integer in a number value.
 fn bigint_of_value<'a>(arena: &'a Arena, value: &Value) -> Result<&'a BigInt, BuiltinError> {
-    let num = get::num(arena, value).map_err(BuiltinError::from)?;
+    let num = value::get::num(arena, value).map_err(BuiltinError::from)?;
     Ok(num::to_int(num))
 }
 
@@ -44,7 +44,7 @@ pub fn rev_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value,
     let value_list = extract::one(values)?;
     let mut values = list_of_value(arena, value_list)?.to_vec();
     values.reverse();
-    let value = make::list(arena, typ_list.node.into(), values, Span::default())?;
+    let value = value::make::list(arena, typ_list.node.into(), values, Span::default())?;
     Ok(value)
 }
 
@@ -60,7 +60,7 @@ pub fn concat_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Val
         let values = list_of_value(arena, value_list)?;
         concatenated.extend(values.iter().cloned());
     }
-    let value = make::list(arena, typ_list.node.into(), concatenated, Span::default())?;
+    let value = value::make::list(arena, typ_list.node.into(), concatenated, Span::default())?;
     Ok(value)
 }
 
@@ -80,7 +80,7 @@ pub fn distinct_(
     let all_distinct = values
         .windows(2)
         .all(|values| !arena.view(values[0]).syntax_eq(&arena.view(values[1])));
-    let value = make::bool(arena, all_distinct, Span::default())?;
+    let value = value::make::bool(arena, all_distinct, Span::default())?;
     Ok(value)
 }
 
@@ -103,21 +103,25 @@ pub fn partition_(
         .enumerate()
         .partition(|(index, _)| BigInt::from(*index) < *len);
     // Each half keeps the element type
-    let value_left = make::list(
+    let value_left = value::make::list(
         arena,
         typ_list.clone(),
         values_left.into_iter().map(|(_, value)| value).collect(),
         Span::default(),
     )?;
-    let value_right = make::list(
+    let value_right = value::make::list(
         arena,
         typ_list.clone(),
         values_right.into_iter().map(|(_, value)| value).collect(),
         Span::default(),
     )?;
     let typ_tuple = typ::make::tuple(vec![typ.clone(), typ.clone()]);
-    let value =
-        make::tuple(arena, typ_tuple.node.into(), vec![value_left, value_right], Span::default())?;
+    let value = value::make::tuple(
+        arena,
+        typ_tuple.node.into(),
+        vec![value_left, value_right],
+        Span::default(),
+    )?;
     Ok(value)
 }
 
@@ -141,7 +145,7 @@ pub fn assoc_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Valu
         }
     }
     let typ_opt = typ::make::opt(typ_value.clone());
-    let value = make::opt(arena, typ_opt.node.into(), found, Span::default())?;
+    let value = value::make::opt(arena, typ_opt.node.into(), found, Span::default())?;
     Ok(value)
 }
 
@@ -168,7 +172,7 @@ pub fn sort_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value
     // A stable sort keeps equal keys in input order
     keyed.sort_by(|(key_l, _), (key_r, _)| key_l.cmp(key_r));
     let values = keyed.into_iter().map(|(_, value)| value).collect();
-    let value = make::list(arena, typ_list.node.into(), values, Span::default())?;
+    let value = value::make::list(arena, typ_list.node.into(), values, Span::default())?;
     Ok(value)
 }
 
@@ -205,9 +209,9 @@ pub fn transpose_(
     }
     let mut value_rows = Vec::with_capacity(columns.len());
     for column in columns {
-        let value_row = make::list(arena, typ_list.clone(), column, Span::default())?;
+        let value_row = value::make::list(arena, typ_list.clone(), column, Span::default())?;
         value_rows.push(value_row);
     }
-    let value = make::list(arena, typ_matrix.node.into(), value_rows, Span::default())?;
+    let value = value::make::list(arena, typ_matrix.node.into(), value_rows, Span::default())?;
     Ok(value)
 }
