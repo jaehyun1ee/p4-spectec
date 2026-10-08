@@ -17,6 +17,7 @@ mod cmp;
 mod convert;
 pub mod external;
 pub mod get;
+mod hash;
 pub mod make;
 mod print;
 mod visit;

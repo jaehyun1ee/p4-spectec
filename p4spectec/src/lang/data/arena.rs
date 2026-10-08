@@ -98,19 +98,8 @@ impl Arena {
         self.value.span(value.span)
     }
 
-    /// Borrows a value issued by this arena for syntax comparisons.
+    /// Borrows a value issued by this arena for comparison and printing.
     pub fn view(&self, value: Value) -> ValueRef<'_> {
         ValueRef { arena: self, value }
-    }
-
-    // - Printing
-
-    /// Prints a value in full, resolving its stored contents.
-    pub fn to_string(&self, value: &Value) -> String {
-        let mut output = String::new();
-        let mut printer = crate::lang::traits::print::Printer::new(&mut output);
-        super::value::flat::print::print_value(self, value, &mut printer)
-            .expect("writing to a String cannot fail");
-        output
     }
 }

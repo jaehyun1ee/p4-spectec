@@ -29,8 +29,9 @@ mod cmp;
 mod convert;
 pub mod external;
 pub mod get;
+mod hash;
 pub mod make;
-pub mod print;
+mod print;
 mod view;
 
 pub(in crate::lang::data) use arena::ValueArena;

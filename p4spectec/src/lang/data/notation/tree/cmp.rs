@@ -3,16 +3,13 @@
 //! Mixops compare and hash atom names, ignoring source spans.
 //! Mixfix comparison visits the arguments in notation order.
 
-use std::{
-    cmp::Ordering,
-    hash::{Hash, Hasher},
-};
+use std::cmp::Ordering;
 
 use crate::lang::traits::{cmp::SyntaxCmp, eq::SyntaxEq};
 
 use super::{Mixfix, Mixop};
 
-// = Equality, ordering, and hashing
+// = Equality and ordering
 
 impl Mixop {
     /// Orders two mixops by structure and atom names, lexicographically.
@@ -98,28 +95,6 @@ impl Ord for Mixop {
 impl PartialOrd for Mixop {
     fn partial_cmp(&self, mixop_other: &Self) -> Option<Ordering> {
         Some(self.cmp(mixop_other))
-    }
-}
-
-impl Hash for Mixop {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        // Hash the form first so different variants rarely collide
-        self.tag().hash(hasher);
-        match self {
-            Self::Arg => {}
-            Self::Atom(atom) => atom.node.hash(hasher),
-            Self::Brack(atom_l, mixop, atom_r) => {
-                atom_l.node.hash(hasher);
-                mixop.hash(hasher);
-                atom_r.node.hash(hasher);
-            }
-            Self::Infix(mixop_l, atom, mixop_r) => {
-                mixop_l.hash(hasher);
-                atom.node.hash(hasher);
-                mixop_r.hash(hasher);
-            }
-            Self::Seq(mixops) => mixops.hash(hasher),
-        }
     }
 }
 

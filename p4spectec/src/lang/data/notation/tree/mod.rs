@@ -10,9 +10,11 @@ use serde::{Deserialize, Serialize};
 
 use super::{AtomPhrase, MixopTag};
 
+mod at;
 mod cmp;
 mod convert;
 pub mod get;
+mod hash;
 pub mod make;
 pub mod parse;
 mod print;

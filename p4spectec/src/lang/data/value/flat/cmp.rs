@@ -1,16 +1,15 @@
 //! Comparison of flat values
 //!
-//! Canonical equality and hashing combine body contents and child identities.
-//! `ValueRef` compares values from one arena by canonical id,
-//! and resolves bodies for structural comparison across arenas.
+//! Canonical equality combines body contents and child identities.
+//! `ValueRef` requires both values to belong to the same arena.
+//! Equality uses canonical ids; ordering compares contents structurally.
 
 use std::cmp::Ordering;
-use std::hash::{Hash, Hasher};
 
 use crate::lang::{
     common::prim::num,
     data::{
-        intern::{CanonEq, CanonHash, CanonInterner},
+        intern::{CanonEq, CanonInterner},
         notation::{MixopArena, flat::get as get_notation},
     },
     traits::{cmp::SyntaxCmp, eq::SyntaxEq},
@@ -18,7 +17,7 @@ use crate::lang::{
 
 use super::{Value, ValueKind, ValueRef};
 
-// = Canonical equality and hashing
+// = Canonical equality
 
 impl CanonEq<MixopArena> for ValueKind {
     fn canon_eq(
@@ -74,69 +73,29 @@ impl CanonEq<MixopArena> for ValueKind {
     }
 }
 
-impl CanonHash<MixopArena> for ValueKind {
-    fn canon_hash<H: Hasher>(
-        &self,
-        interner: &CanonInterner<Self>,
-        arena_mixop: &MixopArena,
-        hasher: &mut H,
-    ) {
-        std::mem::discriminant(self).hash(hasher);
-        match self {
-            ValueKind::Bool(value) => value.hash(hasher),
-            ValueKind::Num(value) => value.hash(hasher),
-            ValueKind::Text(value) => value.hash(hasher),
-            ValueKind::Struct(value_fields) => {
-                value_fields.len().hash(hasher);
-                for (atom, value) in value_fields {
-                    atom.node.hash(hasher);
-                    interner.canon_id(value.node).hash(hasher);
-                }
-            }
-            ValueKind::Case(value_case) => {
-                arena_mixop
-                    .canon_id(*get_notation::mixop(value_case))
-                    .hash(hasher);
-                get_notation::args(value_case).len().hash(hasher);
-                for value in get_notation::args(value_case) {
-                    interner.canon_id(value.node).hash(hasher);
-                }
-            }
-            ValueKind::Tuple(values) | ValueKind::List(values) => {
-                values.len().hash(hasher);
-                for value in values {
-                    interner.canon_id(value.node).hash(hasher);
-                }
-            }
-            ValueKind::Opt(value) => value
-                .map(|value| interner.canon_id(value.node))
-                .hash(hasher),
-            ValueKind::Func(id) => id.node.hash(hasher),
-            ValueKind::Extern(json) => json.hash(hasher),
-        }
-    }
-}
-
 // = Syntax comparison
 
 impl SyntaxEq for ValueRef<'_> {
     fn syntax_eq(&self, value_other: &Self) -> bool {
-        // Same arena: canonical ids decide; otherwise compare structurally
-        if std::ptr::eq(self.arena, value_other.arena) {
-            self.arena.canon_id(&self.value) == value_other.arena.canon_id(&value_other.value)
-        } else {
-            self.syntax_cmp(value_other).is_eq()
-        }
+        assert!(
+            std::ptr::eq(self.arena, value_other.arena),
+            "values must belong to the same arena"
+        );
+        self.arena.canon_id(&self.value) == self.arena.canon_id(&value_other.value)
     }
 }
 
 impl SyntaxCmp for ValueRef<'_> {
     fn syntax_cmp(&self, value_other: &Self) -> Ordering {
-        // Children are compared through their own arenas
+        assert!(
+            std::ptr::eq(self.arena, value_other.arena),
+            "values must belong to the same arena"
+        );
+        // Compare child contents in the same arena
         let compare_value = |value_l: &Value, value_r: &Value| {
             self.arena
                 .view(*value_l)
-                .syntax_cmp(&value_other.arena.view(*value_r))
+                .syntax_cmp(&self.arena.view(*value_r))
         };
         let compare_values = |values_l: &[Value], values_r: &[Value]| {
             values_l
@@ -147,7 +106,7 @@ impl SyntaxCmp for ValueRef<'_> {
                 .unwrap_or_else(|| values_l.len().cmp(&values_r.len()))
         };
         let kind_l = self.arena.kind(&self.value);
-        let kind_r = value_other.arena.kind(&value_other.value);
+        let kind_r = self.arena.kind(&value_other.value);
         match (kind_l, kind_r) {
             (ValueKind::Bool(value_l), ValueKind::Bool(value_r)) => value_l.cmp(value_r),
             (ValueKind::Num(value_l), ValueKind::Num(value_r)) => num::compare(value_l, value_r),
@@ -165,12 +124,9 @@ impl SyntaxCmp for ValueRef<'_> {
                     .find(|order| !order.is_eq())
                     .unwrap_or_else(|| value_fields_l.len().cmp(&value_fields_r.len()))
             }
-            (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => value_case_l.cmp_by(
-                self.arena.arena_mixop(),
-                value_case_r,
-                value_other.arena.arena_mixop(),
-                compare_value,
-            ),
+            (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => {
+                value_case_l.cmp_by(self.arena.arena_mixop(), value_case_r, compare_value)
+            }
             (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
             | (ValueKind::List(values_l), ValueKind::List(values_r)) => {
                 compare_values(values_l, values_r)

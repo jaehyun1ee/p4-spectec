@@ -473,7 +473,7 @@ fn eval_debug_instr<'global, Iface: Interface, Ext: Extern>(
 ) -> Backtrack<(Context<'global>, Flow)> {
     // Evaluate before printing so expression failures keep their trace
     let value = unwrap!(eval_exp(runner_ctx, &ctx, &instr.exp));
-    println!("{}", runner_ctx.arena().to_string(&value));
+    println!("{}", runner_ctx.arena().view(value).to_string());
     ok!((ctx, Flow::Cont(vec![])))
 }
 
