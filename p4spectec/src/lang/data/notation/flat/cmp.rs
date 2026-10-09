@@ -132,7 +132,7 @@ impl SyntaxEq for MixopRef<'_> {
             std::ptr::eq(self.arena_mixop, mixop_other.arena_mixop),
             "mixops must belong to the same arena"
         );
-        self.arena_mixop.canon_eq(self.mixop, mixop_other.mixop)
+        self.arena_mixop.canon_id(self.mixop) == self.arena_mixop.canon_id(mixop_other.mixop)
     }
 }
 

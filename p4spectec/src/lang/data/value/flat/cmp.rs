@@ -46,7 +46,8 @@ impl CanonEq<MixopArena> for ValueKind {
                     )
             }
             (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => {
-                arena_mixop.canon_eq(*value_case_l.mixop(), *value_case_r.mixop())
+                arena_mixop.canon_id(*value_case_l.mixop())
+                    == arena_mixop.canon_id(*value_case_r.mixop())
                     && value_case_l.args().len() == value_case_r.args().len()
                     && value_case_l
                         .args()

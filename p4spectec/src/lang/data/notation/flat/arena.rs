@@ -90,9 +90,4 @@ impl MixopArena {
     pub fn canon_id(&self, mixop: Mixop) -> CanonId<MixopKind> {
         self.mixops.canon_id(mixop)
     }
-
-    /// Whether two mixops have the same structure and atom names.
-    pub fn canon_eq(&self, mixop_l: Mixop, mixop_r: Mixop) -> bool {
-        self.canon_id(mixop_l) == self.canon_id(mixop_r)
-    }
 }
