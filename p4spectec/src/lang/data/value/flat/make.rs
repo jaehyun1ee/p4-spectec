@@ -33,7 +33,7 @@ impl Value {
         typ: Rc<TypKind>,
         span: Span,
     ) -> Result<Self, ValueError> {
-        arena.alloc(kind, typ, span)
+        arena.value.alloc(&arena.mixop, kind, typ, span)
     }
 }
 

@@ -14,7 +14,7 @@ impl Value {
     /// Interns the tree in the target arena, preserving its type and source span.
     pub fn into_flat(self, arena: &mut Arena) -> Result<flat::Value, ValueError> {
         let kind = self.node.into_flat(arena)?;
-        arena.alloc(kind, self.note.into(), self.span)
+        flat::Value::new(arena, kind, self.note.into(), self.span)
     }
 }
 

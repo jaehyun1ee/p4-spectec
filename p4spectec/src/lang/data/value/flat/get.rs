@@ -12,6 +12,13 @@ use crate::lang::{common::prim::num::Number, data::arena::Arena};
 use super::super::{ValueError, ValueTag};
 use super::{Value, ValueCase, ValueField, ValueKind};
 
+// - Errors
+
+/// Reports the actual kind of a body when a projection expects another kind.
+fn kind_mismatch(kind: &ValueKind, expected: ValueTag) -> ValueError {
+    ValueError::KindMismatch { expected, actual: kind.tag() }
+}
+
 // - Primitives
 
 /// The boolean in a value.
@@ -184,11 +191,4 @@ pub fn four(values: &[Value]) -> Result<(&Value, &Value, &Value, &Value), ValueE
         [value_a, value_b, value_c, value_d] => Ok((value_a, value_b, value_c, value_d)),
         _ => Err(ValueError::CountMismatch { expected: 4, actual: values.len() }),
     }
-}
-
-// - Errors
-
-/// Reports the actual kind of a body when a projection expects another kind.
-fn kind_mismatch(kind: &ValueKind, expected: ValueTag) -> ValueError {
-    ValueError::KindMismatch { expected, actual: kind.tag() }
 }

@@ -5,18 +5,7 @@
 //! and outlive `reset_values`; a case body's notation is one of them.
 //! `value` allocates values into the arena and reads them back.
 
-use std::rc::Rc;
-
-use crate::lang::common::source::Span;
-
-use super::{
-    notation::MixopArena,
-    typ::TypKind,
-    value::{
-        ValueArena, ValueError,
-        flat::{Value, ValueKind},
-    },
-};
+use super::{notation::MixopArena, value::ValueArena};
 
 // = Arena storage
 
@@ -50,17 +39,5 @@ impl Arena {
     /// and numbering starts over; shape handles stay valid.
     pub fn reset_values(&mut self) {
         self.value = ValueArena::default();
-    }
-
-    // - Interning
-
-    /// Interns the three parts and returns their handles as a value.
-    pub(super) fn alloc(
-        &mut self,
-        kind: ValueKind,
-        typ: Rc<TypKind>,
-        span: Span,
-    ) -> Result<Value, ValueError> {
-        self.value.alloc(&self.mixop, kind, typ, span)
     }
 }
