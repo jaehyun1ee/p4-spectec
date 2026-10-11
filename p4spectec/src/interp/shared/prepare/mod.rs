@@ -5,6 +5,7 @@
 //! so evaluation indexes a frame instead of looking names up;
 //! notations' mixops are interned as shapes in the specification's
 //! `MixopArena` on the way, and containers and phrases recurse structurally.
+//! `Callable::prepare` pairs a prepared definition with the collected layout.
 
 mod il;
 
@@ -18,7 +19,7 @@ use crate::lang::{
     },
 };
 
-use crate::runtime::envs::interp::shared::frame::FrameLayout;
+use crate::runtime::envs::interp::shared::{callable::Callable, frame::FrameLayout};
 
 pub use il::prepare_def_typ;
 
@@ -28,6 +29,8 @@ pub struct PrepareContext<'a> {
     pub layout: &'a mut FrameLayout,
     /// The specification's shapes, filled as mixops are interned.
     pub arena_mixop: &'a mut MixopArena,
+    /// The runner's instruction-selection mode, used to lower SL tail calls.
+    pub det: bool,
 }
 
 /// Slot resolution of one syntax node.
@@ -38,6 +41,27 @@ pub trait Prepare: Sized {
     /// Resolves the node's identifiers and mixops through `ctx`.
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output;
 }
+
+// - Callables
+
+impl<T> Callable<T> {
+    /// Prepares a definition, collecting its slot layout.
+    ///
+    /// Notations are interned into `arena_mixop`,
+    /// which must stay with the prepared definition for evaluation.
+    pub fn prepare<S: Prepare<Output = T>>(
+        arena_mixop: &mut MixopArena,
+        det: bool,
+        source: S,
+    ) -> Self {
+        // The traversal fills the layout as it resolves names
+        let mut layout = FrameLayout::default();
+        let def = source.prepare(&mut PrepareContext { layout: &mut layout, arena_mixop, det });
+        Self { def, layout: Rc::new(layout) }
+    }
+}
+
+// - Names
 
 impl Prepare for Id {
     type Output = IdSlot;

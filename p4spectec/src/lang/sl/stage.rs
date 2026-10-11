@@ -14,13 +14,13 @@ pub use il::stage::{Prepared, Source};
 /// The expression representation and rule-call form used by SL syntax.
 pub trait Stage: il::stage::Stage {
     /// A source rule call or a prepared ordinary/tail call.
-    type Rule: Clone + fmt::Debug + PartialEq;
+    type RuleInstr: Clone + fmt::Debug + PartialEq;
 }
 
 impl Stage for Source {
-    type Rule = super::ast::RuleInstr<Self>;
+    type RuleInstr = super::ast::RuleInstr<Self>;
 }
 
 impl Stage for Prepared {
-    type Rule = super::prepared::Rule;
+    type RuleInstr = super::prepared::RuleInstr;
 }

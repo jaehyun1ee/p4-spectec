@@ -39,7 +39,6 @@ pub type HoldInstr = source::HoldInstr<Prepared>;
 pub type CaseInstr = source::CaseInstr<Prepared>;
 pub type GroupInstr = source::GroupInstr<Prepared>;
 pub type LetInstr = source::LetInstr<Prepared>;
-pub type RuleInstr = source::RuleInstr<Prepared>;
 pub type ResultInstr = source::ResultInstr<Prepared>;
 pub type ReturnInstr = source::ReturnInstr<Prepared>;
 pub type DebugInstr = source::DebugInstr<Prepared>;
@@ -72,9 +71,9 @@ pub type DefinedFunc = source::DefinedFunc<Prepared>;
 
 /// A prepared relation call with its execution form.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Rule {
+pub enum RuleInstr {
     /// Binds the relation's outputs and runs its continuation.
-    Call(RuleInstr),
+    Call(source::RuleInstr<Prepared>),
     /// Returns the relation's outputs through the tail-call dispatch loop.
     Tail(RuleTailInstr),
 }

@@ -5,39 +5,13 @@
 //! table rows form one sequential block even in deterministic mode.
 //! Only a tail-position call that immediately returns its outputs is lowered.
 
-use std::rc::Rc;
-
-use crate::lang::{data::notation::MixopArena, hints::input, traits::eq::SyntaxEq};
+use crate::lang::{hints::input, traits::eq::SyntaxEq};
 
 use crate::lang::sl::{ast as source, prepared as ast};
 
-use crate::runtime::envs::interp::shared::{callable::Callable, frame::FrameLayout};
-
 use crate::interp::shared::prepare::{Prepare, PrepareContext};
 
-/// Prepares a relation for the runner's instruction-selection mode.
-pub(super) fn prepare_rel(
-    arena_mixop: &mut MixopArena,
-    rel: source::RelDef,
-    det: bool,
-) -> Callable<ast::RelDef> {
-    let mut layout = FrameLayout::default();
-    let ctx = PrepareContext { layout: &mut layout, arena_mixop };
-    let def = Preparer { ctx, det }.prepare_rel(rel);
-    Callable { def, layout: Rc::new(layout) }
-}
-
-/// Prepares a function for the runner's instruction-selection mode.
-pub(super) fn prepare_func(
-    arena_mixop: &mut MixopArena,
-    func: source::MetaFuncDef,
-    det: bool,
-) -> Callable<ast::MetaFuncDef> {
-    let mut layout = FrameLayout::default();
-    let ctx = PrepareContext { layout: &mut layout, arena_mixop };
-    let def = Preparer { ctx, det }.prepare_func(func);
-    Callable { def, layout: Rc::new(layout) }
-}
+// = Instruction preparation
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Position {
@@ -45,12 +19,7 @@ enum Position {
     NonTail,
 }
 
-struct Preparer<'a> {
-    ctx: PrepareContext<'a>,
-    det: bool,
-}
-
-impl Preparer<'_> {
+impl PrepareContext<'_> {
     /// Prepares a block using the evaluator's tail-position rule.
     fn prepare_block(&mut self, block: source::Block, pos: Position) -> ast::Block {
         let instrs_len = block.len();
@@ -71,24 +40,24 @@ impl Preparer<'_> {
         stacker::maybe_grow(64 * 1024, 1024 * 1024, || {
             let instr_kind = match instr.node {
                 source::InstrKind::If(instr) => ast::InstrKind::If(ast::IfInstr {
-                    exp: instr.exp.prepare(&mut self.ctx),
-                    iter_exps: instr.iter_exps.prepare(&mut self.ctx),
+                    exp: instr.exp.prepare(self),
+                    iter_exps: instr.iter_exps.prepare(self),
                     block: self.prepare_block(instr.block, pos),
                     dangle: instr.dangle,
                 }),
                 source::InstrKind::Hold(instr) => ast::InstrKind::Hold(ast::HoldInstr {
                     id: instr.id,
-                    not_exp: instr.not_exp.prepare(&mut self.ctx),
-                    iter_exps: instr.iter_exps.prepare(&mut self.ctx),
+                    not_exp: instr.not_exp.prepare(self),
+                    iter_exps: instr.iter_exps.prepare(self),
                     hold_case: self.prepare_hold_case(instr.hold_case, pos),
                 }),
                 source::InstrKind::Case(instr) => ast::InstrKind::Case(ast::CaseInstr {
-                    exp: instr.exp.prepare(&mut self.ctx),
+                    exp: instr.exp.prepare(self),
                     cases: instr
                         .cases
                         .into_iter()
                         .map(|case| ast::Case {
-                            guard: case.guard.prepare(&mut self.ctx),
+                            guard: case.guard.prepare(self),
                             block: self.prepare_block(case.block, pos),
                         })
                         .collect(),
@@ -97,13 +66,13 @@ impl Preparer<'_> {
                 source::InstrKind::Group(instr) => ast::InstrKind::Group(ast::GroupInstr {
                     id: instr.id,
                     rel_signature: instr.rel_signature,
-                    exps: instr.exps.prepare(&mut self.ctx),
+                    exps: instr.exps.prepare(self),
                     block: self.prepare_block(instr.block, pos),
                 }),
                 source::InstrKind::Let(instr) => ast::InstrKind::Let(ast::LetInstr {
-                    exp_l: instr.exp_l.prepare(&mut self.ctx),
-                    exp_r: instr.exp_r.prepare(&mut self.ctx),
-                    iter_instrs: instr.iter_instrs.prepare(&mut self.ctx),
+                    exp_l: instr.exp_l.prepare(self),
+                    exp_r: instr.exp_r.prepare(self),
+                    iter_instrs: instr.iter_instrs.prepare(self),
                     block: self.prepare_block(instr.block, pos),
                 }),
                 source::InstrKind::Rule(instr) => {
@@ -111,13 +80,13 @@ impl Preparer<'_> {
                 }
                 source::InstrKind::Result(instr) => ast::InstrKind::Result(ast::ResultInstr {
                     rel_signature: instr.rel_signature,
-                    exps: instr.exps.prepare(&mut self.ctx),
+                    exps: instr.exps.prepare(self),
                 }),
-                source::InstrKind::Return(instr) => ast::InstrKind::Return(ast::ReturnInstr {
-                    exp: instr.exp.prepare(&mut self.ctx),
-                }),
+                source::InstrKind::Return(instr) => {
+                    ast::InstrKind::Return(ast::ReturnInstr { exp: instr.exp.prepare(self) })
+                }
                 source::InstrKind::Debug(instr) => ast::InstrKind::Debug(ast::DebugInstr {
-                    exp: instr.exp.prepare(&mut self.ctx),
+                    exp: instr.exp.prepare(self),
                     instr: Box::new(self.prepare_instr(*instr.instr, pos)),
                 }),
             };
@@ -126,22 +95,22 @@ impl Preparer<'_> {
     }
 
     /// Lowers a rule to a tail call only when no continuation remains to run.
-    fn prepare_rule(&mut self, instr: source::RuleInstr, pos: Position) -> ast::Rule {
+    fn prepare_rule(&mut self, instr: source::RuleInstr, pos: Position) -> ast::RuleInstr {
         // Compare source expressions before their mixops become arena handles
         if pos == Position::Tail && returns_outputs(&instr) {
             let (exps_input, _) = input::split(&instr.input_hint, instr.not_exp.into_args())
                 .expect("input hint must fit relation");
-            return ast::Rule::Tail(ast::RuleTailInstr {
+            return ast::RuleInstr::Tail(ast::RuleTailInstr {
                 id: instr.id,
-                exps_input: exps_input.prepare(&mut self.ctx),
+                exps_input: exps_input.prepare(self),
             });
         }
         // Ordinary calls retain output binding, iterations, and the continuation
-        ast::Rule::Call(ast::RuleInstr {
+        ast::RuleInstr::Call(source::RuleInstr {
             id: instr.id,
-            not_exp: instr.not_exp.prepare(&mut self.ctx),
+            not_exp: instr.not_exp.prepare(self),
             input_hint: instr.input_hint,
-            iter_instrs: instr.iter_instrs.prepare(&mut self.ctx),
+            iter_instrs: instr.iter_instrs.prepare(self),
             block: self.prepare_block(instr.block, pos),
         })
     }
@@ -161,86 +130,17 @@ impl Preparer<'_> {
         }
     }
 
-    /// Prepares a relation while preserving its otherwise-block fallback.
-    fn prepare_rel(&mut self, rel: source::RelDef) -> ast::RelDef {
-        match rel {
-            // External relations only resolve their input bindings
-            source::RelDef::Extern(rel) => ast::RelDef::Extern(ast::ExternRel {
-                id: rel.id,
-                rel_signature: rel.rel_signature,
-                exps_input: rel.exps_input.prepare(&mut self.ctx),
-                hints: rel.hints,
-            }),
-            source::RelDef::Defined(rel) => {
-                // The otherwise block must still catch a failing main body
-                let pos = if rel.block_else.is_some() { Position::NonTail } else { Position::Tail };
-                ast::RelDef::Defined(ast::DefinedRel {
-                    id: rel.id,
-                    rel_signature: rel.rel_signature,
-                    exps_input: rel.exps_input.prepare(&mut self.ctx),
-                    block: self.prepare_block(rel.block, pos),
-                    block_else: rel
-                        .block_else
-                        .map(|block| self.prepare_block(block, Position::Tail)),
-                    hints: rel.hints,
-                })
-            }
-        }
-    }
-
-    /// Prepares a function's bindings and the blocks executed by its body.
-    fn prepare_func(&mut self, func: source::MetaFuncDef) -> ast::MetaFuncDef {
-        match func {
-            // External functions only resolve their parameters
-            source::MetaFuncDef::Extern(func) => ast::MetaFuncDef::Extern(ast::ExternFunc {
-                id: func.id,
-                tparams: func.tparams,
-                params: func.params.prepare(&mut self.ctx),
-                typ: func.typ,
-                hints: func.hints,
-            }),
-            // Builtin functions also have no body to lower
-            source::MetaFuncDef::Builtin(func) => ast::MetaFuncDef::Builtin(ast::BuiltinFunc {
-                id: func.id,
-                tparams: func.tparams,
-                params: func.params.prepare(&mut self.ctx),
-                typ: func.typ,
-                hints: func.hints,
-            }),
-            // Table rows share one sequential selection
-            source::MetaFuncDef::Table(func) => {
-                ast::MetaFuncDef::Table(self.prepare_table_func(func))
-            }
-            source::MetaFuncDef::Defined(func) => {
-                // The otherwise block must still catch a failing main body
-                let pos =
-                    if func.block_else.is_some() { Position::NonTail } else { Position::Tail };
-                ast::MetaFuncDef::Defined(ast::DefinedFunc {
-                    id: func.id,
-                    tparams: func.tparams,
-                    params: func.params.prepare(&mut self.ctx),
-                    typ: func.typ,
-                    block: self.prepare_block(func.block, pos),
-                    block_else: func
-                        .block_else
-                        .map(|block| self.prepare_block(block, Position::Tail)),
-                    hints: func.hints,
-                })
-            }
-        }
-    }
-
     /// Prepares concatenated table rows with sequential selection at their root.
     fn prepare_table_func(&mut self, func: source::TableFunc) -> ast::TableFunc {
-        let params = func.params.prepare(&mut self.ctx);
+        let params = func.params.prepare(self);
         let mut instrs_len: usize = func.table_rows.iter().map(|row| row.block.len()).sum();
         // Only the last instruction across all rows inherits tail position
         let table_rows = func
             .table_rows
             .into_iter()
             .map(|row| {
-                let exps_input = row.exps_input.prepare(&mut self.ctx);
-                let exp = row.exp.prepare(&mut self.ctx);
+                let exps_input = row.exps_input.prepare(self);
+                let exp = row.exp.prepare(self);
                 let block = row
                     .block
                     .into_iter()
@@ -275,6 +175,91 @@ fn returns_outputs(instr: &source::RuleInstr) -> bool {
             .all(|(exp_l, exp_r)| exp_l.syntax_eq(exp_r))
 }
 
+// = Definition preparation
+
+// - Relation definitions
+
+impl Prepare for source::RelDef {
+    type Output = ast::RelDef;
+
+    /// Prepares a relation while preserving its otherwise-block fallback.
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        match self {
+            // External relations only resolve their input bindings
+            source::RelDef::Extern(rel) => ast::RelDef::Extern(ast::ExternRel {
+                id: rel.id,
+                rel_signature: rel.rel_signature,
+                exps_input: rel.exps_input.prepare(ctx),
+                hints: rel.hints,
+            }),
+            source::RelDef::Defined(rel) => {
+                // The otherwise block must still catch a failing main body
+                let pos = if rel.block_else.is_some() { Position::NonTail } else { Position::Tail };
+                ast::RelDef::Defined(ast::DefinedRel {
+                    id: rel.id,
+                    rel_signature: rel.rel_signature,
+                    exps_input: rel.exps_input.prepare(ctx),
+                    block: ctx.prepare_block(rel.block, pos),
+                    block_else: rel
+                        .block_else
+                        .map(|block| ctx.prepare_block(block, Position::Tail)),
+                    hints: rel.hints,
+                })
+            }
+        }
+    }
+}
+
+// - Meta-function definitions
+
+impl Prepare for source::MetaFuncDef {
+    type Output = ast::MetaFuncDef;
+
+    /// Prepares a function's bindings and the blocks executed by its body.
+    fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
+        match self {
+            // External functions only resolve their parameters
+            source::MetaFuncDef::Extern(func) => ast::MetaFuncDef::Extern(ast::ExternFunc {
+                id: func.id,
+                tparams: func.tparams,
+                params: func.params.prepare(ctx),
+                typ: func.typ,
+                hints: func.hints,
+            }),
+            // Builtin functions also have no body to lower
+            source::MetaFuncDef::Builtin(func) => ast::MetaFuncDef::Builtin(ast::BuiltinFunc {
+                id: func.id,
+                tparams: func.tparams,
+                params: func.params.prepare(ctx),
+                typ: func.typ,
+                hints: func.hints,
+            }),
+            // Table rows share one sequential selection
+            source::MetaFuncDef::Table(func) => {
+                ast::MetaFuncDef::Table(ctx.prepare_table_func(func))
+            }
+            source::MetaFuncDef::Defined(func) => {
+                // The otherwise block must still catch a failing main body
+                let pos =
+                    if func.block_else.is_some() { Position::NonTail } else { Position::Tail };
+                ast::MetaFuncDef::Defined(ast::DefinedFunc {
+                    id: func.id,
+                    tparams: func.tparams,
+                    params: func.params.prepare(ctx),
+                    typ: func.typ,
+                    block: ctx.prepare_block(func.block, pos),
+                    block_else: func
+                        .block_else
+                        .map(|block| ctx.prepare_block(block, Position::Tail)),
+                    hints: func.hints,
+                })
+            }
+        }
+    }
+}
+
+// - Parameters
+
 impl Prepare for source::ParamKind {
     type Output = ast::ParamKind;
 
@@ -287,6 +272,8 @@ impl Prepare for source::ParamKind {
         }
     }
 }
+
+// - Guards
 
 impl Prepare for source::Guard {
     type Output = ast::Guard;

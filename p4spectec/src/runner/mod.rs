@@ -88,7 +88,7 @@ pub fn build_al<Ext: Extern>(
     let Spec::Al(spec) = spec else { unreachable!() };
     // Load and prepare the definitions
     let mut arena_mixop = MixopArena::new();
-    let global = AlGlobal::load(&mut arena_mixop, spec)?;
+    let global = AlGlobal::load(&mut arena_mixop, config.det, spec)?;
     let config = AlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(arena_mixop, global, AlInterp::new(config), interface, external))
 }
@@ -107,7 +107,7 @@ pub fn build_sl<Ext: Extern>(
     let Spec::Sl(spec) = spec else { unreachable!() };
     // Load and prepare the definitions
     let mut arena_mixop = MixopArena::new();
-    let global = SlGlobal::load(&mut arena_mixop, spec, config.det)?;
+    let global = SlGlobal::load(&mut arena_mixop, config.det, spec)?;
     let config = SlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(arena_mixop, global, SlInterp::new(config), interface, external))
 }
@@ -124,7 +124,7 @@ pub fn build_pl<Ext: Extern>(
     let interface = builtin::p4(&spec);
     let Spec::Pl(spec) = spec else { unreachable!() };
     let mut arena_mixop = MixopArena::new();
-    let global = PlGlobal::load(&mut arena_mixop, spec)?;
+    let global = PlGlobal::load(&mut arena_mixop, config.det, spec)?;
     let config = PlConfig::new(config.cache, config.det, config.guard);
     Ok(Runner::new(arena_mixop, global, PlInterp::new(config), interface, external))
 }

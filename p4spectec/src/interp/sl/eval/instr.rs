@@ -17,7 +17,7 @@ use crate::lang::{
     traits::print::Print,
 };
 
-use crate::lang::sl::prepared as ast;
+use crate::lang::sl::{ast as source, prepared as ast};
 
 use crate::diagnostic::Report;
 
@@ -148,8 +148,8 @@ pub fn eval_instr<Iface: Interface, Ext: Extern>(
                 Flow::cont_from_unmatch(eval_let_instr(runner_ctx, ctx, instr, tail))
             }
             ast::InstrKind::Rule(instr) => Flow::cont_from_unmatch(match instr {
-                ast::Rule::Call(instr) => eval_rule_instr(runner_ctx, ctx, instr, tail),
-                ast::Rule::Tail(instr) => eval_rule_tail_instr(runner_ctx, ctx, span, instr),
+                ast::RuleInstr::Call(instr) => eval_rule_instr(runner_ctx, ctx, instr, tail),
+                ast::RuleInstr::Tail(instr) => eval_rule_tail_instr(runner_ctx, ctx, span, instr),
             }),
             ast::InstrKind::Result(instr) => {
                 Flow::cont_from_unmatch(eval_result_instr(runner_ctx, ctx, span, instr))
@@ -355,7 +355,7 @@ fn eval_let_instr<Iface: Interface, Ext: Extern>(
 fn eval_rule_instr<Iface: Interface, Ext: Extern>(
     runner_ctx: &mut RunnerContext<'_, SlInterp, Iface, Ext>,
     ctx: Cow<'_, Context<'_>>,
-    instr: &ast::RuleInstr,
+    instr: &source::RuleInstr<ast::Prepared>,
     tail: bool,
 ) -> Backtrack<Flow> {
     // Split the notation arguments by the input hint

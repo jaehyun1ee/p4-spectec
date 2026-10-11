@@ -182,7 +182,7 @@ pub enum InstrKind<P: Stage = Source> {
     /// Bind a pattern, then run the block.
     Let(LetInstr<P>),
     /// Call a relation using the stage's rule-call representation.
-    Rule(P::Rule),
+    Rule(P::RuleInstr),
     /// Conclude the relation with outputs.
     Result(ResultInstr<P>),
     /// Conclude the function with a value.
