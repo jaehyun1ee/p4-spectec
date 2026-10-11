@@ -50,11 +50,12 @@ fn roundtrip(unparser: &P4Unparser, includes: &[PathBuf], path: &Path) -> Result
         },
     };
     // Canonical bodies ignore source spans and type notes, like IL value equality
-    let outcome = if arena.canon_id(&program) == arena.canon_id(&program_roundtrip) {
-        Outcome::Pass
-    } else {
-        Outcome::RoundtripFail
-    };
+    let outcome =
+        if arena.value.canon_id(program.node) == arena.value.canon_id(program_roundtrip.node) {
+            Outcome::Pass
+        } else {
+            Outcome::RoundtripFail
+        };
     Ok(outcome)
 }
 
