@@ -11,7 +11,7 @@ use crate::lang::data::{
 
 use crate::lang::sl::{ast as source, prepared as ast};
 
-use crate::runtime::envs::interp::shared::TypeDef;
+use crate::runtime::envs::interp::shared::{TypeDef, frame::FrameLayout};
 
 use crate::interp::shared::{
     context::{self as shared, FuncSignature},
@@ -45,6 +45,9 @@ impl Global {
         spec: source::Spec,
     ) -> Result<Self, Error> {
         let mut loaded = Self::new();
+        let mut layout = FrameLayout::default();
+        let mut ctx = PrepareContext::new(arena_mixop, &mut layout, det);
+
         // Prepare definitions before inserting them into their namespaces
         for def in spec {
             match def.node {
@@ -54,7 +57,10 @@ impl Global {
                         ast::TypDef::Extern(typdef) => (typdef.id, TypeDef::Extern),
                         ast::TypDef::Defined(typdef) => {
                             let ast::DefinedTyp { id, tparams, def_typ, .. } = *typdef;
-                            (id, TypeDef::Defined(tparams, Box::new(def_typ.prepare(arena_mixop))))
+                            let def_typ = def_typ.prepare(ctx.arena_mixop);
+                            let def_typ = Box::new(def_typ);
+                            let typdef = TypeDef::Defined(tparams, def_typ);
+                            (id, typdef)
                         }
                     };
                     loaded.insert_typdef(id, typdef);
@@ -63,7 +69,7 @@ impl Global {
                 source::DefKind::Var(_) => {}
                 source::DefKind::Rel(rel) => {
                     // Relations are prepared into callables with a frame layout
-                    let rel = PrepareContext::prepare_callable(arena_mixop, det, rel);
+                    let rel = rel.prepare(&mut ctx);
                     let id = match &rel.def {
                         ast::RelDef::Extern(rel) => &rel.id,
                         ast::RelDef::Defined(rel) => &rel.id,
@@ -72,7 +78,7 @@ impl Global {
                 }
                 source::DefKind::MetaFunc(func) => {
                     // Prepare functions before sharing them with local bindings
-                    let func = PrepareContext::prepare_callable(arena_mixop, det, func);
+                    let func = func.prepare(&mut ctx);
                     let id = match &func.def {
                         ast::MetaFuncDef::Extern(func) => &func.id,
                         ast::MetaFuncDef::Builtin(func) => &func.id,
