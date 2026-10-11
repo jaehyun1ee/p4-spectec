@@ -3,7 +3,6 @@
 //! Prints IL in a readable source-like syntax:
 //! binary operators are parenthesized, premises print on `--` lines,
 //! iterations show their bound (`<-`) and binding (`->`) variables.
-//! `ExpRef` and `ArgRef` render prepared syntax through its notation arena.
 
 use std::fmt::{self, Write};
 
@@ -11,11 +10,7 @@ use crate::util::text::escape_text;
 
 use crate::lang::traits::print::{Print, Printer};
 
-use super::ast::*;
-
-mod prepared;
-
-pub use prepared::{ArgRef, ExpRef, PatternRef};
+use super::super::ast::*;
 
 // == Printing
 
@@ -470,7 +465,7 @@ fn write_prems_with(output: &mut Printer<'_>, level: usize, prems: &[Prem]) -> f
 }
 
 /// Prints an iteration as `*{x <- x*, y -> y*}`: bound, then binding variables.
-pub(crate) fn print_prem_iter<B: Print>(
+fn print_prem_iter<B: Print>(
     iter: &Iter,
     vars_bound: &[B],
     vars_bind: &[B],
