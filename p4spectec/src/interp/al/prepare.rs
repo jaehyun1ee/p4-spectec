@@ -4,13 +4,46 @@
 //! reserving slots in the callable's frame layout.
 //! Extern and builtin definitions have no body and pass through unchanged.
 
+use std::rc::Rc;
+
+use crate::lang::data::notation::MixopArena;
+
 use crate::lang::al::{ast as source, prepared::*};
 
-use crate::interp::shared::prepare::{Prepare, PrepareContext};
+use crate::runtime::envs::interp::shared::{callable::Callable, frame::FrameLayout};
+
+use crate::interp::shared::prepare::{Prepare, il};
+
+// - Preparation context
+
+/// Records AL slots and interned mixops.
+pub struct PrepareContext<'a> {
+    /// The specification's notation arena.
+    pub arena_mixop: &'a mut MixopArena,
+    /// The callable's frame layout.
+    pub layout: &'a mut FrameLayout,
+}
+
+impl PrepareContext<'_> {
+    fn il(&mut self) -> il::PrepareContext<'_> {
+        il::PrepareContext { arena_mixop: &mut *self.arena_mixop, layout: &mut *self.layout }
+    }
+
+    /// Prepares a definition and collects its frame layout.
+    pub fn prepare_callable<T, S>(arena_mixop: &mut MixopArena, source: S) -> Callable<T>
+    where
+        S: for<'a> Prepare<PrepareContext<'a>, Output = T>,
+    {
+        let mut layout = FrameLayout::default();
+        let mut ctx = PrepareContext { arena_mixop, layout: &mut layout };
+        let def = source.prepare(&mut ctx);
+        Callable { def, layout: Rc::new(layout) }
+    }
+}
 
 // - Premises
 
-impl Prepare for source::PremKind {
+impl Prepare<PrepareContext<'_>> for source::PremKind {
     type Output = PremKind;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
@@ -28,71 +61,78 @@ impl Prepare for source::PremKind {
 
 // - Rule premise
 
-impl Prepare for source::RulePrem {
+impl Prepare<PrepareContext<'_>> for source::RulePrem {
     type Output = RulePrem;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
-        RulePrem { id: self.id, not_exp: self.not_exp.prepare(ctx), input_hint: self.input_hint }
+        RulePrem {
+            id: self.id,
+            not_exp: self.not_exp.prepare(&mut ctx.il()),
+            input_hint: self.input_hint,
+        }
     }
 }
 
 // - If premise
 
-impl Prepare for source::IfPrem {
+impl Prepare<PrepareContext<'_>> for source::IfPrem {
     type Output = IfPrem;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
-        IfPrem { exp: self.exp.prepare(ctx) }
+        IfPrem { exp: self.exp.prepare(&mut ctx.il()) }
     }
 }
 
 // - If-hold premise
 
-impl Prepare for source::IfHoldPrem {
+impl Prepare<PrepareContext<'_>> for source::IfHoldPrem {
     type Output = IfHoldPrem;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
-        IfHoldPrem { id: self.id, not_exp: self.not_exp.prepare(ctx) }
+        IfHoldPrem { id: self.id, not_exp: self.not_exp.prepare(&mut ctx.il()) }
     }
 }
 
 // - If-not-hold premise
 
-impl Prepare for source::IfNotHoldPrem {
+impl Prepare<PrepareContext<'_>> for source::IfNotHoldPrem {
     type Output = IfNotHoldPrem;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
-        IfNotHoldPrem { id: self.id, not_exp: self.not_exp.prepare(ctx) }
+        IfNotHoldPrem { id: self.id, not_exp: self.not_exp.prepare(&mut ctx.il()) }
     }
 }
 
 // - Let premise
 
-impl Prepare for source::LetPrem {
+impl Prepare<PrepareContext<'_>> for source::LetPrem {
     type Output = LetPrem;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
-        LetPrem { exp_l: self.exp_l.prepare(ctx), exp_r: self.exp_r.prepare(ctx) }
+        LetPrem {
+            exp_l: self.exp_l.prepare(&mut ctx.il()),
+            exp_r: self.exp_r.prepare(&mut ctx.il()),
+        }
     }
 }
 
 // - Iterated premise
 
-impl Prepare for source::IterPrem {
+impl Prepare<PrepareContext<'_>> for source::IterPrem {
     type Output = IterPrem;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
-        IterPrem { prem: self.prem.prepare(ctx), prem_iter: self.prem_iter.prepare(ctx) }
+        IterPrem { prem: self.prem.prepare(ctx), prem_iter: self.prem_iter.prepare(&mut ctx.il()) }
     }
 }
 
 // - Debug premise
 
-impl Prepare for source::DebugPrem {
+impl Prepare<PrepareContext<'_>> for source::DebugPrem {
     type Output = DebugPrem;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
-        DebugPrem { exp: self.exp.prepare(ctx) }
+        DebugPrem { exp: self.exp.prepare(&mut ctx.il()) }
     }
 }
 
@@ -100,7 +140,7 @@ impl Prepare for source::DebugPrem {
 
 // - Rule group
 
-impl Prepare for source::RuleGroupKind {
+impl Prepare<PrepareContext<'_>> for source::RuleGroupKind {
     type Output = RuleGroupKind;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
@@ -114,7 +154,7 @@ impl Prepare for source::RuleGroupKind {
 
 // - Else group
 
-impl Prepare for source::ElseGroupKind {
+impl Prepare<PrepareContext<'_>> for source::ElseGroupKind {
     type Output = ElseGroupKind;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
@@ -128,13 +168,13 @@ impl Prepare for source::ElseGroupKind {
 
 // - Rule match
 
-impl Prepare for source::RuleMatch {
+impl Prepare<PrepareContext<'_>> for source::RuleMatch {
     type Output = RuleMatch;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         RuleMatch {
-            exps_signature: self.exps_signature.prepare(ctx),
-            exps_input: self.exps_input.prepare(ctx),
+            exps_signature: self.exps_signature.prepare(&mut ctx.il()),
+            exps_input: self.exps_input.prepare(&mut ctx.il()),
             prems: self.prems.prepare(ctx),
         }
     }
@@ -142,27 +182,27 @@ impl Prepare for source::RuleMatch {
 
 // - Rule path
 
-impl Prepare for source::RulePath {
+impl Prepare<PrepareContext<'_>> for source::RulePath {
     type Output = RulePath;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         RulePath {
             id: self.id,
             prems: self.prems.prepare(ctx),
-            exps_output: self.exps_output.prepare(ctx),
+            exps_output: self.exps_output.prepare(&mut ctx.il()),
         }
     }
 }
 
 // - Clauses
 
-impl Prepare for source::ClauseKind {
+impl Prepare<PrepareContext<'_>> for source::ClauseKind {
     type Output = ClauseKind;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         ClauseKind {
-            args: self.args.prepare(ctx),
-            exp: self.exp.prepare(ctx),
+            args: self.args.prepare(&mut ctx.il()),
+            exp: self.exp.prepare(&mut ctx.il()),
             prems: self.prems.prepare(ctx),
         }
     }
@@ -170,14 +210,14 @@ impl Prepare for source::ClauseKind {
 
 // - Table rows
 
-impl Prepare for source::TableRowKind {
+impl Prepare<PrepareContext<'_>> for source::TableRowKind {
     type Output = TableRowKind;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
         TableRowKind {
-            exps_signature: self.exps_signature.prepare(ctx),
-            args: self.args.prepare(ctx),
-            exp: self.exp.prepare(ctx),
+            exps_signature: self.exps_signature.prepare(&mut ctx.il()),
+            args: self.args.prepare(&mut ctx.il()),
+            exp: self.exp.prepare(&mut ctx.il()),
             prems: self.prems.prepare(ctx),
         }
     }
@@ -187,7 +227,7 @@ impl Prepare for source::TableRowKind {
 
 // - Relation definition
 
-impl Prepare for source::RelDef {
+impl Prepare<PrepareContext<'_>> for source::RelDef {
     type Output = RelDef;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
@@ -200,7 +240,7 @@ impl Prepare for source::RelDef {
 
 // - Defined relation definition
 
-impl Prepare for source::DefinedRel {
+impl Prepare<PrepareContext<'_>> for source::DefinedRel {
     type Output = DefinedRel;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
@@ -219,7 +259,7 @@ impl Prepare for source::DefinedRel {
 
 // - Meta-function definition
 
-impl Prepare for source::MetaFuncDef {
+impl Prepare<PrepareContext<'_>> for source::MetaFuncDef {
     type Output = MetaFuncDef;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
@@ -236,7 +276,7 @@ impl Prepare for source::MetaFuncDef {
 
 // - Table function definition
 
-impl Prepare for source::TableFunc {
+impl Prepare<PrepareContext<'_>> for source::TableFunc {
     type Output = TableFunc;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
@@ -252,7 +292,7 @@ impl Prepare for source::TableFunc {
 
 // - Defined function definition
 
-impl Prepare for source::DefinedFunc {
+impl Prepare<PrepareContext<'_>> for source::DefinedFunc {
     type Output = DefinedFunc;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
@@ -270,7 +310,7 @@ impl Prepare for source::DefinedFunc {
 
 // == Definitions
 
-impl Prepare for source::DefKind {
+impl Prepare<PrepareContext<'_>> for source::DefKind {
     type Output = DefKind;
 
     fn prepare(self, ctx: &mut PrepareContext<'_>) -> Self::Output {
