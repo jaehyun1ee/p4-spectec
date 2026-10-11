@@ -33,7 +33,7 @@ fn eval_arg<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Extern>
         ast::ArgKind::Def(id) => eval_def_arg(runner_ctx.arena_mut(), ctx, id, &arg.span),
     };
     result.with_frame(arg.span.clone(), || {
-        format!("while evaluating argument {}", arg.view(runner_ctx.arena().mixop()).to_string())
+        format!("while evaluating argument {}", arg.view(&runner_ctx.arena().mixop).to_string())
     })
 }
 

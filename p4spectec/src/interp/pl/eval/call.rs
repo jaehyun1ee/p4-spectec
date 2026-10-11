@@ -186,7 +186,7 @@ pub(crate) fn cache_func<Iface: Interface, Ext: Extern>(
             if !matches!(&func.def, ast::MetaFuncDef::Extern(_)))
         && !values
             .iter()
-            .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
+            .any(|value| matches!(runner_ctx.arena().value.kind(value.node), ValueKind::Func(_)))
 }
 
 // = Relation invocation

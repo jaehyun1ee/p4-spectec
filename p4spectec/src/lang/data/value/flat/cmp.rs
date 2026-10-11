@@ -83,7 +83,8 @@ impl SyntaxEq for ValueRef<'_> {
             std::ptr::eq(self.arena, value_other.arena),
             "values must belong to the same arena"
         );
-        self.arena.canon_id(&self.value) == self.arena.canon_id(&value_other.value)
+        self.arena.value.canon_id(self.value.node)
+            == self.arena.value.canon_id(value_other.value.node)
     }
 }
 
@@ -107,8 +108,8 @@ impl SyntaxCmp for ValueRef<'_> {
                 .find(|order| !order.is_eq())
                 .unwrap_or_else(|| values_l.len().cmp(&values_r.len()))
         };
-        let kind_l = self.arena.kind(&self.value);
-        let kind_r = self.arena.kind(&value_other.value);
+        let kind_l = self.arena.value.kind(self.value.node);
+        let kind_r = self.arena.value.kind(value_other.value.node);
         match (kind_l, kind_r) {
             (ValueKind::Bool(value_l), ValueKind::Bool(value_r)) => value_l.cmp(value_r),
             (ValueKind::Num(value_l), ValueKind::Num(value_r)) => num::compare(value_l, value_r),
@@ -132,7 +133,7 @@ impl SyntaxCmp for ValueRef<'_> {
                     .unwrap_or_else(|| value_fields_l.len().cmp(&value_fields_r.len()))
             }
             (ValueKind::Case(value_case_l), ValueKind::Case(value_case_r)) => {
-                value_case_l.cmp_by(self.arena.mixop(), value_case_r, compare_value)
+                value_case_l.cmp_by(&self.arena.mixop, value_case_r, compare_value)
             }
             (ValueKind::Tuple(values_l), ValueKind::Tuple(values_r))
             | (ValueKind::List(values_l), ValueKind::List(values_r)) => {

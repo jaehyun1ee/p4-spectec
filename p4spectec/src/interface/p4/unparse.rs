@@ -114,7 +114,7 @@ impl P4Unparser {
 
     /// Renders a value as P4 text.
     pub fn render(&self, arena: &Arena, value: &Value) -> Result<String, P4UnparseError> {
-        match arena.kind(value) {
+        match arena.value.kind(value.node) {
             // Primitives print as themselves
             ValueKind::Bool(value) => Ok(value.to_string()),
             ValueKind::Num(Number::Nat(value)) => Ok(value.to_string()),
@@ -123,7 +123,9 @@ impl P4Unparser {
             // Structs have no P4 spelling
             ValueKind::Struct(_) => Err(P4UnparseError::ValueUnsupported("Struct")),
             // Cases go through their hint or shape
-            ValueKind::Case(value_case) => self.render_case(arena, arena.typ(value), value_case),
+            ValueKind::Case(value_case) => {
+                self.render_case(arena, arena.value.typ(value.note), value_case)
+            }
             // Tuples in parentheses, comma separated
             ValueKind::Tuple(values) => {
                 let rendered = self.render_values(arena, values, ", ")?;
@@ -147,7 +149,7 @@ impl P4Unparser {
         typ: &TypKind,
         value_case: &ValueCase,
     ) -> Result<String, P4UnparseError> {
-        let mixop = value_case.mixop().into_tree(arena.mixop());
+        let mixop = value_case.mixop().into_tree(&arena.mixop);
         if let TypKind::Var(type_id, _) = typ
             && let Some(hint) = self.hints.get(&(type_id.node.clone(), mixop))
         {
@@ -213,7 +215,7 @@ impl P4Unparser {
         rendered: &mut Vec<String>,
     ) -> Result<(), P4UnparseError> {
         // Traversal items in reading order: atoms, and arguments by position
-        let arena_mixop = arena.mixop();
+        let arena_mixop = &arena.mixop;
         let mut visit_items = Vec::new();
         value_case.mixop().visit(arena_mixop, |visit_item| {
             visit_items.push(visit_item);

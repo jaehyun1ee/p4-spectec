@@ -16,7 +16,7 @@ use super::{Value, ValueCase, ValueField, ValueKind};
 
 /// The boolean in a value.
 pub fn bool(arena: &Arena, value: &Value) -> Result<bool, ValueError> {
-    match arena.kind(value) {
+    match arena.value.kind(value.node) {
         ValueKind::Bool(value) => Ok(*value),
         kind => Err(kind_mismatch(kind, ValueTag::Bool)),
     }
@@ -24,7 +24,7 @@ pub fn bool(arena: &Arena, value: &Value) -> Result<bool, ValueError> {
 
 /// The number in a value.
 pub fn num<'a>(arena: &'a Arena, value: &Value) -> Result<&'a Number, ValueError> {
-    match arena.kind(value) {
+    match arena.value.kind(value.node) {
         ValueKind::Num(value) => Ok(value),
         kind => Err(kind_mismatch(kind, ValueTag::Num)),
     }
@@ -32,7 +32,7 @@ pub fn num<'a>(arena: &'a Arena, value: &Value) -> Result<&'a Number, ValueError
 
 /// The text in a value.
 pub fn text<'a>(arena: &'a Arena, value: &Value) -> Result<&'a str, ValueError> {
-    match arena.kind(value) {
+    match arena.value.kind(value.node) {
         ValueKind::Text(value) => Ok(value),
         kind => Err(kind_mismatch(kind, ValueTag::Text)),
     }
@@ -42,7 +42,7 @@ pub fn text<'a>(arena: &'a Arena, value: &Value) -> Result<&'a str, ValueError> 
 
 /// The fields of a struct value.
 pub fn structure<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [ValueField], ValueError> {
-    match arena.kind(value) {
+    match arena.value.kind(value.node) {
         ValueKind::Struct(value_fields) => Ok(value_fields),
         kind => Err(kind_mismatch(kind, ValueTag::Struct)),
     }
@@ -52,7 +52,7 @@ pub fn structure<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [ValueField]
 
 /// The shape and arguments of a case value.
 pub fn case<'a>(arena: &'a Arena, value: &Value) -> Result<&'a ValueCase, ValueError> {
-    match arena.kind(value) {
+    match arena.value.kind(value.node) {
         ValueKind::Case(value_case) => Ok(value_case),
         kind => Err(kind_mismatch(kind, ValueTag::Case)),
     }
@@ -70,7 +70,7 @@ macro_rules! matches {
                 if {
                     use $crate::lang::traits::eq::SyntaxEq as _;
 
-                    let mixop = value_case.mixop().into_tree($arena.mixop());
+                    let mixop = value_case.mixop().into_tree(&$arena.mixop);
                     [$shape, $($shape_alt),*].into_iter().any(|mixop_text| {
                         let mixop_expect = $crate::lang::data::notation::tree::parse::mixop(mixop_text);
                         mixop.syntax_eq(mixop_expect.as_ref())
@@ -92,7 +92,7 @@ macro_rules! matches {
     ($arena:expr, $value:expr, $($arms:tt)+) => {{
         let value = $value;
         let arena = $arena;
-        let value_case = match arena.kind(value) {
+        let value_case = match arena.value.kind(value.node) {
             $crate::lang::data::value::flat::ValueKind::Case(value_case) => Some(value_case),
             _ => None,
         };
@@ -109,7 +109,7 @@ pub(crate) use matches;
 
 /// The components of a tuple value.
 pub fn tuple<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], ValueError> {
-    match arena.kind(value) {
+    match arena.value.kind(value.node) {
         ValueKind::Tuple(values) => Ok(values),
         kind => Err(kind_mismatch(kind, ValueTag::Tuple)),
     }
@@ -117,7 +117,7 @@ pub fn tuple<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], ValueEr
 
 /// The content of an option value.
 pub fn opt(arena: &Arena, value: &Value) -> Result<Option<Value>, ValueError> {
-    match arena.kind(value) {
+    match arena.value.kind(value.node) {
         ValueKind::Opt(value) => Ok(*value),
         kind => Err(kind_mismatch(kind, ValueTag::Opt)),
     }
@@ -125,7 +125,7 @@ pub fn opt(arena: &Arena, value: &Value) -> Result<Option<Value>, ValueError> {
 
 /// The elements of a list value.
 pub fn list<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], ValueError> {
-    match arena.kind(value) {
+    match arena.value.kind(value.node) {
         ValueKind::List(values) => Ok(values),
         kind => Err(kind_mismatch(kind, ValueTag::List)),
     }
@@ -135,7 +135,7 @@ pub fn list<'a>(arena: &'a Arena, value: &Value) -> Result<&'a [Value], ValueErr
 
 /// The JSON of a host-owned value.
 pub fn external<'a>(arena: &'a Arena, value: &Value) -> Result<&'a Rc<json>, ValueError> {
-    match arena.kind(value) {
+    match arena.value.kind(value.node) {
         ValueKind::Extern(json) => Ok(json),
         kind => Err(kind_mismatch(kind, ValueTag::Extern)),
     }

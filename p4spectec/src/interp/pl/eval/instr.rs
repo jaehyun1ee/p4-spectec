@@ -237,9 +237,7 @@ fn eval_if_instr<'global, Tier, Iface: Interface, Ext: Extern>(
             ctx,
             Flow::cont(
                 instr.exp.node.span.clone(),
-                error::prem::condition_unmet(
-                    instr.exp.view(runner_ctx.arena().mixop()).to_string()
-                )
+                error::prem::condition_unmet(instr.exp.view(&runner_ctx.arena().mixop).to_string())
             )
         ))
     }
@@ -331,7 +329,7 @@ fn eval_case_instr<'global, Tier, Iface: Interface, Ext: Extern>(
         ctx,
         Flow::cont(
             instr.exp.node.span.clone(),
-            error::prem::condition_unmet(instr.exp.view(runner_ctx.arena().mixop()).to_string())
+            error::prem::condition_unmet(instr.exp.view(&runner_ctx.arena().mixop).to_string())
         )
     ))
 }
@@ -525,7 +523,7 @@ fn eval_check_let_sub_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} is not a subtype of {}",
-                    instr.exp_r.view(runner_ctx.arena().mixop()).to_string(),
+                    instr.exp_r.view(&runner_ctx.arena().mixop).to_string(),
                     Print::to_string(&instr.typ)
                 ))
             )
@@ -561,7 +559,7 @@ fn eval_check_let_match_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} does not match the expected pattern",
-                    instr.exp_r.view(runner_ctx.arena().mixop()).to_string()
+                    instr.exp_r.view(&runner_ctx.arena().mixop).to_string()
                 ))
             )
         ))
@@ -598,7 +596,7 @@ fn eval_option_get_instr<'global, Tier, Iface: Interface, Ext: Extern>(
                 instr.exp_r.node.span.clone(),
                 error::prem::condition_unmet(format!(
                     "{} evaluated to an empty option",
-                    instr.exp_r.view(runner_ctx.arena().mixop()).to_string()
+                    instr.exp_r.view(&runner_ctx.arena().mixop).to_string()
                 ))
             )
         ))

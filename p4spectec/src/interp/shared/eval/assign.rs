@@ -64,7 +64,7 @@ pub fn assign_exp<Ctx: WriteContext>(
     exp: &ast::Exp,
     value: Value,
 ) -> Backtrack<Ctx> {
-    match (&exp.node, arena.kind(&value)) {
+    match (&exp.node, arena.value.kind(value.node)) {
         // A variable binds directly
         (ast::ExpKind::Id(id), _) => assign_id_exp(arena, ctx, id, value),
         // Tuple: componentwise
@@ -219,7 +219,7 @@ fn assign_cons_exp<Ctx: WriteContext>(
         .split_first()
         .expect("cons pattern must match a non-empty list");
     // Rebuild the tail as a list value of the same type
-    let typ = phrase!(node: arena.typ(value).clone(), span: exp.span.clone());
+    let typ = phrase!(node: arena.value.typ(value.note).clone(), span: exp.span.clone());
     let value_tail = unwrap_from_result!(
         value::make::list(arena, typ.node.clone(), values_tail.to_vec(), Span::default()),
         &Span::default()
@@ -358,7 +358,7 @@ pub fn assign_def<Ctx: WriteContext>(
     value: Value,
 ) -> Backtrack<Ctx> {
     // The value must be a function reference
-    let ValueKind::Func(id_func) = arena.kind(&value) else {
+    let ValueKind::Func(id_func) = arena.value.kind(value.node) else {
         unreachable!("function parameter must receive a function reference");
     };
     // Look the definition up in the caller, bind it in the callee

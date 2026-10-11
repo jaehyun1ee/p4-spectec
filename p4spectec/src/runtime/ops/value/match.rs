@@ -71,9 +71,9 @@ where
 {
     match &typ.node {
         // Booleans
-        TypKind::Bool => Ok(matches!(arena.kind(value), ValueKind::Bool(_))),
+        TypKind::Bool => Ok(matches!(arena.value.kind(value.node), ValueKind::Bool(_))),
         // Naturals: a natural, or a non-negative integer
-        TypKind::Num(NumTyp::Nat) => Ok(match arena.kind(value) {
+        TypKind::Num(NumTyp::Nat) => Ok(match arena.value.kind(value.node) {
             // Naturals as such
             ValueKind::Num(Number::Nat(_)) => true,
             // Integers when non-negative
@@ -82,9 +82,9 @@ where
             _ => false,
         }),
         // Integers: any number
-        TypKind::Num(NumTyp::Int) => Ok(matches!(arena.kind(value), ValueKind::Num(_))),
+        TypKind::Num(NumTyp::Int) => Ok(matches!(arena.value.kind(value.node), ValueKind::Num(_))),
         // Text
-        TypKind::Text => Ok(matches!(arena.kind(value), ValueKind::Text(_))),
+        TypKind::Text => Ok(matches!(arena.value.kind(value.node), ValueKind::Text(_))),
         // A named type: unfold its definition
         TypKind::Var(id, targs) => {
             let typdef = find_typdef_opt(id).ok_or_else(|| MatchError::TypeUndefined {
@@ -97,7 +97,7 @@ where
                     Err(MatchError::TypeVariableUnexpected { span: typ.span.clone() })
                 }
                 // Extern types hold extern values
-                TypeDef::Extern => Ok(matches!(arena.kind(value), ValueKind::Extern(_))),
+                TypeDef::Extern => Ok(matches!(arena.value.kind(value.node), ValueKind::Extern(_))),
                 // A defined type: instantiate, then match the body
                 TypeDef::Defined(tparams, def_typ) => {
                     // Type arguments must match the parameters
@@ -108,7 +108,7 @@ where
                             actual: mismatch.actual,
                             span: typ.span.clone(),
                         })?;
-                    match (&def_typ.node, arena.kind(value)) {
+                    match (&def_typ.node, arena.value.kind(value.node)) {
                         // An alias: test against the aliased type
                         (DefTypKind::Plain(typ), _) => {
                             let typ = subst_typ(&|id| theta.get(id), typ)?;
@@ -136,7 +136,7 @@ where
                         }
                         // A variant: a same-shaped case accepts the arguments
                         (DefTypKind::Variant(typ_cases), ValueKind::Case(value_case)) => {
-                            let arena_mixop = arena.mixop();
+                            let arena_mixop = &arena.mixop;
                             let mixop_value = value_case.mixop().view(arena_mixop);
                             for TypCase { not_typ, .. } in typ_cases {
                                 // Skip cases of a different shape
@@ -166,7 +166,7 @@ where
             }
         }
         // Tuples: componentwise
-        TypKind::Tuple(typs) => match arena.kind(value) {
+        TypKind::Tuple(typs) => match arena.value.kind(value.node) {
             ValueKind::Tuple(values) => {
                 subs_inner(arena, find_typdef_opt, find_func, typs.iter(), values.iter())
             }
@@ -174,7 +174,7 @@ where
             _ => Ok(false),
         },
         // Options: absent, or present with the element type
-        TypKind::Iter(typ_inner, Iter::Opt) => match arena.kind(value) {
+        TypKind::Iter(typ_inner, Iter::Opt) => match arena.value.kind(value.node) {
             // A present option checks its payload
             ValueKind::Opt(Some(value)) => sub(arena, find_typdef_opt, find_func, typ_inner, value),
             // An absent option has no payload to check
@@ -183,7 +183,7 @@ where
             _ => Ok(false),
         },
         // Lists: every element in the element type
-        TypKind::Iter(typ_inner, Iter::List) => match arena.kind(value) {
+        TypKind::Iter(typ_inner, Iter::List) => match arena.value.kind(value.node) {
             ValueKind::List(values) => {
                 for value in values {
                     if !sub(arena, find_typdef_opt, find_func, typ_inner, value)? {
@@ -196,7 +196,7 @@ where
             _ => Ok(false),
         },
         // Function values: the named function's type must be equivalent
-        TypKind::Func(func_typ) => match arena.kind(value) {
+        TypKind::Func(func_typ) => match arena.value.kind(value.node) {
             ValueKind::Func(id) => {
                 let func_typ_actual = find_func(&id.node).ok_or_else(|| {
                     MatchError::FunctionUndefined { name: id.node.clone(), span: id.span.clone() }
@@ -262,12 +262,12 @@ pub fn check<'env, F>(
 where
     F: Fn(&str) -> Option<FuncTyp>,
 {
-    match (subcheck, arena.kind(value)) {
+    match (subcheck, arena.value.kind(value.node)) {
         // Statically known to hold
         (Subcheck::Skip, _) => Ok(true),
         // Variant case: the tag must be one of the accepted
         (Subcheck::Mixop(mixops), ValueKind::Case(value_case)) => {
-            let arena_mixop = arena.mixop();
+            let arena_mixop = &arena.mixop;
             let mixop_value = value_case.mixop().view(arena_mixop);
             Ok(mixops
                 .iter()

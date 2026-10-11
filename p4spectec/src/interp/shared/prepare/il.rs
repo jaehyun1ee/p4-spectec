@@ -40,7 +40,7 @@ fn prepare_typ_case(arena_mixop: &mut MixopArena, typ_case: source::TypCase) -> 
     let source::TypCase { not_typ, typ_origin, hints } = typ_case;
     let (mixop, typs) = not_typ.node.into_parts();
     let mixop = arena_mixop
-        .intern_shared(&mixop)
+        .intern(&mixop)
         .expect("specification mixops fit in 32-bit shape handles");
     let not_typ_kind = notation::flat::Mixfix::new(arena_mixop, mixop, typs)
         .expect("a notation type fills every position");

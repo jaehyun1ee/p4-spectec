@@ -23,7 +23,7 @@ use super::{Value, ValueKind};
 
 /// Storage for value bodies, types, and spans.
 #[derive(Debug)]
-pub(in crate::lang::data) struct ValueArena {
+pub struct ValueArena {
     /// Bodies, with canonical identities; a case reads its mixop's.
     values: CanonInterner<ValueKind>,
     /// Types, shared by allocation.
@@ -87,22 +87,22 @@ impl ValueArena {
     // - Lookup
 
     /// Reads the body behind its handle.
-    pub(in crate::lang::data) fn kind(&self, value: Interned<ValueKind>) -> &ValueKind {
+    pub fn kind(&self, value: Interned<ValueKind>) -> &ValueKind {
         self.values.get(value)
     }
 
     /// Reads a type annotation.
-    pub(in crate::lang::data) fn typ(&self, typ: Interned<TypKind>) -> &Rc<TypKind> {
+    pub fn typ(&self, typ: Interned<TypKind>) -> &Rc<TypKind> {
         self.types.get(typ)
     }
 
     /// Reads a source location.
-    pub(in crate::lang::data) fn span(&self, span: Interned<Span>) -> &Span {
+    pub fn span(&self, span: Interned<Span>) -> &Span {
         self.spans.get(span)
     }
 
     /// Returns the canonical identity of a body.
-    pub(in crate::lang::data) fn canon_id(&self, value: Interned<ValueKind>) -> CanonId<ValueKind> {
+    pub fn canon_id(&self, value: Interned<ValueKind>) -> CanonId<ValueKind> {
         self.values.canon_id(value)
     }
 }

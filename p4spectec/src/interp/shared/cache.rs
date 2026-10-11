@@ -29,7 +29,10 @@ impl CallKey {
     pub(crate) fn new(arena: &Arena, name: &str, values: &[Value]) -> Self {
         Self {
             name: name.to_owned(),
-            values: values.iter().map(|value| arena.canon_id(value)).collect(),
+            values: values
+                .iter()
+                .map(|value| arena.value.canon_id(value.node))
+                .collect(),
         }
     }
 }
@@ -47,7 +50,7 @@ impl Hash for CallQuery<'_> {
         self.name.hash(hasher);
         self.values.len().hash(hasher);
         for value in self.values {
-            self.arena.canon_id(value).hash(hasher);
+            self.arena.value.canon_id(value.node).hash(hasher);
         }
     }
 }
@@ -60,7 +63,7 @@ impl Equivalent<CallKey> for CallQuery<'_> {
                 .values
                 .iter()
                 .zip(&key.values)
-                .all(|(value, id)| self.arena.canon_id(value) == *id)
+                .all(|(value, id)| self.arena.value.canon_id(value.node) == *id)
     }
 }
 

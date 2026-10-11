@@ -102,8 +102,8 @@ pub fn case(
     span: Span,
 ) -> Result<Value, ValueError> {
     let (mixop, values) = mixfix.into_parts();
-    let arena_mixop = arena.mixop_mut();
-    let mixop = arena_mixop.intern_shared(&mixop)?;
+    let arena_mixop = &mut arena.mixop;
+    let mixop = arena_mixop.intern(&mixop)?;
     let value_case = notation::flat::Mixfix::new(arena_mixop, mixop, values)
         .expect("a mixfix fills every position");
     Value::new(arena, ValueKind::Case(value_case), typ, span)

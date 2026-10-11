@@ -45,7 +45,7 @@ fn map_find_opt(arena: &Arena, key: &Value, map: &[Value]) -> Option<Value> {
         let Ok(value_case) = value::get::case(arena, pair) else {
             continue;
         };
-        let mixop = value_case.mixop().into_tree(arena.mixop());
+        let mixop = value_case.mixop().into_tree(&arena.mixop);
         if !mixop.syntax_eq(mixop_pair.as_ref()) {
             continue;
         }
@@ -87,7 +87,7 @@ fn map_update(
     let mixop_pair = pair_mixop();
     for pair in map {
         let matching = value::get::case(arena, pair).ok().is_some_and(|value_case| {
-            let mixop = value_case.mixop().into_tree(arena.mixop());
+            let mixop = value_case.mixop().into_tree(&arena.mixop);
             if !mixop.syntax_eq(mixop_pair.as_ref()) {
                 return false;
             }
@@ -116,7 +116,7 @@ fn map_of_value(arena: &Arena, value: &Value) -> Result<ValueMap, BuiltinError> 
         .map_err(|_| BuiltinError::argument_invalid("expected a map"))?;
     let mixop_map = map_mixop();
     // The value must be a map case wrapping one list
-    let mixop = value_case.mixop().into_tree(arena.mixop());
+    let mixop = value_case.mixop().into_tree(&arena.mixop);
     if !mixop.syntax_eq(mixop_map.as_ref()) {
         return Err(BuiltinError::argument_invalid("expected a map"));
     }

@@ -37,7 +37,7 @@ pub mod make;
 mod print;
 mod view;
 
-pub(in crate::lang::data) use arena::ValueArena;
+pub use arena::ValueArena;
 pub use view::ValueRef;
 
 // = Value forms

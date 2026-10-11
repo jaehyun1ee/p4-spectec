@@ -20,7 +20,7 @@ impl Print for ValueRef<'_> {
 impl ValueRef<'_> {
     /// Prints a value with nested aggregates indented by `level`.
     fn print_inner(&self, printer: &mut Printer<'_>, level: usize) -> fmt::Result {
-        match self.arena.kind(&self.value) {
+        match self.arena.value.kind(self.value.node) {
             ValueKind::Bool(value) => write!(printer, "{value}"),
             ValueKind::Num(value) => value.print(printer),
             ValueKind::Text(text) => printer.write_str(&escape_text(text)),
@@ -43,7 +43,7 @@ impl ValueRef<'_> {
                 printer.write_char('}')
             }
             ValueKind::Case(value_case) => {
-                value_case.print_with(self.arena.mixop(), printer, |value, printer| {
+                value_case.print_with(&self.arena.mixop, printer, |value, printer| {
                     value.view(self.arena).print_inner(printer, level + 1)
                 })
             }

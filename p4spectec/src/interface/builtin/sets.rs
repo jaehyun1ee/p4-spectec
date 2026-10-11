@@ -51,7 +51,7 @@ fn set_of_value(arena: &Arena, value: &Value) -> Result<ValueSet, BuiltinError> 
         .map_err(|_| BuiltinError::argument_invalid("expected a set"))?;
     let mixop_set = set_mixop();
     // The value must be a set case wrapping one list
-    let mixop = value_case.mixop().into_tree(arena.mixop());
+    let mixop = value_case.mixop().into_tree(&arena.mixop);
     if !mixop.syntax_eq(mixop_set.as_ref()) {
         return Err(BuiltinError::argument_invalid("expected a set"));
     }

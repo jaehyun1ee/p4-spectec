@@ -189,7 +189,7 @@ fn eval_if_instr<Iface: Interface, Ext: Extern>(
     } else {
         ok!(Flow::cont(
             instr.exp.span.clone(),
-            error::prem::condition_unmet(instr.exp.view(runner_ctx.arena().mixop()).to_string()),
+            error::prem::condition_unmet(instr.exp.view(&runner_ctx.arena().mixop).to_string()),
         ))
     }
 }
@@ -271,7 +271,7 @@ fn eval_case_instr<Iface: Interface, Ext: Extern>(
         instr.exp.span.clone(),
         error::prem::condition_unmet(format!(
             "case {}",
-            instr.exp.view(runner_ctx.arena().mixop()).to_string()
+            instr.exp.view(&runner_ctx.arena().mixop).to_string()
         )),
     ))
 }
@@ -422,9 +422,9 @@ fn eval_return_instr<Iface: Interface, Ext: Extern>(
         let (scope, _) = unwrap_from_result!(ctx.find_func_with_scope(id), &id.span);
         // Local functions and function-valued arguments must be called here
         if scope == Scope::Local
-            || values
-                .iter()
-                .any(|value| matches!(runner_ctx.arena().kind(value), ValueKind::Func(_)))
+            || values.iter().any(|value| {
+                matches!(runner_ctx.arena().value.kind(value.node), ValueKind::Func(_))
+            })
         {
             let value =
                 unwrap!(SlInterp::invoke_func(runner_ctx, ctx.as_ref(), id, &targs, &values));
@@ -450,9 +450,9 @@ fn eval_debug_instr<Iface: Interface, Ext: Extern>(
     tail: bool,
 ) -> Backtrack<Flow> {
     let value = unwrap!(eval_exp(runner_ctx, ctx.as_ref(), &instr.exp));
-    println!("{}: {}", instr.exp.span, instr.exp.view(runner_ctx.arena().mixop()).to_string());
+    println!("{}: {}", instr.exp.span, instr.exp.view(&runner_ctx.arena().mixop).to_string());
     // Print the value's source span when it has one
-    let span = runner_ctx.arena().span(&value).to_string();
+    let span = runner_ctx.arena().value.span(value.span).to_string();
     if span.is_empty() {
         println!("{}", value.view(runner_ctx.arena()).to_string());
     } else {

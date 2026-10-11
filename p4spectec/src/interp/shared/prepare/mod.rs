@@ -110,9 +110,9 @@ impl<T: Prepare> Prepare for tree::Mixfix<T> {
     }
 }
 
-/// Interns a shared mixop as a shape, walking it once per specification.
+/// Interns a shared mixop as a shape in the specification arena.
 pub(crate) fn prepare_mixop(ctx: &mut PrepareContext<'_>, mixop: &Rc<tree::Mixop>) -> flat::Mixop {
     ctx.arena_mixop
-        .intern_shared(mixop)
+        .intern(mixop)
         .expect("specification mixops fit in 32-bit shape handles")
 }

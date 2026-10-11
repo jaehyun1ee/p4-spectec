@@ -444,7 +444,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
     /// and decides whether template arguments follow.
     fn classify_name(&mut self, value: &Value, span: &Span, next: LexerState) -> Phrase<Token> {
         let arena = self.ctx.arena();
-        let name = match arena.kind(value) {
+        let name = match arena.value.kind(value.node) {
             ValueKind::Text(name) => name,
             _ => return phrase!(node: Token::Identifier, span: span.clone()),
         };
@@ -735,7 +735,7 @@ impl<'source, 'arena> Lexer<'source, 'arena> {
                 // Each literal's atom has its own span, so its shape is not shared
                 let mixop = Mixop::Seq(vec![Mixop::Arg, Mixop::Atom(atom), Mixop::Arg]);
                 let mut arena = self.ctx.arena_mut();
-                let arena_mixop = arena.mixop_mut();
+                let arena_mixop = &mut arena.mixop;
                 let mixop = arena_mixop.intern(&mixop).map_err(ValueError::from)?;
                 let value_case =
                     notation::flat::Mixfix::new(arena_mixop, mixop, vec![value_width, value_int])

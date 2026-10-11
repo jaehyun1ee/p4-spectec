@@ -133,7 +133,7 @@ pub fn assoc_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Valu
     let mut found = None;
     for pair in list_of_value(arena, value_list)? {
         // Every element must be a pair
-        let pair = match arena.kind(pair) {
+        let pair = match arena.value.kind(pair.node) {
             ValueKind::Tuple(pair) if pair.len() == 2 => pair,
             _ => {
                 return Err(BuiltinError::argument_invalid("expected an association pair"));
@@ -160,7 +160,7 @@ pub fn sort_(arena: &mut Arena, targs: &[Typ], values: &[Value]) -> Result<Value
     let pairs = list_of_value(arena, value_list)?;
     for pair in pairs {
         // Every element must be a pair whose first component is the key
-        let pair_values = match arena.kind(pair) {
+        let pair_values = match arena.value.kind(pair.node) {
             ValueKind::Tuple(pair) if pair.len() == 2 => pair,
             _ => {
                 return Err(BuiltinError::argument_invalid("expected a numeric pair"));

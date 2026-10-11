@@ -2,13 +2,7 @@
 //!
 //! A mixop handle is valid only in the arena that issued it.
 //! `intern` stores a tree node by node, children first,
-//! and records each new mixop's number of argument positions;
-//! `intern_shared` remembers a shared tree by its address,
-//! so a mixop shared by many expressions is walked once.
-
-use std::{collections::HashMap, rc::Rc};
-
-use foldhash::fast::RandomState;
+//! and records each new mixop's number of argument positions.
 
 use crate::lang::data::intern::{CanonId, CanonInterner};
 
@@ -17,9 +11,6 @@ use super::{Mixop, MixopKind};
 
 // = Arena storage
 
-/// A shared tree with its mixop, kept so the tree's address is not reused.
-type SharedMixop = (Rc<tree::Mixop>, Mixop);
-
 /// Storage for notation mixops, shared by every value built from them.
 #[derive(Debug, Default)]
 pub struct MixopArena {
@@ -27,8 +18,6 @@ pub struct MixopArena {
     mixops: CanonInterner<MixopKind>,
     /// Argument positions of each mixop, by handle index.
     arities: Vec<u32>,
-    /// Handles of shared trees, by address.
-    shared: HashMap<*const tree::Mixop, SharedMixop, RandomState>,
 }
 
 impl MixopArena {
@@ -58,19 +47,6 @@ impl MixopArena {
             let arity = self.kind(mixop).arity(self);
             self.arities.push(u32::try_from(arity)?);
         }
-        Ok(mixop)
-    }
-
-    /// Interns a shared tree, walking it only the first time.
-    pub fn intern_shared(&mut self, mixop_tree: &Rc<tree::Mixop>) -> Result<Mixop, MixopError> {
-        // Seen before: the same allocation has the same mixop
-        if let Some((_, mixop)) = self.shared.get(&Rc::as_ptr(mixop_tree)) {
-            return Ok(*mixop);
-        }
-        // First sight: intern and keep the tree alive with its mixop
-        let mixop = self.intern(mixop_tree)?;
-        self.shared
-            .insert(Rc::as_ptr(mixop_tree), (Rc::clone(mixop_tree), mixop));
         Ok(mixop)
     }
 

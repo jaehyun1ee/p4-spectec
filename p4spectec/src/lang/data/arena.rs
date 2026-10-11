@@ -10,7 +10,6 @@ use std::rc::Rc;
 use crate::lang::common::source::Span;
 
 use super::{
-    intern::CanonId,
     notation::MixopArena,
     typ::TypKind,
     value::{
@@ -27,9 +26,9 @@ use super::{
 #[derive(Debug, Default)]
 pub struct Arena {
     /// Notation shapes of prepared syntax and case bodies.
-    pub(super) mixop: MixopArena,
+    pub mixop: MixopArena,
     /// Value bodies, types, and spans.
-    pub(super) value: ValueArena,
+    pub value: ValueArena,
 }
 
 impl Arena {
@@ -53,17 +52,6 @@ impl Arena {
         self.value = ValueArena::default();
     }
 
-    // - Lookup
-
-    /// The notation shapes of prepared syntax and case bodies.
-    pub fn mixop(&self) -> &MixopArena {
-        &self.mixop
-    }
-
-    /// The notation shapes, for interning notations during a run.
-    pub fn mixop_mut(&mut self) -> &mut MixopArena {
-        &mut self.mixop
-    }
     // - Interning
 
     /// Interns the three parts and returns their handles as a value.
@@ -74,27 +62,5 @@ impl Arena {
         span: Span,
     ) -> Result<Value, ValueError> {
         self.value.alloc(&self.mixop, kind, typ, span)
-    }
-
-    // - Lookup
-
-    /// The body of a value.
-    pub fn kind(&self, value: &Value) -> &ValueKind {
-        self.value.kind(value.node)
-    }
-
-    /// The canonical identity of a value's body.
-    pub fn canon_id(&self, value: &Value) -> CanonId<ValueKind> {
-        self.value.canon_id(value.node)
-    }
-
-    /// The type of a value.
-    pub fn typ(&self, value: &Value) -> &Rc<TypKind> {
-        self.value.typ(value.note)
-    }
-
-    /// The span of a value.
-    pub fn span(&self, value: &Value) -> &Span {
-        self.value.span(value.span)
     }
 }

@@ -13,7 +13,7 @@ pub mod flat;
 pub mod tree;
 
 pub use error::ValueError;
-pub(super) use flat::ValueArena;
+pub use flat::ValueArena;
 
 // = Value tags
 

@@ -16,9 +16,9 @@ impl Value {
     /// Copies an arena value into a tree, including its type and source span.
     pub fn into_tree(self, arena: &Arena) -> tree::Value {
         tree::Value {
-            node: arena.kind(&self).into_tree(arena),
-            note: arena.typ(&self).as_ref().clone(),
-            span: arena.span(&self).clone(),
+            node: arena.value.kind(self.node).into_tree(arena),
+            note: arena.value.typ(self.note).as_ref().clone(),
+            span: arena.value.span(self.span).clone(),
         }
     }
 }
@@ -71,7 +71,7 @@ impl ValueCase {
         mixop: notation::flat::Mixop,
         values: &mut slice::Iter<'_, Value>,
     ) -> tree::ValueCase {
-        match arena.mixop().kind(mixop) {
+        match arena.mixop.kind(mixop) {
             notation::flat::MixopKind::Arg => tree::ValueCase::Arg(Box::new(
                 values
                     .next()

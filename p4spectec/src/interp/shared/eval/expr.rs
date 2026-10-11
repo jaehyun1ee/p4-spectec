@@ -102,7 +102,7 @@ pub(crate) fn eval_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, E
         }
     })();
     result.with_frame(exp.span.clone(), || {
-        format!("while evaluating expression {}", exp.view(runner_ctx.arena().mixop()).to_string())
+        format!("while evaluating expression {}", exp.view(&runner_ctx.arena().mixop).to_string())
     })
 }
 
@@ -384,7 +384,10 @@ fn eval_cat_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
 ) -> Backtrack<Value> {
     let value_l = unwrap!(eval_exp(runner_ctx, ctx, exp_l));
     let value_r = unwrap!(eval_exp(runner_ctx, ctx, exp_r));
-    let value = match (runner_ctx.arena().kind(&value_l), runner_ctx.arena().kind(&value_r)) {
+    let value = match (
+        runner_ctx.arena().value.kind(value_l.node),
+        runner_ctx.arena().value.kind(value_r.node),
+    ) {
         // Texts concatenate
         (ValueKind::Text(text_l), ValueKind::Text(text_r)) => {
             let text = format!("{text_l}{text_r}");
@@ -436,7 +439,7 @@ fn eval_len_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: Ext
     exp_inner: &ast::Exp,
 ) -> Backtrack<Value> {
     let value = unwrap!(eval_exp(runner_ctx, ctx, exp_inner));
-    let len = match runner_ctx.arena().kind(&value) {
+    let len = match runner_ctx.arena().value.kind(value.node) {
         // Texts count bytes, lists count elements; anything else is an error
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
@@ -492,7 +495,7 @@ fn eval_slice_exp<'global, Interp: Invoker<Iface, Ext>, Iface: Interface, Ext: E
     let value_idx = unwrap!(eval_exp(runner_ctx, ctx, exp_idx));
     let value_len = unwrap!(eval_exp(runner_ctx, ctx, exp_len));
     // Text slices report bounds errors at the index, lists at the length
-    let span_bounds = if matches!(runner_ctx.arena().kind(&value), ValueKind::Text(_)) {
+    let span_bounds = if matches!(runner_ctx.arena().value.kind(value.node), ValueKind::Text(_)) {
         &exp_idx.span
     } else {
         &exp_len.span

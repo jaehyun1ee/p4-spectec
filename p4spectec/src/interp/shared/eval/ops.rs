@@ -147,10 +147,10 @@ pub(crate) fn sub(
 
 /// Tests a value against a case, list, or option pattern.
 pub(crate) fn r#match(arena: &Arena, pattern: &ast::Pattern<Prepared>, value: Value) -> bool {
-    match (pattern, arena.kind(&value)) {
+    match (pattern, arena.value.kind(value.node)) {
         // Case: same constructor shape
         (ast::Pattern::Case(mixop), ValueKind::Case(value_case)) => {
-            let arena_mixop = arena.mixop();
+            let arena_mixop = &arena.mixop;
             let mixop_pattern = mixop.view(arena_mixop);
             let mixop_value = value_case.mixop().view(arena_mixop);
             mixop_pattern.syntax_eq(&mixop_value)
@@ -397,7 +397,7 @@ pub(crate) fn access_index(
 ) -> Backtrack<Value> {
     // The operand must be a text or list and the index in bounds
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
-    let len = match arena.kind(value_base) {
+    let len = match arena.value.kind(value_base.node) {
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => unreachable!("index operand must be a text or list"),
@@ -405,10 +405,10 @@ pub(crate) fn access_index(
     let Some(idx) = usize::try_from(&int_idx).ok().filter(|idx| *idx < len) else {
         return fatal!(span_idx.clone(), error::expr::index_out_of_bounds(int_idx, len),);
     };
-    match arena.kind(value_base) {
+    match arena.value.kind(value_base.node) {
         // Text: a one-character slice
         ValueKind::Text(_) => {
-            let typ = crate::phrase!(node: arena.typ(value_base).clone(), span: arena.span(value_base).clone());
+            let typ = crate::phrase!(node: arena.value.typ(value_base.note).clone(), span: arena.value.span(value_base.span).clone());
             let value_len = unwrap_from_result!(
                 value::make::nat(arena, 1u64.into(), Span::default()),
                 span_idx
@@ -443,7 +443,7 @@ pub(crate) fn access_slice(
     // The operand must be a text or list and the range within it
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let int_len = unwrap!(get_int(arena, value_len, span_len));
-    let size = match arena.kind(value_base) {
+    let size = match arena.value.kind(value_base.node) {
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => unreachable!("slice operand must be a text or list"),
@@ -460,7 +460,7 @@ pub(crate) fn access_slice(
             error::expr::slice_out_of_bounds(int_idx, int_end, size),
         );
     };
-    match arena.kind(value_base) {
+    match arena.value.kind(value_base.node) {
         // Text: the byte range must fall on character boundaries
         ValueKind::Text(text) => match text.get(idx..idx_end) {
             Some(text) => {
@@ -499,7 +499,7 @@ pub(crate) fn update_index(
 ) -> Backtrack<Value> {
     // Operand and index checks as for access
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
-    let len = match arena.kind(value_base) {
+    let len = match arena.value.kind(value_base.node) {
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => unreachable!("index operand must be a text or list"),
@@ -507,7 +507,7 @@ pub(crate) fn update_index(
     let Some(idx) = usize::try_from(&int_idx).ok().filter(|idx| *idx < len) else {
         return fatal!(span_idx.clone(), error::expr::index_out_of_bounds(int_idx, len),);
     };
-    let value = match arena.kind(value_base) {
+    let value = match arena.value.kind(value_base.node) {
         // Text: the replacement must be a single character
         ValueKind::Text(text) => {
             let size = text.len();
@@ -596,7 +596,7 @@ pub(crate) fn update_slice(
     // Operand and range checks as for access
     let int_idx = unwrap!(get_int(arena, value_idx, span_idx));
     let int_len = unwrap!(get_int(arena, value_len, span_len));
-    let size = match arena.kind(value_base) {
+    let size = match arena.value.kind(value_base.node) {
         ValueKind::Text(text) => text.len(),
         ValueKind::List(values) => values.len(),
         _ => unreachable!("slice operand must be a text or list"),
@@ -610,7 +610,7 @@ pub(crate) fn update_slice(
         let int_end = &int_idx + &int_len;
         return fatal!(span_len.clone(), error::expr::slice_out_of_bounds(int_idx, int_end, size),);
     };
-    let value = match arena.kind(value_base) {
+    let value = match arena.value.kind(value_base.node) {
         // Text: the replacement must have the range's length
         ValueKind::Text(text) => {
             let size = text.len();
