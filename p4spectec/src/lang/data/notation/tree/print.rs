@@ -7,7 +7,7 @@ use std::fmt;
 
 use crate::lang::traits::print::{Print, Printer};
 
-use super::super::print::print_piece;
+use super::super::print::print_item;
 use super::{Mixfix, Mixop};
 
 // = Notation forms
@@ -24,9 +24,9 @@ impl Mixop {
     ) -> fmt::Result {
         let mut is_first = true;
         let mut result = Ok(());
-        self.visit(|piece| {
+        self.visit(|visit_item| {
             if result.is_ok() {
-                result = print_piece(piece, printer, &mut is_first, &mut print_arg);
+                result = print_item(visit_item, printer, &mut is_first, &mut print_arg);
             }
         });
         result

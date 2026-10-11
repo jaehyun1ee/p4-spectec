@@ -16,6 +16,7 @@ mod get;
 mod map;
 mod print;
 pub mod tree;
+pub(crate) mod visit;
 
 pub use error::{ArityMismatch, MixopError};
 pub use flat::MixopArena;
@@ -47,13 +48,4 @@ pub struct Mixfix<M, T> {
     mixop: M,
     /// Arguments in notation order, one per position.
     args: Vec<T>,
-}
-
-/// A piece of a notation in reading order.
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum Piece<'a> {
-    /// A literal atom.
-    Atom(&'a AtomPhrase),
-    /// The argument position with this number.
-    Arg(usize),
 }

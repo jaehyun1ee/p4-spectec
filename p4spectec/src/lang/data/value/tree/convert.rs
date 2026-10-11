@@ -6,7 +6,7 @@
 use crate::lang::data::{arena::Arena, notation::flat as notation};
 
 use super::super::{ValueError, flat};
-use super::{self as value, Value, ValueCase, ValueField, ValueKind};
+use super::{Value, ValueCase, ValueField, ValueKind};
 
 // = Values
 
@@ -66,7 +66,7 @@ impl ValueCase {
     /// Interns arguments in notation order, then their mixop.
     fn into_flat(self, arena: &mut Arena) -> Result<flat::ValueCase, ValueError> {
         // Intern argument values before the case's mixop
-        let (mixop, values) = value::get::into_parts(self);
+        let (mixop, values) = self.into_parts();
         let values = values
             .into_iter()
             .map(|value| value.into_flat(arena))

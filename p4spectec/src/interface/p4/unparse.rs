@@ -14,7 +14,7 @@ use crate::lang::{
     common::{notation::atom::Atom, prim::num::Number},
     data::{
         arena::Arena,
-        notation::{Piece, tree::Mixop},
+        notation::{tree::Mixop, visit::VisitItem},
         value::flat::{Value, ValueCase, ValueKind},
     },
     hints::alter::{self, AlterHint, Renderer},
@@ -212,18 +212,18 @@ impl P4Unparser {
         value_case: &ValueCase,
         rendered: &mut Vec<String>,
     ) -> Result<(), P4UnparseError> {
-        // Pieces in reading order: atoms, and arguments by position
+        // Traversal items in reading order: atoms, and arguments by position
         let arena_mixop = arena.mixop();
-        let mut pieces = Vec::new();
-        value_case.mixop().visit(arena_mixop, |piece| {
-            pieces.push(piece);
+        let mut visit_items = Vec::new();
+        value_case.mixop().visit(arena_mixop, |visit_item| {
+            visit_items.push(visit_item);
         });
-        for piece in pieces {
-            match piece {
+        for visit_item in visit_items {
+            match visit_item {
                 // Arguments render recursively
-                Piece::Arg(pos) => rendered.push(self.render(arena, &value_case.args()[pos])?),
+                VisitItem::Arg(pos) => rendered.push(self.render(arena, &value_case.args()[pos])?),
                 // Silent atoms are dropped rather than left as empty pieces
-                Piece::Atom(atom) => {
+                VisitItem::Atom(atom) => {
                     let rendered_atom = Self::render_atom(&atom.node);
                     if !rendered_atom.is_empty() {
                         rendered.push(rendered_atom);

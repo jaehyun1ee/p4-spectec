@@ -8,14 +8,14 @@ use super::{Value, ValueCase};
 
 // - Cases
 
-/// Splits a filled tree into its mixop and arguments in notation order.
-pub fn into_parts(value_case: ValueCase) -> (Mixop, Vec<Value>) {
-    let mut values = Vec::new();
-    let mixop = value_case.into_parts_inner(&mut values);
-    (mixop, values)
-}
-
 impl ValueCase {
+    /// Splits a filled tree into its mixop and arguments in notation order.
+    pub fn into_parts(self) -> (Mixop, Vec<Value>) {
+        let mut values = Vec::new();
+        let mixop = self.into_parts_inner(&mut values);
+        (mixop, values)
+    }
+
     /// Moves each argument into the output as its position is visited.
     fn into_parts_inner(self, values: &mut Vec<Value>) -> Mixop {
         match self {

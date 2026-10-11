@@ -4,11 +4,7 @@
 //! AL, SL, and PL reuse these expressions and supporting syntax;
 //! preparation operations live under `interp/shared/prepare`.
 
-use crate::lang::data::var::VarSlot;
-
-pub use crate::lang::data::notation::flat::Mixop;
-
-use super::ast as source;
+use super::{ast as source, stage::Stage};
 
 pub use super::ast::{
     Atom, BinOp, CmpOp, DefinedTyp, ExternTyp, FuncTyp, Hint, Id, Iter, ListPattern, Num, NumOp,
@@ -20,7 +16,12 @@ pub use super::stage::Prepared;
 // - Variables
 
 /// A variable with its frame slot.
-pub type Var = VarSlot;
+pub type Var = <Prepared as Stage>::Var;
+
+// - Notation
+
+/// An interned notation shape.
+pub type Mixop = <Prepared as Stage>::Mixop;
 
 // - Expressions
 
@@ -31,7 +32,7 @@ pub type Exp = source::Exp<Prepared>;
 pub type ExpField = source::ExpField<Prepared>;
 pub type ExpKind = source::ExpKind<Prepared>;
 pub type NotExp = source::NotExp<Prepared>;
-pub type ExpIter = source::ExpIter<VarSlot>;
+pub type ExpIter = source::ExpIter<Var>;
 
 // - Paths
 
@@ -65,4 +66,4 @@ pub type Subcheck = source::Subcheck<Prepared>;
 // - Premises
 
 /// A premise iterator over slot-resolved variables.
-pub type PremIter = source::PremIter<VarSlot>;
+pub type PremIter = source::PremIter<Var>;
