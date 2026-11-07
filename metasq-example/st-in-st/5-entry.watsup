@@ -1,0 +1,10 @@
+;;
+;; Mini p4st-in-p4st: entry point
+;;
+
+relation RunRel: spec |- id val* : vsRes
+  hint(input %0 %1 %2)
+
+rule RunRel:
+  spec |- id val* : vsRes
+  -- Rel_call: CTX spec eps |- id val* : vsRes

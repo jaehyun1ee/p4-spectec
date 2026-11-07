@@ -1,0 +1,20 @@
+;;
+;; filter.p4 as the p4Pgm value a P4 frontend would produce
+;;
+;; prs has a single start state, so its body is that state's statements.
+;; 0x42 is the natural number 66.
+;; A list right after a text would read as indexing, hence the parentheses.
+;;
+
+dec $filter_p4 : p4Pgm
+
+def $filter_p4 = [
+  ParserD "prs"
+    ([ Param NoD PktT "p", Param OutD (HdrT "H") "hdr" ])
+    ([ ExtractS "p" "hdr", AcceptS ]),
+  ControlD "flt"
+    ([ Param InD (HdrT "H") "hdr", Param OutD BoolT "pass" ])
+    ([ IfS (EqE (FieldE (VarE "hdr") "dst") (BitE 66))
+         (AssignS "pass" (BoolE false))
+         (AssignS "pass" (BoolE true)) ])
+]

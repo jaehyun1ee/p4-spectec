@@ -1,0 +1,151 @@
+;;
+;; Mini p4st-in-p4st: expressions and meta-function calls
+;;
+;; A failure of a subexpression propagates as is,
+;; and a meta-function call evaluates its clauses as rules with one output.
+;;
+
+rule Exps_eval/nil:
+  C |- eps : OK eps
+
+rule Exps_eval/cons:
+  C |- exp_h :: exp_t* : OK (val_h :: val_t*)
+  -- Exp_eval: C |- exp_h : OK val_h
+  -- Exps_eval: C |- exp_t* : OK val_t*
+
+rule Exps_eval/fail-h:
+  C |- exp_h :: exp_t* : fail
+  -- Exp_eval: C |- exp_h : fail
+
+rule Exps_eval/fail-t:
+  C |- exp_h :: exp_t* : fail
+  -- Exp_eval: C |- exp_h : OK val_h
+  -- Exps_eval: C |- exp_t* : fail
+
+;;
+;; Expressions
+;;
+
+;; The subexpressions an expression evaluates first
+dec $subexps(exp) : exp*
+
+def $subexps(EVAR _ _) = eps
+def $subexps(EBOOL _) = eps
+def $subexps(ENAT _) = eps
+def $subexps(ETEXT _) = eps
+def $subexps(ECMP exp_l exp_r) = [ exp_l, exp_r ]
+def $subexps(ENE exp_l exp_r) = [ exp_l, exp_r ]
+def $subexps(ECASE _ exp*) = exp*
+def $subexps(ETUP exp*) = exp*
+def $subexps(EOPT eps) = eps
+def $subexps(EOPT exp) = [ exp ]
+def $subexps(ELIST exp*) = exp*
+def $subexps(ECONS exp_h exp_t) = [ exp_h, exp_t ]
+def $subexps(ECALL _ exp*) = exp*
+def $subexps(EMATCH exp _) = [ exp ]
+
+rule Exp_eval/fail:
+  C |- exp : fail
+  -- Exps_eval: C |- $subexps(exp) : fail
+
+rule Exp_eval/evar:
+  C |- EVAR id it* : OK val
+  -- if val = $lookup(C, id, it*)
+
+rule Exp_eval/ebool:
+  C |- EBOOL bool : OK (VBOOL bool)
+
+rule Exp_eval/enat:
+  C |- ENAT nat : OK (VNAT nat)
+
+rule Exp_eval/etext:
+  C |- ETEXT text : OK (VTEXT text)
+
+rule Exp_eval/ecmp:
+  C |- ECMP exp_l exp_r : OK (VBOOL (val_l = val_r))
+  -- Exps_eval: C |- [ exp_l, exp_r ] : OK ([ val_l, val_r ])
+
+rule Exp_eval/ene:
+  C |- ENE exp_l exp_r : OK (VBOOL (val_l =/= val_r))
+  -- Exps_eval: C |- [ exp_l, exp_r ] : OK ([ val_l, val_r ])
+
+rule Exp_eval/ecase:
+  C |- ECASE ctor exp* : OK (VCASE ctor val*)
+  -- Exps_eval: C |- exp* : OK val*
+
+rule Exp_eval/etup:
+  C |- ETUP exp* : OK (VTUP val*)
+  -- Exps_eval: C |- exp* : OK val*
+
+rule Exp_eval/eopt-none:
+  C |- EOPT eps : OK (VOPT eps)
+
+rule Exp_eval/eopt-some:
+  C |- EOPT exp : OK (VOPT val)
+  -- Exps_eval: C |- [ exp ] : OK ([ val ])
+
+rule Exp_eval/elist:
+  C |- ELIST exp* : OK (VLIST val*)
+  -- Exps_eval: C |- exp* : OK val*
+
+rule Exp_eval/econs:
+  C |- ECONS exp_h exp_t : OK (VLIST (val_h :: val_t*))
+  -- Exps_eval: C |- [ exp_h, exp_t ] : OK ([ val_h, VLIST val_t* ])
+
+rule Exp_eval/ecall:
+  C |- ECALL id exp* : vRes
+  -- Exps_eval: C |- exp* : OK val*
+  -- Fun_call: C |- id val* : vRes
+
+dec $matches(val, pat) : bool
+
+rule Exp_eval/ematch:
+  C |- EMATCH exp pat : OK (VBOOL $matches(val, pat))
+  -- Exps_eval: C |- [ exp ] : OK ([ val ])
+
+def $matches(VCASE ctor _, PCASE ctor') = (ctor = ctor')
+def $matches(VLIST (_ :: _), PCONS) = true
+def $matches(VLIST eps, PNIL) = true
+def $matches(VOPT val, PSOME) = true
+def $matches(VOPT eps, PNONE) = true
+def $matches(_, _) = false
+  -- otherwise
+
+;;
+;; Meta-function calls
+;;
+
+;; A clause is a rule with its arguments as inputs and its result as the one output
+dec $rul_of(clause) : rul
+
+def $rul_of(exp_a* exp prem*) = "" exp_a* ([ exp ]) prem*
+
+dec $ruls_of(clause*) : rul*
+
+def $ruls_of(eps) = eps
+def $ruls_of(clause_h :: clause_t*) = $rul_of(clause_h) :: $ruls_of(clause_t*)
+
+dec $one(vsRes) : vRes
+
+def $one(OK ([ val ])) = OK val
+def $one(UNMATCH) = UNMATCH
+def $one(ERROR) = ERROR
+
+rule Fun_call/ok:
+  C |- id val* : OK val_o
+  -- if DECD id clause* _ = $find(C, id)
+  -- Ruls_eval: C |- $ruls_of(clause*) val* : OK ([ val_o ])
+
+rule Fun_call/unmatch:
+  C |- id val* : UNMATCH
+  -- if DECD id clause* eps = $find(C, id)
+  -- Ruls_eval: C |- $ruls_of(clause*) val* : UNMATCH
+
+rule Fun_call/owise:
+  C |- id val* : $one(vsRes)
+  -- if DECD id clause* clause_owise = $find(C, id)
+  -- Ruls_eval: C |- $ruls_of(clause*) val* : UNMATCH
+  -- Rul_eval: C |- $rul_of(clause_owise) val* : vsRes
+
+rule Fun_call/error: _ |- _ _ : ERROR
+  -- otherwise

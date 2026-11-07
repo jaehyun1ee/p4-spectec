@@ -1,0 +1,50 @@
+;;
+;; Mini p4st-in-p4st: AL abstract syntax
+;;
+;; Only the forms that the AL of metasq-example/p4 contains are covered.
+;;
+
+syntax id = text
+
+syntax it = OPT | LIST   ;; ? / *
+
+;; A case is named by its notation, e.g. "IfS % % %"
+syntax ctor = text
+
+;; An extern meta-value such as a pkt, carried opaquely
+extern syntax ext
+
+syntax val =
+  | VBOOL bool | VCASE ctor val*
+  | VNAT nat | VTEXT text | VTUP val* | VOPT val? | VLIST val* | VEXT ext
+
+;; The shapes that `matches` tests
+syntax pat = PCASE ctor | PCONS | PNIL | PSOME | PNONE
+
+syntax exp =
+  | EVAR id it*            ;; p4Val, p4Val*
+  | EBOOL bool             ;; true/false
+  | ECMP exp exp           ;; (p4Val = ...)
+  | ECASE ctor exp*        ;; (IfS ...)
+  | ENAT nat | ETEXT text                  ;; 66, "hdr"
+  | ENE exp exp                            ;; (p4Id' =/= p4Id)
+  | ETUP exp* | EOPT exp? | ELIST exp*     ;; (E, p4Id), ?(p4Val), [...]
+  | ECONS exp exp                          ;; p4Stmt_h :: p4Stmt_t*
+  | ECALL id exp*                          ;; $find(E, p4Id)
+  | EMATCH exp pat                         ;; p4Stmt matches IfS
+
+syntax prem =
+  | IF exp | LET exp exp | REL id exp* exp*
+
+syntax rul = id exp* exp* prem*
+
+;; A type definition keeps only its cases, and a clause its arguments, result, and premises
+syntax typdef = ctor*
+syntax clause = exp* exp prem*
+
+syntax defn =
+  | SYND id typdef | EXTSYND id
+  | RELD id rul* rul? | EXTRELD id
+  | DECD id clause* clause?
+
+syntax spec = defn*
