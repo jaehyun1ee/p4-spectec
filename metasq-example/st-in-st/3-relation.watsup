@@ -1,0 +1,164 @@
+;;
+;; Mini p4st-in-p4st: relations and relation calls
+;;
+;; `OK [...]` would read as indexing, so a list after OK is parenthesized.
+;;
+
+relation Rel_call: C |- id val* : vsRes
+  hint(input %0 %1 %2)
+relation Rul_eval: C |- rul val* : vsRes
+  hint(input %0 %1 %2)
+relation Ruls_eval: C |- rul* val* : vsRes
+  hint(input %0 %1 %2)
+relation Det_check: C |- rul* val* : fail
+  hint(input %0 %1 %2)
+relation Prem_eval: C |- prem : cRes
+  hint(input %0 %1)
+relation Prems_eval: C |- prem* : cRes
+  hint(input %0 %1)
+relation Exps_eval: C |- exp* : vsRes
+  hint(input %0 %1)
+
+;; One expression, and meta-function calls
+relation Exp_eval: C |- exp : vRes
+  hint(input %0 %1)
+relation Fun_call: C |- id val* : vRes
+  hint(input %0 %1 %2)
+
+;;
+;; Rules for Rel_call
+;;
+
+rule Rel_call/ok:
+  C |- id val* : OK val_o*
+  -- if RELD id rul* _ = $find(C, id)
+  -- Ruls_eval: C |- rul* val* : OK val_o*
+
+rule Rel_call/unmatch:
+  C |- id val* : UNMATCH
+  -- if RELD id rul* eps = $find(C, id)
+  -- Ruls_eval: C |- rul* val* : UNMATCH
+
+rule Rel_call/owise:
+  C |- id val* : vsRes
+  -- if RELD id rul* rul_owise = $find(C, id)
+  -- Ruls_eval: C |- rul* val* : UNMATCH
+  -- Rul_eval: C |- rul_owise val* : vsRes
+
+;;
+;; The extern relation call semantics
+;;
+
+extern relation ExtRel_call: |- id val* : vsRes
+  hint(input %0 %1)
+
+rule Rel_call/extern:
+  C |- id val* : vsRes
+  -- if EXTRELD id = $find(C, id)
+  -- ExtRel_call: |- id val* : vsRes
+
+rule Rel_call/error: _ |- _ _ : ERROR
+  -- otherwise
+
+;;
+;; Ruls_eval, Det_check, and Rul_eval
+;;
+
+rule Ruls_eval/nil:
+  C |- eps val* : UNMATCH
+
+rule Ruls_eval/unmatch:
+  C |- (rul_h :: rul_t*) val* : vsRes
+  -- Rul_eval: C |- rul_h val* : UNMATCH
+  -- Ruls_eval: C |- rul_t* val* : vsRes
+
+rule Ruls_eval/ok:
+  C |- (rul_h :: rul_t*) val* : OK val_o*
+  -- Rul_eval: C |- rul_h val* : OK val_o*
+  -- Det_check: C |- rul_t* val* : UNMATCH
+
+rule Ruls_eval/error: _ |- _ _ : ERROR
+  -- otherwise
+
+rule Det_check/nil:
+  C |- eps val* : UNMATCH
+
+rule Det_check/ok:
+  C |- (rul_h :: rul_t*) val* : fail
+  -- Rul_eval: C |- rul_h val* : UNMATCH
+  -- Det_check: C |- rul_t* val* : fail
+
+rule Det_check/error:
+  C |- (rul_h :: rul_t*) val* : ERROR
+  -- Rul_eval: C |- rul_h val* : vsRes
+  -- if vsRes =/= UNMATCH
+
+rule Rul_eval/ok:
+  C |- (id exp_i* exp_o* prem*) val* : OK val_o*
+  -- if C' = $assign(C, exp_i*, val*)
+  -- Prems_eval: C' |- prem* : OK C''
+  -- Exps_eval: C'' |- exp_o* : OK val_o*
+
+rule Rul_eval/unmatch:
+  C |- (id exp_i* exp_o* prem*) val* : UNMATCH
+  -- if C' = $assign(C, exp_i*, val*)
+  -- Prems_eval: C' |- prem* : UNMATCH
+
+rule Rul_eval/error: _ |- _ _ : ERROR
+  -- otherwise
+
+;;
+;; Prem_eval
+;;
+
+rule Prem_eval/if_ok_true:
+  C |- IF exp : OK C
+  -- Exps_eval: C |- [exp] : OK ([(VBOOL true)])
+
+rule Prem_eval/if_ok_false:
+  C |- IF exp : UNMATCH
+  -- Exps_eval: C |- [exp] : OK ([(VBOOL false)])
+
+rule Prem_eval/rel-ok:
+  C |- REL id exp_i* exp_o* : OK C'
+  -- Exps_eval: C |- exp_i* : OK val_i*
+  -- Rel_call: C |- id val_i* : OK val_o*
+  -- if C' = $assign(C, exp_o*, val_o*)
+
+;; Failures and let premises
+
+rule Prem_eval/cond-fail:
+  C |- IF exp : fail
+  -- Exps_eval: C |- [exp] : fail
+
+rule Prem_eval/rel-fail:
+  C |- REL id exp_i* exp_o* : fail
+  -- Exps_eval: C |- exp_i* : OK val_i*
+  -- Rel_call: C |- id val_i* : fail
+
+rule Prem_eval/rel-args-fail:
+  C |- REL id exp_i* exp_o* : fail
+  -- Exps_eval: C |- exp_i* : fail
+
+rule Prem_eval/let-ok:
+  C |- LET exp_l exp_r : OK C'
+  -- Exps_eval: C |- [exp_r] : OK ([val])
+  -- if C' = $assign(C, [exp_l], [val])
+
+rule Prem_eval/let-fail:
+  C |- LET exp_l exp_r : fail
+  -- Exps_eval: C |- [exp_r] : fail
+
+;; Prems_eval threads C through prem*, stopping at the first failure
+
+rule Prems_eval/nil:
+  C |- eps : OK C
+
+rule Prems_eval/cons:
+  C |- prem_h :: prem_t* : cRes
+  -- Prem_eval: C |- prem_h : OK C'
+  -- Prems_eval: C' |- prem_t* : cRes
+
+rule Prems_eval/fail:
+  C |- prem_h :: prem_t* : fail
+  -- Prem_eval: C |- prem_h : fail

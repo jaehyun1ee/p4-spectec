@@ -1,0 +1,198 @@
+;;
+;; Mini P4 specification, without P4 IR
+;;
+;; Just enough of P4 for filter.p4 to run end to end.
+;;
+
+;;
+;; P4 abstract syntax
+;;
+
+syntax p4Id = text
+
+;; A header type name is enough for filter.p4
+syntax p4Type = BoolT | BitT nat | HdrT p4Id | PktT
+
+syntax p4Exp =
+  | VarE p4Id | BoolE bool | BitE nat
+  | EqE p4Exp p4Exp          ;; hdr.dst == 0x42
+  | FieldE p4Exp p4Id        ;; hdr.dst
+
+syntax p4Stmt =
+  | IfS p4Exp p4Stmt p4Stmt  ;; if (...) ...
+  | AssignS p4Id p4Exp       ;; pass = false
+  | ExtractS p4Id p4Id       ;; p.extract(hdr)
+  | AcceptS                  ;; transition accept
+
+;; A direction, a type, and a name
+syntax p4Dir = NoD | InD | OutD
+syntax p4Param = Param p4Dir p4Type p4Id
+
+syntax p4Decl =
+  | ParserD p4Id p4Param* p4Stmt*
+  | ControlD p4Id p4Param* p4Stmt*
+
+syntax p4Pgm = p4Decl*
+
+;;
+;; Domains and meta-functions
+;;
+
+extern syntax pkt
+
+syntax p4Val =
+  | BoolV bool | BitV nat
+  | HdrV p4Id (p4Id, p4Val)* | PktV pkt
+
+syntax E = (p4Id, p4Val)*
+
+dec $find(E, p4Id) : p4Val?
+
+def $find((p4Id', p4Val) :: E_t, p4Id)
+  = p4Val
+  -- if p4Id' = p4Id
+
+def $find((p4Id', p4Val) :: E_t, p4Id)
+  = $find(E_t, p4Id)
+  -- if p4Id' =/= p4Id
+
+def $find(_, _) = eps
+  -- otherwise
+
+dec $update(E, p4Id, p4Val) : E
+
+def $update((p4Id', p4Val') :: E_t, p4Id, p4Val)
+  = (p4Id, p4Val) :: E_t
+  -- if p4Id' = p4Id
+
+def $update((p4Id', p4Val') :: E_t, p4Id, p4Val)
+  = (p4Id', p4Val') :: $update(E_t, p4Id, p4Val)
+  -- if p4Id' =/= p4Id
+
+def $update(eps, p4Id, p4Val) = [ (p4Id, p4Val) ]
+
+;;
+;; Relations and if rules
+;;
+
+relation P4Exp_eval: E |- p4Exp : p4Val
+  hint(input %0 %1)
+
+relation P4Stmt_eval: E |- p4Stmt : E
+  hint(input %0 %1)
+
+rule P4Stmt_eval/if_true:
+  E |- IfS p4Exp p4Stmt_t p4Stmt_f : E'
+  -- P4Exp_eval: E |- p4Exp : p4Val
+  -- if p4Val = BoolV true
+  -- P4Stmt_eval: E |- p4Stmt_t : E'
+
+rule P4Stmt_eval/if_false:
+  E |- IfS p4Exp p4Stmt_t p4Stmt_f : E'
+  -- P4Exp_eval: E |- p4Exp : p4Val
+  -- if p4Val = BoolV false
+  -- P4Stmt_eval: E |- p4Stmt_f : E'
+
+;;
+;; Target interface and extract rule
+;;
+
+relation P4Block_call: p4Pgm |- p4Id p4Val* : p4Val*
+  hint(input %0 %1 %2)
+
+extern relation Parse_pkt: pkt |- p4Val : pkt p4Val
+  hint(input %0 %1)
+
+rule P4Stmt_eval/extract:
+  E |- ExtractS p4Id_pkt p4Id_hdr : E''
+  -- if p4Val_pkt = $find(E, p4Id_pkt)
+  -- if PktV pkt = p4Val_pkt
+  -- if p4Val_hdr = $find(E, p4Id_hdr)
+  -- Parse_pkt: pkt |- p4Val_hdr : pkt' p4Val_hdr'
+  -- if E' = $update(E, p4Id_pkt, PktV pkt')
+  -- if E'' = $update(E', p4Id_hdr, p4Val_hdr')
+
+;;
+;; The remaining rules that filter.p4 needs
+;;
+
+rule P4Stmt_eval/assign:
+  E |- AssignS p4Id p4Exp : E'
+  -- P4Exp_eval: E |- p4Exp : p4Val
+  -- if E' = $update(E, p4Id, p4Val)
+
+rule P4Stmt_eval/accept:
+  E |- AcceptS : E
+
+rule P4Exp_eval/varE:
+  E |- VarE p4Id : p4Val
+  -- if p4Val = $find(E, p4Id)
+
+rule P4Exp_eval/boolE:
+  E |- BoolE bool : BoolV bool
+
+rule P4Exp_eval/bit:
+  E |- BitE nat : BitV nat
+
+rule P4Exp_eval/eq:
+  E |- EqE p4Exp_l p4Exp_r : BoolV (p4Val_l = p4Val_r)
+  -- P4Exp_eval: E |- p4Exp_l : p4Val_l
+  -- P4Exp_eval: E |- p4Exp_r : p4Val_r
+
+rule P4Exp_eval/field:
+  E |- FieldE p4Exp p4Id : p4Val
+  -- P4Exp_eval: E |- p4Exp : HdrV _ E_f
+  -- if p4Val = $find(E_f, p4Id)
+
+relation P4Stmts_eval: E |- p4Stmt* : E
+  hint(input %0 %1)
+
+rule P4Stmts_eval/nil:
+  E |- eps : E
+
+rule P4Stmts_eval/cons:
+  E |- p4Stmt_h :: p4Stmt_t* : E''
+  -- P4Stmt_eval: E |- p4Stmt_h : E'
+  -- P4Stmts_eval: E' |- p4Stmt_t* : E''
+
+dec $name_of(p4Decl) : p4Id
+
+def $name_of(ParserD p4Id _ _) = p4Id
+def $name_of(ControlD p4Id _ _) = p4Id
+
+dec $find_decl(p4Pgm, p4Id) : p4Decl?
+
+def $find_decl(p4Decl :: p4Decl_t*, p4Id) = p4Decl
+  -- if $name_of(p4Decl) = p4Id
+
+def $find_decl(p4Decl :: p4Decl_t*, p4Id) = $find_decl(p4Decl_t*, p4Id)
+  -- if $name_of(p4Decl) =/= p4Id
+
+def $find_decl(_, _) = eps
+  -- otherwise
+
+;; A block binds each parameter to its argument and returns each parameter's final value
+dec $body_of(p4Decl) : (p4Param*, p4Stmt*)
+
+def $body_of(ParserD _ p4Param* p4Stmt*) = (p4Param*, p4Stmt*)
+def $body_of(ControlD _ p4Param* p4Stmt*) = (p4Param*, p4Stmt*)
+
+dec $bind(p4Param*, p4Val*) : E
+
+def $bind(eps, eps) = eps
+def $bind((Param p4Dir p4Type p4Id) :: p4Param_t*, p4Val :: p4Val_t*)
+  = (p4Id, p4Val) :: $bind(p4Param_t*, p4Val_t*)
+
+dec $outs(p4Param*, E) : p4Val*
+
+def $outs(eps, E) = eps
+def $outs((Param p4Dir p4Type p4Id) :: p4Param_t*, E) = p4Val :: $outs(p4Param_t*, E)
+  -- if p4Val = $find(E, p4Id)
+
+rule P4Block_call:
+  p4Pgm |- p4Id p4Val* : p4Val_o*
+  -- if p4Decl = $find_decl(p4Pgm, p4Id)
+  -- if (p4Param*, p4Stmt*) = $body_of(p4Decl)
+  -- if E = $bind(p4Param*, p4Val*)
+  -- P4Stmts_eval: E |- p4Stmt* : E'
+  -- if p4Val_o* = $outs(p4Param*, E')

@@ -1,0 +1,81 @@
+;;
+;; Mini p4st-in-p4st: AL evaluation domains
+;;
+
+;; The context: the definitions and the bound meta-variables
+syntax env = (id, it*, val)*
+syntax C = CTX spec env
+
+syntax fail = UNMATCH | ERROR
+syntax res<T> = OK T | fail
+
+syntax vsRes = res<val*>
+syntax cRes = res<C>
+
+;; The result of one expression or meta-function call
+syntax vRes = res<val>
+
+;;
+;; Definition lookup
+;;
+
+dec $id_of(defn) : id
+
+def $id_of(SYND id _) = id
+def $id_of(EXTSYND id) = id
+def $id_of(RELD id _ _) = id
+def $id_of(EXTRELD id) = id
+def $id_of(DECD id _ _) = id
+
+dec $find_defn(defn*, id) : defn?
+
+def $find_defn(defn :: defn_t*, id) = defn
+  -- if $id_of(defn) = id
+
+def $find_defn(defn :: defn_t*, id) = $find_defn(defn_t*, id)
+  -- if $id_of(defn) =/= id
+
+def $find_defn(_, _) = eps
+  -- otherwise
+
+dec $find(C, id) : defn?
+
+def $find(CTX spec env, id) = $find_defn(spec, id)
+
+;;
+;; Meta-variable binding
+;;
+
+dec $lookup_env(env, id, it*) : val?
+
+def $lookup_env((id', it'*, val) :: env_t, id, it*) = val
+  -- if (id', it'*) = (id, it*)
+
+def $lookup_env((id', it'*, val) :: env_t, id, it*) = $lookup_env(env_t, id, it*)
+  -- if (id', it'*) =/= (id, it*)
+
+def $lookup_env(_, _, _) = eps
+  -- otherwise
+
+dec $lookup(C, id, it*) : val?
+
+def $lookup(CTX spec env, id, it*) = $lookup_env(env, id, it*)
+
+;; Binds a pattern of AL's binding forms to a value;
+;; AL has checked the shape with `matches` beforehand
+dec $assign(C, exp*, val*) : C
+
+dec $assign_one(C, exp, val) : C
+
+def $assign(C, eps, eps) = C
+def $assign(C, exp_h :: exp_t*, val_h :: val_t*)
+  = $assign($assign_one(C, exp_h, val_h), exp_t*, val_t*)
+
+def $assign_one(CTX spec env, EVAR id it*, val) = CTX spec ((id, it*, val) :: env)
+def $assign_one(C, ECASE ctor exp*, VCASE ctor' val*) = $assign(C, exp*, val*)
+  -- if ctor = ctor'
+def $assign_one(C, ETUP exp*, VTUP val*) = $assign(C, exp*, val*)
+def $assign_one(C, ECONS exp_h exp_t, VLIST (val_h :: val_t*))
+  = $assign_one($assign_one(C, exp_h, val_h), exp_t, VLIST val_t*)
+def $assign_one(C, EOPT eps, VOPT eps) = C
+def $assign_one(C, EOPT exp, VOPT val) = $assign_one(C, exp, val)

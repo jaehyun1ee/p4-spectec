@@ -1,0 +1,18 @@
+[package]
+name = "metasq-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+rust-version = "1.97.1"
+
+# Runs the mini specifications on the p4spectec library;
+# nothing here is part of the p4spectec crate
+[dependencies]
+p4spectec = { path = "../../p4spectec" }
+serde_json = { version = "1.0.128", features = ["unbounded_depth"] }
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+all = "warn"
